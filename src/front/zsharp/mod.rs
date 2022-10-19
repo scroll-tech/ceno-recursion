@@ -2,6 +2,7 @@
 
 mod parser;
 mod term;
+mod blocks;
 pub mod zvisit;
 
 use super::{FrontEnd, Mode};
@@ -69,14 +70,15 @@ impl FrontEnd for ZSharpFE {
 
 impl ZSharpFE {
     /// Execute the Z# front-end interpreter on the supplied file with the supplied inputs
-    pub fn interpret(i: Inputs) -> T {
+    pub fn interpret(i: Inputs) {
         let loader = parser::ZLoad::new();
         let asts = loader.load(&i.file);
         let mut g = ZGen::new(asts, i.mode, loader.stdlib(), i.isolate_asserts);
         g.visit_files();
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
-        g.const_entry_fn("main")
+        let cs = g.bl_const_entry_fn("main");
+        cs.pretty();
     }
 }
 

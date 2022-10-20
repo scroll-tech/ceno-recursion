@@ -2,6 +2,7 @@ use zokrates_pest_ast as ast;
 use crate::front::zsharp::ZGen;
 use crate::front::zsharp::debug;
 use crate::front::zsharp::PathBuf;
+use pest::Span;
 
 fn get_type_span(ty: &ast::Type) -> String {
     match ty {
@@ -16,6 +17,101 @@ fn get_type_span(ty: &ast::Type) -> String {
     }
 }
 
+fn new_block(mut blks: B) -> B {
+    // Create new Block
+    blks.blocks.push(Vec::new());
+    blks.spans.push(Vec::new());
+    blks.bl_len += 1;
+    // Assert B@
+    let new_span = format!("assert(B@ = {})", (blks.bl_len - 1).to_string());
+    let check_stmt = ast::Statement::Assertion(ast::AssertionStatement {
+        expression: ast::Expression::Binary(ast::BinaryExpression {
+            op: ast::BinaryOperator::Eq,
+            left: Box::new(ast::Expression::Identifier(ast::IdentifierExpression {
+                value: "B@".to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            right: Box::new(ast::Expression::Literal(ast::LiteralExpression::DecimalLiteral(ast::DecimalLiteralExpression {
+                // TODO: Where do I put the actual number???
+                value: ast::DecimalNumber { span: Span::new("", 0, 0).unwrap() },
+                suffix: None,
+                span: Span::new("", 0, 0).unwrap()
+            }))),
+            span: Span::new("", 0, 0).unwrap()
+        }),
+        message: None,
+        span: Span::new("", 0, 0).unwrap()
+    });
+    blks.blocks[blks.bl_len - 1].push(check_stmt);
+    blks.spans[blks.bl_len - 1].push(new_span);
+    blks
+}
+
+fn transition_block<'ast>(mut blks: B<'ast>, old_state: usize, new_state: usize, ident: ast::IdentifierExpression<'ast>, condition: ast::Expression<'ast>) -> B<'ast> {
+    let new_span = format!("B@ = if {} < {} then {} else {} fi", ident.span.as_str().clone(), condition.span().as_str().clone(), (old_state + 1).to_string(), (new_state + 1).to_string());
+    let trans_stmt = ast::Statement::Definition(ast::DefinitionStatement {
+        lhs: vec![ast::TypedIdentifierOrAssignee::TypedIdentifier(ast::TypedIdentifier {
+            ty: ast::Type::Basic(ast::BasicType::U32(ast::U32Type { span:Span::new("", 0, 0).unwrap() })),
+            identifier: ast::IdentifierExpression {
+                value: "B@".to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            },
+            span: Span::new("", 0, 0).unwrap()
+        })],
+        expression: ast::Expression::Ternary(ast::TernaryExpression {
+            first: Box::new(ast::Expression::Binary(ast::BinaryExpression {
+                op: ast::BinaryOperator::Lt,
+                left: Box::new(ast::Expression::Identifier(ident.clone())),
+                right: Box::new(condition.clone()),
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            second: Box::new(ast::Expression::Literal(ast::LiteralExpression::DecimalLiteral(ast::DecimalLiteralExpression {
+                // TODO: Where do I put the actual number???
+                value: ast::DecimalNumber { span: Span::new("", 0, 0).unwrap() },
+                suffix: None,
+                span: Span::new("", 0, 0).unwrap()
+            }))),
+            third: Box::new(ast::Expression::Literal(ast::LiteralExpression::DecimalLiteral(ast::DecimalLiteralExpression {
+                // TODO: Where do I put the actual number???
+                value: ast::DecimalNumber { span: Span::new("", 0, 0).unwrap() },
+                suffix: None,
+                span: Span::new("", 0, 0).unwrap()
+            }))),
+            span: Span::new("", 0, 0).unwrap()
+        }),
+        span: Span::new("", 0, 0).unwrap()
+    });
+    blks.blocks[old_state].push(trans_stmt.clone());
+    blks.spans[old_state].push(new_span.clone());
+    blks.blocks[new_state].push(trans_stmt);
+    blks.spans[new_state].push(new_span);
+    blks
+}
+
+fn terminal_block(mut blks: B) -> B {
+    let new_span = format!("B@ = {}", blks.bl_len.to_string());
+    let assign_stmt = ast::Statement::Definition(ast::DefinitionStatement {
+        lhs: vec![ast::TypedIdentifierOrAssignee::TypedIdentifier(ast::TypedIdentifier {
+            ty: ast::Type::Basic(ast::BasicType::U32(ast::U32Type { span:Span::new("", 0, 0).unwrap() })),
+            identifier: ast::IdentifierExpression {
+                value: "B@".to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            },
+            span: Span::new("", 0, 0).unwrap()
+        })],
+        expression: ast::Expression::Literal(ast::LiteralExpression::DecimalLiteral(ast::DecimalLiteralExpression {
+                // TODO: Where do I put the actual number???
+                value: ast::DecimalNumber { span: Span::new("", 0, 0).unwrap() },
+                suffix: None,
+                span: Span::new("", 0, 0).unwrap()
+            })),
+        span: Span::new("", 0, 0).unwrap()
+    });
+    blks.blocks[blks.bl_len - 1].push(assign_stmt);
+    blks.spans[blks.bl_len - 1].push(new_span);
+    blks
+}
+
 pub struct B<'ast> {
     blocks: Vec<Vec<ast::Statement<'ast>>>,
     // Store actual codes for pretty printing
@@ -26,9 +122,9 @@ pub struct B<'ast> {
 impl<'ast> B<'ast> {
     fn new() -> Self {
         let input = Self {
-            blocks: vec![Vec::new()],
-            spans: vec![Vec::new()],
-            bl_len: 1
+            blocks: Vec::new(),
+            spans: Vec::new(),
+            bl_len: 0
         };
         input
     }
@@ -82,9 +178,14 @@ impl<'ast> ZGen<'ast> {
             .ok_or_else(|| format!("No function '{}' attempting fn call", &f_name))?;
 
         let mut blks = B::new();
+        // Check B@ is at initial block
+        blks = new_block(blks);
+        // Iterate through Stmts
         for s in &f.statements {
             blks = self.bl_stmt_impl_::<IS_CNST>(blks, s)?;
         }
+        // Assign B@ to termination block
+        blks = terminal_block(blks);
 
         Ok(blks)
     }
@@ -107,24 +208,23 @@ impl<'ast> ZGen<'ast> {
                 Ok(blks)
             }
             ast::Statement::Iteration(it) => {
+                let old_state = blks.bl_len - 1;
                 // Create and push FROM statement
                 let new_span = format!("{} {} = {}", get_type_span(&it.ty), it.index.span.as_str(), it.from.span().as_str());
                 let from_stmt = ast::Statement::Definition(ast::DefinitionStatement {
                     lhs: vec![ast::TypedIdentifierOrAssignee::TypedIdentifier(ast::TypedIdentifier {
                         ty: it.ty.clone(),
                         identifier: it.index.clone(),
-                        span: it.span.clone()
+                        span: Span::new("", 0, 0).unwrap()
                     })],
                     expression: it.from.clone(),
-                    span: it.span.clone()
+                    span: Span::new("", 0, 0).unwrap()
                 });
                 blks.blocks[blks.bl_len - 1].push(from_stmt);
                 blks.spans[blks.bl_len - 1].push(new_span);
-                // Create and push SWITCH statement
-                // TODO
-                blks.blocks.push(Vec::new());
-                blks.spans.push(Vec::new());
-                blks.bl_len += 1;
+                // Check B@
+                blks = new_block(blks);
+                // Iterate through Stmts
                 for body in &it.statements {
                     blks = self.bl_stmt_impl_::<IS_CNST>(blks, body)?;
                 }
@@ -134,26 +234,28 @@ impl<'ast> ZGen<'ast> {
                     lhs: vec![ast::TypedIdentifierOrAssignee::TypedIdentifier(ast::TypedIdentifier {
                         ty: it.ty.clone(),
                         identifier: it.index.clone(),
-                        span: it.span.clone()
+                        span: Span::new("", 0, 0).unwrap()
                     })],
                     expression: ast::Expression::Binary(ast::BinaryExpression {
                         op: ast::BinaryOperator::Add,
                         left: Box::new(ast::Expression::Identifier(it.index.clone())),
                         right: Box::new(ast::Expression::Literal(ast::LiteralExpression::DecimalLiteral(ast::DecimalLiteralExpression {
                             // TODO: Where do I put the actual number???
-                            value: ast::DecimalNumber { span: it.span.clone() },
+                            value: ast::DecimalNumber { span: Span::new("", 0, 0).unwrap() },
                             suffix: None,
-                            span: it.span.clone()
+                            span: Span::new("", 0, 0).unwrap()
                         }))),
-                        span: it.span.clone()
+                        span: Span::new("", 0, 0).unwrap()
                     }),
-                    span: it.span.clone()
+                    span: Span::new("", 0, 0).unwrap()
                 });
                 blks.blocks[blks.bl_len - 1].push(step_stmt);
                 blks.spans[blks.bl_len - 1].push(new_span);
-                blks.blocks.push(Vec::new());
-                blks.spans.push(Vec::new());
-                blks.bl_len += 1;
+                // Create and push TRANSITION statement
+                let new_state = blks.bl_len - 1;
+                blks = transition_block(blks, old_state, new_state, it.index.clone(), it.to.clone());
+                // Check B@
+                blks = new_block(blks);
                 Ok(blks)
             }
             ast::Statement::Definition(_) => {

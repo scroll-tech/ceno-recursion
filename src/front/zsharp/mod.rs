@@ -79,6 +79,7 @@ impl ZSharpFE {
         g.generics_stack_push(HashMap::new());
         let cs = g.bl_const_entry_fn("main");
         cs.pretty();
+        println!("");
     }
 }
 

@@ -3,26 +3,41 @@ use crate::front::zsharp::ZGen;
 use crate::front::zsharp::debug;
 use crate::front::zsharp::PathBuf;
 
+fn get_type_span(ty: &ast::Type) -> String {
+    match ty {
+        ast::Type::Basic(ast::BasicType::Field(t)) => { format!("{}", t.span.as_str()) }
+        ast::Type::Basic(ast::BasicType::Boolean(t)) => { format!("{}", t.span.as_str()) }
+        ast::Type::Basic(ast::BasicType::U8(t)) => { format!("{}", t.span.as_str()) }
+        ast::Type::Basic(ast::BasicType::U16(t)) => { format!("{}", t.span.as_str()) }
+        ast::Type::Basic(ast::BasicType::U32(t)) => { format!("{}", t.span.as_str()) }
+        ast::Type::Basic(ast::BasicType::U64(t)) => { format!("{}", t.span.as_str()) }
+        ast::Type::Struct(t) => { format!("{}", t.span.as_str()) }
+        ast::Type::Array(t) => { format!("{}", t.span.as_str()) }
+    }
+}
+
 pub struct B<'ast> {
-    blocks: Vec<Vec<&'ast ast::Statement<'ast>>>,
+    blocks: Vec<Vec<ast::Statement<'ast>>>,
+    // Store actual codes for pretty printing
+    spans: Vec<Vec<String>>,
     bl_len: usize
 }
 
 impl<'ast> B<'ast> {
     fn new() -> Self {
-        let mut input = Self {
-            blocks: Vec::new(),
+        let input = Self {
+            blocks: vec![Vec::new()],
+            spans: vec![Vec::new()],
             bl_len: 1
         };
-        input.blocks.push(Vec::new());
         input
     }
 
     pub fn pretty(&self) {
         for i in 0..self.bl_len {
             println!("\nBlock {}:", i);
-            for j in &self.blocks[i] {
-                println!("{}", j.span().as_str());
+            for j in &self.spans[i] {
+                println!("{}", j);
             }
         }
     }
@@ -83,26 +98,67 @@ impl<'ast> ZGen<'ast> {
 
         match s {
             ast::Statement::Return(_) => {
-                blks.blocks[blks.bl_len - 1].push(s);
+                blks.blocks[blks.bl_len - 1].push(s.clone());
+                blks.spans[blks.bl_len - 1].push(s.span().as_str().to_owned().clone());
                 Ok(blks)
             }
             ast::Statement::Assertion(_) => {
-                blks.blocks[blks.bl_len - 1].push(s);
+                blks.blocks[blks.bl_len - 1].push(s.clone());
                 Ok(blks)
             }
             ast::Statement::Iteration(it) => {
-                blks.blocks[blks.bl_len - 1].push(s);
+                // Create and push FROM statement
+                let new_span = format!("{} {} = {}", get_type_span(&it.ty), it.index.span.as_str(), it.from.span().as_str());
+                let from_stmt = ast::Statement::Definition(ast::DefinitionStatement {
+                    lhs: vec![ast::TypedIdentifierOrAssignee::TypedIdentifier(ast::TypedIdentifier {
+                        ty: it.ty.clone(),
+                        identifier: it.index.clone(),
+                        span: it.span.clone()
+                    })],
+                    expression: it.from.clone(),
+                    span: it.span.clone()
+                });
+                blks.blocks[blks.bl_len - 1].push(from_stmt);
+                blks.spans[blks.bl_len - 1].push(new_span);
+                // Create and push SWITCH statement
+                // TODO
                 blks.blocks.push(Vec::new());
+                blks.spans.push(Vec::new());
                 blks.bl_len += 1;
                 for body in &it.statements {
                     blks = self.bl_stmt_impl_::<IS_CNST>(blks, body)?;
                 }
+                // Create and push STEP statement
+                let new_span = format!("{} = {} + 1", it.index.span.as_str(), it.index.span.as_str());
+                let step_stmt = ast::Statement::Definition(ast::DefinitionStatement {
+                    lhs: vec![ast::TypedIdentifierOrAssignee::TypedIdentifier(ast::TypedIdentifier {
+                        ty: it.ty.clone(),
+                        identifier: it.index.clone(),
+                        span: it.span.clone()
+                    })],
+                    expression: ast::Expression::Binary(ast::BinaryExpression {
+                        op: ast::BinaryOperator::Add,
+                        left: Box::new(ast::Expression::Identifier(it.index.clone())),
+                        right: Box::new(ast::Expression::Literal(ast::LiteralExpression::DecimalLiteral(ast::DecimalLiteralExpression {
+                            // TODO: Where do I put the actual number???
+                            value: ast::DecimalNumber { span: it.span.clone() },
+                            suffix: None,
+                            span: it.span.clone()
+                        }))),
+                        span: it.span.clone()
+                    }),
+                    span: it.span.clone()
+                });
+                blks.blocks[blks.bl_len - 1].push(step_stmt);
+                blks.spans[blks.bl_len - 1].push(new_span);
                 blks.blocks.push(Vec::new());
+                blks.spans.push(Vec::new());
                 blks.bl_len += 1;
                 Ok(blks)
             }
             ast::Statement::Definition(_) => {
-                blks.blocks[blks.bl_len - 1].push(s);
+                blks.blocks[blks.bl_len - 1].push(s.clone());
+                blks.spans[blks.bl_len - 1].push(s.span().as_str().to_owned().clone());
                 Ok(blks)
             }
         }

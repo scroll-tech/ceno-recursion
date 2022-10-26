@@ -31,10 +31,12 @@ fn new_block(mut blks: B) -> B {
                 value: "B@".to_string(),
                 span: Span::new("", 0, 0).unwrap()
             })),
-            right: Box::new(ast::Expression::Literal(ast::LiteralExpression::DecimalLiteral(ast::DecimalLiteralExpression {
+            right: Box::new(ast::Expression::Literal(ast::LiteralExpression::HexLiteral(ast::HexLiteralExpression {
                 // TODO: Where do I put the actual number???
-                value: ast::DecimalNumber { span: Span::new("", 0, 0).unwrap() },
-                suffix: None,
+                value: ast::HexNumberExpression::U32( ast::U32NumberExpression{
+                    value: format!("{:X}", blks.bl_len - 1),
+                    span: Span::new("", 0, 0).unwrap()
+                }),
                 span: Span::new("", 0, 0).unwrap()
             }))),
             span: Span::new("", 0, 0).unwrap()
@@ -65,16 +67,20 @@ fn transition_block<'ast>(mut blks: B<'ast>, old_state: usize, new_state: usize,
                 right: Box::new(condition.clone()),
                 span: Span::new("", 0, 0).unwrap()
             })),
-            second: Box::new(ast::Expression::Literal(ast::LiteralExpression::DecimalLiteral(ast::DecimalLiteralExpression {
+            second: Box::new(ast::Expression::Literal(ast::LiteralExpression::HexLiteral(ast::HexLiteralExpression {
                 // TODO: Where do I put the actual number???
-                value: ast::DecimalNumber { span: Span::new("", 0, 0).unwrap() },
-                suffix: None,
+                value: ast::HexNumberExpression::U32( ast::U32NumberExpression{
+                    value: format!("{:X}", old_state + 1),
+                    span: Span::new("", 0, 0).unwrap()
+                }),
                 span: Span::new("", 0, 0).unwrap()
             }))),
-            third: Box::new(ast::Expression::Literal(ast::LiteralExpression::DecimalLiteral(ast::DecimalLiteralExpression {
+            third: Box::new(ast::Expression::Literal(ast::LiteralExpression::HexLiteral(ast::HexLiteralExpression {
                 // TODO: Where do I put the actual number???
-                value: ast::DecimalNumber { span: Span::new("", 0, 0).unwrap() },
-                suffix: None,
+                value: ast::HexNumberExpression::U32( ast::U32NumberExpression{
+                    value: format!("{:X}", new_state + 1),
+                    span: Span::new("", 0, 0).unwrap()
+                }),
                 span: Span::new("", 0, 0).unwrap()
             }))),
             span: Span::new("", 0, 0).unwrap()
@@ -99,10 +105,11 @@ fn terminal_block(mut blks: B) -> B {
             accesses: Vec::new(),
             span: Span::new("", 0, 0).unwrap()
         })],
-        expression: ast::Expression::Literal(ast::LiteralExpression::DecimalLiteral(ast::DecimalLiteralExpression {
-                // TODO: Where do I put the actual number???
-                value: ast::DecimalNumber { span: Span::new("", 0, 0).unwrap() },
-                suffix: None,
+        expression: ast::Expression::Literal(ast::LiteralExpression::HexLiteral(ast::HexLiteralExpression {
+                value: ast::HexNumberExpression::U32( ast::U32NumberExpression{
+                    value: format!("{:X}", blks.bl_len),
+                    span: Span::new("", 0, 0).unwrap()
+                }),
                 span: Span::new("", 0, 0).unwrap()
             })),
         span: Span::new("", 0, 0).unwrap()
@@ -239,10 +246,11 @@ impl<'ast> ZGen<'ast> {
                     expression: ast::Expression::Binary(ast::BinaryExpression {
                         op: ast::BinaryOperator::Add,
                         left: Box::new(ast::Expression::Identifier(it.index.clone())),
-                        right: Box::new(ast::Expression::Literal(ast::LiteralExpression::DecimalLiteral(ast::DecimalLiteralExpression {
-                            // TODO: Where do I put the actual number???
-                            value: ast::DecimalNumber { span: Span::new("", 0, 0).unwrap() },
-                            suffix: None,
+                        right: Box::new(ast::Expression::Literal(ast::LiteralExpression::HexLiteral(ast::HexLiteralExpression {
+                            value: ast::HexNumberExpression::U32( ast::U32NumberExpression{
+                                value: format!("{:X}", 1),
+                                span: Span::new("", 0, 0).unwrap()
+                            }),
                             span: Span::new("", 0, 0).unwrap()
                         }))),
                         span: Span::new("", 0, 0).unwrap()

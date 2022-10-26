@@ -2,152 +2,83 @@ use zokrates_pest_ast as ast;
 use crate::front::zsharp::ZGen;
 use crate::front::zsharp::debug;
 use crate::front::zsharp::PathBuf;
+use crate::front::zsharp::pretty;
 use pest::Span;
 
-fn get_type_span(ty: &ast::Type) -> String {
-    match ty {
-        ast::Type::Basic(ast::BasicType::Field(t)) => { format!("{}", t.span.as_str()) }
-        ast::Type::Basic(ast::BasicType::Boolean(t)) => { format!("{}", t.span.as_str()) }
-        ast::Type::Basic(ast::BasicType::U8(t)) => { format!("{}", t.span.as_str()) }
-        ast::Type::Basic(ast::BasicType::U16(t)) => { format!("{}", t.span.as_str()) }
-        ast::Type::Basic(ast::BasicType::U32(t)) => { format!("{}", t.span.as_str()) }
-        ast::Type::Basic(ast::BasicType::U64(t)) => { format!("{}", t.span.as_str()) }
-        ast::Type::Struct(t) => { format!("{}", t.span.as_str()) }
-        ast::Type::Array(t) => { format!("{}", t.span.as_str()) }
-    }
-}
-
-fn new_block(mut blks: B) -> B {
-    // Create new Block
-    blks.blocks.push(Vec::new());
-    blks.spans.push(Vec::new());
-    blks.bl_len += 1;
-    // Assert B@
-    let new_span = format!("assert(B@ = {})", (blks.bl_len - 1).to_string());
-    let check_stmt = ast::Statement::Assertion(ast::AssertionStatement {
-        expression: ast::Expression::Binary(ast::BinaryExpression {
-            op: ast::BinaryOperator::Eq,
-            left: Box::new(ast::Expression::Identifier(ast::IdentifierExpression {
-                value: "B@".to_string(),
-                span: Span::new("", 0, 0).unwrap()
-            })),
-            right: Box::new(ast::Expression::Literal(ast::LiteralExpression::HexLiteral(ast::HexLiteralExpression {
-                // TODO: Where do I put the actual number???
-                value: ast::HexNumberExpression::U32( ast::U32NumberExpression{
-                    value: format!("{:X}", blks.bl_len - 1),
-                    span: Span::new("", 0, 0).unwrap()
-                }),
-                span: Span::new("", 0, 0).unwrap()
-            }))),
-            span: Span::new("", 0, 0).unwrap()
-        }),
-        message: None,
+fn cond_expr<'ast>(ident: ast::IdentifierExpression<'ast>, condition: ast::Expression<'ast>) -> ast::Expression<'ast> {
+    let ce = ast::Expression::Binary(ast::BinaryExpression {
+        op: ast::BinaryOperator::Lt,
+        left: Box::new(ast::Expression::Identifier(ident.clone())),
+        right: Box::new(condition.clone()),
         span: Span::new("", 0, 0).unwrap()
     });
-    blks.blocks[blks.bl_len - 1].push(check_stmt);
-    blks.spans[blks.bl_len - 1].push(new_span);
-    blks
+    ce
 }
 
-fn transition_block<'ast>(mut blks: B<'ast>, old_state: usize, new_state: usize, ident: ast::IdentifierExpression<'ast>, condition: ast::Expression<'ast>) -> B<'ast> {
-    let new_span = format!("B@ = if {} < {} then {} else {} fi", ident.span.as_str().clone(), condition.span().as_str().clone(), (old_state + 1).to_string(), (new_state + 1).to_string());
-    let trans_stmt = ast::Statement::Definition(ast::DefinitionStatement {
-        lhs: vec![ast::TypedIdentifierOrAssignee::Assignee(ast::Assignee {
-            id: ast::IdentifierExpression {
-                value: "B@".to_string(),
-                span: Span::new("", 0, 0).unwrap()
-            },
-            accesses: Vec::new(),
-            span: Span::new("", 0, 0).unwrap()
-        })],
-        expression: ast::Expression::Ternary(ast::TernaryExpression {
-            first: Box::new(ast::Expression::Binary(ast::BinaryExpression {
-                op: ast::BinaryOperator::Lt,
-                left: Box::new(ast::Expression::Identifier(ident.clone())),
-                right: Box::new(condition.clone()),
-                span: Span::new("", 0, 0).unwrap()
-            })),
-            second: Box::new(ast::Expression::Literal(ast::LiteralExpression::HexLiteral(ast::HexLiteralExpression {
-                // TODO: Where do I put the actual number???
-                value: ast::HexNumberExpression::U32( ast::U32NumberExpression{
-                    value: format!("{:X}", old_state + 1),
-                    span: Span::new("", 0, 0).unwrap()
-                }),
-                span: Span::new("", 0, 0).unwrap()
-            }))),
-            third: Box::new(ast::Expression::Literal(ast::LiteralExpression::HexLiteral(ast::HexLiteralExpression {
-                // TODO: Where do I put the actual number???
-                value: ast::HexNumberExpression::U32( ast::U32NumberExpression{
-                    value: format!("{:X}", new_state + 1),
-                    span: Span::new("", 0, 0).unwrap()
-                }),
-                span: Span::new("", 0, 0).unwrap()
-            }))),
-            span: Span::new("", 0, 0).unwrap()
-        }),
-        span: Span::new("", 0, 0).unwrap()
-    });
-    blks.blocks[old_state].push(trans_stmt.clone());
-    blks.spans[old_state].push(new_span.clone());
-    blks.blocks[new_state].push(trans_stmt);
-    blks.spans[new_state].push(new_span);
-    blks
+#[derive(Clone)]
+pub struct Block<'ast> {
+    name: usize,
+    instructions: Vec<ast::Statement<'ast>>,
+    terminator: BlockTerminator<'ast>,
 }
 
-fn terminal_block(mut blks: B) -> B {
-    let new_span = format!("B@ = {}", blks.bl_len.to_string());
-    let assign_stmt = ast::Statement::Definition(ast::DefinitionStatement {
-        lhs: vec![ast::TypedIdentifierOrAssignee::Assignee(ast::Assignee {
-            id: ast::IdentifierExpression {
-                value: "B@".to_string(),
-                span: Span::new("", 0, 0).unwrap()
-            },
-            accesses: Vec::new(),
-            span: Span::new("", 0, 0).unwrap()
-        })],
-        expression: ast::Expression::Literal(ast::LiteralExpression::HexLiteral(ast::HexLiteralExpression {
-                value: ast::HexNumberExpression::U32( ast::U32NumberExpression{
-                    value: format!("{:X}", blks.bl_len),
-                    span: Span::new("", 0, 0).unwrap()
-                }),
-                span: Span::new("", 0, 0).unwrap()
-            })),
-        span: Span::new("", 0, 0).unwrap()
-    });
-    blks.blocks[blks.bl_len - 1].push(assign_stmt);
-    blks.spans[blks.bl_len - 1].push(new_span);
-    blks
+#[derive(Clone)]
+// Coda is the number of total types of blocks
+pub enum BlockTerminator<'ast> {
+    Transition(BlockTransition<'ast>),
+    Coda(usize),
 }
 
-pub struct B<'ast> {
-    blocks: Vec<Vec<ast::Statement<'ast>>>,
-    // Store actual codes for pretty printing
-    spans: Vec<Vec<String>>,
-    bl_len: usize
+#[derive(Clone)]
+// BlockTransition is of the format:
+// if cond then goto tblock else goto fblock
+pub struct BlockTransition<'ast> {
+    cond: ast::Expression<'ast>,
+    tblock: usize,
+    fblock: usize,
 }
 
-impl<'ast> B<'ast> {
-    fn new() -> Self {
+impl<'ast> Block<'ast> {
+    fn new(name: usize) -> Self {
         let input = Self {
-            blocks: Vec::new(),
-            spans: Vec::new(),
-            bl_len: 0
+            name,
+            instructions: Vec::new(),
+            terminator: BlockTerminator::Coda(name + 1)
         };
         input
     }
 
     pub fn pretty(&self) {
-        for i in 0..self.bl_len {
-            println!("\nBlock {}:", i);
-            for j in &self.spans[i] {
-                println!("{}", j);
+        println!("\nBlock {}:", self.name);
+        for s in &self.instructions {
+            pretty::pretty_stmt(1, &s);
+        }
+        match &self.terminator {
+            BlockTerminator::Transition(t) => {
+                print!("Block Transition: ");
+                pretty::pretty_expr(&t.cond);
+                print!(" ? block {} : block {}", t.tblock.to_string(), t.fblock.to_string())
+            }
+            BlockTerminator::Coda(c) => {
+                print!("Block terminates with coda {}.", c.to_string());
             }
         }
     }
 }
 
+impl<'ast> BlockTransition<'ast> {
+    fn new(cond: ast::Expression<'ast>, tblock: usize, fblock: usize) -> Self {
+        let input = Self {
+            cond,
+            tblock,
+            fblock
+        };
+        input
+    }
+}
+
 impl<'ast> ZGen<'ast> {
-    pub fn bl_const_entry_fn(&'ast self, n: &str) -> B<'ast> {
+    pub fn bl_const_entry_fn(&'ast self, n: &str) -> Vec<Block<'ast>> {
         debug!("Const entry: {}", n);
         let (f_file, f_name) = self.deref_import(n);
         if let Some(f) = self.functions.get(&f_file).and_then(|m| m.get(&f_name)) {
@@ -171,7 +102,7 @@ impl<'ast> ZGen<'ast> {
         &self,
         f_path: PathBuf,
         f_name: String,
-    ) -> Result<B, String> {
+    ) -> Result<Vec<Block>, String> {
         if IS_CNST {
             debug!("Const function call: {} {:?}", f_name, f_path);
         } else {
@@ -184,20 +115,24 @@ impl<'ast> ZGen<'ast> {
             .get(&f_name)
             .ok_or_else(|| format!("No function '{}' attempting fn call", &f_name))?;
 
-        let mut blks = B::new();
-        // Check B@ is at initial block
-        blks = new_block(blks);
+        let mut blks = Vec::new();
+        let mut blks_len = 0;
+        // Create the initial block
+        blks.push(Block::new(0));
+        blks_len += 1;
         // Iterate through Stmts
         for s in &f.statements {
-            blks = self.bl_stmt_impl_::<IS_CNST>(blks, s)?;
+            (blks, blks_len) = self.bl_stmt_impl_::<IS_CNST>(blks, blks_len, s)?;
         }
-        // Assign B@ to termination block
-        blks = terminal_block(blks);
-
         Ok(blks)
     }
 
-    fn bl_stmt_impl_<const IS_CNST: bool>(&'ast self, mut blks: B<'ast>, s: &'ast ast::Statement<'ast>) -> Result<B, String> {
+    fn bl_stmt_impl_<const IS_CNST: bool>(
+        &'ast self, 
+        mut blks: Vec<Block<'ast>>,
+        mut blks_len: usize,
+        s: &'ast ast::Statement<'ast>
+    ) -> Result<(Vec<Block>, usize), String> {
         if IS_CNST {
             debug!("Const stmt: {}", s.span().as_str());
         } else {
@@ -206,18 +141,16 @@ impl<'ast> ZGen<'ast> {
 
         match s {
             ast::Statement::Return(_) => {
-                blks.blocks[blks.bl_len - 1].push(s.clone());
-                blks.spans[blks.bl_len - 1].push(s.span().as_str().to_owned().clone());
-                Ok(blks)
+                blks[blks_len - 1].instructions.push(s.clone());
+                Ok((blks, blks_len))
             }
             ast::Statement::Assertion(_) => {
-                blks.blocks[blks.bl_len - 1].push(s.clone());
-                Ok(blks)
+                blks[blks_len - 1].instructions.push(s.clone());
+                Ok((blks, blks_len))
             }
             ast::Statement::Iteration(it) => {
-                let old_state = blks.bl_len - 1;
+                let old_state = blks_len - 1;
                 // Create and push FROM statement
-                let new_span = format!("{} {} = {}", get_type_span(&it.ty), it.index.span.as_str(), it.from.span().as_str());
                 let from_stmt = ast::Statement::Definition(ast::DefinitionStatement {
                     lhs: vec![ast::TypedIdentifierOrAssignee::TypedIdentifier(ast::TypedIdentifier {
                         ty: it.ty.clone(),
@@ -227,16 +160,15 @@ impl<'ast> ZGen<'ast> {
                     expression: it.from.clone(),
                     span: Span::new("", 0, 0).unwrap()
                 });
-                blks.blocks[blks.bl_len - 1].push(from_stmt);
-                blks.spans[blks.bl_len - 1].push(new_span);
-                // Check B@
-                blks = new_block(blks);
+                blks[blks_len - 1].instructions.push(from_stmt);
+                // Create new Block
+                blks.push(Block::new(blks_len));
+                blks_len += 1;
                 // Iterate through Stmts
                 for body in &it.statements {
-                    blks = self.bl_stmt_impl_::<IS_CNST>(blks, body)?;
+                    (blks, blks_len) = self.bl_stmt_impl_::<IS_CNST>(blks, blks_len, body)?;
                 }
                 // Create and push STEP statement
-                let new_span = format!("{} = {} + 1", it.index.span.as_str(), it.index.span.as_str());
                 let step_stmt = ast::Statement::Definition(ast::DefinitionStatement {
                     lhs: vec![ast::TypedIdentifierOrAssignee::Assignee(ast::Assignee {
                         id: it.index.clone(),
@@ -257,19 +189,26 @@ impl<'ast> ZGen<'ast> {
                     }),
                     span: Span::new("", 0, 0).unwrap()
                 });
-                blks.blocks[blks.bl_len - 1].push(step_stmt);
-                blks.spans[blks.bl_len - 1].push(new_span);
+                blks[blks_len - 1].instructions.push(step_stmt);
                 // Create and push TRANSITION statement
-                let new_state = blks.bl_len - 1;
-                blks = transition_block(blks, old_state, new_state, it.index.clone(), it.to.clone());
-                // Check B@
-                blks = new_block(blks);
-                Ok(blks)
+                let new_state = blks_len - 1;
+                let term = BlockTerminator::Transition(
+                    BlockTransition::new(
+                        cond_expr(it.index.clone(), it.to.clone()), 
+                        old_state + 1, 
+                        new_state + 1
+                    )
+                );
+                blks[new_state].terminator = term.clone();
+                blks[old_state].terminator = term;
+                // Create new Block
+                blks.push(Block::new(blks_len));
+                blks_len += 1;
+                Ok((blks, blks_len))
             }
             ast::Statement::Definition(_) => {
-                blks.blocks[blks.bl_len - 1].push(s.clone());
-                blks.spans[blks.bl_len - 1].push(s.span().as_str().to_owned().clone());
-                Ok(blks)
+                blks[blks_len - 1].instructions.push(s.clone());
+                Ok((blks, blks_len))
             }
         }
     }

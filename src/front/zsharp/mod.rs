@@ -3,6 +3,7 @@
 mod parser;
 mod term;
 mod blocks;
+mod pretty;
 pub mod zvisit;
 
 use super::{FrontEnd, Mode};
@@ -77,9 +78,11 @@ impl ZSharpFE {
         g.visit_files();
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
-        let cs = g.bl_const_entry_fn("main");
-        cs.pretty();
-        println!("");
+        let bs = g.bl_const_entry_fn("main");
+        for b in bs {
+            b.pretty();
+            println!("");
+        }
     }
 }
 

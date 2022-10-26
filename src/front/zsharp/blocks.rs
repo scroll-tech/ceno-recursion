@@ -50,12 +50,12 @@ fn new_block(mut blks: B) -> B {
 fn transition_block<'ast>(mut blks: B<'ast>, old_state: usize, new_state: usize, ident: ast::IdentifierExpression<'ast>, condition: ast::Expression<'ast>) -> B<'ast> {
     let new_span = format!("B@ = if {} < {} then {} else {} fi", ident.span.as_str().clone(), condition.span().as_str().clone(), (old_state + 1).to_string(), (new_state + 1).to_string());
     let trans_stmt = ast::Statement::Definition(ast::DefinitionStatement {
-        lhs: vec![ast::TypedIdentifierOrAssignee::TypedIdentifier(ast::TypedIdentifier {
-            ty: ast::Type::Basic(ast::BasicType::U32(ast::U32Type { span:Span::new("", 0, 0).unwrap() })),
-            identifier: ast::IdentifierExpression {
+        lhs: vec![ast::TypedIdentifierOrAssignee::Assignee(ast::Assignee {
+            id: ast::IdentifierExpression {
                 value: "B@".to_string(),
                 span: Span::new("", 0, 0).unwrap()
             },
+            accesses: Vec::new(),
             span: Span::new("", 0, 0).unwrap()
         })],
         expression: ast::Expression::Ternary(ast::TernaryExpression {
@@ -91,12 +91,12 @@ fn transition_block<'ast>(mut blks: B<'ast>, old_state: usize, new_state: usize,
 fn terminal_block(mut blks: B) -> B {
     let new_span = format!("B@ = {}", blks.bl_len.to_string());
     let assign_stmt = ast::Statement::Definition(ast::DefinitionStatement {
-        lhs: vec![ast::TypedIdentifierOrAssignee::TypedIdentifier(ast::TypedIdentifier {
-            ty: ast::Type::Basic(ast::BasicType::U32(ast::U32Type { span:Span::new("", 0, 0).unwrap() })),
-            identifier: ast::IdentifierExpression {
+        lhs: vec![ast::TypedIdentifierOrAssignee::Assignee(ast::Assignee {
+            id: ast::IdentifierExpression {
                 value: "B@".to_string(),
                 span: Span::new("", 0, 0).unwrap()
             },
+            accesses: Vec::new(),
             span: Span::new("", 0, 0).unwrap()
         })],
         expression: ast::Expression::Literal(ast::LiteralExpression::DecimalLiteral(ast::DecimalLiteralExpression {
@@ -231,9 +231,9 @@ impl<'ast> ZGen<'ast> {
                 // Create and push STEP statement
                 let new_span = format!("{} = {} + 1", it.index.span.as_str(), it.index.span.as_str());
                 let step_stmt = ast::Statement::Definition(ast::DefinitionStatement {
-                    lhs: vec![ast::TypedIdentifierOrAssignee::TypedIdentifier(ast::TypedIdentifier {
-                        ty: it.ty.clone(),
-                        identifier: it.index.clone(),
+                    lhs: vec![ast::TypedIdentifierOrAssignee::Assignee(ast::Assignee {
+                        id: it.index.clone(),
+                        accesses: Vec::new(),
                         span: Span::new("", 0, 0).unwrap()
                     })],
                     expression: ast::Expression::Binary(ast::BinaryExpression {

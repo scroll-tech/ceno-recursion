@@ -140,17 +140,25 @@ fn get_bin_op(op: &ast::BinaryOperator) -> &str {
 fn pretty_literal(l: &ast::LiteralExpression) {
     match l {
         ast::LiteralExpression::DecimalLiteral(d) => {
-            print!("{}", d.value.span.as_str())
+            print!("{}", d.value.value);
+            match d.suffix {
+                Some(ast::DecimalSuffix::U8(_)) => { print!(" <U8>") }
+                Some(ast::DecimalSuffix::U16(_)) => { print!(" <U16>") }
+                Some(ast::DecimalSuffix::U32(_)) => { print!(" <U32>") }
+                Some(ast::DecimalSuffix::U64(_)) => { print!(" <U64>") }
+                Some(ast::DecimalSuffix::Field(_)) => { print!(" <Field>") }
+                _ => { print!(" <Undef>") }
+            }
         }
         ast::LiteralExpression::BooleanLiteral(b) => {
             print!("{}", b.value)
         }
         ast::LiteralExpression::HexLiteral(h) => {
             match &h.value {
-                ast::HexNumberExpression::U8(u) => { print!("{}", u.value) }
-                ast::HexNumberExpression::U16(u) => { print!("{}", u.value) }
-                ast::HexNumberExpression::U32(u) => { print!("{}", u.value) }
-                ast::HexNumberExpression::U64(u) => { print!("{}", u.value) }
+                ast::HexNumberExpression::U8(u) => { print!("{} <U8>", u.value) }
+                ast::HexNumberExpression::U16(u) => { print!("{} <U16>", u.value) }
+                ast::HexNumberExpression::U32(u) => { print!("{} <U32>", u.value) }
+                ast::HexNumberExpression::U64(u) => { print!("{} <U64>", u.value) }
             }
         }
     }

@@ -1,3 +1,5 @@
+// TODO: Add type to all the + 1s.
+
 use zokrates_pest_ast as ast;
 use crate::front::zsharp::ZGen;
 use crate::front::zsharp::debug;
@@ -13,6 +15,18 @@ fn cond_expr<'ast>(ident: ast::IdentifierExpression<'ast>, condition: ast::Expre
         span: Span::new("", 0, 0).unwrap()
     });
     ce
+}
+
+fn ty_to_dec_suffix<'ast>(ty: ast::Type<'ast>) -> ast::DecimalSuffix<'ast> {
+    let span = Span::new("", 0, 0).unwrap();
+    match ty {
+        ast::Type::Basic(ast::BasicType::Field(_)) => { ast::DecimalSuffix::Field(ast::FieldSuffix { span }) }
+        ast::Type::Basic(ast::BasicType::U8(_)) => { ast::DecimalSuffix::U8(ast::U8Suffix { span }) }
+        ast::Type::Basic(ast::BasicType::U16(_)) => { ast::DecimalSuffix::U16(ast::U16Suffix { span }) }
+        ast::Type::Basic(ast::BasicType::U32(_)) => { ast::DecimalSuffix::U32(ast::U32Suffix { span }) }
+        ast::Type::Basic(ast::BasicType::U64(_)) => { ast::DecimalSuffix::U64(ast::U64Suffix { span }) }
+        _ => { panic!("Type not supported for loop iterator.") }
+    }
 }
 
 #[derive(Clone)]
@@ -178,11 +192,12 @@ impl<'ast> ZGen<'ast> {
                     expression: ast::Expression::Binary(ast::BinaryExpression {
                         op: ast::BinaryOperator::Add,
                         left: Box::new(ast::Expression::Identifier(it.index.clone())),
-                        right: Box::new(ast::Expression::Literal(ast::LiteralExpression::HexLiteral(ast::HexLiteralExpression {
-                            value: ast::HexNumberExpression::U32( ast::U32NumberExpression{
-                                value: format!("{:X}", 1),
+                        right: Box::new(ast::Expression::Literal(ast::LiteralExpression::DecimalLiteral(ast::DecimalLiteralExpression {
+                            value: ast::DecimalNumber {
+                                value: "1".to_string(),
                                 span: Span::new("", 0, 0).unwrap()
-                            }),
+                            },
+                            suffix: Some(ty_to_dec_suffix(it.ty.clone())),
                             span: Span::new("", 0, 0).unwrap()
                         }))),
                         span: Span::new("", 0, 0).unwrap()

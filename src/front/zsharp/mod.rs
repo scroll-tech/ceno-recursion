@@ -395,7 +395,7 @@ impl<'ast> ZGen<'ast> {
     fn literal_(&self, e: &ast::LiteralExpression<'ast>) -> Result<T, String> {
         match e {
             ast::LiteralExpression::DecimalLiteral(d) => {
-                let vstr = &d.value.span.as_str();
+                let vstr = &d.value.value;
                 match &d.suffix {
                     Some(ast::DecimalSuffix::U8(_)) => Ok(uint_lit(vstr.parse::<u8>().unwrap(), 8)),
                     Some(ast::DecimalSuffix::U16(_)) => {

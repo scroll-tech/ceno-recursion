@@ -1,10 +1,14 @@
 // TODO: Add type to all the + 1s.
 
+use std::collections::HashMap;
+use log::{debug, warn};
+
 use zokrates_pest_ast as ast;
 use crate::front::zsharp::ZGen;
-use crate::front::zsharp::debug;
 use crate::front::zsharp::PathBuf;
 use crate::front::zsharp::pretty;
+use crate::front::zsharp::T;
+use crate::front::zsharp::Ty;
 use pest::Span;
 
 fn cond_expr<'ast>(ident: ast::IdentifierExpression<'ast>, condition: ast::Expression<'ast>) -> ast::Expression<'ast> {
@@ -108,11 +112,11 @@ impl<'ast> ZGen<'ast> {
             );
         }
 
-        self.bl_function_call_impl_::<true>(f_file, f_name)
+        self.bl_function_call_::<true>(f_file, f_name)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))
     }
 
-    fn bl_function_call_impl_<const IS_CNST: bool>(
+    fn bl_function_call_<const IS_CNST: bool>(
         &self,
         f_path: PathBuf,
         f_name: String,
@@ -136,12 +140,12 @@ impl<'ast> ZGen<'ast> {
         blks_len += 1;
         // Iterate through Stmts
         for s in &f.statements {
-            (blks, blks_len) = self.bl_stmt_impl_::<IS_CNST>(blks, blks_len, s)?;
+            (blks, blks_len) = self.bl_stmt_::<IS_CNST>(blks, blks_len, s)?;
         }
         Ok(blks)
     }
 
-    fn bl_stmt_impl_<const IS_CNST: bool>(
+    fn bl_stmt_<const IS_CNST: bool>(
         &'ast self, 
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
@@ -180,7 +184,7 @@ impl<'ast> ZGen<'ast> {
                 blks_len += 1;
                 // Iterate through Stmts
                 for body in &it.statements {
-                    (blks, blks_len) = self.bl_stmt_impl_::<IS_CNST>(blks, blks_len, body)?;
+                    (blks, blks_len) = self.bl_stmt_::<IS_CNST>(blks, blks_len, body)?;
                 }
                 // Create and push STEP statement
                 let step_stmt = ast::Statement::Definition(ast::DefinitionStatement {
@@ -225,6 +229,86 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].instructions.push(s.clone());
                 Ok((blks, blks_len))
             }
+        }
+    }
+
+    fn bl_eval_impl_<const IS_CNST: bool>(
+        &self, bl: &Block<'ast>, 
+        in_state: HashMap<String, (Ty, T)>, 
+    ) -> Result<HashMap<String, (Ty, T)>, String> {
+        if IS_CNST {
+            debug!("Const block: ");
+            let _ = &bl.pretty();
+        } else {
+            debug!("Block: ");
+            let _ = &bl.pretty();
+        }
+
+        let mut cur_state = Ok(in_state);
+        for s in &bl.instructions {
+            cur_state = match s {
+                ast::Statement::Return(r) => Ok(cur_state.unwrap()),
+                ast::Statement::Assertion(e) => Ok(cur_state.unwrap()),
+                ast::Statement::Iteration(i) => Ok(cur_state.unwrap()),
+                ast::Statement::Definition(d) => {
+                    // XXX(unimpl) multi-assignment unimplemented
+                    assert!(d.lhs.len() <= 1);
+
+                    self.set_lhs_ty_defn::<IS_CNST>(d)?;
+                    let e = self.expr_impl_::<IS_CNST>(&d.expression)?;
+
+                    if let Some(l) = d.lhs.first() {
+                        match l {
+                            ast::TypedIdentifierOrAssignee::Assignee(l) => {
+                                let strict = match &d.expression {
+                                    ast::Expression::Unary(u) => {
+                                        matches!(&u.op, ast::UnaryOperator::Strict(_))
+                                    }
+                                    _ => false,
+                                };
+                                // self.assign_impl_::<IS_CNST>(&l.id.value, &l.accesses[..], e, strict)
+                                Ok(cur_state.unwrap())
+                            }
+                            ast::TypedIdentifierOrAssignee::TypedIdentifier(l) => {
+                                let decl_ty = self.type_impl_::<IS_CNST>(&l.ty)?;
+                                let ty = e.type_();
+                                if &decl_ty != ty {
+                                    return Err(format!(
+                                        "Assignment type mismatch: {} annotated vs {} actual",
+                                        decl_ty, ty,
+                                    ));
+                                }
+                                // self.declare_init_impl_::<IS_CNST>(
+                                    // l.identifier.value.clone(),
+                                    // decl_ty,
+                                    // e,
+                                // )
+                                Ok(cur_state.unwrap())
+                            }
+                        }
+                    } else {
+                        warn!("Statement with no LHS!");
+                        Ok(cur_state.unwrap())
+                    }
+                    }
+            }
+        };
+        cur_state
+    }
+
+    fn bl_declare_init_impl_<const IS_CNST: bool>(
+        &self,
+        name: String,
+        ty: Ty,
+        val: T,
+        in_state: HashMap<String, (Ty, T)>, 
+    ) -> Result<HashMap<String, (Ty, T)>, String> {
+        if IS_CNST {
+            self.cvar_declare_init(name, &ty, val)
+        } else {
+            self.circ_declare_init(name, ty, Val::Term(val))
+                .map(|_| ())
+                .map_err(|e| format!("{}", e))
         }
     }
 }

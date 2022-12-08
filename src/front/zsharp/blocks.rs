@@ -1,6 +1,5 @@
 // TODO: Add type to all the + 1s.
 
-use std::collections::HashMap;
 use log::{debug, warn};
 
 use zokrates_pest_ast as ast;
@@ -9,6 +8,9 @@ use crate::front::zsharp::PathBuf;
 use crate::front::zsharp::pretty;
 use crate::front::zsharp::T;
 use crate::front::zsharp::Ty;
+use crate::front::zsharp::const_bool;
+use crate::front::zsharp::span_to_string;
+use crate::front::zsharp::bool;
 use pest::Span;
 
 fn cond_expr<'ast>(ident: ast::IdentifierExpression<'ast>, condition: ast::Expression<'ast>) -> ast::Expression<'ast> {
@@ -96,8 +98,8 @@ impl<'ast> BlockTransition<'ast> {
 }
 
 impl<'ast> ZGen<'ast> {
-    pub fn bl_const_entry_fn(&'ast self, n: &str) -> Vec<Block<'ast>> {
-        debug!("Const entry: {}", n);
+    pub fn bl_gen_const_entry_fn(&'ast self, n: &str) -> Vec<Block<'ast>> {
+        debug!("Block Gen Const entry: {}", n);
         let (f_file, f_name) = self.deref_import(n);
         if let Some(f) = self.functions.get(&f_file).and_then(|m| m.get(&f_name)) {
             if !f.generics.is_empty() {
@@ -112,19 +114,20 @@ impl<'ast> ZGen<'ast> {
             );
         }
 
-        self.bl_function_call_::<true>(f_file, f_name)
+        self.bl_gen_function_call_::<true>(f_file, f_name)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))
     }
 
-    fn bl_function_call_<const IS_CNST: bool>(
+    // TODO: Error handling in function call
+    fn bl_gen_function_call_<const IS_CNST: bool>(
         &self,
         f_path: PathBuf,
         f_name: String,
     ) -> Result<Vec<Block>, String> {
         if IS_CNST {
-            debug!("Const function call: {} {:?}", f_name, f_path);
+            debug!("Block Gen Const function call: {} {:?}", f_name, f_path);
         } else {
-            debug!("Function call: {} {:?}", f_name, f_path);
+            debug!("Block Gen Function call: {} {:?}", f_name, f_path);
         }
         let f = self
             .functions
@@ -133,6 +136,13 @@ impl<'ast> ZGen<'ast> {
             .get(&f_name)
             .ok_or_else(|| format!("No function '{}' attempting fn call", &f_name))?;
 
+        // XXX(unimpl) multi-return unimplemented
+        assert!(f.returns.len() <= 1);
+        // Get the return type because we need to convert it into a variable
+        let ret_ty = f
+            .returns
+            .first().ok_or("No return type provided for one or more function")?;
+
         let mut blks = Vec::new();
         let mut blks_len = 0;
         // Create the initial block
@@ -140,26 +150,40 @@ impl<'ast> ZGen<'ast> {
         blks_len += 1;
         // Iterate through Stmts
         for s in &f.statements {
-            (blks, blks_len) = self.bl_stmt_::<IS_CNST>(blks, blks_len, s)?;
+            (blks, blks_len) = self.bl_gen_stmt_::<IS_CNST>(blks, blks_len, s, ret_ty)?;
         }
         Ok(blks)
     }
 
-    fn bl_stmt_<const IS_CNST: bool>(
+    fn bl_gen_stmt_<const IS_CNST: bool>(
         &'ast self, 
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
-        s: &'ast ast::Statement<'ast>
+        s: &'ast ast::Statement<'ast>,
+        ret_ty: &'ast ast::Type<'ast>
     ) -> Result<(Vec<Block>, usize), String> {
         if IS_CNST {
-            debug!("Const stmt: {}", s.span().as_str());
+            debug!("Block Gen Const stmt: {}", s.span().as_str());
         } else {
-            debug!("Stmt: {}", s.span().as_str());
+            debug!("Block Gen Stmt: {}", s.span().as_str());
         }
 
         match s {
-            ast::Statement::Return(_) => {
-                blks[blks_len - 1].instructions.push(s.clone());
+            ast::Statement::Return(r) => {
+                let ret_stmt = ast::Statement::Definition(ast::DefinitionStatement {
+                    lhs: vec![ast::TypedIdentifierOrAssignee::TypedIdentifier(ast::TypedIdentifier {
+                        ty: ret_ty.clone(),
+                        identifier: ast::IdentifierExpression {
+                            value: "%RET".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        span: Span::new("", 0, 0).unwrap()
+                    })],
+                    // Assume that we only have ONE return variable
+                    expression: r.expressions[0].clone(),
+                    span: Span::new("", 0, 0).unwrap()
+                });
+                blks[blks_len - 1].instructions.push(ret_stmt);
                 Ok((blks, blks_len))
             }
             ast::Statement::Assertion(_) => {
@@ -184,7 +208,7 @@ impl<'ast> ZGen<'ast> {
                 blks_len += 1;
                 // Iterate through Stmts
                 for body in &it.statements {
-                    (blks, blks_len) = self.bl_stmt_::<IS_CNST>(blks, blks_len, body)?;
+                    (blks, blks_len) = self.bl_gen_stmt_::<IS_CNST>(blks, blks_len, body, ret_ty)?;
                 }
                 // Create and push STEP statement
                 let step_stmt = ast::Statement::Definition(ast::DefinitionStatement {
@@ -232,10 +256,21 @@ impl<'ast> ZGen<'ast> {
         }
     }
 
-    fn bl_eval_impl_<const IS_CNST: bool>(
-        &self, bl: &Block<'ast>, 
-        in_state: HashMap<String, (Ty, T)>, 
-    ) -> Result<HashMap<String, (Ty, T)>, String> {
+    pub fn bl_eval_const_entry_fn(&self, entry_bl: usize, bls: &Vec<Block<'ast>>) -> Result<T, String> {
+        // We assume that all errors has been handled in bl_gen functions        
+        debug!("Block Eval Const entry: {}", entry_bl);
+        self.cvar_enter_function();
+        self.bl_eval_impl_::<true>(&bls[entry_bl])?;
+
+        // Return value is just the value of the variable called "%RET"
+        // Type of return value is checked during assignment
+        self.cvar_lookup("RET").ok_or(format!(
+            "Missing return value for one or more functions."
+        ))
+    }
+
+    // TODO: Return the index of the next block
+    fn bl_eval_impl_<const IS_CNST: bool>(&self, bl: &Block<'ast>) -> Result<(), String> {
         if IS_CNST {
             debug!("Const block: ");
             let _ = &bl.pretty();
@@ -244,19 +279,82 @@ impl<'ast> ZGen<'ast> {
             let _ = &bl.pretty();
         }
 
-        let mut cur_state = Ok(in_state);
         for s in &bl.instructions {
-            cur_state = match s {
-                ast::Statement::Return(r) => Ok(cur_state.unwrap()),
-                ast::Statement::Assertion(e) => Ok(cur_state.unwrap()),
-                ast::Statement::Iteration(i) => Ok(cur_state.unwrap()),
+            match s {
+                ast::Statement::Return(r) => {
+                    // XXX(unimpl) multi-return unimplemented
+                    assert!(r.expressions.len() <= 1);
+                    if let Some(e) = r.expressions.first() {
+                        self.set_lhs_ty_ret(r);
+                        let ret = self.expr_impl_::<IS_CNST>(e)?;
+                        self.ret_impl_::<IS_CNST>(Some(ret)).map_err(|e| format!("{}", e))?;
+                    } else {
+                        self.ret_impl_::<IS_CNST>(None).map_err(|e| format!("{}", e))?;
+                    }
+                }
+                ast::Statement::Assertion(e) => {
+                    match self.expr_impl_::<true>(&e.expression).and_then(|v| {
+                        const_bool(v)
+                            .ok_or_else(|| "interpreting expr as const bool failed".to_string())
+                    }) {
+                        Ok(true) => {},
+                        Ok(false) => return Err(format!(
+                            "Const assert failed: {} at\n{}",
+                            e.message
+                                .as_ref()
+                                .map(|m| m.value.as_ref())
+                                .unwrap_or("(no error message given)"),
+                            span_to_string(e.expression.span()),
+                        )),
+                        Err(err) if IS_CNST => return Err(format!(
+                            "Const assert expression eval failed {} at\n{}",
+                            err,
+                            span_to_string(e.expression.span()),
+                        )),
+                        _ => {
+                            let b = bool(self.expr_impl_::<false>(&e.expression)?)?;
+                            self.assert(b);
+                        }
+                    }
+                }
+                ast::Statement::Iteration(i) => {
+                    let ty = self.type_impl_::<IS_CNST>(&i.ty)?;
+                    let ival_cons = match ty {
+                        Ty::Field => T::new_field,
+                        Ty::Uint(8) => T::new_u8,
+                        Ty::Uint(16) => T::new_u16,
+                        Ty::Uint(32) => T::new_u32,
+                        Ty::Uint(64) => T::new_u64,
+                        _ => {
+                            return Err(format!(
+                                "Iteration variable must be Field or Uint, got {:?}",
+                                ty
+                            ));
+                        }
+                    };
+                    // XXX(rsw) CHECK does this work if the range includes negative numbers?
+                    let s = self.const_isize_impl_::<IS_CNST>(&i.from)?;
+                    let e = self.const_isize_impl_::<IS_CNST>(&i.to)?;
+                    let v_name = i.index.value.clone();
+                    self.enter_scope_impl_::<IS_CNST>();
+                    self.decl_impl_::<IS_CNST>(v_name, &ty)?;
+                    for j in s..e {
+                        self.enter_scope_impl_::<IS_CNST>();
+                        self.assign_impl_::<IS_CNST>(&i.index.value, &[][..], ival_cons(j), false)?;
+                        for s in &i.statements {
+                            self.stmt_impl_::<IS_CNST>(s)?;
+                        }
+                        self.exit_scope_impl_::<IS_CNST>();
+                    }
+                    self.exit_scope_impl_::<IS_CNST>();
+                }
                 ast::Statement::Definition(d) => {
                     // XXX(unimpl) multi-assignment unimplemented
                     assert!(d.lhs.len() <= 1);
-
+    
                     self.set_lhs_ty_defn::<IS_CNST>(d)?;
                     let e = self.expr_impl_::<IS_CNST>(&d.expression)?;
-
+    
                     if let Some(l) = d.lhs.first() {
                         match l {
                             ast::TypedIdentifierOrAssignee::Assignee(l) => {
@@ -266,8 +364,7 @@ impl<'ast> ZGen<'ast> {
                                     }
                                     _ => false,
                                 };
-                                // self.assign_impl_::<IS_CNST>(&l.id.value, &l.accesses[..], e, strict)
-                                Ok(cur_state.unwrap())
+                                self.assign_impl_::<IS_CNST>(&l.id.value, &l.accesses[..], e, strict)?;
                             }
                             ast::TypedIdentifierOrAssignee::TypedIdentifier(l) => {
                                 let decl_ty = self.type_impl_::<IS_CNST>(&l.ty)?;
@@ -278,37 +375,20 @@ impl<'ast> ZGen<'ast> {
                                         decl_ty, ty,
                                     ));
                                 }
-                                // self.declare_init_impl_::<IS_CNST>(
-                                    // l.identifier.value.clone(),
-                                    // decl_ty,
-                                    // e,
-                                // )
-                                Ok(cur_state.unwrap())
+                                self.declare_init_impl_::<IS_CNST>(
+                                    l.identifier.value.clone(),
+                                    decl_ty,
+                                    e,
+                                )?;
                             }
                         }
                     } else {
                         warn!("Statement with no LHS!");
-                        Ok(cur_state.unwrap())
                     }
-                    }
+                }
             }
         };
-        cur_state
-    }
 
-    fn bl_declare_init_impl_<const IS_CNST: bool>(
-        &self,
-        name: String,
-        ty: Ty,
-        val: T,
-        in_state: HashMap<String, (Ty, T)>, 
-    ) -> Result<HashMap<String, (Ty, T)>, String> {
-        if IS_CNST {
-            self.cvar_declare_init(name, &ty, val)
-        } else {
-            self.circ_declare_init(name, ty, Val::Term(val))
-                .map(|_| ())
-                .map_err(|e| format!("{}", e))
-        }
+        Ok(())
     }
 }

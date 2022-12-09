@@ -71,8 +71,9 @@ impl FrontEnd for ZSharpFE {
 }
 
 impl ZSharpFE {
-    /// Execute the Z# front-end interpreter on the supplied file with the supplied inputs
-    pub fn interpret(i: Inputs) -> T {
+    // Execute the Z# front-end interpreter on the supplied file with the supplied inputs
+    pub fn interpret(i: Inputs) -> () {
+    // pub fn interpret(i: Inputs) -> T {
         let loader = parser::ZLoad::new();
         let asts = loader.load(&i.file);
         let mut g = ZGen::new(asts, i.mode, loader.stdlib(), i.isolate_asserts);
@@ -82,12 +83,12 @@ impl ZSharpFE {
         let (blks, entry_bl, exit_bl) = g.bl_gen_const_entry_fn("main");
         println!("Entry block: {entry_bl}");
         println!("Exit block: {exit_bl}");
-        // for b in &blks {
-            // b.pretty();
-            // println!("");
-        // }
-        g.bl_eval_const_entry_fn(entry_bl, exit_bl, &blks)
-        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))
+        for b in &blks {
+            b.pretty();
+            println!("");
+        }
+        /* g.bl_eval_const_entry_fn(entry_bl, exit_bl, &blks)
+        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)) */
     }
 }
 
@@ -1373,6 +1374,18 @@ impl<'ast> ZGen<'ast> {
             st.iter().rev().find_map(|v| v.get(name).cloned())
         } else {
             None
+        }
+    }
+
+    fn cvar_cur_scope_find(&self, name: &str) -> bool {
+        if let Some(st1) = self.cvars_stack.borrow().last() {
+            if let Some(st2) = st1.last() {
+                st2.contains_key(name)
+            } else {
+                false
+            }
+        } else {
+            false
         }
     }
 

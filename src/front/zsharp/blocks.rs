@@ -11,6 +11,7 @@ use crate::front::zsharp::Ty;
 use crate::front::zsharp::const_bool;
 use crate::front::zsharp::span_to_string;
 use crate::front::zsharp::bool;
+use std::collections::BTreeMap;
 use pest::Span;
 
 fn cond_expr<'ast>(ident: ast::IdentifierExpression<'ast>, condition: ast::Expression<'ast>) -> ast::Expression<'ast> {
@@ -98,7 +99,24 @@ impl<'ast> BlockTransition<'ast> {
 }
 
 impl<'ast> ZGen<'ast> {
-    pub fn bl_gen_const_entry_fn(&'ast self, n: &str) -> Vec<Block<'ast>> {
+    fn print_all_vars_in_scope(&self) {
+        println!("\n\nVariables in scope:");
+
+        let mut all_vars = BTreeMap::new();
+        let binding = self.cvars_stack.borrow_mut();
+        let maps = binding.last().unwrap();
+        for map in maps {
+            for (key, value) in map.iter() {
+                all_vars.insert(key, value);
+            }
+        }
+        
+        for (key, value) in all_vars {
+            println!("{key} = {value}");
+        }
+    }
+
+    pub fn bl_gen_const_entry_fn(&'ast self, n: &str) -> (Vec<Block<'ast>>, usize, usize) {
         debug!("Block Gen Const entry: {}", n);
         let (f_file, f_name) = self.deref_import(n);
         if let Some(f) = self.functions.get(&f_file).and_then(|m| m.get(&f_name)) {
@@ -123,7 +141,7 @@ impl<'ast> ZGen<'ast> {
         &self,
         f_path: PathBuf,
         f_name: String,
-    ) -> Result<Vec<Block>, String> {
+    ) -> Result<(Vec<Block>, usize, usize), String> {
         if IS_CNST {
             debug!("Block Gen Const function call: {} {:?}", f_name, f_path);
         } else {
@@ -152,7 +170,7 @@ impl<'ast> ZGen<'ast> {
         for s in &f.statements {
             (blks, blks_len) = self.bl_gen_stmt_::<IS_CNST>(blks, blks_len, s, ret_ty)?;
         }
-        Ok(blks)
+        Ok((blks, 0, blks_len))
     }
 
     fn bl_gen_stmt_<const IS_CNST: bool>(
@@ -256,21 +274,24 @@ impl<'ast> ZGen<'ast> {
         }
     }
 
-    pub fn bl_eval_const_entry_fn(&self, entry_bl: usize, bls: &Vec<Block<'ast>>) -> Result<T, String> {
+    pub fn bl_eval_const_entry_fn(&self, entry_bl: usize, exit_bl: usize, bls: &Vec<Block<'ast>>) -> Result<T, String> {
         // We assume that all errors has been handled in bl_gen functions        
         debug!("Block Eval Const entry: {}", entry_bl);
         self.cvar_enter_function();
-        self.bl_eval_impl_::<true>(&bls[entry_bl])?;
+        let mut nb = entry_bl;
+        while nb != exit_bl {
+            self.print_all_vars_in_scope();
+            nb = self.bl_eval_impl_::<true>(&bls[nb])?;
+        }
 
         // Return value is just the value of the variable called "%RET"
         // Type of return value is checked during assignment
-        self.cvar_lookup("RET").ok_or(format!(
+        self.cvar_lookup("%RET").ok_or(format!(
             "Missing return value for one or more functions."
         ))
     }
 
-    // TODO: Return the index of the next block
-    fn bl_eval_impl_<const IS_CNST: bool>(&self, bl: &Block<'ast>) -> Result<(), String> {
+    fn bl_eval_impl_<const IS_CNST: bool>(&self, bl: &Block<'ast>) -> Result<usize, String> {
         if IS_CNST {
             debug!("Const block: ");
             let _ = &bl.pretty();
@@ -389,6 +410,15 @@ impl<'ast> ZGen<'ast> {
             }
         };
 
-        Ok(())
+        match &bl.terminator {
+            BlockTerminator::Transition(t) => {
+                match self.expr_impl_::<true>(&t.cond).ok().and_then(const_bool) {
+                    Some(true) => Ok(t.tblock), 
+                    Some(false) => Ok(t.fblock),
+                    _ => Err("block transition condition not const bool".to_string()),
+                }
+            }
+            BlockTerminator::Coda(nb) => Ok(*nb)
+        }
     }
 }

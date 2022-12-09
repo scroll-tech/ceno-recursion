@@ -17,6 +17,7 @@ use log::{debug, warn};
 use rug::Integer;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -78,12 +79,14 @@ impl ZSharpFE {
         g.visit_files();
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
-        let bs = g.bl_gen_const_entry_fn("main");
-        for b in &bs {
-            b.pretty();
-            println!("");
-        }
-        g.bl_eval_const_entry_fn(0, &bs)
+        let (blks, entry_bl, exit_bl) = g.bl_gen_const_entry_fn("main");
+        println!("Entry block: {entry_bl}");
+        println!("Exit block: {exit_bl}");
+        // for b in &blks {
+            // b.pretty();
+            // println!("");
+        // }
+        g.bl_eval_const_entry_fn(entry_bl, exit_bl, &blks)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))
     }
 }
@@ -103,7 +106,7 @@ struct ZGen<'ast> {
     constants: HashMap<PathBuf, HashMap<String, (ast::Type<'ast>, T)>>,
     import_map: HashMap<PathBuf, HashMap<String, (PathBuf, String)>>,
     mode: Mode,
-    cvars_stack: RefCell<Vec<Vec<HashMap<String, T>>>>,
+    cvars_stack: RefCell<Vec<Vec<BTreeMap<String, T>>>>,
     crets_stack: RefCell<Vec<T>>,
     lhs_ty: RefCell<Option<Ty>>,
     ret_ty_stack: RefCell<Vec<Ty>>,
@@ -1301,7 +1304,7 @@ impl<'ast> ZGen<'ast> {
             .borrow_mut()
             .last_mut()
             .unwrap()
-            .push(HashMap::new());
+            .push(BTreeMap::new());
     }
 
     fn exit_scope_impl_<const IS_CNST: bool>(&self) {

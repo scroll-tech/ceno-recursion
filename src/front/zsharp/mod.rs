@@ -72,7 +72,7 @@ impl FrontEnd for ZSharpFE {
 
 impl ZSharpFE {
     // Execute the Z# front-end interpreter on the supplied file with the supplied inputs
-    pub fn interpret(i: Inputs) -> () {
+    pub fn interpret(i: Inputs) -> T {
     // pub fn interpret(i: Inputs) -> T {
         let loader = parser::ZLoad::new();
         let asts = loader.load(&i.file);
@@ -87,8 +87,8 @@ impl ZSharpFE {
             b.pretty();
             println!("");
         }
-        /* g.bl_eval_const_entry_fn(entry_bl, exit_bl, &blks)
-        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)) */
+        g.bl_eval_const_entry_fn(entry_bl, exit_bl, &blks)
+        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))
     }
 }
 

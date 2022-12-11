@@ -49,9 +49,6 @@ pub struct Block<'ast> {
 
 #[derive(Clone)]
 pub enum BlockContent<'ast> {
-    SPInit(),   // %SP = 0
-    BPUpdate(), // %BP = %SP
-    SPInc(usize), // %SP = %SP + offset
     MemPush((String, usize)), // %PHY[%SP + offset] = id
     MemPop((String, usize)),  // id = %PHY[%BP + offset]
     Stmt(Statement<'ast>) // other statements
@@ -87,9 +84,6 @@ impl<'ast> Block<'ast> {
         println!("\nBlock {}:", self.name);
         for c in &self.instructions {
             match c {
-                BlockContent::SPInit() => { println!("    %SP = 0") }
-                BlockContent::BPUpdate() => { println!("    %BP = %SP") }
-                BlockContent::SPInc(offset) => { println!("    %SP = %SP + {offset}") }
                 BlockContent::MemPush((id, offset)) => { println!("    %PHY[%SP + {offset}] = {id}") }
                 BlockContent::MemPop((id, offset)) => { println!("    {id} = %PHY[%BP + {offset}]") }
                 BlockContent::Stmt(s) => { pretty::pretty_stmt(1, &s); }
@@ -137,7 +131,7 @@ impl<'ast> ZGen<'ast> {
         }
     }
 
-    fn t_to_usize(a: T) -> Result<usize, String> {
+    fn t_to_usize(&self, a: T) -> Result<usize, String> {
         let t = const_val(a)?;
         match t.ty {
             Ty::Field => {
@@ -182,9 +176,49 @@ impl<'ast> ZGen<'ast> {
         blks.push(Block::new(0));
         blks_len += 1;
         // Initialize %SP
-        blks[blks_len - 1].instructions.push(BlockContent::SPInit());
+        let sp_init_stmt = Statement::Definition(DefinitionStatement {
+            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                ty: Type::Basic(BasicType::Field(FieldType {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                identifier: IdentifierExpression {
+                    value: "%SP".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                span: Span::new("", 0, 0).unwrap()
+            })],
+            expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: "0".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            span: Span::new("", 0, 0).unwrap()
+        });
+        blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_init_stmt));
         // Initialize %BP
-        blks[blks_len - 1].instructions.push(BlockContent::BPUpdate());
+        let bp_init_stmt = Statement::Definition(DefinitionStatement {
+            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                ty: Type::Basic(BasicType::Field(FieldType {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                identifier: IdentifierExpression {
+                    value: "%BP".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                span: Span::new("", 0, 0).unwrap()
+            })],
+            expression: Expression::Identifier(IdentifierExpression {
+                value: "%SP".to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            }),
+            span: Span::new("", 0, 0).unwrap()
+        });
+        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_init_stmt));
 
         self.bl_gen_function_call_::<true>(f_file, f_name, blks, blks_len)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))
@@ -289,26 +323,18 @@ impl<'ast> ZGen<'ast> {
 
                 // STORE iterator in Physical Mem if has appeared before
                 (blks, stmt_phy_assign, sp_offset) = self.bl_gen_scoping_(blks, blks_len, &it.index.value, stmt_phy_assign, sp_offset);
-                // New Scoping
+                
+                // New Scope
+                (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_::<IS_CNST>(blks, blks_len, sp_offset)?;
                 let v_name = it.index.value.clone();
                 let ty = self.type_impl_::<IS_CNST>(&it.ty)?;
-                self.enter_scope_impl_::<IS_CNST>();
                 self.decl_impl_::<IS_CNST>(v_name, &ty)?;
-
-                // Update %SP and %BP if any changes has been made
-                if sp_offset > 0 {
-                    // %BP = %SP
-                    blks[blks_len - 1].instructions.push(BlockContent::BPUpdate());
-                    // %SP = %SP + sp_offset
-                    blks[blks_len - 1].instructions.push(BlockContent::SPInc(sp_offset));
-                    sp_offset = 0
-                }
 
                 // Create new Block
                 blks.push(Block::new(blks_len));
                 blks_len += 1;
 
-                let mut var_to_pop = BTreeMap::new();
+                let mut var_to_pop;
                 // Iterate through Stmts
                 for body in &it.statements {
                     (blks, blks_len, var_to_pop, sp_offset) = self.bl_gen_stmt_::<IS_CNST>(blks, blks_len, body, ret_ty, sp_offset)?;
@@ -356,7 +382,7 @@ impl<'ast> ZGen<'ast> {
                 blks[old_state].terminator = term;
 
                 // Exit Scoping
-                self.exit_scope_impl_::<IS_CNST>();
+                (blks, blks_len, sp_offset) = self.bl_gen_exit_scope_::<IS_CNST>(blks, blks_len, sp_offset)?;
 
                 // Create new Block
                 blks.push(Block::new(blks_len));
@@ -443,6 +469,119 @@ impl<'ast> ZGen<'ast> {
         (blks, stmt_phy_assign, sp_offset)
     }
 
+    fn bl_gen_enter_scope_<const IS_CNST: bool>(
+        &'ast self,
+        mut blks: Vec<Block<'ast>>,
+        blks_len: usize,
+        mut sp_offset: usize
+    ) -> Result<(Vec<Block>, usize, usize), String> {
+        // New Scoping
+        self.enter_scope_impl_::<IS_CNST>();
+
+        // Update %SP and %BP if any changes has been made
+        if sp_offset > 0 {
+            // %BP = %SP
+            let bp_update_stmt = Statement::Definition(DefinitionStatement {
+                lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                    ty: Type::Basic(BasicType::Field(FieldType {
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    identifier: IdentifierExpression {
+                        value: "%BP".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    span: Span::new("", 0, 0).unwrap()
+                })],
+                expression: Expression::Identifier(IdentifierExpression {
+                    value: "%SP".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                }),
+                span: Span::new("", 0, 0).unwrap()
+            });
+            blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_update_stmt));
+            // %SP = %SP + sp_offset
+            let sp_update_stmt = Statement::Definition(DefinitionStatement {
+                lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
+                    id: IdentifierExpression {
+                        value: "%SP".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    accesses: Vec::new(),
+                    span: Span::new("", 0, 0).unwrap()
+                })],
+                expression: Expression::Binary(BinaryExpression {
+                    op: BinaryOperator::Add,
+                    left: Box::new(Expression::Identifier(IdentifierExpression {
+                        value: "%SP".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                        value: DecimalNumber {
+                            value: sp_offset.to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        span: Span::new("", 0, 0).unwrap()
+                    }))),
+                    span: Span::new("", 0, 0).unwrap()
+                }),
+                span: Span::new("", 0, 0).unwrap()
+            });
+            blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_update_stmt));
+            sp_offset = 0;
+        }
+        Ok((blks, blks_len, sp_offset))
+    }
+
+    fn bl_gen_exit_scope_<const IS_CNST: bool>(
+        &'ast self,
+        mut blks: Vec<Block<'ast>>,
+        blks_len: usize,
+        mut sp_offset: usize
+    ) -> Result<(Vec<Block>, usize, usize), String> {
+        // Exit Scoping
+        self.exit_scope_impl_::<IS_CNST>();
+
+        // Update %SP if any changes has been made
+        if sp_offset > 0 {
+            // %SP = %SP + sp_offset
+            let sp_update_stmt = Statement::Definition(DefinitionStatement {
+                lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
+                    id: IdentifierExpression {
+                        value: "%SP".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    accesses: Vec::new(),
+                    span: Span::new("", 0, 0).unwrap()
+                })],
+                expression: Expression::Binary(BinaryExpression {
+                    op: BinaryOperator::Add,
+                    left: Box::new(Expression::Identifier(IdentifierExpression {
+                        value: "%SP".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                        value: DecimalNumber {
+                            value: sp_offset.to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        span: Span::new("", 0, 0).unwrap()
+                    }))),
+                    span: Span::new("", 0, 0).unwrap()
+                }),
+                span: Span::new("", 0, 0).unwrap()
+            });
+            blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_update_stmt));
+            sp_offset = 0;
+        }
+        Ok((blks, blks_len, sp_offset))
+    }
+
     // I am hacking cvars_stack to do the interpretation. Ideally we want a separate var_table to do so.
     // We only need BTreeMap<String, T> to finish evaluation, so the 2 Vecs of cvars_stack should always have
     // size 1.
@@ -451,9 +590,15 @@ impl<'ast> ZGen<'ast> {
         debug!("Block Eval Const entry: {}", entry_bl);
         self.cvar_enter_function();
         let mut nb = entry_bl;
+        let mut phy_mem = Vec::new();
         while nb != exit_bl {
             self.print_all_vars_in_scope();
-            (nb, _, _, _) = self.bl_eval_impl_::<true>(&bls[nb], Vec::new(), 0, 0)?;
+            println!("%PHY:");
+            for c in &phy_mem {
+                println!("{c},");
+            }
+            println!();
+            (nb, phy_mem) = self.bl_eval_impl_::<true>(&bls[nb], phy_mem)?;
         }
 
         // Return value is just the value of the variable called "%RET"
@@ -467,9 +612,7 @@ impl<'ast> ZGen<'ast> {
         &self, 
         bl: &Block<'ast>,
         mut phy_mem: Vec<T>,
-        mut sp: usize,
-        mut bp: usize
-    ) -> Result<(usize, Vec<T>, usize, usize), String> {
+    ) -> Result<(usize, Vec<T>), String> {
         if IS_CNST {
             debug!("Const block: ");
             let _ = &bl.pretty();
@@ -480,27 +623,25 @@ impl<'ast> ZGen<'ast> {
 
         for s in &bl.instructions {
             match s {
-                BlockContent::SPInit() => { sp = 0; }
-                BlockContent::BPUpdate() => {bp = sp; }
-                BlockContent::SPInc(offset) => { sp += offset; }
                 BlockContent::MemPush((var, offset)) => {
+                    let sp_t = self.cvar_lookup("%SP").ok_or(format!("Push to %PHY failed: %SP is uninitialized."))?;
+                    let sp = self.t_to_usize(sp_t)?;
                     if sp + offset != phy_mem.len() {
-                        return Err(format!("Error processing %PHY push: incorrect index."));
+                        return Err(format!("Error processing %PHY push: index {sp} + {offset} does not match with stack size."));
                     } else {
-                        if var == "%BP" {
-                            panic!("Evaluation of %BP has yet to be implemented");
-                        } else {
-                            let var_expr = Expression::Identifier(IdentifierExpression {
-                                value: var.to_string(),
-                                span: Span::new("", 0, 0).unwrap()
-                            });
-                            let e = self.expr_impl_::<IS_CNST>(&var_expr)?;
-                            phy_mem.push(e);
-                        }
+                        let e = self.cvar_lookup(&var).ok_or(format!("Push to %PHY failed: pushing an out-of-scope variable."))?;
+                        phy_mem.push(e);
                     }
                 }
                 BlockContent::MemPop((var, offset)) => {
-                    panic!("Evaluation of MemPop has yet to be implemented");                  
+                    let bp_t = self.cvar_lookup("%BP").ok_or(format!("Pop from %PHY failed: %BP is uninitialized."))?;
+                    let bp = self.t_to_usize(bp_t)?;
+                    if bp + offset >= phy_mem.len() {
+                        return Err(format!("Error processing %PHY pop: index out of bound."));
+                    } else {
+                        let t = phy_mem[bp + offset].clone();
+                        self.cvar_assign(&var, t)?;
+                    }              
                 }
                 BlockContent::Stmt(Statement::Return(_)) => {
                     return Err(format!("Blocks should not contain return statements."));
@@ -572,19 +713,18 @@ impl<'ast> ZGen<'ast> {
                         warn!("Statement with no LHS!");
                     }
                 }
-                _ => { panic!("Not implemented."); }
             }
         };
 
         match &bl.terminator {
             BlockTerminator::Transition(t) => {
                 match self.expr_impl_::<true>(&t.cond).ok().and_then(const_bool) {
-                    Some(true) => Ok((t.tblock, phy_mem, sp, bp)), 
-                    Some(false) => Ok((t.fblock, phy_mem, sp, bp)),
+                    Some(true) => Ok((t.tblock, phy_mem)), 
+                    Some(false) => Ok((t.fblock, phy_mem)),
                     _ => Err("block transition condition not const bool".to_string()),
                 }
             }
-            BlockTerminator::Coda(nb) => Ok((*nb, phy_mem, sp, bp))
+            BlockTerminator::Coda(nb) => Ok((*nb, phy_mem))
         }
     }
 }

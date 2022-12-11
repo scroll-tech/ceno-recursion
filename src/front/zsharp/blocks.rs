@@ -127,7 +127,10 @@ impl<'ast> ZGen<'ast> {
         }
         
         for (key, value) in all_vars {
-            println!("{key} = {value}");
+            print!("{key} = ");
+            value.pretty(&mut std::io::stdout().lock())
+            .expect("error pretty-printing value");
+            println!();
         }
     }
 
@@ -590,14 +593,16 @@ impl<'ast> ZGen<'ast> {
         debug!("Block Eval Const entry: {}", entry_bl);
         self.cvar_enter_function();
         let mut nb = entry_bl;
-        let mut phy_mem = Vec::new();
+        let mut phy_mem: Vec<T> = Vec::new();
         while nb != exit_bl {
             self.print_all_vars_in_scope();
-            println!("%PHY:");
+            print!("%PHY: [");
             for c in &phy_mem {
-                println!("{c},");
+                c.pretty(&mut std::io::stdout().lock())
+                .expect("error pretty-printing value");
+                print!(", ");
             }
-            println!();
+            println!("]");
             (nb, phy_mem) = self.bl_eval_impl_::<true>(&bls[nb], phy_mem)?;
         }
 

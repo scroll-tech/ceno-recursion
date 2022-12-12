@@ -258,29 +258,37 @@ impl<'ast> ZGen<'ast> {
         self.cvar_enter_function();
 
         // Iterate through Stmts
+        let mut offset = 0;
+        let mut exit_blk = 0;
         for s in &f.statements {
-            (blks, blks_len, _, _) = self.bl_gen_stmt_::<IS_CNST>(blks, blks_len, s, ret_ty, 0)?;
+            (blks, blks_len, exit_blk, _, offset) = self.bl_gen_stmt_::<IS_CNST>(blks, blks_len, exit_blk, s, ret_ty, offset)?;
         }
-        Ok((blks, 0, blks_len))
+        if exit_blk == 0 {
+            exit_blk = blks_len;
+        }
+        Ok((blks, 0, exit_blk))
     }
 
     // Generate blocks from statements
     // Return value:
     // result[0]: list of blocks generated so far
     // result[1]: length of the generated blocks
-    // result[2]: variables that need to be POPed after current scope, with their offset to %BP
+    // result[2]: Exit Block of the current function, will be decided after processing any return statement
+    //            0 if undecided, coda block if we are processing 
+    // result[3]: variables that need to be POPed after current scope, with their offset to %BP
     //            used by loop statements and potentially if / else statements
-    // result[3]: variables that need to be POPed after current function, with their offset to %BP
+    // result[4]: variables that need to be POPed after current function, with their offset to %BP
     //            used by bl_gen_function_call
-    // result[4]: offset between value of %SP and the actual size of the physical memory
+    // result[5]: offset between value of %SP and the actual size of the physical memory
     fn bl_gen_stmt_<const IS_CNST: bool>(
         &'ast self, 
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
+        mut exit_blk: usize,
         s: &'ast Statement<'ast>,
         ret_ty: &'ast Type<'ast>,
         mut sp_offset: usize
-    ) -> Result<(Vec<Block>, usize, BTreeMap<usize, String>, usize), String> {
+    ) -> Result<(Vec<Block>, usize, usize, BTreeMap<usize, String>, usize), String> {
         if IS_CNST {
             debug!("Block Gen Const stmt: {}", s.span().as_str());
         } else {
@@ -305,6 +313,18 @@ impl<'ast> ZGen<'ast> {
                     span: Span::new("", 0, 0).unwrap()
                 });
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(ret_stmt));
+
+                // Update CODA block
+                if exit_blk == 0 {
+                    exit_blk = blks_len;
+                    // Create new Block
+                    blks.push(Block::new(blks_len));
+                    blks_len += 1;
+                } else {
+                    let term = BlockTerminator::Coda(exit_blk);
+                    blks[blks_len - 1].terminator = term;
+                }
+
             }
             Statement::Assertion(_) => {
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(s.clone()));
@@ -340,7 +360,7 @@ impl<'ast> ZGen<'ast> {
                 let mut var_to_pop;
                 // Iterate through Stmts
                 for body in &it.statements {
-                    (blks, blks_len, var_to_pop, sp_offset) = self.bl_gen_stmt_::<IS_CNST>(blks, blks_len, body, ret_ty, sp_offset)?;
+                    (blks, blks_len, exit_blk, var_to_pop, sp_offset) = self.bl_gen_stmt_::<IS_CNST>(blks, blks_len, exit_blk, body, ret_ty, sp_offset)?;
                     vars_to_pop.extend(var_to_pop);
                 }
                 // Create and push STEP statement
@@ -441,7 +461,7 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(s.clone()));
             }
         }
-        Ok((blks, blks_len, stmt_phy_assign, sp_offset))
+        Ok((blks, blks_len, exit_blk, stmt_phy_assign, sp_offset))
     }
 
     // Handle scoping change by pushing old values onto the stack
@@ -458,9 +478,9 @@ impl<'ast> ZGen<'ast> {
             // If the identifier is used in the previous scopes of the current function,
             // push the previous value and pop it after current scope ends
             if self.cvar_lookup(id).is_some() {
-                // Push %BP onto the stack before anything else
+                // Push %SP onto the stack before anything else
                 if sp_offset == 0 {
-                    blks[blks_len - 1].instructions.push(BlockContent::MemPush(("%BP".to_string(), sp_offset)));
+                    blks[blks_len - 1].instructions.push(BlockContent::MemPush(("%SP".to_string(), sp_offset)));
                     stmt_phy_assign.insert(sp_offset, "%BP".to_string());
                     sp_offset += 1;
                 }

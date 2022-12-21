@@ -250,7 +250,7 @@ impl<'ast> ZGen<'ast> {
         mut blks_len: usize,
         mut stmt_phy_assign: BTreeMap<usize, String>,
         mut sp_offset: usize,
-        args: Vec<&'ast Expression<'ast>>,
+        args: Vec<Expression<'ast>>, // We do not use &args here because Expressions might be reconstructed
         f_path: PathBuf,
         f_name: String,
     ) -> Result<(Vec<Block>, usize, usize, usize, BTreeMap<usize, String>, usize), String> {
@@ -534,7 +534,13 @@ impl<'ast> ZGen<'ast> {
         Ok((blks, blks_len, exit_blk, stmt_phy_assign, sp_offset))
     }
 
-    // new_expr reconstructs the expression and converts all function calls to %RET
+    // Generate blocks from statements
+    // Return value:
+    // result[0 ~ 5] follows bl_gen_stmt_
+    // result[6]: new_expr reconstructs the expression and converts all function calls to %RET
+    // result[7]: func_count, how many function calls has occured in this statement?
+    // Since the return value of all function calls are stored in %RET, we need to differentiate them if
+    // multiple function calls occur in the same statement
     fn bl_gen_expr_<const IS_CNST: bool>(
         &'ast self, 
         mut blks: Vec<Block<'ast>>,
@@ -542,42 +548,105 @@ impl<'ast> ZGen<'ast> {
         mut exit_blk: usize,
         e: &'ast Expression<'ast>,
         mut stmt_phy_assign: BTreeMap<usize, String>,
-        mut sp_offset: usize
-    ) -> Result<(Vec<Block>, usize, usize, BTreeMap<usize, String>, usize, Expression), String> {
+        mut sp_offset: usize,
+        mut func_count: usize
+    ) -> Result<(Vec<Block>, usize, usize, BTreeMap<usize, String>, usize, Expression, usize), String> {
         if IS_CNST {
             debug!("Const expr: {}", e.span().as_str());
         } else {
             debug!("Expr: {}", e.span().as_str());
         }
 
-        let new_expr = *e.clone();
+        let mut ret_e = e.clone();
 
         match e {
             Expression::Ternary(t) => {
-                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset) = self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &t.first, stmt_phy_assign, sp_offset)?;
-                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset) = self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &t.second, stmt_phy_assign, sp_offset)?;
-                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset) = self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &t.third, stmt_phy_assign, sp_offset)?;
+                let new_e_first: Expression;
+                let new_e_second: Expression;
+                let new_e_third: Expression;
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, new_e_first, func_count) = 
+                    self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &t.first, stmt_phy_assign, sp_offset, func_count)?;
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, new_e_second, func_count) = 
+                    self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &t.second, stmt_phy_assign, sp_offset, func_count)?;
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, new_e_third, func_count) = 
+                    self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &t.third, stmt_phy_assign, sp_offset, func_count)?;
+                ret_e = Expression::Ternary(TernaryExpression {
+                    first: Box::new(new_e_first),
+                    second: Box::new(new_e_second),
+                    third: Box::new(new_e_third),
+                    span: Span::new("", 0, 0).unwrap()
+                });
             }
             Expression::Binary(b) => {
-                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, ret_e) = self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &b.left, stmt_phy_assign, sp_offset)?;
-                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset) = self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &b.right, stmt_phy_assign, sp_offset)?;
+                let new_e_left: Expression;
+                let new_e_right: Expression;
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, new_e_left, func_count) = 
+                    self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &b.left, stmt_phy_assign.clone(), sp_offset, func_count)?;
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, new_e_right, func_count) = 
+                    self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &b.right, stmt_phy_assign.clone(), sp_offset, func_count)?;
+                ret_e = Expression::Binary(BinaryExpression {
+                    op: b.op.clone(),
+                    left: Box::new(new_e_left),
+                    right: Box::new(new_e_right),
+                    span: Span::new("", 0, 0).unwrap()
+                });
             }
             Expression::Unary(u) => {
-                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, ret_e) = self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &u.expression, stmt_phy_assign, sp_offset)?;
+                let new_e_expr: Expression;
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, new_e_expr, func_count) = 
+                    self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &u.expression, stmt_phy_assign.clone(), sp_offset, func_count)?;
+                ret_e = Expression::Unary(UnaryExpression {
+                    op: u.op.clone(),
+                    expression: Box::new(new_e_expr),
+                    span: Span::new("", 0, 0).unwrap()
+                });
             }
             Expression::Postfix(p) => {
                 // assume no functions in arrays, etc.
                 assert!(!p.accesses.is_empty());
                 if let Some(Access::Call(c)) = p.accesses.first() {
                     let (f_path, f_name) = self.deref_import(&p.id.value);
-                    let args = c
-                        .arguments
-                        .expressions
-                        .iter()
-                        .map(|e| Ok::<&zokrates_pest_ast::Expression<'_>, String>(e))
-                        .collect::<Result<Vec<_>, _>>()?;
+                    // TODO: evalute all arguments to see if they contain additional function calls
+                    let mut args: Vec<Expression> = Vec::new();
+                    let mut new_expr: Expression;
+                    for old_expr in &c.arguments.expressions {
+                        (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, new_expr, func_count) = 
+                            self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, old_expr, stmt_phy_assign.clone(), sp_offset, func_count)?;
+                        args.push(new_expr);                       
+                    }
                     (blks, blks_len, _, _, stmt_phy_assign, sp_offset) =
-                        self.bl_gen_function_call_::<IS_CNST>(blks, blks_len, stmt_phy_assign, sp_offset, args, f_path, f_name)?;
+                        self.bl_gen_function_call_::<IS_CNST>(blks, blks_len, stmt_phy_assign, sp_offset, args, f_path.clone(), f_name.clone())?;
+                    let ret_ty = self
+                    .functions
+                    .get(&f_path)
+                    .ok_or_else(|| format!("No file '{:?}' attempting fn call", &f_path))?
+                    .get(&f_name)
+                    .ok_or_else(|| format!("No function '{}' attempting fn call", &f_name))?
+                    .returns
+                    .first().ok_or("No return type provided for one or more function")?;
+
+                    let update_ret_stmt = Statement::Definition(DefinitionStatement {
+                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                            ty: ret_ty.clone(),
+                            identifier: IdentifierExpression {
+                                value: "%RET{func_count}".to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            span: Span::new("", 0, 0).unwrap()
+                        })],
+                        // Assume that we only have ONE return variable
+                        expression: Expression::Identifier(IdentifierExpression {
+                            value: "%RET".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        }),
+                        span: Span::new("", 0, 0).unwrap()
+                    });
+                    blks[blks_len - 1].instructions.push(BlockContent::Stmt(update_ret_stmt));
+                    func_count += 1;
+                    ret_e = Expression::Identifier(IdentifierExpression {
+                        value: "%RET{func_count}".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })
                 } else {
                     panic!("Array and Struct not implemented!")
                 };
@@ -587,7 +656,7 @@ impl<'ast> ZGen<'ast> {
             Expression::InlineArray(_) => { panic!("Array not supported!"); }
             _ => {}
         }
-        Ok((blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, ret_e))
+        Ok((blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, ret_e, func_count))
     }   
     
     // Handle scoping change by pushing old values onto the stack

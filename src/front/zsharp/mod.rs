@@ -564,7 +564,7 @@ impl<'ast> ZGen<'ast> {
             }
             if f.parameters.len() != args.len() {
                 return Err(format!(
-                    "Wrong nimber of arguments calling {} (got {}, expected {})",
+                    "Wrong number of arguments calling {} (got {}, expected {})",
                     &f.id.value,
                     args.len(),
                     f.parameters.len()

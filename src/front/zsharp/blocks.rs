@@ -1,4 +1,16 @@
 // TODO: Recursion is not supported.
+//       Generics are not supported.
+//       If / else statements are not supported.
+//       Arrays & structs are not supported.
+
+// Other Cleanups:
+//  Cross check edge-case detection with original ZSharp
+//  Can we get rid of IS_CNST?
+//  Replace `panic!()` with proper `return Err(format!());`
+
+// Problem:
+// How to deal with `a = f() ? g() : h()`?
+// This might occur on lhs as well! `a[p()] = q()`
 
 use log::{debug, warn};
 
@@ -223,24 +235,33 @@ impl<'ast> ZGen<'ast> {
         });
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_init_stmt));
 
-        self.bl_gen_function_call_::<true>(f_file, f_name, blks, blks_len)
-            .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))
+        let main_ret = self.bl_gen_function_call_::<true>(blks, blks_len, BTreeMap::new(), 0, Vec::new(), f_file, f_name)
+            .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+        (main_ret.0, main_ret.2, main_ret.3)
     }
 
     // TODO: Error handling in function call
     // The head block of the function is already created to facilitate any required initialization
+    // Return type:
+    // Blks, blks_len, entry_blk, exit_blk, stmt_phy_assign, sp_offset
     fn bl_gen_function_call_<const IS_CNST: bool>(
         &'ast self,
-        f_path: PathBuf,
-        f_name: String,
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
-    ) -> Result<(Vec<Block>, usize, usize), String> {
+        mut stmt_phy_assign: BTreeMap<usize, String>,
+        mut sp_offset: usize,
+        args: Vec<&'ast Expression<'ast>>,
+        f_path: PathBuf,
+        f_name: String,
+    ) -> Result<(Vec<Block>, usize, usize, usize, BTreeMap<usize, String>, usize), String> {
         if IS_CNST {
             debug!("Block Gen Const function call: {} {:?}", f_name, f_path);
         } else {
             debug!("Block Gen Function call: {} {:?}", f_name, f_path);
         }
+
+        let mut exit_blk = 0;
+
         let f = self
             .functions
             .get(&f_path)
@@ -248,32 +269,81 @@ impl<'ast> ZGen<'ast> {
             .get(&f_name)
             .ok_or_else(|| format!("No function '{}' attempting fn call", &f_name))?;
 
-        // XXX(unimpl) multi-return unimplemented
-        assert!(f.returns.len() <= 1);
-        // Get the return type because we need to convert it into a variable
-        let ret_ty = f
-            .returns
-            .first().ok_or("No return type provided for one or more function")?;
-        // Use cvar to identify variable scoping for push and pull
-        self.cvar_enter_function();
+        if self.stdlib.is_embed(&f_path) {
+            // Leave embedded functions in the blocks
+            // They will be handled at IR level
+        } else {
+            // XXX(unimpl) multi-return unimplemented
+            assert!(f.returns.len() <= 1);
+            if f.generics.len() != 0 {
+                return Err(format!("Generics not implemented"));
+            }
+            if f.parameters.len() != args.len() {
+                return Err(format!(
+                    "Wrong number of arguments calling {} (got {}, expected {})",
+                    &f.id.value,
+                    args.len(),
+                    f.parameters.len()
+                ));
+            }
 
-        // Iterate through Stmts
-        let mut offset = 0;
-        let mut exit_blk = 0;
-        for s in &f.statements {
-            (blks, blks_len, exit_blk, _, offset) = self.bl_gen_stmt_::<IS_CNST>(blks, blks_len, exit_blk, s, ret_ty, offset)?;
+            // XXX(unimpl) multi-return unimplemented
+            assert!(f.returns.len() <= 1);
+            // Get the return type because we need to convert it into a variable
+            let ret_ty = f
+                .returns
+                .first().ok_or("No return type provided for one or more function")?;
+
+            for (p, a) in f.parameters.clone().into_iter().zip(args) {
+                let p_id = p.id.value.clone();
+                // Push p to stack if necessary
+                (blks, stmt_phy_assign, sp_offset) = self.bl_gen_scoping_(blks, blks_len, &p.id.value, stmt_phy_assign, sp_offset);
+                // Assign p to a
+                let param_stmt = Statement::Definition(DefinitionStatement {
+                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        ty: p.ty,
+                        identifier: IdentifierExpression {
+                            value: p_id.clone(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        span: Span::new("", 0, 0).unwrap()
+                    })],
+                    expression: a.clone(),
+                    span: Span::new("", 0, 0).unwrap()
+                });
+                blks[blks_len - 1].instructions.push(BlockContent::Stmt(param_stmt));
+            }
+
+            // Use cvar to identify variable scoping for push and pull
+            self.cvar_enter_function();
+
+            // Add parameters to scope
+            for p in f.parameters.clone().into_iter() {
+                let p_id = p.id.value.clone();
+                let p_ty = self.type_impl_::<IS_CNST>(&p.ty)?;
+                self.decl_impl_::<IS_CNST>(p_id, &p_ty)?;                
+            }
+
+            // Iterate through Stmts
+            for s in &f.statements {
+                (blks, blks_len, exit_blk, _, sp_offset) = self.bl_gen_stmt_::<IS_CNST>(blks, blks_len, exit_blk, s, ret_ty, sp_offset)?;
+            }
+            if exit_blk == 0 {
+                exit_blk = blks_len;
+            }
+
+            self.cvar_exit_function();
+            self.maybe_garbage_collect();
         }
-        if exit_blk == 0 {
-            exit_blk = blks_len;
-        }
-        Ok((blks, 0, exit_blk))
+
+        Ok((blks, blks_len, 0, exit_blk, stmt_phy_assign, sp_offset))
     }
 
     // Generate blocks from statements
     // Return value:
     // result[0]: list of blocks generated so far
     // result[1]: length of the generated blocks
-    // result[2]: Exit Block of the current function, will be decided after processing any return statement
+    // result[2]: Exit Block of the CURRENT function, will be decided after processing any return statement
     //            0 if undecided, coda block if we are processing 
     // result[3]: variables that need to be POPed after current scope, with their offset to %BP
     //            used by loop statements and potentially if / else statements
@@ -464,6 +534,62 @@ impl<'ast> ZGen<'ast> {
         Ok((blks, blks_len, exit_blk, stmt_phy_assign, sp_offset))
     }
 
+    // new_expr reconstructs the expression and converts all function calls to %RET
+    fn bl_gen_expr_<const IS_CNST: bool>(
+        &'ast self, 
+        mut blks: Vec<Block<'ast>>,
+        mut blks_len: usize,
+        mut exit_blk: usize,
+        e: &'ast Expression<'ast>,
+        mut stmt_phy_assign: BTreeMap<usize, String>,
+        mut sp_offset: usize
+    ) -> Result<(Vec<Block>, usize, usize, BTreeMap<usize, String>, usize, Expression), String> {
+        if IS_CNST {
+            debug!("Const expr: {}", e.span().as_str());
+        } else {
+            debug!("Expr: {}", e.span().as_str());
+        }
+
+        let new_expr = *e.clone();
+
+        match e {
+            Expression::Ternary(t) => {
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset) = self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &t.first, stmt_phy_assign, sp_offset)?;
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset) = self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &t.second, stmt_phy_assign, sp_offset)?;
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset) = self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &t.third, stmt_phy_assign, sp_offset)?;
+            }
+            Expression::Binary(b) => {
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, ret_e) = self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &b.left, stmt_phy_assign, sp_offset)?;
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset) = self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &b.right, stmt_phy_assign, sp_offset)?;
+            }
+            Expression::Unary(u) => {
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, ret_e) = self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &u.expression, stmt_phy_assign, sp_offset)?;
+            }
+            Expression::Postfix(p) => {
+                // assume no functions in arrays, etc.
+                assert!(!p.accesses.is_empty());
+                if let Some(Access::Call(c)) = p.accesses.first() {
+                    let (f_path, f_name) = self.deref_import(&p.id.value);
+                    let args = c
+                        .arguments
+                        .expressions
+                        .iter()
+                        .map(|e| Ok::<&zokrates_pest_ast::Expression<'_>, String>(e))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    (blks, blks_len, _, _, stmt_phy_assign, sp_offset) =
+                        self.bl_gen_function_call_::<IS_CNST>(blks, blks_len, stmt_phy_assign, sp_offset, args, f_path, f_name)?;
+                } else {
+                    panic!("Array and Struct not implemented!")
+                };
+            }
+            Expression::ArrayInitializer(_) => { panic!("Array not supported!"); }
+            Expression::InlineStruct(_) => { panic!("Struct not supported!"); }
+            Expression::InlineArray(_) => { panic!("Array not supported!"); }
+            _ => {}
+        }
+        Ok((blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, ret_e))
+    }   
+    
     // Handle scoping change by pushing old values onto the stack
     fn bl_gen_scoping_(
         &'ast self, 

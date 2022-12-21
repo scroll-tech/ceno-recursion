@@ -2,15 +2,12 @@
 //       Generics are not supported.
 //       If / else statements are not supported.
 //       Arrays & structs are not supported.
+//       Function within array index?
 
 // Other Cleanups:
 //  Cross check edge-case detection with original ZSharp
 //  Can we get rid of IS_CNST?
 //  Replace `panic!()` with proper `return Err(format!());`
-
-// Problem:
-// How to deal with `a = f() ? g() : h()`?
-// This might occur on lhs as well! `a[p()] = q()`
 
 use log::{debug, warn};
 
@@ -369,6 +366,9 @@ impl<'ast> ZGen<'ast> {
 
         match s {
             Statement::Return(r) => {
+                let ret_expr: Expression;
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, ret_expr, _) = 
+                    self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &r.expressions[0], stmt_phy_assign, sp_offset, 0)?;
                 let ret_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                         ty: ret_ty.clone(),
@@ -379,7 +379,7 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     })],
                     // Assume that we only have ONE return variable
-                    expression: r.expressions[0].clone(),
+                    expression: ret_expr,
                     span: Span::new("", 0, 0).unwrap()
                 });
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(ret_stmt));
@@ -396,20 +396,31 @@ impl<'ast> ZGen<'ast> {
                 }
 
             }
-            Statement::Assertion(_) => {
-                blks[blks_len - 1].instructions.push(BlockContent::Stmt(s.clone()));
+            Statement::Assertion(a) => {
+                let asst_expr: Expression;
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, asst_expr, _) = 
+                    self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &a.expression, stmt_phy_assign, sp_offset, 0)?;
+                let asst_stmt = Statement::Assertion(AssertionStatement {
+                    expression: asst_expr,
+                    message: a.message.clone(),
+                    span: Span::new("", 0, 0).unwrap()
+                });
+                blks[blks_len - 1].instructions.push(BlockContent::Stmt(asst_stmt));
             }
             Statement::Iteration(it) => {
                 let mut vars_to_pop = BTreeMap::new();
                 let old_state = blks_len - 1;
                 // Create and push FROM statement
+                let from_expr: Expression;
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, from_expr, _) = 
+                    self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &it.from, stmt_phy_assign, sp_offset, 0)?;
                 let from_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                         ty: it.ty.clone(),
                         identifier: it.index.clone(),
                         span: Span::new("", 0, 0).unwrap()
                     })],
-                    expression: it.from.clone(),
+                    expression: from_expr,
                     span: Span::new("", 0, 0).unwrap()
                 });
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(from_stmt));
@@ -463,10 +474,13 @@ impl<'ast> ZGen<'ast> {
                 }
 
                 // Create and push TRANSITION statement
+                let to_expr: Expression;
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, to_expr, _) = 
+                    self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &it.to, stmt_phy_assign, sp_offset, 0)?;
                 let new_state = blks_len - 1;
                 let term = BlockTerminator::Transition(
                     BlockTransition::new(
-                        cond_expr(it.index.clone(), it.to.clone()), 
+                        cond_expr(it.index.clone(), to_expr), 
                         old_state + 1, 
                         new_state + 1
                     )
@@ -484,6 +498,11 @@ impl<'ast> ZGen<'ast> {
             Statement::Definition(d) => {
                 // XXX(unimpl) multi-assignment unimplemented
                 assert!(d.lhs.len() <= 1);
+
+                // Evaluate function calls in expression
+                let rhs_expr: Expression;
+                (blks, blks_len, exit_blk, stmt_phy_assign, sp_offset, rhs_expr, _) = 
+                    self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, &d.expression, stmt_phy_assign, sp_offset, 0)?;
 
                 // Handle Scoping change
                 self.set_lhs_ty_defn::<IS_CNST>(d)?;
@@ -527,8 +546,12 @@ impl<'ast> ZGen<'ast> {
                 } else {
                     warn!("Statement with no LHS!");
                 }
-
-                blks[blks_len - 1].instructions.push(BlockContent::Stmt(s.clone()));
+                let new_stmt = Statement::Definition(DefinitionStatement {
+                    lhs: d.lhs.clone(),
+                    expression: rhs_expr,
+                    span: Span::new("", 0, 0).unwrap()
+                });
+                blks[blks_len - 1].instructions.push(BlockContent::Stmt(new_stmt));
             }
         }
         Ok((blks, blks_len, exit_blk, stmt_phy_assign, sp_offset))
@@ -629,7 +652,7 @@ impl<'ast> ZGen<'ast> {
                         lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                             ty: ret_ty.clone(),
                             identifier: IdentifierExpression {
-                                value: "%RET{func_count}".to_string(),
+                                value: format!("%RET{}", func_count),
                                 span: Span::new("", 0, 0).unwrap()
                             },
                             span: Span::new("", 0, 0).unwrap()
@@ -642,11 +665,11 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     });
                     blks[blks_len - 1].instructions.push(BlockContent::Stmt(update_ret_stmt));
-                    func_count += 1;
                     ret_e = Expression::Identifier(IdentifierExpression {
-                        value: "%RET{func_count}".to_string(),
+                        value: format!("%RET{}", func_count),
                         span: Span::new("", 0, 0).unwrap()
-                    })
+                    });
+                    func_count += 1;
                 } else {
                     panic!("Array and Struct not implemented!")
                 };

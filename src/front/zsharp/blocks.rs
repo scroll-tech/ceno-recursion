@@ -232,7 +232,7 @@ impl<'ast> ZGen<'ast> {
         });
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_init_stmt));
 
-        let main_ret = self.bl_gen_function_call_::<true>(blks, blks_len, BTreeMap::new(), 0, Vec::new(), f_file, f_name)
+        let main_ret = self.bl_gen_function_call_::<true>(blks, blks_len, 0, Vec::new(), f_file, f_name)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
         (main_ret.0, main_ret.2, main_ret.3)
     }
@@ -245,12 +245,11 @@ impl<'ast> ZGen<'ast> {
         &'ast self,
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
-        mut stmt_phy_assign: BTreeMap<usize, String>,
         mut sp_offset: usize,
         args: Vec<Expression<'ast>>, // We do not use &args here because Expressions might be reconstructed
         f_path: PathBuf,
         f_name: String,
-    ) -> Result<(Vec<Block>, usize, usize, usize, BTreeMap<usize, String>, usize), String> {
+    ) -> Result<(Vec<Block>, usize, usize, usize, usize), String> {
         if IS_CNST {
             debug!("Block Gen Const function call: {} {:?}", f_name, f_path);
         } else {
@@ -258,6 +257,7 @@ impl<'ast> ZGen<'ast> {
         }
 
         let mut exit_blk = 0;
+        let mut stmt_phy_assign = BTreeMap::new();
 
         let f = self
             .functions
@@ -311,8 +311,16 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(param_stmt));
             }
 
+            if stmt_phy_assign.len() > 0 {
+                (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_::<IS_CNST>(blks, blks_len, sp_offset)?;
+            }
+
             // Use cvar to identify variable scoping for push and pull
             self.cvar_enter_function();
+
+            // Create new Block
+            blks.push(Block::new(blks_len));
+            blks_len += 1;
 
             // Add parameters to scope
             for p in f.parameters.clone().into_iter() {
@@ -331,9 +339,22 @@ impl<'ast> ZGen<'ast> {
 
             self.cvar_exit_function();
             self.maybe_garbage_collect();
+
+            // Create new Block
+            blks.push(Block::new(blks_len));
+            blks_len += 1;
+            
+            if stmt_phy_assign.len() > 0 {
+                // POP local variables out
+                for (addr, var) in stmt_phy_assign.iter().rev() {
+                    blks[blks_len - 1].instructions.push(BlockContent::MemPop((var.to_string(), *addr)));
+                }
+                // Exit Scoping
+                (blks, blks_len, sp_offset) = self.bl_gen_exit_scope_::<IS_CNST>(blks, blks_len, sp_offset)?;
+            }
         }
 
-        Ok((blks, blks_len, 0, exit_blk, stmt_phy_assign, sp_offset))
+        Ok((blks, blks_len, 0, exit_blk, sp_offset))
     }
 
     // Generate blocks from statements
@@ -637,8 +658,10 @@ impl<'ast> ZGen<'ast> {
                             self.bl_gen_expr_::<IS_CNST>(blks, blks_len, exit_blk, old_expr, stmt_phy_assign.clone(), sp_offset, func_count)?;
                         args.push(new_expr);                       
                     }
-                    (blks, blks_len, _, _, stmt_phy_assign, sp_offset) =
-                        self.bl_gen_function_call_::<IS_CNST>(blks, blks_len, stmt_phy_assign, sp_offset, args, f_path.clone(), f_name.clone())?;
+                    // Update %SP and %BP before function call started since we won't know what happens to them
+                    (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_::<IS_CNST>(blks, blks_len, sp_offset)?;
+                    (blks, blks_len, _, _, sp_offset) =
+                        self.bl_gen_function_call_::<IS_CNST>(blks, blks_len, sp_offset, args, f_path.clone(), f_name.clone())?;
                     let ret_ty = self
                     .functions
                     .get(&f_path)
@@ -665,6 +688,16 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     });
                     blks[blks_len - 1].instructions.push(BlockContent::Stmt(update_ret_stmt));
+                    
+                    // Exit Scoping
+                    // We need to do it AFTER %RET has been stored somewhere else to prevent it being overrided
+                    // We also need to do it BEFORE some assinging some variable to %RET because otherwise its
+                    // value might be overrided again after being assigned to %RET
+                    for (addr, var) in stmt_phy_assign.iter().rev() {
+                        blks[blks_len - 1].instructions.push(BlockContent::MemPop((var.to_string(), *addr)));
+                    }
+                    (blks, blks_len, sp_offset) = self.bl_gen_exit_scope_::<IS_CNST>(blks, blks_len, sp_offset)?;
+                    
                     ret_e = Expression::Identifier(IdentifierExpression {
                         value: format!("%RET{}", func_count),
                         span: Span::new("", 0, 0).unwrap()
@@ -683,6 +716,7 @@ impl<'ast> ZGen<'ast> {
     }   
     
     // Handle scoping change by pushing old values onto the stack
+    // When IS_FUNC_CALL is activated, we don't care about shadowing
     fn bl_gen_scoping_(
         &'ast self, 
         mut blks: Vec<Block<'ast>>,

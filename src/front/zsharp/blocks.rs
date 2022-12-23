@@ -212,25 +212,6 @@ impl<'ast> ZGen<'ast> {
             span: Span::new("", 0, 0).unwrap()
         });
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_init_stmt));
-        // Initialize %OSP
-        let bp_init_stmt = Statement::Definition(DefinitionStatement {
-            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                ty: Type::Basic(BasicType::Field(FieldType {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                identifier: IdentifierExpression {
-                    value: "%OSP".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                span: Span::new("", 0, 0).unwrap()
-            })],
-            expression: Expression::Identifier(IdentifierExpression {
-                value: "%SP".to_string(),
-                span: Span::new("", 0, 0).unwrap()
-            }),
-            span: Span::new("", 0, 0).unwrap()
-        });
-        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_init_stmt));
         // Initialize %BP
         let bp_init_stmt = Statement::Definition(DefinitionStatement {
             lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
@@ -719,9 +700,9 @@ impl<'ast> ZGen<'ast> {
             // If the identifier is used in the previous scopes of the current function,
             // push the previous value and pop it after current scope ends
             if self.cvar_lookup(id).is_some() {
-                // Push %OSP onto the stack, pop back as %BP
+                // Push %BP onto the stack, pop back as %BP
                 if sp_offset == 0 {
-                    blks[blks_len - 1].instructions.push(BlockContent::MemPush(("%OSP".to_string(), sp_offset)));
+                    blks[blks_len - 1].instructions.push(BlockContent::MemPush(("%BP".to_string(), sp_offset)));
                     stmt_phy_assign.insert(sp_offset, "%BP".to_string());
                     sp_offset += 1;
                 }
@@ -742,16 +723,16 @@ impl<'ast> ZGen<'ast> {
         // New Scoping
         self.enter_scope_impl_::<true>();
 
-        // Update %SP and %OSP if any changes has been made
+        // Update %SP and %BP if any changes has been made
         if sp_offset > 0 {
-            // %OSP = %SP
+            // %BP = %SP
             let bp_update_stmt = Statement::Definition(DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                     ty: Type::Basic(BasicType::Field(FieldType {
                         span: Span::new("", 0, 0).unwrap()
                     })),
                     identifier: IdentifierExpression {
-                        value: "%OSP".to_string(),
+                        value: "%BP".to_string(),
                         span: Span::new("", 0, 0).unwrap()
                     },
                     span: Span::new("", 0, 0).unwrap()
@@ -809,21 +790,16 @@ impl<'ast> ZGen<'ast> {
         // Exit Scoping
         self.exit_scope_impl_::<true>();
 
-        // POP local variables out
-        for (addr, var) in stmt_phy_assign.iter().rev() {
-            blks[blks_len - 1].instructions.push(BlockContent::MemPop((var.to_string(), *addr)));
-        }
-
-        // Update %SP and %OSP if any changes has been made
+        // Update %SP and %BP if any changes has been made
         if sp_offset > 0 {
-            // %OSP = %SP
+            // %BP = %SP
             let bp_update_stmt = Statement::Definition(DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                     ty: Type::Basic(BasicType::Field(FieldType {
                         span: Span::new("", 0, 0).unwrap()
                     })),
                     identifier: IdentifierExpression {
-                        value: "%OSP".to_string(),
+                        value: "%BP".to_string(),
                         span: Span::new("", 0, 0).unwrap()
                     },
                     span: Span::new("", 0, 0).unwrap()
@@ -867,6 +843,11 @@ impl<'ast> ZGen<'ast> {
             });
             blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_update_stmt));
             sp_offset = 0;
+        }
+
+        // POP local variables out
+        for (addr, var) in stmt_phy_assign.iter().rev() {
+            blks[blks_len - 1].instructions.push(BlockContent::MemPop((var.to_string(), *addr)));
         }
         Ok((blks, blks_len, sp_offset))
     }

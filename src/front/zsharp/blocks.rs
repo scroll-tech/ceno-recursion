@@ -67,7 +67,7 @@ pub enum BlockContent<'ast> {
 // Coda is the number of total types of blocks
 pub enum BlockTerminator<'ast> {
     Transition(BlockTransition<'ast>),
-    Coda(usize),
+    Coda(NextBlock),
 }
 
 #[derive(Clone)]
@@ -75,8 +75,25 @@ pub enum BlockTerminator<'ast> {
 // if cond then goto tblock else goto fblock
 pub struct BlockTransition<'ast> {
     cond: Expression<'ast>,
-    tblock: usize,
-    fblock: usize,
+    tblock: NextBlock,
+    fblock: NextBlock,
+}
+
+#[derive(Clone)]
+// The next block either has a usize label,
+// or is pointed by %RP
+pub enum NextBlock {
+    Label(usize),
+    Rp()
+}
+
+impl NextBlock {
+    pub fn to_string(&self) -> String {
+        match self {
+            NextBlock::Label(l) => { l.to_string() }
+            NextBlock::Rp() => { "%RP".to_string() }
+        }
+    }
 }
 
 impl<'ast> Block<'ast> {
@@ -84,7 +101,7 @@ impl<'ast> Block<'ast> {
         let input = Self {
             name,
             instructions: Vec::new(),
-            terminator: BlockTerminator::Coda(name + 1)
+            terminator: BlockTerminator::Coda(NextBlock::Label(name + 1))
         };
         input
     }
@@ -112,7 +129,7 @@ impl<'ast> Block<'ast> {
 }
 
 impl<'ast> BlockTransition<'ast> {
-    fn new(cond: Expression<'ast>, tblock: usize, fblock: usize) -> Self {
+    fn new(cond: Expression<'ast>, tblock: NextBlock, fblock: NextBlock) -> Self {
         let input = Self {
             cond,
             tblock,
@@ -140,6 +157,16 @@ impl<'ast> ZGen<'ast> {
             value.pretty(&mut std::io::stdout().lock())
             .expect("error pretty-printing value");
             println!();
+        }
+    }
+
+    fn find_next_block(&self, nb: NextBlock) -> Result<usize, String> {
+        match nb {
+            NextBlock::Label(l) => { Ok(l) }
+            NextBlock::Rp() => {
+                let rp = self.cvar_lookup("%RP").ok_or(format!("Block transition failed: %RP is undefined."))?;
+                self.t_to_usize(rp)
+            }
         }
     }
 
@@ -400,7 +427,7 @@ impl<'ast> ZGen<'ast> {
                     blks.push(Block::new(blks_len));
                     blks_len += 1;
                 } else {
-                    let term = BlockTerminator::Coda(exit_blk);
+                    let term = BlockTerminator::Coda(NextBlock::Label(exit_blk));
                     blks[blks_len - 1].terminator = term;
                 }
 
@@ -485,8 +512,8 @@ impl<'ast> ZGen<'ast> {
                 let term = BlockTerminator::Transition(
                     BlockTransition::new(
                         cond_expr(it.index.clone(), to_expr), 
-                        old_state + 1, 
-                        new_state + 1
+                        NextBlock::Label(old_state + 1), 
+                        NextBlock::Label(new_state + 1)
                     )
                 );
                 blks[new_state].terminator = term.clone();
@@ -991,12 +1018,12 @@ impl<'ast> ZGen<'ast> {
         match &bl.terminator {
             BlockTerminator::Transition(t) => {
                 match self.expr_impl_::<true>(&t.cond).ok().and_then(const_bool) {
-                    Some(true) => Ok((t.tblock, phy_mem)), 
-                    Some(false) => Ok((t.fblock, phy_mem)),
+                    Some(true) => Ok((self.find_next_block(t.tblock.clone())?, phy_mem)), 
+                    Some(false) => Ok((self.find_next_block(t.fblock.clone())?, phy_mem)),
                     _ => Err("block transition condition not const bool".to_string()),
                 }
             }
-            BlockTerminator::Coda(nb) => Ok((*nb, phy_mem))
+            BlockTerminator::Coda(nb) => Ok((self.find_next_block(nb.clone())?, phy_mem))
         }
     }
 }

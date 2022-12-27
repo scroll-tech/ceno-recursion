@@ -3,7 +3,6 @@
 //       If / else statements are not supported.
 //       Arrays & structs are not supported.
 //       Function within array index?
-//       Multi-file program not supported
 
 // Other Cleanups:
 //  Cross check edge-case detection with original ZSharp
@@ -19,6 +18,7 @@ use crate::front::zsharp::pretty;
 use crate::front::zsharp::T;
 use crate::front::zsharp::Ty;
 use crate::front::zsharp::Value;
+use crate::front::zsharp::Loc;
 use crate::front::zsharp::const_bool;
 use crate::front::zsharp::const_val;
 use crate::front::zsharp::span_to_string;
@@ -68,7 +68,6 @@ pub enum BlockContent<'ast> {
 pub enum BlockTerminator<'ast> {
     Transition(BlockTransition<'ast>),
     Coda(NextBlock),
-    FuncCall(String) // Placeholders before blocks corresponding to each function has been determined
 }
 
 #[derive(Clone)]
@@ -124,9 +123,6 @@ impl<'ast> Block<'ast> {
             }
             BlockTerminator::Coda(c) => {
                 print!("Block terminates with coda {}.", c.to_string());
-            }
-            BlockTerminator::FuncCall(fc) => {
-                print!("Block terminates with function call to {}.", fc);
             }
         }
     }
@@ -199,7 +195,6 @@ impl<'ast> ZGen<'ast> {
 
     pub fn bl_gen_const_entry_fn(&'ast self, n: &str) -> (Vec<Block<'ast>>, usize, usize) {
         debug!("Block Gen Const entry: {}", n);
-
         let (f_file, f_name) = self.deref_import(n);
         if let Some(f) = self.functions.get(&f_file).and_then(|m| m.get(&f_name)) {
             if !f.generics.is_empty() {
@@ -214,38 +209,11 @@ impl<'ast> ZGen<'ast> {
             );
         }
 
-        // Blocks for main function
         let mut blks = Vec::new();
         let mut blks_len = 0;
-        let exit_blk: usize;
         // Create the initial block
         blks.push(Block::new(0));
         blks_len += 1;
-        // Initialize %RP
-        let rp_init_stmt = Statement::Definition(DefinitionStatement {
-            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                ty: Type::Basic(BasicType::Field(FieldType {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                identifier: IdentifierExpression {
-                    value: "%RP".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                span: Span::new("", 0, 0).unwrap()
-            })],
-            expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: "0".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            })),
-            span: Span::new("", 0, 0).unwrap()
-        });
-        blks[blks_len - 1].instructions.push(BlockContent::Stmt(rp_init_stmt));
         // Initialize %SP
         let sp_init_stmt = Statement::Definition(DefinitionStatement {
             lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
@@ -291,127 +259,15 @@ impl<'ast> ZGen<'ast> {
         });
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_init_stmt));
 
-        (blks, blks_len, exit_blk) = self.bl_gen_function_init_(blks, blks_len, f_file.clone(), f_name)
+        let main_ret = self.bl_gen_function_call_(blks, blks_len, 0, Vec::new(), f_file, f_name)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-
-        // Create a mapping from each function name to the beginning of their blocks
-        let mut func_blk_map = BTreeMap::new();
-        func_blk_map.insert("main".to_string(), 0);
-        // Generate blocks for other functions
-        for decls in &self.asts[&f_file].declarations {
-            if let SymbolDeclaration::Function(func) = decls {
-                let f_name = func.id.value.clone();
-                if f_name != "main".to_string() {
-                    if self.functions.get(&f_file).and_then(|m| m.get(&f_name)) == None {
-                        panic!(
-                            "No function '{:?}//{}' attempting entry_fn",
-                            &f_file, &f_name
-                        );
-                    }
-                    func_blk_map.insert(f_name.clone(), blks_len);
-                    (blks, blks_len, _) = self.bl_gen_function_init_(blks, blks_len, f_file.clone(), f_name)
-                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                }
-            }
-        }
-
-        let mut new_blks = Vec::new();
-        // Convert all FuncCall to actual Block number
-        for mut blk in blks {
-            if let BlockTerminator::FuncCall(f_name) = blk.terminator {
-                let f_label = func_blk_map.get(&f_name).unwrap();
-                blk.terminator = BlockTerminator::Coda(NextBlock::Label(*f_label));
-            }
-            new_blks.push(blk);
-        }
-
-        // Return: blks, entry_blk, exit_blk
-        (new_blks, 0, exit_blk)
-    }
-
-    // Convert each function to blocks
-    // Return type:
-    // Blks, blks_len, exit_blk
-    fn bl_gen_function_init_(
-        &'ast self,
-        mut blks: Vec<Block<'ast>>,
-        mut blks_len: usize,
-        f_path: PathBuf,
-        f_name: String,
-    ) -> Result<(Vec<Block>, usize, usize), String> {
-        debug!("Block Gen Function init: {} {:?}", f_name, f_path);
-    
-        let mut exit_blk = 0;
-
-        let f = self
-            .functions
-            .get(&f_path)
-            .ok_or_else(|| format!("No file '{:?}' attempting fn call", &f_path))?
-            .get(&f_name)
-            .ok_or_else(|| format!("No function '{}' attempting fn call", &f_name))?;
-
-        if self.stdlib.is_embed(&f_path) {
-            // Leave embedded functions in the blocks
-            // They will be handled at IR level
-        } else {
-            // XXX(unimpl) multi-return unimplemented
-            assert!(f.returns.len() <= 1);
-            if f.generics.len() != 0 {
-                return Err(format!("Generics not implemented"));
-            }
-
-            // XXX(unimpl) multi-return unimplemented
-            assert!(f.returns.len() <= 1);
-            // Get the return type because we need to convert it into a variable
-            let ret_ty = f
-                .returns
-                .first().ok_or("No return type provided for one or more function")?;
-
-            // Use cvar to identify variable scoping for push and pull
-            self.cvar_enter_function();
-
-            // Create new Block
-            blks.push(Block::new(blks_len));
-            blks_len += 1;
-
-            // Add parameters to scope
-            for p in f.parameters.clone().into_iter() {
-                let p_id = p.id.value.clone();
-                let p_ty = self.type_impl_::<true>(&p.ty)?;
-                self.decl_impl_::<true>(p_id, &p_ty)?;                
-            }
-
-            let mut sp_offset = 0;
-            // Iterate through Stmts
-            for s in &f.statements {
-                (blks, blks_len, exit_blk, _, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, s, ret_ty, sp_offset)?;
-            }
-            if exit_blk == 0 {
-                exit_blk = blks_len;
-            }
-
-            self.cvar_exit_function();
-            self.maybe_garbage_collect();
-
-            // Point final Block to %RP if not in main function
-            if f_name != "main".to_string() {
-                let term = BlockTerminator::Coda(NextBlock::Rp());
-                blks[blks_len - 1].terminator = term;
-            }
-
-            // Create new Block
-            blks.push(Block::new(blks_len));
-            blks_len += 1;
-            
-        }
-
-        Ok((blks, blks_len, exit_blk))
+        (main_ret.0, main_ret.2, main_ret.3)
     }
 
     // TODO: Error handling in function call
     // The head block of the function is already created to facilitate any required initialization
     // Return type:
-    // Blks, blks_len, entry_blk, stmt_phy_assign, sp_offset
+    // Blks, blks_len, entry_blk, exit_blk, stmt_phy_assign, sp_offset
     fn bl_gen_function_call_(
         &'ast self,
         mut blks: Vec<Block<'ast>>,
@@ -420,9 +276,10 @@ impl<'ast> ZGen<'ast> {
         args: Vec<Expression<'ast>>, // We do not use &args here because Expressions might be reconstructed
         f_path: PathBuf,
         f_name: String,
-    ) -> Result<(Vec<Block>, usize, usize, usize), String> {
+    ) -> Result<(Vec<Block>, usize, usize, usize, usize), String> {
         debug!("Block Gen Function call: {} {:?}", f_name, f_path);
 
+        let mut exit_blk = 0;
         let mut stmt_phy_assign = BTreeMap::new();
 
         let f = self
@@ -450,6 +307,13 @@ impl<'ast> ZGen<'ast> {
                 ));
             }
 
+            // XXX(unimpl) multi-return unimplemented
+            assert!(f.returns.len() <= 1);
+            // Get the return type because we need to convert it into a variable
+            let ret_ty = f
+                .returns
+                .first().ok_or("No return type provided for one or more function")?;
+
             for (p, a) in f.parameters.clone().into_iter().zip(args) {
                 let p_id = p.id.value.clone();
                 // Push p to stack if necessary
@@ -474,34 +338,30 @@ impl<'ast> ZGen<'ast> {
                 (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, sp_offset)?;
             }
 
-            // Push %RP to stack if necessary
-            (blks, stmt_phy_assign, sp_offset) = 
-                self.bl_gen_scoping_(blks, blks_len, &"%RP".to_string(), stmt_phy_assign, sp_offset);
-            // Set up %RP and block terminator
-            let rp_update_stmt = Statement::Definition(DefinitionStatement {
-                lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
-                    id: IdentifierExpression {
-                        value: "%RP".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    accesses: Vec::new(),
-                    span: Span::new("", 0, 0).unwrap()
-                })],
-                expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                    value: DecimalNumber {
-                        value: blks_len.to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            });
-            blks[blks_len - 1].instructions.push(BlockContent::Stmt(rp_update_stmt));            
-            let term = BlockTerminator::FuncCall(f_name);
-            blks[blks_len - 1].terminator = term;
+            // Use cvar to identify variable scoping for push and pull
+            self.cvar_enter_function();
+
+            // Create new Block
+            blks.push(Block::new(blks_len));
+            blks_len += 1;
+
+            // Add parameters to scope
+            for p in f.parameters.clone().into_iter() {
+                let p_id = p.id.value.clone();
+                let p_ty = self.type_impl_::<true>(&p.ty)?;
+                self.decl_impl_::<true>(p_id, &p_ty)?;                
+            }
+
+            // Iterate through Stmts
+            for s in &f.statements {
+                (blks, blks_len, exit_blk, _, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, s, ret_ty, sp_offset)?;
+            }
+            if exit_blk == 0 {
+                exit_blk = blks_len;
+            }
+
+            self.cvar_exit_function();
+            self.maybe_garbage_collect();
 
             // Create new Block
             blks.push(Block::new(blks_len));
@@ -513,7 +373,7 @@ impl<'ast> ZGen<'ast> {
             }
         }
 
-        Ok((blks, blks_len, 0, sp_offset))
+        Ok((blks, blks_len, 0, exit_blk, sp_offset))
     }
 
     // Generate blocks from statements
@@ -800,7 +660,7 @@ impl<'ast> ZGen<'ast> {
                     }
                     // Update %SP and %BP before function call started since we won't know what happens to them
                     (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, sp_offset)?;
-                    (blks, blks_len, _, sp_offset) =
+                    (blks, blks_len, _, _, sp_offset) =
                         self.bl_gen_function_call_(blks, blks_len, sp_offset, args, f_path.clone(), f_name.clone())?;
                     let ret_ty = self
                     .functions
@@ -1163,8 +1023,7 @@ impl<'ast> ZGen<'ast> {
                     _ => Err("block transition condition not const bool".to_string()),
                 }
             }
-            BlockTerminator::Coda(nb) => Ok((self.find_next_block(nb.clone())?, phy_mem)),
-            BlockTerminator::FuncCall(fc) => Err(format!("Evaluation failed: function call to {} needs to be converted to block label.", fc))
+            BlockTerminator::Coda(nb) => Ok((self.find_next_block(nb.clone())?, phy_mem))
         }
     }
 }

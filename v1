@@ -1,0 +1,247 @@
+Entry block: 0
+Exit block: 6
+
+Block 0:
+    field %RP = 0 <Field>
+    field %SP = 0 <Field>
+    field %BP = %SP
+Block terminates with coda 1.
+
+Block 1:
+    field a = 5 <Field>
+    field b = 4 <Field>
+    field i = 0 <Field>
+Block Transition: i < 2 <Field> ? block 2 : block 5
+
+Block 2:
+    %PHY[%SP + 0] = %BP
+    field %BP = %SP
+    %PHY[%SP + 1] = a
+    field a = 10 <Field>
+    field j = 0 <Field>
+    %SP = %SP + 2 <Field>
+Block Transition: j < 2 <Field> ? block 3 : block 4
+
+Block 3:
+    %PHY[%SP + 0] = %BP
+    field %BP = %SP
+    %PHY[%SP + 1] = a
+    field a = 20 <Field>
+    j = j + 1 <Field>
+    %SP = %SP + 2 <Field>
+    a = %PHY[%BP + 1]
+    %BP = %PHY[%BP + 0]
+Block Transition: j < 2 <Field> ? block 3 : block 4
+
+Block 4:
+    field a = 20 <Field>
+    b = a
+    i = i + 1 <Field>
+    a = %PHY[%BP + 1]
+    %BP = %PHY[%BP + 0]
+Block Transition: i < 2 <Field> ? block 2 : block 5
+
+Block 5:
+    field %RET = a + b
+Block terminates with coda 6.
+
+Block 6:
+Block terminates with coda 7.
+
+Block 7:
+Block terminates with coda 8.
+
+
+Variables in scope:
+%PHY: []
+
+Block 0:
+    field %RP = 0 <Field>
+    field %SP = 0 <Field>
+    field %BP = %SP
+Block terminates with coda 1.
+
+Variables in scope:
+%BP = 0f
+%RP = 0f
+%SP = 0f
+%PHY: []
+
+Block 1:
+    field a = 5 <Field>
+    field b = 4 <Field>
+    field i = 0 <Field>
+Block Transition: i < 2 <Field> ? block 2 : block 5
+
+Variables in scope:
+%BP = 0f
+%RP = 0f
+%SP = 0f
+a = 5f
+b = 4f
+i = 0f
+%PHY: []
+
+Block 2:
+    %PHY[%SP + 0] = %BP
+    field %BP = %SP
+    %PHY[%SP + 1] = a
+    field a = 10 <Field>
+    field j = 0 <Field>
+    %SP = %SP + 2 <Field>
+Block Transition: j < 2 <Field> ? block 3 : block 4
+
+Variables in scope:
+%BP = 0f
+%RP = 0f
+%SP = 2f
+a = 10f
+b = 4f
+i = 0f
+j = 0f
+%PHY: [0f, 5f, ]
+
+Block 3:
+    %PHY[%SP + 0] = %BP
+    field %BP = %SP
+    %PHY[%SP + 1] = a
+    field a = 20 <Field>
+    j = j + 1 <Field>
+    %SP = %SP + 2 <Field>
+    a = %PHY[%BP + 1]
+    %BP = %PHY[%BP + 0]
+Block Transition: j < 2 <Field> ? block 3 : block 4
+
+Variables in scope:
+%BP = 0f
+%RP = 0f
+%SP = 4f
+a = 10f
+b = 4f
+i = 0f
+j = 1f
+%PHY: [0f, 5f, 0f, 10f, ]
+
+Block 3:
+    %PHY[%SP + 0] = %BP
+    field %BP = %SP
+    %PHY[%SP + 1] = a
+    field a = 20 <Field>
+    j = j + 1 <Field>
+    %SP = %SP + 2 <Field>
+    a = %PHY[%BP + 1]
+    %BP = %PHY[%BP + 0]
+Block Transition: j < 2 <Field> ? block 3 : block 4
+
+Variables in scope:
+%BP = 0f
+%RP = 0f
+%SP = 6f
+a = 10f
+b = 4f
+i = 0f
+j = 2f
+%PHY: [0f, 5f, 0f, 10f, 0f, 10f, ]
+
+Block 4:
+    field a = 20 <Field>
+    b = a
+    i = i + 1 <Field>
+    a = %PHY[%BP + 1]
+    %BP = %PHY[%BP + 0]
+Block Transition: i < 2 <Field> ? block 2 : block 5
+
+Variables in scope:
+%BP = 0f
+%RP = 0f
+%SP = 6f
+a = 5f
+b = 20f
+i = 1f
+j = 2f
+%PHY: [0f, 5f, 0f, 10f, 0f, 10f, ]
+
+Block 2:
+    %PHY[%SP + 0] = %BP
+    field %BP = %SP
+    %PHY[%SP + 1] = a
+    field a = 10 <Field>
+    field j = 0 <Field>
+    %SP = %SP + 2 <Field>
+Block Transition: j < 2 <Field> ? block 3 : block 4
+
+Variables in scope:
+%BP = 6f
+%RP = 0f
+%SP = 8f
+a = 10f
+b = 20f
+i = 1f
+j = 0f
+%PHY: [0f, 5f, 0f, 10f, 0f, 10f, 0f, 5f, ]
+
+Block 3:
+    %PHY[%SP + 0] = %BP
+    field %BP = %SP
+    %PHY[%SP + 1] = a
+    field a = 20 <Field>
+    j = j + 1 <Field>
+    %SP = %SP + 2 <Field>
+    a = %PHY[%BP + 1]
+    %BP = %PHY[%BP + 0]
+Block Transition: j < 2 <Field> ? block 3 : block 4
+
+Variables in scope:
+%BP = 6f
+%RP = 0f
+%SP = 10f
+a = 10f
+b = 20f
+i = 1f
+j = 1f
+%PHY: [0f, 5f, 0f, 10f, 0f, 10f, 0f, 5f, 6f, 10f, ]
+
+Block 3:
+    %PHY[%SP + 0] = %BP
+    field %BP = %SP
+    %PHY[%SP + 1] = a
+    field a = 20 <Field>
+    j = j + 1 <Field>
+    %SP = %SP + 2 <Field>
+    a = %PHY[%BP + 1]
+    %BP = %PHY[%BP + 0]
+Block Transition: j < 2 <Field> ? block 3 : block 4
+
+Variables in scope:
+%BP = 6f
+%RP = 0f
+%SP = 12f
+a = 10f
+b = 20f
+i = 1f
+j = 2f
+%PHY: [0f, 5f, 0f, 10f, 0f, 10f, 0f, 5f, 6f, 10f, 6f, 10f, ]
+
+Block 4:
+    field a = 20 <Field>
+    b = a
+    i = i + 1 <Field>
+    a = %PHY[%BP + 1]
+    %BP = %PHY[%BP + 0]
+Block Transition: i < 2 <Field> ? block 2 : block 5
+
+Variables in scope:
+%BP = 0f
+%RP = 0f
+%SP = 12f
+a = 5f
+b = 20f
+i = 2f
+j = 2f
+%PHY: [0f, 5f, 0f, 10f, 0f, 10f, 0f, 5f, 6f, 10f, 6f, 10f, ]
+
+Block 5:
+    field %RET = a + b
+Block terminates with coda 6.
+
+Return value: 25f

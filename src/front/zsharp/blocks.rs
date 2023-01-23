@@ -888,11 +888,31 @@ impl<'ast> ZGen<'ast> {
             // If the identifier is used in the previous scopes of the current function,
             // push the previous value and pop it after current scope ends
             if self.cvar_lookup(id).is_some() || *id == "%RP".to_string() {
-                // Push %BP onto the stack
+                // Initialize a new stack frame
                 if sp_offset == 0 {
+                    // push %BP onto STACK
                     blks[blks_len - 1].instructions.push(BlockContent::MemPush(("%BP".to_string(), sp_offset)));
                     scope_phy_assign.push((sp_offset, "%BP".to_string()));
                     sp_offset += 1;
+                    // %BP = %SP
+                    let bp_update_stmt = Statement::Definition(DefinitionStatement {
+                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                            ty: Type::Basic(BasicType::Field(FieldType {
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            identifier: IdentifierExpression {
+                                value: "%BP".to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            span: Span::new("", 0, 0).unwrap()
+                        })],
+                        expression: Expression::Identifier(IdentifierExpression {
+                            value: "%SP".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        }),
+                        span: Span::new("", 0, 0).unwrap()
+                    });
+                    blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_update_stmt));
                 }
                 blks[blks_len - 1].instructions.push(BlockContent::MemPush((id.to_string(), sp_offset)));
                 scope_phy_assign.push((sp_offset, id.clone()));
@@ -913,25 +933,6 @@ impl<'ast> ZGen<'ast> {
 
         // Update %SP and %BP if any changes has been made
         if sp_offset > 0 {
-            // %BP = %SP
-            let bp_update_stmt = Statement::Definition(DefinitionStatement {
-                lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                    ty: Type::Basic(BasicType::Field(FieldType {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    identifier: IdentifierExpression {
-                        value: "%BP".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    span: Span::new("", 0, 0).unwrap()
-                })],
-                expression: Expression::Identifier(IdentifierExpression {
-                    value: "%SP".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                }),
-                span: Span::new("", 0, 0).unwrap()
-            });
-            blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_update_stmt));
             // %SP = %SP + sp_offset
             let sp_update_stmt = Statement::Definition(DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
@@ -980,25 +981,6 @@ impl<'ast> ZGen<'ast> {
 
         // Update %SP and %BP if any changes has been made
         if sp_offset > 0 {
-            // %BP = %SP
-            let bp_update_stmt = Statement::Definition(DefinitionStatement {
-                lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                    ty: Type::Basic(BasicType::Field(FieldType {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    identifier: IdentifierExpression {
-                        value: "%BP".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    span: Span::new("", 0, 0).unwrap()
-                })],
-                expression: Expression::Identifier(IdentifierExpression {
-                    value: "%SP".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                }),
-                span: Span::new("", 0, 0).unwrap()
-            });
-            blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_update_stmt));
             // %SP = %SP + sp_offset
             let sp_update_stmt = Statement::Definition(DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {

@@ -404,10 +404,6 @@ impl<'ast> ZGen<'ast> {
                 let term = BlockTerminator::Coda(NextBlock::Rp());
                 blks[blks_len - 1].terminator = term;
             }
-
-            // Create new Block
-            blks.push(Block::new(blks_len));
-            blks_len += 1;
             
         }
 

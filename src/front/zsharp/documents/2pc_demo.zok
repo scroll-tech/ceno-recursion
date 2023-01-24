@@ -1,0 +1,18 @@
+def add(field c, field b) -> field:
+    // Blk 6
+    field a = c
+    return a + b
+
+def main() -> field:
+    // Blk 1
+    field a = 5
+    field b = 4
+    for field i in 0..2 do
+        // Blk 2
+        field a = 20
+        b = add(a, b)
+        // Blk 3
+        field b = 10
+    endfor
+    // Blk 4
+    return a + b

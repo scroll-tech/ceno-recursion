@@ -452,10 +452,33 @@ impl<'ast> ZGen<'ast> {
                 ));
             }
 
+            // We can't assign parameters to their respective arguments directly,
+            // consider `func foo(a, b)` and we call `foo(b, a)`
+            // We would have to assign b to a and a to b, which would be impossible without intermediate variables
+            // Better introduce a variable @ARGx for each parameter and optimize later
+            let mut arg_count = 0;
+            // Assign @ARGx to a
             for (p, a) in f.parameters.clone().into_iter().zip(args) {
+                let param_stmt = Statement::Definition(DefinitionStatement {
+                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        ty: p.ty,
+                        identifier: IdentifierExpression {
+                            value: format!("@ARG{}", arg_count),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        span: Span::new("", 0, 0).unwrap()
+                    })],
+                    expression: a.clone(),
+                    span: Span::new("", 0, 0).unwrap()
+                });
+                blks[blks_len - 1].instructions.push(BlockContent::Stmt(param_stmt));
+                arg_count += 1;
+            }
+            arg_count = 0;
+            // Assign p to @ARGx
+            // p has been pushed to stack before function call
+            for p in f.parameters.clone().into_iter() {
                 let p_id = p.id.value.clone();
-                // p has been pushed to stack before function call
-                // Assign p to a
                 let param_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                         ty: p.ty,
@@ -465,10 +488,14 @@ impl<'ast> ZGen<'ast> {
                         },
                         span: Span::new("", 0, 0).unwrap()
                     })],
-                    expression: a.clone(),
+                    expression: Expression::Identifier(IdentifierExpression {
+                        value: format!("@ARG{}", arg_count),
+                        span: Span::new("", 0, 0).unwrap()
+                    }),
                     span: Span::new("", 0, 0).unwrap()
                 });
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(param_stmt));
+                arg_count += 1;
             }
 
             if scope_phy_assign.len() > 0 {

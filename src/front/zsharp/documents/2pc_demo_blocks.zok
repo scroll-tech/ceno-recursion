@@ -39,8 +39,11 @@ Block 2:
     %SP = %SP + 5 <Field>
     
     // Set parameters of ADD() to func call arguments
-    field c = a
-    field b = b
+    // We need @ARG because if we do B = A directly then C = B is using the wrong value
+    field @ARG0 = a
+    field @ARG1 = b
+    field b = @ARG0
+    field c = @ARG1
     // Set return pointer, ADD() should return to block 3
     %RP = 3 <Field>
 // Call ADD() at block 6
@@ -89,7 +92,7 @@ Block terminates with coda 6.
 
 Block 6:
     field a = c
-    field %RET = a + b
+    field %RET = b + a
 Block terminates with coda 7.
 
 // Block reserved in case we have multiple returns

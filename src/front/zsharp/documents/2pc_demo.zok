@@ -1,7 +1,7 @@
-def add(field c, field b) -> field:
+def add(field b, field c) -> field:
     // Blk 6
     field a = c
-    return a + b
+    return b + a
 
 def main() -> field:
     // Blk 1

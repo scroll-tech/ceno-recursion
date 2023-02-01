@@ -50,12 +50,14 @@ vis = { vis_private | vis_public }
 // Statements
 statement = { (return_statement // does not require subsequent newline
               | (iteration_statement
+                | conditional_statement
                 | definition_statement
                 | expression_statement
                 ) ~ NEWLINE
             ) ~ NEWLINE* }
 
 iteration_statement = { "for" ~ ty ~ identifier ~ "in" ~ expression ~ ".." ~ expression ~ "do" ~ NEWLINE* ~ statement* ~ "endfor"}
+conditional_statement = { "if" ~ expression ~ "then" ~ NEWLINE* ~ statement* ~ "else"? ~ NEWLINE*? ~ statement*? ~ "endif"}
 return_statement = { "return" ~ expression_list}
 definition_statement = { typed_identifier_or_assignee_list ~ "=" ~ expression } // declare and assign, so only identifiers are allowed, unlike `assignment_statement`
 expression_statement = {"assert" ~ "(" ~ expression ~ ("," ~ quoted_string)? ~ ")"}
@@ -69,7 +71,7 @@ expression_list = _{(expression ~ ("," ~ expression)*)?}
 expression = { unaried_term ~ (op_binary ~ unaried_term)* }
 unaried_term = { op_unary? ~ powered_term }
 powered_term = { term ~ (op_pow ~ exponent_expression)? }
-term = { ("(" ~ expression ~ ")") | inline_struct_expression | conditional_expression | postfix_expression | primary_expression | inline_array_expression | array_initializer_expression }
+term = { ("(" ~ expression ~ ")") | inline_struct_expression | postfix_expression | primary_expression | inline_array_expression | array_initializer_expression }
 spread = { "..." ~ expression }
 range = { from_expression? ~ ".." ~ to_expression? }
 from_expression = { expression }

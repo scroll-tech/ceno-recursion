@@ -452,4 +452,11 @@ pub trait ZVisitorMut<'ast>: Sized {
     ) -> ZVisitorResult {
         walk_iteration_statement(self, iter)
     }
+
+    fn visit_conditional_statement(
+        &mut self,
+        cond: &mut ast::ConditionalStatement<'ast>,
+    ) -> ZVisitorResult {
+        walk_conditional_statement(self, cond)
+    }
 }

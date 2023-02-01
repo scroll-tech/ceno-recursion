@@ -709,6 +709,7 @@ pub fn walk_statement<'ast, Z: ZVisitorMut<'ast>>(
         Definition(d) => visitor.visit_definition_statement(d),
         Assertion(a) => visitor.visit_assertion_statement(a),
         Iteration(i) => visitor.visit_iteration_statement(i),
+        Conditional(c) => visitor.visit_conditional_statement(c),
     }
 }
 
@@ -798,4 +799,18 @@ pub fn walk_iteration_statement<'ast, Z: ZVisitorMut<'ast>>(
         .iter_mut()
         .try_for_each(|s| visitor.visit_statement(s))?;
     visitor.visit_span(&mut iter.span)
+}
+
+pub fn walk_conditional_statement<'ast, Z: ZVisitorMut<'ast>>(
+    visitor: &mut Z,
+    cond: &mut ast::ConditionalStatement<'ast>,
+) -> ZVisitorResult {
+    visitor.visit_expression(&mut cond.condition)?;
+    cond.ifbranch
+        .iter_mut()
+        .try_for_each(|s| visitor.visit_statement(s))?;
+    cond.elsebranch
+        .iter_mut()
+        .try_for_each(|s| visitor.visit_statement(s))?;
+    visitor.visit_span(&mut cond.span)
 }

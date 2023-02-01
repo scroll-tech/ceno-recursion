@@ -9,6 +9,7 @@ pub fn pretty_stmt(indent: usize, s: &Statement) {
         Statement::Definition(d) => { pretty_def_stmt(d); }
         Statement::Assertion(a) => { pretty_ass_stmt(a); }
         Statement::Iteration(i) => { pretty_ite_stmt(indent, i); }
+        Statement::Conditional(c) => { pretty_cond_stmt(indent, c); }
     }
 }
 
@@ -63,6 +64,19 @@ fn pretty_ite_stmt(indent: usize, i: &IterationStatement) {
     pretty_expr(&i.to);
     println!(":");
     for s in &i.statements {
+        pretty_stmt(indent + 1, &s);
+    }
+}
+
+fn pretty_cond_stmt(indent: usize, c: &ConditionalStatement) {
+    print!("if ");
+    pretty_expr(&c.condition);
+    println!(":");
+    for s in &c.ifbranch {
+        pretty_stmt(indent + 1, &s);
+    }
+    println!("else:");
+    for s in &c.elsebranch {
         pretty_stmt(indent + 1, &s);
     }
 }

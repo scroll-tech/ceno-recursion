@@ -15,7 +15,7 @@ pub use ast::{
     DefinitionStatement, ExplicitGenerics, Expression, FieldSuffix, FieldType, File,
     FromExpression, FromImportDirective, FunctionDefinition, HexLiteralExpression,
     HexNumberExpression, IdentifierExpression, ImportDirective, ImportSymbol,
-    InlineArrayExpression, InlineStructExpression, InlineStructMember, IterationStatement,
+    InlineArrayExpression, InlineStructExpression, InlineStructMember, IterationStatement, ConditionalStatement, 
     LiteralExpression, MainImportDirective, MemberAccess, NegOperator, NotOperator, Parameter,
     PosOperator, PostfixExpression, Pragma, PrivateNumber, PrivateVisibility, PublicVisibility,
     Range, RangeOrExpression, ReturnStatement, Span, Spread, SpreadOrExpression, Statement,
@@ -385,6 +385,7 @@ mod ast {
         Definition(DefinitionStatement<'ast>),
         Assertion(AssertionStatement<'ast>),
         Iteration(IterationStatement<'ast>),
+        Conditional(ConditionalStatement<'ast>),
     }
 
     impl<'ast> Statement<'ast> {
@@ -394,6 +395,7 @@ mod ast {
                 Statement::Definition(x) => &x.span,
                 Statement::Assertion(x) => &x.span,
                 Statement::Iteration(x) => &x.span,
+                Statement::Conditional(x) => &x.span,
             }
         }
     }
@@ -424,6 +426,16 @@ mod ast {
         pub from: Expression<'ast>,
         pub to: Expression<'ast>,
         pub statements: Vec<Statement<'ast>>,
+        #[pest_ast(outer())]
+        pub span: Span<'ast>,
+    }
+
+    #[derive(Debug, FromPest, PartialEq, Clone)]
+    #[pest_ast(rule(Rule::conditional_statement))]
+    pub struct ConditionalStatement<'ast> {
+        pub condition: Expression<'ast>,
+        pub ifbranch: Vec<Statement<'ast>>,
+        pub elsebranch: Vec<Statement<'ast>>,
         #[pest_ast(outer())]
         pub span: Span<'ast>,
     }

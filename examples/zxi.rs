@@ -40,7 +40,6 @@ fn main() {
         mode,
         isolate_asserts: false,
     };
-    // ZSharpFE::interpret(inputs);
     let cs = ZSharpFE::interpret(inputs);
     print!("\n\nReturn value: ");
     cs.pretty(&mut std::io::stdout().lock())

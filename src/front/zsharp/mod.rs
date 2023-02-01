@@ -73,13 +73,13 @@ impl FrontEnd for ZSharpFE {
 impl ZSharpFE {
     // Execute the Z# front-end interpreter on the supplied file with the supplied inputs
     pub fn interpret(i: Inputs) -> T {
-    // pub fn interpret(i: Inputs) -> T {
         let loader = parser::ZLoad::new();
         let asts = loader.load(&i.file);
         let mut g = ZGen::new(asts, i.mode, loader.stdlib(), i.isolate_asserts);
         g.visit_files();
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
+        // g.const_entry_fn("main")
         let (blks, entry_bl, exit_bl) = g.bl_gen_const_entry_fn("main");
         println!("Entry block: {entry_bl}");
         println!("Exit block: {exit_bl}");
@@ -1177,6 +1177,40 @@ impl<'ast> ZGen<'ast> {
                     self.exit_scope_impl_::<IS_CNST>();
                 }
                 self.exit_scope_impl_::<IS_CNST>();
+                Ok(())
+            }
+            ast::Statement::Conditional(c) => {
+                match self.expr_impl_::<true>(&c.condition).ok().and_then(const_bool) {
+                    Some(true) => {
+                        self.enter_scope_impl_::<IS_CNST>();
+                        for s in &c.ifbranch {
+                            self.stmt_impl_::<IS_CNST>(s)?;
+                        }
+                        self.exit_scope_impl_::<IS_CNST>();
+                    },
+                    Some(false) => {
+                        self.enter_scope_impl_::<IS_CNST>();
+                        for s in &c.elsebranch {
+                            self.stmt_impl_::<IS_CNST>(s)?;
+                        }
+                        self.exit_scope_impl_::<IS_CNST>();
+                    },
+                    None if IS_CNST => { return Err("if / else statement condition not const bool".to_string()); },
+                    _ => {
+                        let ce = self.expr_impl_::<false>(&c.condition)?;
+                        let cbool = bool(ce.clone())?;
+                        self.circ_enter_condition(cbool.clone());
+                        for s in &c.ifbranch {
+                            self.stmt_impl_::<IS_CNST>(s)?;
+                        }
+                        self.circ_exit_condition();
+                        self.circ_enter_condition(term![NOT; cbool]);
+                        for s in &c.elsebranch {
+                            self.stmt_impl_::<IS_CNST>(s)?;
+                        }
+                        self.circ_exit_condition();
+                    }
+                }
                 Ok(())
             }
             ast::Statement::Definition(d) => {

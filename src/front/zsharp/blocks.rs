@@ -1,11 +1,14 @@
 // TODO: Recursion is not supported.
 //       Generics are not supported.
-//       If / else statements are not supported.
 //       Loop breaks are not supported
 //       Arrays & structs are not supported.
 //       Function within array index?
 //       Multi-file program not supported
 //       Calling f(b, a) when parameter is f(a: Int, b: Int)?
+//       What would happen if we put function calls in loop to / from?
+//       Return statements in if / else
+
+// BUG: Loop counter should be its own scope
 
 // Other Cleanups:
 //   Cross check edge-case detection with original ZSharp
@@ -609,7 +612,19 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(asst_stmt));
             }
             Statement::Iteration(it) => {
-                let old_state = blks_len - 1;
+
+                // Standalone Scope for the Iterator
+                (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, sp_offset)?;
+
+                // STORE iterator value in Physical Mem if has appeared before                
+                let mut loop_scope_phy_assign: Vec<(usize, String)> = Vec::new();
+                (blks, loop_scope_phy_assign, sp_offset) = self.bl_gen_scoping_::<false>(blks, blks_len, &it.index.value, loop_scope_phy_assign, sp_offset);
+
+                // Initialize the iterator
+                let v_name = it.index.value.clone();
+                let ty = self.type_impl_::<true>(&it.ty)?;
+                self.decl_impl_::<true>(v_name, &ty)?;
+
                 // Create and push FROM statement
                 let from_expr: Expression;
                 (blks, blks_len, exit_blk, scope_phy_assign, sp_offset, from_expr, _) = 
@@ -625,24 +640,24 @@ impl<'ast> ZGen<'ast> {
                 });
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(from_stmt));
 
-                // STORE iterator in Physical Mem if has appeared before
-                (blks, scope_phy_assign, sp_offset) = self.bl_gen_scoping_::<false>(blks, blks_len, &it.index.value, scope_phy_assign, sp_offset);
-                
-                // New Scope
+                // New Scope AGAIN to deal with any overwrites to the iterator within the loop
                 (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, sp_offset)?;
-                let v_name = it.index.value.clone();
-                let ty = self.type_impl_::<true>(&it.ty)?;
-                self.decl_impl_::<true>(v_name, &ty)?;
+                let mut next_scope_phy_assign: Vec<(usize, String)> = Vec::new();
+
+                let old_state = blks_len - 1;
 
                 // Create new Block
                 blks.push(Block::new(blks_len));
                 blks_len += 1;
 
-                let mut next_scope_phy_assign: Vec<(usize, String)> = Vec::new();
                 // Iterate through Stmts
                 for body in &it.statements {
                     (blks, blks_len, exit_blk, next_scope_phy_assign, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, body, ret_ty, sp_offset, next_scope_phy_assign)?;
                 }
+
+                // Exit scoping to iterator scope
+                (blks, blks_len, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, next_scope_phy_assign, sp_offset)?;
+
                 // Create and push STEP statement
                 let step_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
@@ -682,8 +697,60 @@ impl<'ast> ZGen<'ast> {
                 blks[new_state].terminator = term.clone();
                 blks[old_state].terminator = term;
 
+                // Create new block
+                blks.push(Block::new(blks_len));
+                blks_len += 1;
+
+                // Exit scoping again to outside the loop
+                (blks, blks_len, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, loop_scope_phy_assign, sp_offset)?;
+            }
+            Statement::Conditional(c) => {
+                let head_state = blks_len - 1;
+
+                // If statements
+                // Enter Scoping
+                (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, sp_offset)?;
+                // Create new Block
+                blks.push(Block::new(blks_len));
+                blks_len += 1;
+                let mut next_scope_phy_assign: Vec<(usize, String)> = Vec::new();
+                // Iterate through Stmts
+                for body in &c.ifbranch {
+                    (blks, blks_len, exit_blk, next_scope_phy_assign, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, body, ret_ty, sp_offset, next_scope_phy_assign)?;
+                }
                 // Exit Scoping
                 (blks, blks_len, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, next_scope_phy_assign, sp_offset)?;
+                let if_tail_state = blks_len - 1;
+
+                // Else statements
+                // Enter Scoping
+                (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, sp_offset)?;
+                // Create new Block
+                blks.push(Block::new(blks_len));
+                blks_len += 1;
+                let mut next_scope_phy_assign: Vec<(usize, String)> = Vec::new();
+                // Iterate through Stmts
+                for body in &c.elsebranch {
+                    (blks, blks_len, exit_blk, next_scope_phy_assign, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, body, ret_ty, sp_offset, next_scope_phy_assign)?;
+                }
+                // Exit Scoping
+                (blks, blks_len, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, next_scope_phy_assign, sp_offset)?;
+                let else_tail_state = blks_len - 1;
+
+                // Block Transition
+                // Transition of head block is a branch to if or else
+                let head_term = BlockTerminator::Transition(
+                    BlockTransition::new(
+                        c.condition.clone(), 
+                        NextBlock::Label(head_state + 1), 
+                        NextBlock::Label(if_tail_state + 1)
+                    )
+                );
+                blks[head_state].terminator = head_term;
+                // Transition of if block is to the end of tail
+                let if_tail_term = BlockTerminator::Coda(NextBlock::Label(else_tail_state + 1));
+                blks[if_tail_state].terminator = if_tail_term;
+                // Transition of else block is already correct
 
                 // Create new Block
                 blks.push(Block::new(blks_len));
@@ -1139,6 +1206,9 @@ impl<'ast> ZGen<'ast> {
                 }
                 BlockContent::Stmt(Statement::Iteration(_)) => {
                     return Err(format!("Blocks should not contain iteration statements."));
+                }
+                BlockContent::Stmt(Statement::Conditional(_)) => {
+                    return Err(format!("Blocks should not contain if / else statements."));
                 }
                 BlockContent::Stmt(Statement::Definition(d)) => {
                     // XXX(unimpl) multi-assignment unimplemented

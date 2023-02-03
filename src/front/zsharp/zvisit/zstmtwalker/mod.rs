@@ -802,9 +802,9 @@ impl<'ast, 'ret> ZVisitorMut<'ast> for ZStatementWalker<'ast, 'ret> {
         self.pop_scope(); // }
 
         self.push_scope(); // {
-            cond.elsebranch
-                .iter_mut()
-                .try_for_each(|s| self.visit_statement(s))?;
+        cond.elsebranch
+            .iter_mut()
+            .try_for_each(|s| self.visit_statement(s))?;
         self.pop_scope(); // }
 
         self.visit_span(&mut cond.span)

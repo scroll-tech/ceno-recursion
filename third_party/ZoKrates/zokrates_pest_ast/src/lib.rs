@@ -435,7 +435,15 @@ mod ast {
     pub struct ConditionalStatement<'ast> {
         pub condition: Expression<'ast>,
         pub ifbranch: Vec<Statement<'ast>>,
+        pub dummy: Vec<DummyElse<'ast>>,
         pub elsebranch: Vec<Statement<'ast>>,
+        #[pest_ast(outer())]
+        pub span: Span<'ast>,
+    }
+
+    #[derive(Debug, FromPest, PartialEq, Clone)]
+    #[pest_ast(rule(Rule::dummy_else))]
+    pub struct DummyElse<'ast> {
         #[pest_ast(outer())]
         pub span: Span<'ast>,
     }

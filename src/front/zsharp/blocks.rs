@@ -1,10 +1,9 @@
 // TODO: Recursion is not supported.
 //       Generics are not supported.
-//       Loop breaks are not supported
+//       Loop breaks are not supported.
 //       Arrays & structs are not supported.
 //       Function within array index?
 //       Multi-file program not supported
-//       Calling f(b, a) when parameter is f(a: Int, b: Int)?
 //       What would happen if we put function calls in loop to / from?
 //       Return statements in if / else
 
@@ -390,6 +389,8 @@ impl<'ast> ZGen<'ast> {
                 self.decl_impl_::<true>(p_id, &p_ty)?;                
             }
 
+            // Since the out-most scope of a function does not have a stack frame,
+            // we do not need to keep track of func_phy_assign between its statements
             let mut sp_offset = 0;
             // Iterate through Stmts
             for s in &f.statements {
@@ -402,10 +403,10 @@ impl<'ast> ZGen<'ast> {
             self.cvar_exit_function();
             self.maybe_garbage_collect();
 
-            // Point final Block to %RP if not in main function
+            // Point exit block to %RP if not in main function
             if f_name != "main".to_string() {
                 let term = BlockTerminator::Coda(NextBlock::Rp());
-                blks[blks_len - 1].terminator = term;
+                blks[exit_blk].terminator = term;
             }
             
         }
@@ -416,19 +417,17 @@ impl<'ast> ZGen<'ast> {
     // TODO: Error handling in function call
     // The head block of the function is already created to facilitate any required initialization
     // Return type:
-    // Blks, blks_len, entry_blk, scope_phy_assign, sp_offset
+    // Blks, blks_len, entry_blk, sp_offset
     fn bl_gen_function_call_(
         &'ast self,
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
-        mut sp_offset: usize,
+        sp_offset: usize,
         args: Vec<Expression<'ast>>, // We do not use &args here because Expressions might be reconstructed
         f_path: PathBuf,
         f_name: String
     ) -> Result<(Vec<Block>, usize, usize, usize), String> {
         debug!("Block Gen Function call: {} {:?}", f_name, f_path);
-
-        let scope_phy_assign: Vec<(usize, String)> = Vec::new();
 
         let f = self
             .functions
@@ -501,10 +500,6 @@ impl<'ast> ZGen<'ast> {
                 arg_count += 1;
             }
 
-            if scope_phy_assign.len() > 0 {
-                (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, sp_offset)?;
-            }
-
             // %RP has been pushed to stack before function call
             // Set up %RP and block terminator
             let rp_update_stmt = Statement::Definition(DefinitionStatement {
@@ -535,11 +530,6 @@ impl<'ast> ZGen<'ast> {
             // Create new Block
             blks.push(Block::new(blks_len));
             blks_len += 1;
-            
-            if scope_phy_assign.len() > 0 {
-                // Exit Scoping
-                (blks, blks_len, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, scope_phy_assign, sp_offset)?;
-            }
         }
 
         Ok((blks, blks_len, 0, sp_offset))
@@ -551,8 +541,8 @@ impl<'ast> ZGen<'ast> {
     // result[1]: length of the generated blocks
     // result[2]: Exit Block of the CURRENT function, will be decided after processing any return statement
     //            0 if undecided, coda block if we are processing 
-    // result[3]: mapping between variables and their address in stack (in term of offset to %BP) for
-    //            ALL stack frames of the current scope
+    // result[3]: Mapping between variables and their address in stack (in term of offset to %BP) for
+    //            ALL stack frames of the current function. Each entry represents one scope.
     // result[4]: variables that need to be POPed after current function, with their offset to %BP
     //            used by bl_gen_function_call
     // result[5]: offset between value of %SP and the actual size of the physical memory
@@ -564,15 +554,15 @@ impl<'ast> ZGen<'ast> {
         s: &'ast Statement<'ast>,
         ret_ty: &'ast Type<'ast>,
         mut sp_offset: usize,
-        mut scope_phy_assign: Vec<(usize, String)>
-    ) -> Result<(Vec<Block>, usize, usize, Vec<(usize, String)>, usize), String> {
+        mut func_phy_assign: Vec<Vec<(usize, String)>>
+    ) -> Result<(Vec<Block>, usize, usize, Vec<Vec<(usize, String)>>, usize), String> {
         debug!("Block Gen Stmt: {}", s.span().as_str());
 
         match s {
             Statement::Return(r) => {
                 let ret_expr: Expression;
-                (blks, blks_len, exit_blk, scope_phy_assign, sp_offset, ret_expr, _) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &r.expressions[0], scope_phy_assign, sp_offset, 0)?;
+                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, ret_expr, _) = 
+                    self.bl_gen_expr_(blks, blks_len, exit_blk, &r.expressions[0], func_phy_assign, sp_offset, 0)?;
                 let ret_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                         ty: ret_ty.clone(),
@@ -588,6 +578,12 @@ impl<'ast> ZGen<'ast> {
                 });
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(ret_stmt));
 
+                // Handle scope change after return
+                // We are doing this for main function also, although we shouldn't need it
+                blks.push(Block::new(blks_len));
+                blks_len += 1;
+                (blks, sp_offset) = self.bl_gen_return_scope_(blks, blks_len, func_phy_assign.clone(), sp_offset)?;
+
                 // Update CODA block
                 if exit_blk == 0 {
                     exit_blk = blks_len;
@@ -602,8 +598,8 @@ impl<'ast> ZGen<'ast> {
             }
             Statement::Assertion(a) => {
                 let asst_expr: Expression;
-                (blks, blks_len, exit_blk, scope_phy_assign, sp_offset, asst_expr, _) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &a.expression, scope_phy_assign, sp_offset, 0)?;
+                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, asst_expr, _) = 
+                    self.bl_gen_expr_(blks, blks_len, exit_blk, &a.expression, func_phy_assign, sp_offset, 0)?;
                 let asst_stmt = Statement::Assertion(AssertionStatement {
                     expression: asst_expr,
                     message: a.message.clone(),
@@ -614,11 +610,10 @@ impl<'ast> ZGen<'ast> {
             Statement::Iteration(it) => {
 
                 // Standalone Scope for the Iterator
-                (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, sp_offset)?;
+                (blks, func_phy_assign, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
 
                 // STORE iterator value in Physical Mem if has appeared before                
-                let mut loop_scope_phy_assign: Vec<(usize, String)> = Vec::new();
-                (blks, loop_scope_phy_assign, sp_offset) = self.bl_gen_scoping_::<false>(blks, blks_len, &it.index.value, loop_scope_phy_assign, sp_offset);
+                (blks, func_phy_assign, sp_offset) = self.bl_gen_scoping_::<false>(blks, blks_len, &it.index.value, func_phy_assign, sp_offset);
 
                 // Initialize the iterator
                 let v_name = it.index.value.clone();
@@ -627,8 +622,8 @@ impl<'ast> ZGen<'ast> {
 
                 // Create and push FROM statement
                 let from_expr: Expression;
-                (blks, blks_len, exit_blk, scope_phy_assign, sp_offset, from_expr, _) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &it.from, scope_phy_assign, sp_offset, 0)?;
+                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, from_expr, _) = 
+                    self.bl_gen_expr_(blks, blks_len, exit_blk, &it.from, func_phy_assign, sp_offset, 0)?;
                 let from_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                         ty: it.ty.clone(),
@@ -641,8 +636,7 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(from_stmt));
 
                 // New Scope AGAIN to deal with any overwrites to the iterator within the loop
-                (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, sp_offset)?;
-                let mut next_scope_phy_assign: Vec<(usize, String)> = Vec::new();
+                (blks, func_phy_assign, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
 
                 let old_state = blks_len - 1;
 
@@ -652,11 +646,11 @@ impl<'ast> ZGen<'ast> {
 
                 // Iterate through Stmts
                 for body in &it.statements {
-                    (blks, blks_len, exit_blk, next_scope_phy_assign, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, body, ret_ty, sp_offset, next_scope_phy_assign)?;
+                    (blks, blks_len, exit_blk, func_phy_assign, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, body, ret_ty, sp_offset, func_phy_assign)?;
                 }
 
                 // Exit scoping to iterator scope
-                (blks, blks_len, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, next_scope_phy_assign, sp_offset)?;
+                (blks, func_phy_assign, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
 
                 // Create and push STEP statement
                 let step_stmt = Statement::Definition(DefinitionStatement {
@@ -684,8 +678,8 @@ impl<'ast> ZGen<'ast> {
 
                 // Create and push TRANSITION statement
                 let to_expr: Expression;
-                (blks, blks_len, exit_blk, scope_phy_assign, sp_offset, to_expr, _) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &it.to, scope_phy_assign, sp_offset, 0)?;
+                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, to_expr, _) = 
+                    self.bl_gen_expr_(blks, blks_len, exit_blk, &it.to, func_phy_assign, sp_offset, 0)?;
                 let new_state = blks_len - 1;
                 let term = BlockTerminator::Transition(
                     BlockTransition::new(
@@ -702,39 +696,37 @@ impl<'ast> ZGen<'ast> {
                 blks_len += 1;
 
                 // Exit scoping again to outside the loop
-                (blks, blks_len, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, loop_scope_phy_assign, sp_offset)?;
+                (blks, func_phy_assign, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
             }
             Statement::Conditional(c) => {
                 let head_state = blks_len - 1;
 
                 // If statements
                 // Enter Scoping
-                (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, sp_offset)?;
+                (blks, func_phy_assign, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
                 // Create new Block
                 blks.push(Block::new(blks_len));
                 blks_len += 1;
-                let mut next_scope_phy_assign: Vec<(usize, String)> = Vec::new();
                 // Iterate through Stmts
                 for body in &c.ifbranch {
-                    (blks, blks_len, exit_blk, next_scope_phy_assign, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, body, ret_ty, sp_offset, next_scope_phy_assign)?;
+                    (blks, blks_len, exit_blk, func_phy_assign, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, body, ret_ty, sp_offset, func_phy_assign)?;
                 }
                 // Exit Scoping
-                (blks, blks_len, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, next_scope_phy_assign, sp_offset)?;
+                (blks, func_phy_assign, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
                 let if_tail_state = blks_len - 1;
 
                 // Else statements
                 // Enter Scoping
-                (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, sp_offset)?;
+                (blks, func_phy_assign, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
                 // Create new Block
                 blks.push(Block::new(blks_len));
                 blks_len += 1;
-                let mut next_scope_phy_assign: Vec<(usize, String)> = Vec::new();
                 // Iterate through Stmts
                 for body in &c.elsebranch {
-                    (blks, blks_len, exit_blk, next_scope_phy_assign, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, body, ret_ty, sp_offset, next_scope_phy_assign)?;
+                    (blks, blks_len, exit_blk, func_phy_assign, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, body, ret_ty, sp_offset, func_phy_assign)?;
                 }
                 // Exit Scoping
-                (blks, blks_len, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, next_scope_phy_assign, sp_offset)?;
+                (blks, func_phy_assign, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
                 let else_tail_state = blks_len - 1;
 
                 // Block Transition
@@ -762,8 +754,8 @@ impl<'ast> ZGen<'ast> {
 
                 // Evaluate function calls in expression
                 let rhs_expr: Expression;
-                (blks, blks_len, exit_blk, scope_phy_assign, sp_offset, rhs_expr, _) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &d.expression, scope_phy_assign, sp_offset, 0)?;
+                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, rhs_expr, _) =
+                    self.bl_gen_expr_(blks, blks_len, exit_blk, &d.expression, func_phy_assign, sp_offset, 0)?;
 
                 // Handle Scoping change
                 self.set_lhs_ty_defn::<true>(d)?;
@@ -788,7 +780,7 @@ impl<'ast> ZGen<'ast> {
 
                             // Scoping change
                             let id = &l.identifier.value;
-                            (blks, scope_phy_assign, sp_offset) = self.bl_gen_scoping_::<false>(blks, blks_len, id, scope_phy_assign, sp_offset);
+                            (blks, func_phy_assign, sp_offset) = self.bl_gen_scoping_::<false>(blks, blks_len, id, func_phy_assign, sp_offset);
 
                             // Add the identifier to current scope
                             self.declare_init_impl_::<true>(
@@ -809,7 +801,7 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(new_stmt));
             }
         }
-        Ok((blks, blks_len, exit_blk, scope_phy_assign, sp_offset))
+        Ok((blks, blks_len, exit_blk, func_phy_assign, sp_offset))
     }
 
     // Generate blocks from statements
@@ -825,10 +817,10 @@ impl<'ast> ZGen<'ast> {
         mut blks_len: usize,
         mut exit_blk: usize,
         e: &'ast Expression<'ast>,
-        mut scope_phy_assign: Vec<(usize, String)>,
+        mut func_phy_assign: Vec<Vec<(usize, String)>>,
         mut sp_offset: usize,
         mut func_count: usize
-    ) -> Result<(Vec<Block>, usize, usize, Vec<(usize, String)>, usize, Expression, usize), String> {
+    ) -> Result<(Vec<Block>, usize, usize, Vec<Vec<(usize, String)>>, usize, Expression, usize), String> {
         debug!("Block Gen Expr: {}", e.span().as_str());
 
         let mut ret_e = e.clone();
@@ -838,12 +830,12 @@ impl<'ast> ZGen<'ast> {
                 let new_e_first: Expression;
                 let new_e_second: Expression;
                 let new_e_third: Expression;
-                (blks, blks_len, exit_blk, scope_phy_assign, sp_offset, new_e_first, func_count) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &t.first, scope_phy_assign, sp_offset, func_count)?;
-                (blks, blks_len, exit_blk, scope_phy_assign, sp_offset, new_e_second, func_count) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &t.second, scope_phy_assign, sp_offset, func_count)?;
-                (blks, blks_len, exit_blk, scope_phy_assign, sp_offset, new_e_third, func_count) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &t.third, scope_phy_assign, sp_offset, func_count)?;
+                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_first, func_count) = 
+                    self.bl_gen_expr_(blks, blks_len, exit_blk, &t.first, func_phy_assign, sp_offset, func_count)?;
+                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_second, func_count) = 
+                    self.bl_gen_expr_(blks, blks_len, exit_blk, &t.second, func_phy_assign, sp_offset, func_count)?;
+                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_third, func_count) = 
+                    self.bl_gen_expr_(blks, blks_len, exit_blk, &t.third, func_phy_assign, sp_offset, func_count)?;
                 ret_e = Expression::Ternary(TernaryExpression {
                     first: Box::new(new_e_first),
                     second: Box::new(new_e_second),
@@ -854,10 +846,10 @@ impl<'ast> ZGen<'ast> {
             Expression::Binary(b) => {
                 let new_e_left: Expression;
                 let new_e_right: Expression;
-                (blks, blks_len, exit_blk, scope_phy_assign, sp_offset, new_e_left, func_count) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &b.left, scope_phy_assign.clone(), sp_offset, func_count)?;
-                (blks, blks_len, exit_blk, scope_phy_assign, sp_offset, new_e_right, func_count) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &b.right, scope_phy_assign.clone(), sp_offset, func_count)?;
+                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_left, func_count) = 
+                    self.bl_gen_expr_(blks, blks_len, exit_blk, &b.left, func_phy_assign, sp_offset, func_count)?;
+                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_right, func_count) = 
+                    self.bl_gen_expr_(blks, blks_len, exit_blk, &b.right, func_phy_assign, sp_offset, func_count)?;
                 ret_e = Expression::Binary(BinaryExpression {
                     op: b.op.clone(),
                     left: Box::new(new_e_left),
@@ -867,8 +859,8 @@ impl<'ast> ZGen<'ast> {
             }
             Expression::Unary(u) => {
                 let new_e_expr: Expression;
-                (blks, blks_len, exit_blk, scope_phy_assign, sp_offset, new_e_expr, func_count) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &u.expression, scope_phy_assign.clone(), sp_offset, func_count)?;
+                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_expr, func_count) = 
+                    self.bl_gen_expr_(blks, blks_len, exit_blk, &u.expression, func_phy_assign, sp_offset, func_count)?;
                 ret_e = Expression::Unary(UnaryExpression {
                     op: u.op.clone(),
                     expression: Box::new(new_e_expr),
@@ -883,16 +875,15 @@ impl<'ast> ZGen<'ast> {
                     let mut args: Vec<Expression> = Vec::new();
                     let mut new_expr: Expression;
                     for old_expr in &c.arguments.expressions {
-                        (blks, blks_len, exit_blk, scope_phy_assign, sp_offset, new_expr, func_count) = 
-                            self.bl_gen_expr_(blks, blks_len, exit_blk, old_expr, scope_phy_assign.clone(), sp_offset, func_count)?;
+                        (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_expr, func_count) = 
+                            self.bl_gen_expr_(blks, blks_len, exit_blk, old_expr, func_phy_assign, sp_offset, func_count)?;
                         args.push(new_expr);                       
                     }
 
                     // Update %SP and %BP before function call started since we won't know what happens to them
-                    (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, sp_offset)?;
+                    (blks, func_phy_assign, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
                     
                     // Push all local variables onto the stack
-                    let mut callee_phy_assign: Vec<(usize, String)> = Vec::new();
                     let mut var_map: BTreeSet<String> = BTreeSet::new();
                     if let Some(st) = self.cvars_stack.borrow().last() {
                         for var_list in st.iter().rev() {
@@ -902,14 +893,48 @@ impl<'ast> ZGen<'ast> {
                         }
                     }
                     for var in var_map {
-                        (blks, callee_phy_assign, sp_offset) = self.bl_gen_scoping_::<true>(blks, blks_len, &var, callee_phy_assign, sp_offset);
+                        (blks, func_phy_assign, sp_offset) = self.bl_gen_scoping_::<true>(blks, blks_len, &var, func_phy_assign, sp_offset);
                     }
 
                     // Push %RP onto the stack
-                    (blks, callee_phy_assign, sp_offset) = self.bl_gen_scoping_::<true>(blks, blks_len, &"%RP".to_string(), callee_phy_assign, sp_offset);
+                    (blks, func_phy_assign, sp_offset) = self.bl_gen_scoping_::<true>(blks, blks_len, &"%RP".to_string(), func_phy_assign, sp_offset);
 
-                    // Update %SP and %BP again to finalize the call stack
-                    (blks, blks_len, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, sp_offset)?;
+                    // Update %SP again to finalize the call stack
+                    // Note that without the function call, this step should be done by bl_gen_exit_scope below
+                    if sp_offset > 0 {
+                        // %SP = %SP + sp_offset
+                        let sp_update_stmt = Statement::Definition(DefinitionStatement {
+                            lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
+                                id: IdentifierExpression {
+                                    value: "%SP".to_string(),
+                                    span: Span::new("", 0, 0).unwrap()
+                                },
+                                accesses: Vec::new(),
+                                span: Span::new("", 0, 0).unwrap()
+                            })],
+                            expression: Expression::Binary(BinaryExpression {
+                                op: BinaryOperator::Add,
+                                left: Box::new(Expression::Identifier(IdentifierExpression {
+                                    value: "%SP".to_string(),
+                                    span: Span::new("", 0, 0).unwrap()
+                                })),
+                                right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                                    value: DecimalNumber {
+                                        value: sp_offset.to_string(),
+                                        span: Span::new("", 0, 0).unwrap()
+                                    },
+                                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                        span: Span::new("", 0, 0).unwrap()
+                                    })),
+                                    span: Span::new("", 0, 0).unwrap()
+                                }))),
+                                span: Span::new("", 0, 0).unwrap()
+                            }),
+                            span: Span::new("", 0, 0).unwrap()
+                        });
+                        blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_update_stmt));
+                        sp_offset = 0;
+                    }
                 
                     (blks, blks_len, _, sp_offset) =
                         self.bl_gen_function_call_(blks, blks_len, sp_offset, args, f_path.clone(), f_name.clone())?;
@@ -941,10 +966,10 @@ impl<'ast> ZGen<'ast> {
                     blks[blks_len - 1].instructions.push(BlockContent::Stmt(update_ret_stmt));
                     
                     // Exit Scoping
-                    // We need to do it AFTER %RET has been stored somewhere else to prevent it being overrided
-                    // We also need to do it BEFORE some assinging some variable to %RET because otherwise its
+                    // We need to do it AFTER %RET has been stored somewhere else to prevent it from being overrided
+                    // We also need to do it BEFORE some assigning some variable to %RET because otherwise its
                     // value might be overrided again after being assigned to %RET
-                    (blks, blks_len, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, callee_phy_assign, sp_offset)?;
+                    (blks, func_phy_assign, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
                     
                     ret_e = Expression::Identifier(IdentifierExpression {
                         value: format!("%RET{}", func_count),
@@ -960,7 +985,7 @@ impl<'ast> ZGen<'ast> {
             Expression::InlineArray(_) => { return Err(format!("Array not supported!")); }
             _ => {}
         }
-        Ok((blks, blks_len, exit_blk, scope_phy_assign, sp_offset, ret_e, func_count))
+        Ok((blks, blks_len, exit_blk, func_phy_assign, sp_offset, ret_e, func_count))
     }   
     
     // Handle scoping change by pushing old values onto the stack
@@ -970,9 +995,9 @@ impl<'ast> ZGen<'ast> {
         mut blks: Vec<Block<'ast>>,
         blks_len: usize,
         id: &String,
-        mut scope_phy_assign: Vec<(usize, String)>,
+        mut func_phy_assign: Vec<Vec<(usize, String)>>,
         mut sp_offset: usize
-    ) -> (Vec<Block>, Vec<(usize, String)>, usize) {
+    ) -> (Vec<Block>, Vec<Vec<(usize, String)>>, usize) {
         // We don't care about shadowing
         if !self.cvar_cur_scope_find(id) || IS_FUNC_CALL {
             // If the identifier is used in the previous scopes of the current function,
@@ -982,7 +1007,7 @@ impl<'ast> ZGen<'ast> {
                 if sp_offset == 0 {
                     // push %BP onto STACK
                     blks[blks_len - 1].instructions.push(BlockContent::MemPush(("%BP".to_string(), sp_offset)));
-                    scope_phy_assign.push((sp_offset, "%BP".to_string()));
+                    func_phy_assign.last_mut().unwrap_or_else(|| panic!("Pushing into a non-existing scope in func_phy_assign!")).push((sp_offset, "%BP".to_string()));
                     sp_offset += 1;
                     // %BP = %SP
                     let bp_update_stmt = Statement::Definition(DefinitionStatement {
@@ -1005,23 +1030,24 @@ impl<'ast> ZGen<'ast> {
                     blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_update_stmt));
                 }
                 blks[blks_len - 1].instructions.push(BlockContent::MemPush((id.to_string(), sp_offset)));
-                scope_phy_assign.push((sp_offset, id.clone()));
+                func_phy_assign.last_mut().unwrap_or_else(|| panic!("Pushing into a non-existing scope in func_phy_assign!")).push((sp_offset, id.clone()));
                 sp_offset += 1;
             }
         }
-        (blks, scope_phy_assign, sp_offset)
+        (blks, func_phy_assign, sp_offset)
     }
 
     fn bl_gen_enter_scope_(
         &'ast self,
         mut blks: Vec<Block<'ast>>,
         blks_len: usize,
+        mut func_phy_assign: Vec<Vec<(usize, String)>>,
         mut sp_offset: usize
-    ) -> Result<(Vec<Block>, usize, usize), String> {
+    ) -> Result<(Vec<Block>, Vec<Vec<(usize, String)>>, usize), String> {
         // New Scoping
         self.enter_scope_impl_::<true>();
 
-        // Update %SP and %BP if any changes has been made
+        // Update %SP if any changes has been made
         if sp_offset > 0 {
             // %SP = %SP + sp_offset
             let sp_update_stmt = Statement::Definition(DefinitionStatement {
@@ -1056,16 +1082,20 @@ impl<'ast> ZGen<'ast> {
             blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_update_stmt));
             sp_offset = 0;
         }
-        Ok((blks, blks_len, sp_offset))
+
+        // New Stack Frame
+        func_phy_assign.push(Vec::new());
+
+        Ok((blks, func_phy_assign, sp_offset))
     }
 
     fn bl_gen_exit_scope_(
         &'ast self,
         mut blks: Vec<Block<'ast>>,
         blks_len: usize,
-        scope_phy_assign: Vec<(usize, String)>,
+        mut func_phy_assign: Vec<Vec<(usize, String)>>,
         mut sp_offset: usize
-    ) -> Result<(Vec<Block>, usize, usize), String> {
+    ) -> Result<(Vec<Block>, Vec<Vec<(usize, String)>>, usize), String> {
         // Exit Scoping
         self.exit_scope_impl_::<true>();
 
@@ -1106,10 +1136,67 @@ impl<'ast> ZGen<'ast> {
         }
 
         // POP local variables out
-        for (addr, var) in scope_phy_assign.iter().rev() {
+        for (addr, var) in func_phy_assign.pop().unwrap_or_else(|| panic!("Popping out a non-existing scope in func_phy_assign!")).iter().rev() {
             blks[blks_len - 1].instructions.push(BlockContent::MemPop((var.to_string(), *addr)));
         }
-        Ok((blks, blks_len, sp_offset))
+        Ok((blks, func_phy_assign, sp_offset))
+    }
+
+    // Handle a return statement
+    // We need to push out everything in the stack frame of the current function,
+    // but we don't change actual scoping since there might be stuff after the `return`
+    // Whether the things after return should be eliminated is not dealt with here
+    fn bl_gen_return_scope_(
+        &'ast self,
+        mut blks: Vec<Block<'ast>>,
+        blks_len: usize,
+        func_phy_assign: Vec<Vec<(usize, String)>>,
+        mut sp_offset: usize
+    ) -> Result<(Vec<Block>, usize), String> {
+
+        // Update %SP and %BP if any changes has been made
+        if sp_offset > 0 {
+            // %SP = %SP + sp_offset
+            let sp_update_stmt = Statement::Definition(DefinitionStatement {
+                lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
+                    id: IdentifierExpression {
+                        value: "%SP".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    accesses: Vec::new(),
+                    span: Span::new("", 0, 0).unwrap()
+                })],
+                expression: Expression::Binary(BinaryExpression {
+                    op: BinaryOperator::Add,
+                    left: Box::new(Expression::Identifier(IdentifierExpression {
+                        value: "%SP".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                        value: DecimalNumber {
+                            value: sp_offset.to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        span: Span::new("", 0, 0).unwrap()
+                    }))),
+                    span: Span::new("", 0, 0).unwrap()
+                }),
+                span: Span::new("", 0, 0).unwrap()
+            });
+            blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_update_stmt));
+            sp_offset = 0;
+        }
+
+        // POP everything out
+        for scope_phy_assign in func_phy_assign.iter().rev() {
+            for (addr, var) in scope_phy_assign.iter().rev() {
+                blks[blks_len - 1].instructions.push(BlockContent::MemPop((var.to_string(), *addr)));
+            }
+        }
+        Ok((blks, sp_offset))
     }
 
     // I am hacking cvars_stack to do the interpretation. Ideally we want a separate var_table to do so.

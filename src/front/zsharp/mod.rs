@@ -76,9 +76,6 @@ impl ZSharpFE {
         let loader = parser::ZLoad::new();
         let asts = loader.load(&i.file);
         let mut g = ZGen::new(asts, i.mode, loader.stdlib(), i.isolate_asserts);
-        for a in g.asts.iter() {
-            // println!("{:#?}", a);
-        }
         g.visit_files();
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());

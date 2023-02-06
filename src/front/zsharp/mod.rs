@@ -87,6 +87,7 @@ impl ZSharpFE {
             b.pretty();
             println!("");
         }
+        println!("--\nInterpretation:");
         g.bl_eval_const_entry_fn(entry_bl, exit_bl, &blks)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))
     }

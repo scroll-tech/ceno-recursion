@@ -580,20 +580,22 @@ impl<'ast> ZGen<'ast> {
 
                 // Handle scope change after return
                 // We are doing this for main function also, although we shouldn't need it
-                blks.push(Block::new(blks_len));
-                blks_len += 1;
                 (blks, sp_offset) = self.bl_gen_return_scope_(blks, blks_len, func_phy_assign.clone(), sp_offset)?;
 
                 // Update CODA block
                 if exit_blk == 0 {
                     exit_blk = blks_len;
-                    // Create new Block
-                    blks.push(Block::new(blks_len));
-                    blks_len += 1;
                 } else {
                     let term = BlockTerminator::Coda(NextBlock::Label(exit_blk));
                     blks[blks_len - 1].terminator = term;
                 }
+
+                // Create a dummy block
+                // If exit_blk was never initialized, this dummy serves as exit_blk
+                // Otherwise this block is used so that if return is the last statement in conditionals
+                // or loops, its Terminator won't be reassigned when we finish processing the outer scope.
+                blks.push(Block::new(blks_len));
+                blks_len += 1;
 
             }
             Statement::Assertion(a) => {
@@ -900,7 +902,8 @@ impl<'ast> ZGen<'ast> {
                     (blks, func_phy_assign, sp_offset) = self.bl_gen_scoping_::<true>(blks, blks_len, &"%RP".to_string(), func_phy_assign, sp_offset);
 
                     // Update %SP again to finalize the call stack
-                    // Note that without the function call, this step should be done by bl_gen_exit_scope below
+                    // We technically shouldn't need it before %SP will be updated by the next enter_scope,
+                    // but there's no harm doing it here
                     if sp_offset > 0 {
                         // %SP = %SP + sp_offset
                         let sp_update_stmt = Statement::Definition(DefinitionStatement {

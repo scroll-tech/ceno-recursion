@@ -11,7 +11,7 @@
 //   Cross check edge-case detection with original ZSharp
 
 // Comment:
-//   The correct approach is incorrect. One can imagein A calls B, B calls C.
+//   The current approach is incorrect. One can imagein A calls B, B calls C.
 //   A uses variable x, B does not use x, C uses x.
 //   When B returns back to A, x has been rewritten as the value of C.
 

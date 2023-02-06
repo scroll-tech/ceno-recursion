@@ -5,17 +5,10 @@
 //       Function within array index?
 //       Multi-file program not supported
 //       What would happen if we put function calls in loop to / from?
-//       Return statements in if / else
-
-// BUG: Loop counter should be its own scope
+//       Function call inside if / else condition?
 
 // Other Cleanups:
 //   Cross check edge-case detection with original ZSharp
-
-// Comment:
-//   The correct approach is incorrect. One can imagein A calls B, B calls C.
-//   A uses variable x, B does not use x, C uses x.
-//   When B returns back to A, x has been rewritten as the value of C.
 
 use log::{debug, warn};
 
@@ -299,7 +292,7 @@ impl<'ast> ZGen<'ast> {
         });
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_init_stmt));
 
-        (blks, blks_len, exit_blk) = self.bl_gen_function_init_(blks, blks_len, f_file.clone(), f_name)
+        (blks, blks_len, exit_blk) = self.bl_gen_function_init_::<true>(blks, blks_len, f_file.clone(), f_name)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
 
         // Create a mapping from each function name to the beginning of their blocks
@@ -317,7 +310,7 @@ impl<'ast> ZGen<'ast> {
                         );
                     }
                     func_blk_map.insert(f_name.clone(), blks_len);
-                    (blks, blks_len, _) = self.bl_gen_function_init_(blks, blks_len, f_file.clone(), f_name)
+                    (blks, blks_len, _) = self.bl_gen_function_init_::<false>(blks, blks_len, f_file.clone(), f_name)
                         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 }
             }
@@ -340,7 +333,7 @@ impl<'ast> ZGen<'ast> {
     // Convert each function to blocks
     // Return type:
     // Blks, blks_len, exit_blk
-    fn bl_gen_function_init_(
+    fn bl_gen_function_init_<const IS_MAIN: bool>(
         &'ast self,
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
@@ -394,7 +387,7 @@ impl<'ast> ZGen<'ast> {
             let mut sp_offset = 0;
             // Iterate through Stmts
             for s in &f.statements {
-                (blks, blks_len, exit_blk, _, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, s, ret_ty, sp_offset, Vec::new())?;
+                (blks, blks_len, exit_blk, _, sp_offset) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, exit_blk, s, ret_ty, sp_offset, Vec::new())?;
             }
             if exit_blk == 0 {
                 exit_blk = blks_len;
@@ -404,7 +397,7 @@ impl<'ast> ZGen<'ast> {
             self.maybe_garbage_collect();
 
             // Point exit block to %RP if not in main function
-            if f_name != "main".to_string() {
+            if !IS_MAIN {
                 let term = BlockTerminator::Coda(NextBlock::Rp());
                 blks[exit_blk].terminator = term;
             }
@@ -546,7 +539,7 @@ impl<'ast> ZGen<'ast> {
     // result[4]: variables that need to be POPed after current function, with their offset to %BP
     //            used by bl_gen_function_call
     // result[5]: offset between value of %SP and the actual size of the physical memory
-    fn bl_gen_stmt_(
+    fn bl_gen_stmt_<const IS_MAIN: bool>(
         &'ast self, 
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
@@ -562,7 +555,7 @@ impl<'ast> ZGen<'ast> {
             Statement::Return(r) => {
                 let ret_expr: Expression;
                 (blks, blks_len, exit_blk, func_phy_assign, sp_offset, ret_expr, _) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &r.expressions[0], func_phy_assign, sp_offset, 0)?;
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &r.expressions[0], func_phy_assign, sp_offset, 0)?;
                 let ret_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                         ty: ret_ty.clone(),
@@ -579,8 +572,10 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(ret_stmt));
 
                 // Handle scope change after return
-                // We are doing this for main function also, although we shouldn't need it
-                (blks, sp_offset) = self.bl_gen_return_scope_(blks, blks_len, func_phy_assign.clone(), sp_offset)?;
+                // We don't need this if we are in main function
+                if !IS_MAIN {
+                    (blks, sp_offset) = self.bl_gen_return_scope_(blks, blks_len, func_phy_assign.clone(), sp_offset)?;
+                }
 
                 // Update CODA block
                 if exit_blk == 0 {
@@ -601,7 +596,7 @@ impl<'ast> ZGen<'ast> {
             Statement::Assertion(a) => {
                 let asst_expr: Expression;
                 (blks, blks_len, exit_blk, func_phy_assign, sp_offset, asst_expr, _) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &a.expression, func_phy_assign, sp_offset, 0)?;
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &a.expression, func_phy_assign, sp_offset, 0)?;
                 let asst_stmt = Statement::Assertion(AssertionStatement {
                     expression: asst_expr,
                     message: a.message.clone(),
@@ -625,7 +620,7 @@ impl<'ast> ZGen<'ast> {
                 // Create and push FROM statement
                 let from_expr: Expression;
                 (blks, blks_len, exit_blk, func_phy_assign, sp_offset, from_expr, _) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &it.from, func_phy_assign, sp_offset, 0)?;
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &it.from, func_phy_assign, sp_offset, 0)?;
                 let from_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                         ty: it.ty.clone(),
@@ -648,7 +643,7 @@ impl<'ast> ZGen<'ast> {
 
                 // Iterate through Stmts
                 for body in &it.statements {
-                    (blks, blks_len, exit_blk, func_phy_assign, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, body, ret_ty, sp_offset, func_phy_assign)?;
+                    (blks, blks_len, exit_blk, func_phy_assign, sp_offset) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, exit_blk, body, ret_ty, sp_offset, func_phy_assign)?;
                 }
 
                 // Exit scoping to iterator scope
@@ -681,7 +676,7 @@ impl<'ast> ZGen<'ast> {
                 // Create and push TRANSITION statement
                 let to_expr: Expression;
                 (blks, blks_len, exit_blk, func_phy_assign, sp_offset, to_expr, _) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &it.to, func_phy_assign, sp_offset, 0)?;
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &it.to, func_phy_assign, sp_offset, 0)?;
                 let new_state = blks_len - 1;
                 let term = BlockTerminator::Transition(
                     BlockTransition::new(
@@ -711,7 +706,7 @@ impl<'ast> ZGen<'ast> {
                 blks_len += 1;
                 // Iterate through Stmts
                 for body in &c.ifbranch {
-                    (blks, blks_len, exit_blk, func_phy_assign, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, body, ret_ty, sp_offset, func_phy_assign)?;
+                    (blks, blks_len, exit_blk, func_phy_assign, sp_offset) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, exit_blk, body, ret_ty, sp_offset, func_phy_assign)?;
                 }
                 // Exit Scoping
                 (blks, func_phy_assign, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
@@ -725,7 +720,7 @@ impl<'ast> ZGen<'ast> {
                 blks_len += 1;
                 // Iterate through Stmts
                 for body in &c.elsebranch {
-                    (blks, blks_len, exit_blk, func_phy_assign, sp_offset) = self.bl_gen_stmt_(blks, blks_len, exit_blk, body, ret_ty, sp_offset, func_phy_assign)?;
+                    (blks, blks_len, exit_blk, func_phy_assign, sp_offset) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, exit_blk, body, ret_ty, sp_offset, func_phy_assign)?;
                 }
                 // Exit Scoping
                 (blks, func_phy_assign, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
@@ -757,7 +752,7 @@ impl<'ast> ZGen<'ast> {
                 // Evaluate function calls in expression
                 let rhs_expr: Expression;
                 (blks, blks_len, exit_blk, func_phy_assign, sp_offset, rhs_expr, _) =
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &d.expression, func_phy_assign, sp_offset, 0)?;
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &d.expression, func_phy_assign, sp_offset, 0)?;
 
                 // Handle Scoping change
                 self.set_lhs_ty_defn::<true>(d)?;
@@ -813,7 +808,7 @@ impl<'ast> ZGen<'ast> {
     // result[7]: func_count, how many function calls has occured in this statement?
     // Since the return value of all function calls are stored in %RET, we need to differentiate them if
     // multiple function calls occur in the same statement
-    fn bl_gen_expr_(
+    fn bl_gen_expr_<const IS_MAIN: bool>(
         &'ast self, 
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
@@ -833,11 +828,11 @@ impl<'ast> ZGen<'ast> {
                 let new_e_second: Expression;
                 let new_e_third: Expression;
                 (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_first, func_count) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &t.first, func_phy_assign, sp_offset, func_count)?;
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &t.first, func_phy_assign, sp_offset, func_count)?;
                 (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_second, func_count) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &t.second, func_phy_assign, sp_offset, func_count)?;
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &t.second, func_phy_assign, sp_offset, func_count)?;
                 (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_third, func_count) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &t.third, func_phy_assign, sp_offset, func_count)?;
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &t.third, func_phy_assign, sp_offset, func_count)?;
                 ret_e = Expression::Ternary(TernaryExpression {
                     first: Box::new(new_e_first),
                     second: Box::new(new_e_second),
@@ -849,9 +844,9 @@ impl<'ast> ZGen<'ast> {
                 let new_e_left: Expression;
                 let new_e_right: Expression;
                 (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_left, func_count) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &b.left, func_phy_assign, sp_offset, func_count)?;
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &b.left, func_phy_assign, sp_offset, func_count)?;
                 (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_right, func_count) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &b.right, func_phy_assign, sp_offset, func_count)?;
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &b.right, func_phy_assign, sp_offset, func_count)?;
                 ret_e = Expression::Binary(BinaryExpression {
                     op: b.op.clone(),
                     left: Box::new(new_e_left),
@@ -862,7 +857,7 @@ impl<'ast> ZGen<'ast> {
             Expression::Unary(u) => {
                 let new_e_expr: Expression;
                 (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_expr, func_count) = 
-                    self.bl_gen_expr_(blks, blks_len, exit_blk, &u.expression, func_phy_assign, sp_offset, func_count)?;
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &u.expression, func_phy_assign, sp_offset, func_count)?;
                 ret_e = Expression::Unary(UnaryExpression {
                     op: u.op.clone(),
                     expression: Box::new(new_e_expr),
@@ -878,7 +873,7 @@ impl<'ast> ZGen<'ast> {
                     let mut new_expr: Expression;
                     for old_expr in &c.arguments.expressions {
                         (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_expr, func_count) = 
-                            self.bl_gen_expr_(blks, blks_len, exit_blk, old_expr, func_phy_assign, sp_offset, func_count)?;
+                            self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, old_expr, func_phy_assign, sp_offset, func_count)?;
                         args.push(new_expr);                       
                     }
 
@@ -898,8 +893,10 @@ impl<'ast> ZGen<'ast> {
                         (blks, func_phy_assign, sp_offset) = self.bl_gen_scoping_::<true>(blks, blks_len, &var, func_phy_assign, sp_offset);
                     }
 
-                    // Push %RP onto the stack
-                    (blks, func_phy_assign, sp_offset) = self.bl_gen_scoping_::<true>(blks, blks_len, &"%RP".to_string(), func_phy_assign, sp_offset);
+                    // Push %RP onto the stack if not in main
+                    if !IS_MAIN {
+                        (blks, func_phy_assign, sp_offset) = self.bl_gen_scoping_::<true>(blks, blks_len, &"%RP".to_string(), func_phy_assign, sp_offset);
+                    }
 
                     // Update %SP again to finalize the call stack
                     // We technically shouldn't need it before %SP will be updated by the next enter_scope,
@@ -1196,7 +1193,10 @@ impl<'ast> ZGen<'ast> {
         // POP everything out
         for scope_phy_assign in func_phy_assign.iter().rev() {
             for (addr, var) in scope_phy_assign.iter().rev() {
-                blks[blks_len - 1].instructions.push(BlockContent::MemPop((var.to_string(), *addr)));
+                // Local variables have no use to us! We only need to pop out the %BP's
+                if var == "%BP" {
+                    blks[blks_len - 1].instructions.push(BlockContent::MemPop((var.to_string(), *addr)));                
+                }
             }
         }
         Ok((blks, sp_offset))

@@ -3,6 +3,7 @@
 mod parser;
 mod term;
 mod blocks;
+mod blocks_optimization;
 mod pretty;
 pub mod zvisit;
 
@@ -80,14 +81,22 @@ impl ZSharpFE {
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
         // g.const_entry_fn("main")
-        let (blks, entry_bl, exit_bl) = g.bl_gen_const_entry_fn("main");
+        let (mut blks, mut entry_bl, mut exit_bl) = g.bl_gen_const_entry_fn("main");
         println!("Entry block: {entry_bl}");
         println!("Exit block: {exit_bl}");
         for b in &blks {
             b.pretty();
             println!("");
         }
-        println!("--\nInterpretation:");
+        println!("\n\n--\nOptimization:");
+        (blks, entry_bl, exit_bl) = blocks_optimization::dead_block_elimination(blks, entry_bl, exit_bl);
+        println!("Entry block: {entry_bl}");
+        println!("Exit block: {exit_bl}");        
+        for b in &blks {
+            b.pretty();
+            println!("");
+        }
+        println!("\n\n--\nInterpretation:");
         g.bl_eval_const_entry_fn(entry_bl, exit_bl, &blks)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))
     }

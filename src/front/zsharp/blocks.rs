@@ -52,9 +52,9 @@ fn ty_to_dec_suffix<'ast>(ty: Type<'ast>) -> DecimalSuffix<'ast> {
 
 #[derive(Clone)]
 pub struct Block<'ast> {
-    name: usize,
-    instructions: Vec<BlockContent<'ast>>,
-    terminator: BlockTerminator<'ast>,
+    pub name: usize,
+    pub instructions: Vec<BlockContent<'ast>>,
+    pub terminator: BlockTerminator<'ast>,
 }
 
 #[derive(Clone)]
@@ -76,9 +76,9 @@ pub enum BlockTerminator<'ast> {
 // BlockTransition is of the format:
 // if cond then goto tblock else goto fblock
 pub struct BlockTransition<'ast> {
-    cond: Expression<'ast>,
-    tblock: NextBlock,
-    fblock: NextBlock,
+    pub cond: Expression<'ast>,
+    pub tblock: NextBlock,
+    pub fblock: NextBlock,
 }
 
 #[derive(Clone)]
@@ -331,6 +331,10 @@ impl<'ast> ZGen<'ast> {
     }
 
     // Convert each function to blocks
+    // Generic: IS_MAIN determines if we are in the main function, which has three functions:
+    //   1. We don't need to push %RP when doing function calls in MAIN, since %RP is undefined
+    //   2. We don't need to handle scoping after a return in MAIN, since the program terminates
+    //   3. We don't update the exit block of MAIN to %RP
     // Return type:
     // Blks, blks_len, exit_blk
     fn bl_gen_function_init_<const IS_MAIN: bool>(

@@ -138,7 +138,7 @@ fn pretty_ident_expr(i: &IdentifierExpression) {
     print!("{}", i.value);
 }
 
-fn get_un_op(op: &UnaryOperator) -> String {
+fn get_un_op(_op: &UnaryOperator) -> String {
     panic!("Pretty print for unary operators has yet to be implemented.");
 }
 

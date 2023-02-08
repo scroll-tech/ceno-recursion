@@ -7,6 +7,8 @@
 //       What would happen if we put function calls in loop to / from?
 //       Function call inside if / else condition?
 
+// BUG:  Need to push %RET's for function calls
+
 // Other Cleanups:
 //   Cross check edge-case detection with original ZSharp
 
@@ -69,7 +71,8 @@ pub enum BlockContent<'ast> {
 pub enum BlockTerminator<'ast> {
     Transition(BlockTransition<'ast>),
     Coda(NextBlock),
-    FuncCall(String) // Placeholders before blocks corresponding to each function has been determined
+    FuncCall(String), // Placeholders before blocks corresponding to each function has been determined
+    ProgTerm() // The program terminates
 }
 
 #[derive(Clone)]
@@ -119,15 +122,18 @@ impl<'ast> Block<'ast> {
         }
         match &self.terminator {
             BlockTerminator::Transition(t) => {
-                print!("Block Transition: ");
+                print!("Transition: ");
                 pretty::pretty_expr(&t.cond);
                 print!(" ? block {} : block {}", t.tblock.to_string(), t.fblock.to_string())
             }
             BlockTerminator::Coda(c) => {
-                print!("Block terminates with coda {}.", c.to_string());
+                print!("Transition: -> block {}.", c.to_string());
             }
             BlockTerminator::FuncCall(fc) => {
-                print!("Block terminates with function call to {}.", fc);
+                print!("Transition: -> function call on {}.", fc);
+            }
+            BlockTerminator::ProgTerm() => {
+                print!("Program terminates.")
             }
         }
     }
@@ -198,7 +204,7 @@ impl<'ast> ZGen<'ast> {
         }
     }
 
-    pub fn bl_gen_const_entry_fn(&'ast self, n: &str) -> (Vec<Block<'ast>>, usize, usize) {
+    pub fn bl_gen_const_entry_fn(&'ast self, n: &str) -> (Vec<Block<'ast>>, usize) {
         debug!("Block Gen Const entry: {}", n);
 
         let (f_file, f_name) = self.deref_import(n);
@@ -218,7 +224,6 @@ impl<'ast> ZGen<'ast> {
         // Blocks for main function
         let mut blks = Vec::new();
         let mut blks_len = 0;
-        let exit_blk: usize;
         // Create the initial block
         blks.push(Block::new(0));
         blks_len += 1;
@@ -292,7 +297,7 @@ impl<'ast> ZGen<'ast> {
         });
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_init_stmt));
 
-        (blks, blks_len, exit_blk) = self.bl_gen_function_init_::<true>(blks, blks_len, f_file.clone(), f_name)
+        (blks, blks_len) = self.bl_gen_function_init_::<true>(blks, blks_len, f_file.clone(), f_name)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
 
         // Create a mapping from each function name to the beginning of their blocks
@@ -310,7 +315,7 @@ impl<'ast> ZGen<'ast> {
                         );
                     }
                     func_blk_map.insert(f_name.clone(), blks_len);
-                    (blks, blks_len, _) = self.bl_gen_function_init_::<false>(blks, blks_len, f_file.clone(), f_name)
+                    (blks, blks_len) = self.bl_gen_function_init_::<false>(blks, blks_len, f_file.clone(), f_name)
                         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 }
             }
@@ -326,8 +331,7 @@ impl<'ast> ZGen<'ast> {
             new_blks.push(blk);
         }
 
-        // Return: blks, entry_blk, exit_blk
-        (new_blks, 0, exit_blk)
+        (new_blks, 0)
     }
 
     // Convert each function to blocks
@@ -336,17 +340,15 @@ impl<'ast> ZGen<'ast> {
     //   2. We don't need to handle scoping after a return in MAIN, since the program terminates
     //   3. We don't update the exit block of MAIN to %RP
     // Return type:
-    // Blks, blks_len, exit_blk
+    // Blks, blks_len
     fn bl_gen_function_init_<const IS_MAIN: bool>(
         &'ast self,
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
         f_path: PathBuf,
         f_name: String,
-    ) -> Result<(Vec<Block>, usize, usize), String> {
+    ) -> Result<(Vec<Block>, usize), String> {
         debug!("Block Gen Function init: {} {:?}", f_name, f_path);
-    
-        let mut exit_blk = 0;
 
         let f = self
             .functions
@@ -391,24 +393,14 @@ impl<'ast> ZGen<'ast> {
             let mut sp_offset = 0;
             // Iterate through Stmts
             for s in &f.statements {
-                (blks, blks_len, exit_blk, _, sp_offset) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, exit_blk, s, ret_ty, sp_offset, Vec::new())?;
-            }
-            if exit_blk == 0 {
-                exit_blk = blks_len;
+                (blks, blks_len, _, sp_offset) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, s, ret_ty, sp_offset, Vec::new())?;
             }
 
             self.cvar_exit_function();
             self.maybe_garbage_collect();
-
-            // Point exit block to %RP if not in main function
-            if !IS_MAIN {
-                let term = BlockTerminator::Coda(NextBlock::Rp());
-                blks[exit_blk].terminator = term;
-            }
-            
         }
 
-        Ok((blks, blks_len, exit_blk))
+        Ok((blks, blks_len))
     }
 
     // TODO: Error handling in function call
@@ -536,30 +528,27 @@ impl<'ast> ZGen<'ast> {
     // Return value:
     // result[0]: list of blocks generated so far
     // result[1]: length of the generated blocks
-    // result[2]: Exit Block of the CURRENT function, will be decided after processing any return statement
-    //            0 if undecided, coda block if we are processing 
-    // result[3]: Mapping between variables and their address in stack (in term of offset to %BP) for
+    // result[2]: Mapping between variables and their address in stack (in term of offset to %BP) for
     //            ALL stack frames of the current function. Each entry represents one scope.
-    // result[4]: variables that need to be POPed after current function, with their offset to %BP
+    // result[3]: variables that need to be POPed after current function, with their offset to %BP
     //            used by bl_gen_function_call
-    // result[5]: offset between value of %SP and the actual size of the physical memory
+    // result[4]: offset between value of %SP and the actual size of the physical memory
     fn bl_gen_stmt_<const IS_MAIN: bool>(
         &'ast self, 
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
-        mut exit_blk: usize,
         s: &'ast Statement<'ast>,
         ret_ty: &'ast Type<'ast>,
         mut sp_offset: usize,
         mut func_phy_assign: Vec<Vec<(usize, String)>>
-    ) -> Result<(Vec<Block>, usize, usize, Vec<Vec<(usize, String)>>, usize), String> {
+    ) -> Result<(Vec<Block>, usize, Vec<Vec<(usize, String)>>, usize), String> {
         debug!("Block Gen Stmt: {}", s.span().as_str());
 
         match s {
             Statement::Return(r) => {
                 let ret_expr: Expression;
-                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, ret_expr, _) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &r.expressions[0], func_phy_assign, sp_offset, 0)?;
+                (blks, blks_len, func_phy_assign, sp_offset, ret_expr, _) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &r.expressions[0], func_phy_assign, sp_offset, 0)?;
                 let ret_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                         ty: ret_ty.clone(),
@@ -581,26 +570,23 @@ impl<'ast> ZGen<'ast> {
                     (blks, sp_offset) = self.bl_gen_return_scope_(blks, blks_len, func_phy_assign.clone(), sp_offset)?;
                 }
 
-                // Update CODA block
-                if exit_blk == 0 {
-                    exit_blk = blks_len;
+                // Set terminator to ProgTerm if in main, point to %RP otherwise
+                if IS_MAIN {
+                    blks[blks_len - 1].terminator = BlockTerminator::ProgTerm();
                 } else {
-                    let term = BlockTerminator::Coda(NextBlock::Label(exit_blk));
-                    blks[blks_len - 1].terminator = term;
+                    blks[blks_len - 1].terminator = BlockTerminator::Coda(NextBlock::Rp());
                 }
 
-                // Create a dummy block
-                // If exit_blk was never initialized, this dummy serves as exit_blk
-                // Otherwise this block is used so that if return is the last statement in conditionals
-                // or loops, its Terminator won't be reassigned when we finish processing the outer scope.
+                // Create a dummy block in case there are anything after return
+                // Will be eliminated during DBE
                 blks.push(Block::new(blks_len));
                 blks_len += 1;
 
             }
             Statement::Assertion(a) => {
                 let asst_expr: Expression;
-                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, asst_expr, _) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &a.expression, func_phy_assign, sp_offset, 0)?;
+                (blks, blks_len, func_phy_assign, sp_offset, asst_expr, _) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &a.expression, func_phy_assign, sp_offset, 0)?;
                 let asst_stmt = Statement::Assertion(AssertionStatement {
                     expression: asst_expr,
                     message: a.message.clone(),
@@ -623,8 +609,8 @@ impl<'ast> ZGen<'ast> {
 
                 // Create and push FROM statement
                 let from_expr: Expression;
-                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, from_expr, _) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &it.from, func_phy_assign, sp_offset, 0)?;
+                (blks, blks_len, func_phy_assign, sp_offset, from_expr, _) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &it.from, func_phy_assign, sp_offset, 0)?;
                 let from_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                         ty: it.ty.clone(),
@@ -647,7 +633,7 @@ impl<'ast> ZGen<'ast> {
 
                 // Iterate through Stmts
                 for body in &it.statements {
-                    (blks, blks_len, exit_blk, func_phy_assign, sp_offset) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, exit_blk, body, ret_ty, sp_offset, func_phy_assign)?;
+                    (blks, blks_len, func_phy_assign, sp_offset) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, body, ret_ty, sp_offset, func_phy_assign)?;
                 }
 
                 // Exit scoping to iterator scope
@@ -679,8 +665,8 @@ impl<'ast> ZGen<'ast> {
 
                 // Create and push TRANSITION statement
                 let to_expr: Expression;
-                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, to_expr, _) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &it.to, func_phy_assign, sp_offset, 0)?;
+                (blks, blks_len, func_phy_assign, sp_offset, to_expr, _) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &it.to, func_phy_assign, sp_offset, 0)?;
                 let new_state = blks_len - 1;
                 let term = BlockTerminator::Transition(
                     BlockTransition::new(
@@ -700,6 +686,11 @@ impl<'ast> ZGen<'ast> {
                 (blks, func_phy_assign, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
             }
             Statement::Conditional(c) => {
+                // Process function calls in the condition
+                let cond_expr: Expression;
+                (blks, blks_len, func_phy_assign, sp_offset, cond_expr, _) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &c.condition, func_phy_assign, sp_offset, 0)?;
+
                 let head_state = blks_len - 1;
 
                 // If statements
@@ -710,7 +701,7 @@ impl<'ast> ZGen<'ast> {
                 blks_len += 1;
                 // Iterate through Stmts
                 for body in &c.ifbranch {
-                    (blks, blks_len, exit_blk, func_phy_assign, sp_offset) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, exit_blk, body, ret_ty, sp_offset, func_phy_assign)?;
+                    (blks, blks_len, func_phy_assign, sp_offset) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, body, ret_ty, sp_offset, func_phy_assign)?;
                 }
                 // Exit Scoping
                 (blks, func_phy_assign, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
@@ -724,7 +715,7 @@ impl<'ast> ZGen<'ast> {
                 blks_len += 1;
                 // Iterate through Stmts
                 for body in &c.elsebranch {
-                    (blks, blks_len, exit_blk, func_phy_assign, sp_offset) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, exit_blk, body, ret_ty, sp_offset, func_phy_assign)?;
+                    (blks, blks_len, func_phy_assign, sp_offset) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, body, ret_ty, sp_offset, func_phy_assign)?;
                 }
                 // Exit Scoping
                 (blks, func_phy_assign, sp_offset) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
@@ -734,7 +725,7 @@ impl<'ast> ZGen<'ast> {
                 // Transition of head block is a branch to if or else
                 let head_term = BlockTerminator::Transition(
                     BlockTransition::new(
-                        c.condition.clone(), 
+                        cond_expr, 
                         NextBlock::Label(head_state + 1), 
                         NextBlock::Label(if_tail_state + 1)
                     )
@@ -755,8 +746,8 @@ impl<'ast> ZGen<'ast> {
 
                 // Evaluate function calls in expression
                 let rhs_expr: Expression;
-                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, rhs_expr, _) =
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &d.expression, func_phy_assign, sp_offset, 0)?;
+                (blks, blks_len, func_phy_assign, sp_offset, rhs_expr, _) =
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &d.expression, func_phy_assign, sp_offset, 0)?;
 
                 // Handle Scoping change
                 self.set_lhs_ty_defn::<true>(d)?;
@@ -802,26 +793,25 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(new_stmt));
             }
         }
-        Ok((blks, blks_len, exit_blk, func_phy_assign, sp_offset))
+        Ok((blks, blks_len, func_phy_assign, sp_offset))
     }
 
     // Generate blocks from statements
     // Return value:
-    // result[0 ~ 5] follows bl_gen_stmt
-    // result[6]: new_expr reconstructs the expression and converts all function calls to %RET
-    // result[7]: func_count, how many function calls has occured in this statement?
+    // result[0 ~ 4] follows bl_gen_stmt
+    // result[5]: new_expr reconstructs the expression and converts all function calls to %RET
+    // result[6]: func_count, how many function calls has occured in this statement?
     // Since the return value of all function calls are stored in %RET, we need to differentiate them if
     // multiple function calls occur in the same statement
     fn bl_gen_expr_<const IS_MAIN: bool>(
         &'ast self, 
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
-        mut exit_blk: usize,
         e: &'ast Expression<'ast>,
         mut func_phy_assign: Vec<Vec<(usize, String)>>,
         mut sp_offset: usize,
         mut func_count: usize
-    ) -> Result<(Vec<Block>, usize, usize, Vec<Vec<(usize, String)>>, usize, Expression, usize), String> {
+    ) -> Result<(Vec<Block>, usize, Vec<Vec<(usize, String)>>, usize, Expression, usize), String> {
         debug!("Block Gen Expr: {}", e.span().as_str());
 
         let mut ret_e = e.clone();
@@ -831,12 +821,12 @@ impl<'ast> ZGen<'ast> {
                 let new_e_first: Expression;
                 let new_e_second: Expression;
                 let new_e_third: Expression;
-                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_first, func_count) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &t.first, func_phy_assign, sp_offset, func_count)?;
-                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_second, func_count) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &t.second, func_phy_assign, sp_offset, func_count)?;
-                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_third, func_count) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &t.third, func_phy_assign, sp_offset, func_count)?;
+                (blks, blks_len, func_phy_assign, sp_offset, new_e_first, func_count) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &t.first, func_phy_assign, sp_offset, func_count)?;
+                (blks, blks_len, func_phy_assign, sp_offset, new_e_second, func_count) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &t.second, func_phy_assign, sp_offset, func_count)?;
+                (blks, blks_len, func_phy_assign, sp_offset, new_e_third, func_count) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &t.third, func_phy_assign, sp_offset, func_count)?;
                 ret_e = Expression::Ternary(TernaryExpression {
                     first: Box::new(new_e_first),
                     second: Box::new(new_e_second),
@@ -847,10 +837,10 @@ impl<'ast> ZGen<'ast> {
             Expression::Binary(b) => {
                 let new_e_left: Expression;
                 let new_e_right: Expression;
-                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_left, func_count) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &b.left, func_phy_assign, sp_offset, func_count)?;
-                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_right, func_count) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &b.right, func_phy_assign, sp_offset, func_count)?;
+                (blks, blks_len, func_phy_assign, sp_offset, new_e_left, func_count) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &b.left, func_phy_assign, sp_offset, func_count)?;
+                (blks, blks_len, func_phy_assign, sp_offset, new_e_right, func_count) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &b.right, func_phy_assign, sp_offset, func_count)?;
                 ret_e = Expression::Binary(BinaryExpression {
                     op: b.op.clone(),
                     left: Box::new(new_e_left),
@@ -860,8 +850,8 @@ impl<'ast> ZGen<'ast> {
             }
             Expression::Unary(u) => {
                 let new_e_expr: Expression;
-                (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_e_expr, func_count) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, &u.expression, func_phy_assign, sp_offset, func_count)?;
+                (blks, blks_len, func_phy_assign, sp_offset, new_e_expr, func_count) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &u.expression, func_phy_assign, sp_offset, func_count)?;
                 ret_e = Expression::Unary(UnaryExpression {
                     op: u.op.clone(),
                     expression: Box::new(new_e_expr),
@@ -876,8 +866,8 @@ impl<'ast> ZGen<'ast> {
                     let mut args: Vec<Expression> = Vec::new();
                     let mut new_expr: Expression;
                     for old_expr in &c.arguments.expressions {
-                        (blks, blks_len, exit_blk, func_phy_assign, sp_offset, new_expr, func_count) = 
-                            self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, exit_blk, old_expr, func_phy_assign, sp_offset, func_count)?;
+                        (blks, blks_len, func_phy_assign, sp_offset, new_expr, func_count) = 
+                            self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, old_expr, func_phy_assign, sp_offset, func_count)?;
                         args.push(new_expr);                       
                     }
 
@@ -892,6 +882,10 @@ impl<'ast> ZGen<'ast> {
                                 var_map.insert(var);
                             }
                         }
+                    }
+                    // Push all %RETx onto the stack
+                    for ret_count in 0..func_count {
+                        var_map.insert(format!("%RET{}", ret_count));
                     }
                     for var in var_map {
                         (blks, func_phy_assign, sp_offset) = self.bl_gen_scoping_::<true>(blks, blks_len, &var, func_phy_assign, sp_offset);
@@ -989,7 +983,7 @@ impl<'ast> ZGen<'ast> {
             Expression::InlineArray(_) => { return Err(format!("Array not supported!")); }
             _ => {}
         }
-        Ok((blks, blks_len, exit_blk, func_phy_assign, sp_offset, ret_e, func_count))
+        Ok((blks, blks_len, func_phy_assign, sp_offset, ret_e, func_count))
     }   
     
     // Handle scoping change by pushing old values onto the stack
@@ -1005,8 +999,9 @@ impl<'ast> ZGen<'ast> {
         // We don't care about shadowing
         if !self.cvar_cur_scope_find(id) || IS_FUNC_CALL {
             // If the identifier is used in the previous scopes of the current function,
+            // or if it is a variable added by the compiler (always begins with '%'),
             // push the previous value and pop it after current scope ends
-            if self.cvar_lookup(id).is_some() || *id == "%RP".to_string() {
+            if self.cvar_lookup(id).is_some() || id.chars().nth(0).unwrap() == '%' {
                 // Initialize a new stack frame
                 if sp_offset == 0 {
                     // push %BP onto STACK
@@ -1209,13 +1204,14 @@ impl<'ast> ZGen<'ast> {
     // I am hacking cvars_stack to do the interpretation. Ideally we want a separate var_table to do so.
     // We only need BTreeMap<String, T> to finish evaluation, so the 2 Vecs of cvars_stack should always have
     // size 1.
-    pub fn bl_eval_const_entry_fn(&self, entry_bl: usize, exit_bl: usize, bls: &Vec<Block<'ast>>) -> Result<T, String> {
+    pub fn bl_eval_const_entry_fn(&self, entry_bl: usize, bls: &Vec<Block<'ast>>) -> Result<T, String> {
         // We assume that all errors has been handled in bl_gen functions        
         debug!("Block Eval Const entry: {}", entry_bl);
         self.cvar_enter_function();
         let mut nb = entry_bl;
         let mut phy_mem: Vec<T> = Vec::new();
-        while nb != exit_bl {
+        let mut terminated = false;
+        while !terminated {
             self.print_all_vars_in_scope();
             print!("%PHY: [");
             for c in &phy_mem {
@@ -1224,7 +1220,7 @@ impl<'ast> ZGen<'ast> {
                 print!(", ");
             }
             println!("]");
-            (nb, phy_mem) = self.bl_eval_impl_::<true>(&bls[nb], phy_mem)?;
+            (nb, phy_mem, terminated) = self.bl_eval_impl_::<true>(&bls[nb], phy_mem)?;
         }
 
         // Return value is just the value of the variable called "%RET"
@@ -1234,11 +1230,15 @@ impl<'ast> ZGen<'ast> {
         ))
     }
 
+    // Return type:
+    // ret[0]: Index of next block,
+    // ret[1]: Physical memory arrangement,
+    // ret[2]: Has the program terminated?
     fn bl_eval_impl_<const IS_CNST: bool>(
         &self, 
         bl: &Block<'ast>,
         mut phy_mem: Vec<T>,
-    ) -> Result<(usize, Vec<T>), String> {
+    ) -> Result<(usize, Vec<T>, bool), String> {
         if IS_CNST {
             debug!("Const block: ");
             let _ = &bl.pretty();
@@ -1348,13 +1348,14 @@ impl<'ast> ZGen<'ast> {
         match &bl.terminator {
             BlockTerminator::Transition(t) => {
                 match self.expr_impl_::<true>(&t.cond).ok().and_then(const_bool) {
-                    Some(true) => Ok((self.find_next_block(t.tblock.clone())?, phy_mem)), 
-                    Some(false) => Ok((self.find_next_block(t.fblock.clone())?, phy_mem)),
+                    Some(true) => Ok((self.find_next_block(t.tblock.clone())?, phy_mem, false)), 
+                    Some(false) => Ok((self.find_next_block(t.fblock.clone())?, phy_mem, false)),
                     _ => Err("block transition condition not const bool".to_string()),
                 }
             }
-            BlockTerminator::Coda(nb) => Ok((self.find_next_block(nb.clone())?, phy_mem)),
-            BlockTerminator::FuncCall(fc) => Err(format!("Evaluation failed: function call to {} needs to be converted to block label.", fc))
+            BlockTerminator::Coda(nb) => Ok((self.find_next_block(nb.clone())?, phy_mem, false)),
+            BlockTerminator::FuncCall(fc) => Err(format!("Evaluation failed: function call to {} needs to be converted to block label.", fc)),
+            BlockTerminator::ProgTerm() => Ok((0, phy_mem, true))
         }
     }
 }

@@ -8,8 +8,7 @@ use crate::front::zsharp::blocks::*;
 pub fn dead_block_elimination(
     bls: Vec<Block>,
     entry_bl: usize, 
-    exit_bl: usize
-) -> (Vec<Block>, usize, usize) {      
+) -> (Vec<Block>, usize) {      
     let old_size = bls.len();
     
     // Visited: have we ever visited the block in the following DFS?
@@ -28,56 +27,54 @@ pub fn dead_block_elimination(
     while !next_bls.is_empty() {
         let cur_bl = next_bls.pop_front().unwrap();
         
-        // Exit Block is never executed
-        if cur_bl != exit_bl {
-            // If we encounter any %RP = <counter>, append <counter> to next_bls
-            for bc in &bls[cur_bl].instructions {
-                // We can ignore memory for now
-                // The only case currently is %RP on the left & constant on the right
-                if let BlockContent::Stmt(Statement::Definition(d)) = bc {
-                    if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
-                        if a.id.value == "%RP".to_string() {
-                            if let Expression::Literal(LiteralExpression::DecimalLiteral(dle)) = &d.expression {
-                                let tmp_bl: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: %RP is assigned to a non-constant value");
-                                if !visited[tmp_bl] {
-                                    let _ = std::mem::replace(&mut visited[tmp_bl], true);
-                                    next_bls.push_back(tmp_bl);
-                                }
-                            } else {
-                                panic!("Dead Block Elimination failed: %RP is assigned to a non-constant value")
+        // If we encounter any %RP = <counter>, append <counter> to next_bls
+        for bc in &bls[cur_bl].instructions {
+            // We can ignore memory for now
+            // The only case currently is %RP on the left & constant on the right
+            if let BlockContent::Stmt(Statement::Definition(d)) = bc {
+                if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
+                    if a.id.value == "%RP".to_string() {
+                        if let Expression::Literal(LiteralExpression::DecimalLiteral(dle)) = &d.expression {
+                            let tmp_bl: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: %RP is assigned to a non-constant value");
+                            if !visited[tmp_bl] {
+                                let _ = std::mem::replace(&mut visited[tmp_bl], true);
+                                next_bls.push_back(tmp_bl);
                             }
+                        } else {
+                            panic!("Dead Block Elimination failed: %RP is assigned to a non-constant value")
                         }
                     }
                 }
             }
-            
-            // Append everything in the terminator of cur_bl to next_bls
-            // if they have not been visited before
-            match bls[cur_bl].terminator.clone() {
-                BlockTerminator::Transition(t) => {
-                    if let NextBlock::Label(tmp_bl) = t.tblock {
-                        if !visited[tmp_bl] {
-                            let _ = std::mem::replace(&mut visited[tmp_bl], true);
-                            next_bls.push_back(tmp_bl);
-                        }
-                    }
-                    if let NextBlock::Label(tmp_bl) = t.fblock {
-                        if !visited[tmp_bl] {
-                            let _ = std::mem::replace(&mut visited[tmp_bl], true);
-                            next_bls.push_back(tmp_bl);
-                        }
+        }
+        
+        // Append everything in the terminator of cur_bl to next_bls
+        // if they have not been visited before
+        match bls[cur_bl].terminator.clone() {
+            BlockTerminator::Transition(t) => {
+                if let NextBlock::Label(tmp_bl) = t.tblock {
+                    if !visited[tmp_bl] {
+                        let _ = std::mem::replace(&mut visited[tmp_bl], true);
+                        next_bls.push_back(tmp_bl);
                     }
                 }
-                BlockTerminator::Coda(n) => {
-                    if let NextBlock::Label(tmp_bl) = n {
-                        if !visited[tmp_bl] {
-                            let _ = std::mem::replace(&mut visited[tmp_bl], true);
-                            next_bls.push_back(tmp_bl);
-                        }
+                if let NextBlock::Label(tmp_bl) = t.fblock {
+                    if !visited[tmp_bl] {
+                        let _ = std::mem::replace(&mut visited[tmp_bl], true);
+                        next_bls.push_back(tmp_bl);
                     }
                 }
-                BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
             }
+            BlockTerminator::Coda(n) => {
+                if let NextBlock::Label(tmp_bl) = n {
+                    if !visited[tmp_bl] {
+                        let _ = std::mem::replace(&mut visited[tmp_bl], true);
+                        next_bls.push_back(tmp_bl);
+                    }
+                }
+            }
+            BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
+            BlockTerminator::ProgTerm() => {}
         }
     }
 
@@ -95,15 +92,14 @@ pub fn dead_block_elimination(
             let tmp_bl = Block {
                 name: new_label,
                 // No need to store statements if we are at the exit block
-                instructions: if bls[old_label].name == exit_bl { Vec::new() } else { bls[old_label].instructions.clone() },
-                terminator: if bls[old_label].name == exit_bl { BlockTerminator::Coda(NextBlock::Rp()) } else { bls[old_label].terminator.clone() }
+                instructions: bls[old_label].instructions.clone(),
+                terminator: bls[old_label].terminator.clone()
             };
             new_bls.push(tmp_bl);
             new_label += 1;
         }
     }
     let new_entry_bl = label_map[entry_bl];
-    let new_exit_bl = label_map[exit_bl];
     let new_size = new_label;
 
     // Iterate through all new blocks again, update %RP and Block Terminator
@@ -170,8 +166,9 @@ pub fn dead_block_elimination(
                 }
             }
             BlockTerminator::FuncCall(_) => { new_term = bls[cur_bl].terminator.clone(); }
+            BlockTerminator::ProgTerm() => { new_term = bls[cur_bl].terminator.clone(); }
         }
         new_bls[cur_bl].terminator = new_term;
     }
-    return (new_bls, new_entry_bl, new_exit_bl)
+    return (new_bls, new_entry_bl)
 }

@@ -87,7 +87,6 @@ impl ZSharpFE {
             b.pretty();
             println!("");
         }
-        println!("\n\n--\nOptimization:");
         (blks, entry_bl) = blocks_optimization::optimize_block(blks, entry_bl);
         println!("Entry block: {entry_bl}");      
         for b in &blks {

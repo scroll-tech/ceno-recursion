@@ -84,7 +84,7 @@ pub struct BlockTransition<'ast> {
     pub fblock: NextBlock,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 // The next block either has a usize label,
 // or is pointed by %RP
 pub enum NextBlock {
@@ -394,6 +394,13 @@ impl<'ast> ZGen<'ast> {
             // Iterate through Stmts
             for s in &f.statements {
                 (blks, blks_len, _, sp_offset) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, s, ret_ty, sp_offset, Vec::new())?;
+            }
+
+            // Set terminator to ProgTerm if in main, point to %RP otherwise
+            if IS_MAIN {
+                blks[blks_len - 1].terminator = BlockTerminator::ProgTerm();
+            } else {
+                blks[blks_len - 1].terminator = BlockTerminator::Coda(NextBlock::Rp());
             }
 
             self.cvar_exit_function();

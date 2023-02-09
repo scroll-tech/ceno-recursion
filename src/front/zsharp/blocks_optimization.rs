@@ -9,28 +9,32 @@ pub fn optimize_block(
     mut entry_bl: usize
 ) -> (Vec<Block>, usize) {
     let (successor, predecessor, exit_bls) = construct_flow_graph(&bls, entry_bl);
-    println!("\n\n--\nControl Flow Graph:\n");
-    println!("Successor:");
+    /*
+    println!("\n\n--\nControl Flow Graph:");
+    println!("\nSuccessor:");
     for s in 0..successor.len() {
         print!("Block {}: ", s);
         for b in successor[s].iter() {
             print!("{} ", b);
         }
-        println!("\n");
+        println!("");
     }
-    println!("Predecessor:");
+    println!("\nPredecessor:");
     for p in 0..predecessor.len() {
         print!("Block {}: ", p);
         for b in predecessor[p].iter() {
             print!("{} ", b);
         }
-        println!("\n");
+        println!("");
     }
-    print!("Exit Blocks:");
-    for b in exit_bls {
-        print!(" {}", b);
+    print!("\nExit Blocks:");
+    for b in &exit_bls {
+        print!(" {}", *b);
     }
-    println!("--\n");
+    println!("");
+    */
+    println!("\n\n--\nOptimization:");
+    bls = empty_block_elimination(bls, exit_bls, predecessor);
     (bls, entry_bl) = dead_block_elimination(bls, entry_bl);
     return (bls, entry_bl);
 } 
@@ -228,6 +232,93 @@ fn construct_flow_graph(
     return (successor, predecessor, exit_bls);
 }
 
+// Backward analysis
+// If a block is empty and its terminator is a coda (to another block or %RP)
+// replace all the reference to it in its predecessors with that terminator
+// If a block terminates with a branching and both branches to the same block, eliminate the branching
+
+// We assume that something would happen after the function call, so we do not change the value of any %RP
+// This would not affect correctness. Worst case it might make DBE later inefficient.
+
+// CFG will be DESTROYED after this! Only do it after all statement analyses.
+fn empty_block_elimination(
+    mut bls: Vec<Block>,
+    exit_bls: Vec<usize>,
+    predecessor: Vec<HashSet<usize>>
+) -> Vec<Block> {
+
+    let mut visited: Vec<bool> = Vec::new();
+    for _ in 0..bls.len() {
+        visited.push(false);
+    }
+    
+    // Can this ever happen?
+    if exit_bls.len() == 0 {
+        panic!("The program has no exit block!");
+    }
+    
+    // Backward analysis!
+    let mut next_bls: VecDeque<usize> = VecDeque::new();
+    for eb in 0..exit_bls.len() {
+        next_bls.push_back(exit_bls[eb]);
+    }
+    let _ = std::mem::replace(&mut visited[next_bls[0]], true);
+    while !next_bls.is_empty() {
+        let cur_bl = next_bls.pop_front().unwrap();
+
+        // Update the terminator of all predecessor
+        for tmp_bl in &predecessor[cur_bl] {
+            // The only cases we need to continue is
+            // either we haven't processed the predecessor
+            // or cur_bl is empty so predecessors will be changed
+            if !visited[*tmp_bl] || bls[cur_bl].instructions.len() == 0 {
+                let _ = std::mem::replace(&mut visited[*tmp_bl], true);
+                
+                if bls[cur_bl].instructions.len() == 0 {
+                    // Replace terminator of the predecessors
+                    // Terminator of cur_bl might be an rp(), but that's fine
+                    if let BlockTerminator::Coda(nb) = bls[cur_bl].terminator.clone() {
+                        let mut new_term: BlockTerminator = bls[*tmp_bl].terminator.clone();
+                        match bls[*tmp_bl].terminator.clone() {
+                            BlockTerminator::Transition(t) => {
+                                let mut new_trans = t.clone();
+                                if let NextBlock::Label(old_bl) = t.tblock {
+                                    if old_bl == cur_bl {
+                                        new_trans.tblock = nb.clone();
+                                    }
+                                }
+                                if let NextBlock::Label(old_bl) = t.fblock {
+                                    if old_bl == cur_bl {
+                                        new_trans.fblock = nb.clone();
+                                    }
+                                }
+                                // If we now have identical tblock and fblock, we can eliminate the branching
+                                if new_trans.tblock == new_trans.fblock {
+                                    new_term = BlockTerminator::Coda(new_trans.tblock);
+                                } else {
+                                    new_term = BlockTerminator::Transition(new_trans);
+                                }
+                            }
+                            BlockTerminator::Coda(c) => {
+                                if let NextBlock::Label(old_bl) = c {
+                                    if old_bl == cur_bl {
+                                        new_term = BlockTerminator::Coda(nb.clone());
+                                    }
+                                }
+                            }
+                            BlockTerminator::FuncCall(_) => {}
+                            BlockTerminator::ProgTerm() => {}
+                        }
+                        bls[*tmp_bl].terminator = new_term;
+                    }
+                }
+                next_bls.push_back(*tmp_bl);
+            }
+        }
+    }
+    return bls;
+}
+
 // Remove all the dead blocks in the list
 // Rename all block labels so that they are still consecutive
 // Return value: bls, entry_bl, exit_bl
@@ -237,7 +328,7 @@ fn dead_block_elimination(
 ) -> (Vec<Block>, usize) {      
     let old_size = bls.len();
     
-    // Visited: have we ever visited the block in the following DFS?
+    // Visited: have we ever visited the block in the following BFS?
     let mut visited: Vec<bool> = Vec::new();
     for _ in 0..old_size {
         visited.push(false);
@@ -358,5 +449,5 @@ fn dead_block_elimination(
         }
         new_bls[cur_bl].terminator = new_term;
     }
-    return (new_bls, new_entry_bl)
+    return (new_bls, new_entry_bl);
 }

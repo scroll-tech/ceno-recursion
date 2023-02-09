@@ -59,8 +59,8 @@ statement = { (return_statement // does not require subsequent newline
             ) ~ NEWLINE* }
 
 iteration_statement = { "for" ~ ty ~ identifier ~ "in" ~ expression ~ ".." ~ expression ~ "do" ~ NEWLINE* ~ statement* ~ "endfor"}
-conditional_statement = { "if" ~ expression ~ "then" ~ NEWLINE* ~ statement+ ~ conditional_else_statement? ~ "endif"}
-conditional_else_statement = _{ "els" ~ dummy_else ~ " "* ~ NEWLINE* ~ statement+ }
+conditional_statement = { "if" ~ expression ~ "then" ~ NEWLINE* ~ statement* ~ conditional_else_statement? ~ "endif"}
+conditional_else_statement = _{ "els" ~ dummy_else ~ " "* ~ NEWLINE* ~ statement* }
 return_statement = { "return" ~ expression_list}
 definition_statement = { typed_identifier_or_assignee_list ~ "=" ~ expression } // declare and assign, so only identifiers are allowed, unlike `assignment_statement`
 expression_statement = {"assert" ~ "(" ~ expression ~ ("," ~ quoted_string)? ~ ")"}

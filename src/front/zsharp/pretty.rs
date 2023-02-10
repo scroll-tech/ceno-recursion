@@ -15,10 +15,10 @@ pub fn pretty_stmt(indent: usize, s: &Statement) {
 
 fn pretty_ret_stmt(r: &ReturnStatement) {
     print!("return ");
-    pretty_expr(&r.expressions[0]);
+    pretty_expr::<false>(&r.expressions[0]);
     for e in &r.expressions[1..] {
         print!(", ");
-        pretty_expr(e);
+        pretty_expr::<false>(e);
     }
     println!("");
 }
@@ -43,13 +43,13 @@ fn pretty_def_stmt(d: &DefinitionStatement) {
         }        
     }
     print!(" = ");
-    pretty_expr(&d.expression);
+    pretty_expr::<false>(&d.expression);
     println!("");
 }
 
 fn pretty_ass_stmt(a: &AssertionStatement) {
     print!("assert ");
-    pretty_expr(&a.expression);
+    pretty_expr::<false>(&a.expression);
     println!("");
 }
 
@@ -59,9 +59,9 @@ fn pretty_ite_stmt(indent: usize, i: &IterationStatement) {
     print!(" ");
     pretty_ident_expr(&i.index);
     print!(" in ");
-    pretty_expr(&i.from);
+    pretty_expr::<false>(&i.from);
     print!(" .. ");
-    pretty_expr(&i.to);
+    pretty_expr::<false>(&i.to);
     println!(":");
     for s in &i.statements {
         pretty_stmt(indent + 1, &s);
@@ -70,7 +70,7 @@ fn pretty_ite_stmt(indent: usize, i: &IterationStatement) {
 
 fn pretty_cond_stmt(indent: usize, c: &ConditionalStatement) {
     print!("if ");
-    pretty_expr(&c.condition);
+    pretty_expr::<false>(&c.condition);
     println!(":");
     for s in &c.ifbranch {
         pretty_stmt(indent + 1, &s);
@@ -100,23 +100,26 @@ fn pretty_type(ty: &Type) {
     }
 }
 
-pub fn pretty_expr(e: &Expression) {
+pub fn pretty_expr<const IS_BLK: bool>(e: &Expression) {
     match e {
-        Expression::Ternary(t) => { 
-            pretty_expr(&t.first);
+        Expression::Ternary(t) => {
+            if IS_BLK {
+                print!("\n    ");
+            }
+            pretty_expr::<false>(&t.first);
             print!(" ? ");
-            pretty_expr(&t.second);
+            pretty_expr::<IS_BLK>(&t.second);
             print!(" : ");
-            pretty_expr(&t.third);
+            pretty_expr::<IS_BLK>(&t.third);
         }
         Expression::Binary(b) => {
-            pretty_expr(&b.left);
+            pretty_expr::<IS_BLK>(&b.left);
             print!(" {} ", get_bin_op(&b.op));
-            pretty_expr(&b.right);
+            pretty_expr::<IS_BLK>(&b.right);
         }
         Expression::Unary(u) => {
             print!("{}", get_un_op(&u.op));
-            pretty_expr(&u.expression);
+            pretty_expr::<IS_BLK>(&u.expression);
         }
         Expression::Postfix(p) => {
             pretty_ident_expr(&p.id);
@@ -126,8 +129,18 @@ pub fn pretty_expr(e: &Expression) {
                 }
             }
         }
-        Expression::Identifier(i) => { pretty_ident_expr(i); }
-        Expression::Literal(l) => { pretty_literal(l); }
+        Expression::Identifier(i) => {
+            if IS_BLK {
+                print!("-> ")
+            }
+            pretty_ident_expr(i);
+        }
+        Expression::Literal(l) => {
+            if IS_BLK {
+                print!("-> ")
+            }
+            pretty_literal::<IS_BLK>(l);
+        }
         _ => {
             panic!("Pretty print for expression yet to be implemented.");
         }
@@ -166,17 +179,19 @@ fn get_bin_op(op: &BinaryOperator) -> &str {
     }
 }
 
-fn pretty_literal(l: &LiteralExpression) {
+fn pretty_literal<const IS_BLK: bool>(l: &LiteralExpression) {
     match l {
         LiteralExpression::DecimalLiteral(d) => {
             print!("{}", d.value.value);
-            match d.suffix {
-                Some(DecimalSuffix::U8(_)) => { print!(" <U8>") }
-                Some(DecimalSuffix::U16(_)) => { print!(" <U16>") }
-                Some(DecimalSuffix::U32(_)) => { print!(" <U32>") }
-                Some(DecimalSuffix::U64(_)) => { print!(" <U64>") }
-                Some(DecimalSuffix::Field(_)) => { print!(" <Field>") }
-                _ => { print!(" <Undef>") }
+            if !IS_BLK {
+                match d.suffix {
+                    Some(DecimalSuffix::U8(_)) => { print!(" <U8>") }
+                    Some(DecimalSuffix::U16(_)) => { print!(" <U16>") }
+                    Some(DecimalSuffix::U32(_)) => { print!(" <U32>") }
+                    Some(DecimalSuffix::U64(_)) => { print!(" <U64>") }
+                    Some(DecimalSuffix::Field(_)) => { print!(" <Field>") }
+                    _ => { print!(" <Undef>") }
+                }
             }
         }
         LiteralExpression::BooleanLiteral(b) => {
@@ -196,7 +211,7 @@ fn pretty_literal(l: &LiteralExpression) {
 fn pretty_arrayaccess(a: &ArrayAccess) {
     print!("[");
     match &a.expression {
-        RangeOrExpression::Expression(e) => pretty_expr(&e),
+        RangeOrExpression::Expression(e) => pretty_expr::<false>(&e),
         _ => print!("range")
     }
     print!("]");

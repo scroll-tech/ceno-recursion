@@ -52,6 +52,34 @@ fn ty_to_dec_suffix<'ast>(ty: Type<'ast>) -> DecimalSuffix<'ast> {
     }
 }
 
+fn bl_coda<'ast>(nb: NextBlock) -> Expression<'ast> {
+    match nb {
+        NextBlock::Label(val) => Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+            value: DecimalNumber {
+                value: format!("{}", val),
+                span: Span::new("", 0, 0).unwrap()
+            },
+            suffix: Some(ty_to_dec_suffix(Type::Basic(BasicType::Field(FieldType {
+                span: Span::new("", 0, 0).unwrap()
+            })))),
+            span: Span::new("", 0, 0).unwrap()
+        })),
+        NextBlock::Rp() => Expression::Identifier(IdentifierExpression {
+            value: "%RP".to_string(),
+            span: Span::new("", 0, 0).unwrap()
+        })
+    }
+}
+
+fn bl_trans<'ast>(cond: Expression<'ast>, tval: NextBlock, fval: NextBlock) -> Expression<'ast> {
+    Expression::Ternary(TernaryExpression {
+        first: Box::new(cond),
+        second: Box::new(bl_coda(tval)),
+        third: Box::new(bl_coda(fval)),
+        span: Span::new("", 0, 0).unwrap()
+    })
+}
+
 #[derive(Clone)]
 pub struct Block<'ast> {
     pub name: usize,
@@ -69,36 +97,17 @@ pub enum BlockContent<'ast> {
 #[derive(Clone)]
 // Coda is the number of total types of blocks
 pub enum BlockTerminator<'ast> {
-    Transition(BlockTransition<'ast>),
-    Coda(NextBlock),
+    Transition(Expression<'ast>), // Expression that should be evaluated to either a const int or "%RP"
     FuncCall(String), // Placeholders before blocks corresponding to each function has been determined
     ProgTerm() // The program terminates
 }
 
-#[derive(Clone)]
-// BlockTransition is of the format:
-// if cond then goto tblock else goto fblock
-pub struct BlockTransition<'ast> {
-    pub cond: Expression<'ast>,
-    pub tblock: NextBlock,
-    pub fblock: NextBlock,
-}
-
 #[derive(Clone, PartialEq)]
-// The next block either has a usize label,
-// or is pointed by %RP
+// The next block either has a usize label or is pointed by %RP
+// Used to construct Block Transition
 pub enum NextBlock {
     Label(usize),
     Rp()
-}
-
-impl NextBlock {
-    pub fn to_string(&self) -> String {
-        match self {
-            NextBlock::Label(l) => { l.to_string() }
-            NextBlock::Rp() => { "%RP".to_string() }
-        }
-    }
 }
 
 impl<'ast> Block<'ast> {
@@ -106,7 +115,7 @@ impl<'ast> Block<'ast> {
         let input = Self {
             name,
             instructions: Vec::new(),
-            terminator: BlockTerminator::Coda(NextBlock::Label(name + 1))
+            terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1)))
         };
         input
     }
@@ -121,13 +130,9 @@ impl<'ast> Block<'ast> {
             }
         }
         match &self.terminator {
-            BlockTerminator::Transition(t) => {
+            BlockTerminator::Transition(e) => {
                 print!("Transition: ");
-                pretty::pretty_expr(&t.cond);
-                print!(" ? block {} : block {}", t.tblock.to_string(), t.fblock.to_string())
-            }
-            BlockTerminator::Coda(c) => {
-                print!("Transition: -> block {}.", c.to_string());
+                pretty::pretty_expr::<true>(e);
             }
             BlockTerminator::FuncCall(fc) => {
                 print!("Transition: -> function call on {}.", fc);
@@ -136,17 +141,6 @@ impl<'ast> Block<'ast> {
                 print!("Program terminates.")
             }
         }
-    }
-}
-
-impl<'ast> BlockTransition<'ast> {
-    fn new(cond: Expression<'ast>, tblock: NextBlock, fblock: NextBlock) -> Self {
-        let input = Self {
-            cond,
-            tblock,
-            fblock
-        };
-        input
     }
 }
 
@@ -168,16 +162,6 @@ impl<'ast> ZGen<'ast> {
             value.pretty(&mut std::io::stdout().lock())
             .expect("error pretty-printing value");
             println!();
-        }
-    }
-
-    fn find_next_block(&self, nb: NextBlock) -> Result<usize, String> {
-        match nb {
-            NextBlock::Label(l) => { Ok(l) }
-            NextBlock::Rp() => {
-                let rp = self.cvar_lookup("%RP").ok_or(format!("Block transition failed: %RP is undefined."))?;
-                self.t_to_usize(rp)
-            }
         }
     }
 
@@ -326,7 +310,7 @@ impl<'ast> ZGen<'ast> {
         for mut blk in blks {
             if let BlockTerminator::FuncCall(f_name) = blk.terminator {
                 let f_label = func_blk_map.get(&f_name).unwrap();
-                blk.terminator = BlockTerminator::Coda(NextBlock::Label(*f_label));
+                blk.terminator = BlockTerminator::Transition(bl_coda(NextBlock::Label(*f_label)));
             }
             new_blks.push(blk);
         }
@@ -400,7 +384,7 @@ impl<'ast> ZGen<'ast> {
             if IS_MAIN {
                 blks[blks_len - 1].terminator = BlockTerminator::ProgTerm();
             } else {
-                blks[blks_len - 1].terminator = BlockTerminator::Coda(NextBlock::Rp());
+                blks[blks_len - 1].terminator = BlockTerminator::Transition(bl_coda(NextBlock::Rp()));
             }
 
             self.cvar_exit_function();
@@ -581,7 +565,7 @@ impl<'ast> ZGen<'ast> {
                 if IS_MAIN {
                     blks[blks_len - 1].terminator = BlockTerminator::ProgTerm();
                 } else {
-                    blks[blks_len - 1].terminator = BlockTerminator::Coda(NextBlock::Rp());
+                    blks[blks_len - 1].terminator = BlockTerminator::Transition(bl_coda(NextBlock::Rp()));
                 }
 
                 // Create a dummy block in case there are anything after return
@@ -676,7 +660,7 @@ impl<'ast> ZGen<'ast> {
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &it.to, func_phy_assign, sp_offset, 0)?;
                 let new_state = blks_len - 1;
                 let term = BlockTerminator::Transition(
-                    BlockTransition::new(
+                    bl_trans(
                         cond_expr(it.index.clone(), to_expr), 
                         NextBlock::Label(old_state + 1), 
                         NextBlock::Label(new_state + 1)
@@ -731,7 +715,7 @@ impl<'ast> ZGen<'ast> {
                 // Block Transition
                 // Transition of head block is a branch to if or else
                 let head_term = BlockTerminator::Transition(
-                    BlockTransition::new(
+                    bl_trans(
                         cond_expr, 
                         NextBlock::Label(head_state + 1), 
                         NextBlock::Label(if_tail_state + 1)
@@ -739,7 +723,7 @@ impl<'ast> ZGen<'ast> {
                 );
                 blks[head_state].terminator = head_term;
                 // Transition of if block is to the end of tail
-                let if_tail_term = BlockTerminator::Coda(NextBlock::Label(else_tail_state + 1));
+                let if_tail_term = BlockTerminator::Transition(bl_coda(NextBlock::Label(else_tail_state + 1)));
                 blks[if_tail_state].terminator = if_tail_term;
                 // Transition of else block is already correct
 
@@ -1353,14 +1337,12 @@ impl<'ast> ZGen<'ast> {
         };
 
         match &bl.terminator {
-            BlockTerminator::Transition(t) => {
-                match self.expr_impl_::<true>(&t.cond).ok().and_then(const_bool) {
-                    Some(true) => Ok((self.find_next_block(t.tblock.clone())?, phy_mem, false)), 
-                    Some(false) => Ok((self.find_next_block(t.fblock.clone())?, phy_mem, false)),
-                    _ => Err("block transition condition not const bool".to_string()),
+            BlockTerminator::Transition(e) => {
+                match self.t_to_usize(self.expr_impl_::<true>(&e)?) {
+                    Ok(nb) => { return Ok((nb, phy_mem, false)); }, 
+                    _ => { return Err("Evaluation failed: block transition evaluated to an invalid block label".to_string()); }
                 }
             }
-            BlockTerminator::Coda(nb) => Ok((self.find_next_block(nb.clone())?, phy_mem, false)),
             BlockTerminator::FuncCall(fc) => Err(format!("Evaluation failed: function call to {} needs to be converted to block label.", fc)),
             BlockTerminator::ProgTerm() => Ok((0, phy_mem, true))
         }

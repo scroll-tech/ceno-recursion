@@ -98,6 +98,89 @@ fn rp_replacement_stmt(bc: BlockContent, val_map: HashMap<usize, usize>) -> Opti
     return None;
 }
 
+// Given an expression consisted of only ternary, literals, and identifiers,
+// Find all the literal values it mentioned
+// Skip all %RP or other references to variables
+fn bl_trans_find_val(e: &Expression) -> Vec<usize> {
+    match e {
+        Expression::Ternary(te) => {
+            let mut ret = bl_trans_find_val(e.second);
+            ret.append(bl_trans_find_val(e.third));
+            return ret;
+        }
+        Expression::Literal(le) => {
+            if let LiteralExpression::DecimalLiteral(dle) = le {
+                let val: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: %RP is assigned to a non-constant value");
+                return vec![val];
+            } else { panic!("Unexpected value in Block Transition") }
+        }
+        Expression::Identifier(ie) => {
+            return Vec::new();
+        }
+        _ => { panic!("Unexpected expression in Block Transition") }
+    }
+}
+
+// Given an expression consisted of only ternary, literals, and identifiers,
+// Replace all literal values according to label_map
+// Skip all %RP or other references to variables
+fn bl_trans_map(e: Expression, label_map: &Hashmap<usize, usize>) -> Expression {
+    match e {
+        Expression::Ternary(te) => {
+            let new_second = bl_trans_map(e.second);
+            let new_third = bl_trans_map(e.third);
+            return Expression::Ternary(TernaryExpression {
+                first: e.first.clone(),
+                second: new_second,
+                third: new_third,
+                span: e.span.clone()
+            });
+        }
+        Expression::Literal(le) => {
+            if let LiteralExpression::DecimalLiteral(dle) = le {
+                let val: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: %RP is assigned to a non-constant value");
+                return bl_coda(NextBlock::Label(label_map.get(&val)));
+            } else { panic!("Unexpected value in Block Transition") }
+        }
+        Expression::Identifier(ie) => {
+            return e.clone();
+        }
+        _ => { panic!("Unexpected expression in Block Transition") }
+    }
+}
+
+// Given an expression consisted of only ternary, literals, and identifiers,
+// Replace all occurrences of old_val to new_val, which might be %RP
+// I don't think we can combine bl_trans_map and bl_trans_replace together efficiently.
+fn bl_trans_replace(e: Expression, old_val: usize, new_val: NextBlock) -> Expression {
+    match e {
+        Expression::Ternary(te) => {
+            let new_second = bl_trans_replace(e.second);
+            let new_third = bl_trans_replace(e.third);
+            return Expression::Ternary(TernaryExpression {
+                first: e.first.clone(),
+                second: new_second,
+                third: new_third,
+                span: e.span.clone()
+            });
+        }
+        Expression::Literal(le) => {
+            if let LiteralExpression::DecimalLiteral(dle) = le {
+                let val: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: %RP is assigned to a non-constant value");
+                if val == old_val {
+                    return bl_coda(new_val);
+                } else {
+                    return e.clone();
+                }
+            } else { panic!("Unexpected value in Block Transition") }
+        }
+        Expression::Identifier(ie) => {
+            return e.clone();
+        }
+        _ => { panic!("Unexpected expression in Block Transition") }
+    }
+}
+
 // Return value: successor, rp_successor, visited, next_bls
 fn flow_graph_transition<const IS_RP: bool>(
     cur_bl: &usize,
@@ -210,10 +293,10 @@ fn construct_flow_graph(
         // according to flow_graph_transition
         match bls[cur_bl].terminator.clone() {
             BlockTerminator::Transition(t) => {
-                (successor, rp_successor, visited, next_bls) = 
-                    flow_graph_transition::<false>(&cur_bl, t.tblock, rp_slot, successor, rp_successor, visited, next_bls);
-                (successor, rp_successor, visited, next_bls) = 
-                    flow_graph_transition::<false>(&cur_bl, t.fblock, rp_slot, successor, rp_successor, visited, next_bls);
+                for b in &t.branches {
+                    (successor, rp_successor, visited, next_bls) = 
+                        flow_graph_transition::<false>(&cur_bl, b.clone(), rp_slot, successor, rp_successor, visited, next_bls);
+                }
             }
             BlockTerminator::Coda(n) => {
                 (successor, rp_successor, visited, next_bls) = 
@@ -282,19 +365,21 @@ fn empty_block_elimination(
                         match bls[*tmp_bl].terminator.clone() {
                             BlockTerminator::Transition(t) => {
                                 let mut new_trans = t.clone();
-                                if let NextBlock::Label(old_bl) = t.tblock {
-                                    if old_bl == cur_bl {
-                                        new_trans.tblock = nb.clone();
+                                // Record if all branches are identical
+                                let mut identical_branching = true;
+                                for i in 0..t.branches.len() {
+                                    if let NextBlock::Label(old_bl) = t.branches[i].clone() {
+                                        if old_bl == cur_bl {
+                                            new_trans.branches[i] = nb.clone();
+                                        }
+                                    }
+                                    if i > 0 && new_trans.branches[i] != new_trans.branches[i - 1] {
+                                        identical_branching = false;
                                     }
                                 }
-                                if let NextBlock::Label(old_bl) = t.fblock {
-                                    if old_bl == cur_bl {
-                                        new_trans.fblock = nb.clone();
-                                    }
-                                }
-                                // If we now have identical tblock and fblock, we can eliminate the branching
-                                if new_trans.tblock == new_trans.fblock {
-                                    new_term = BlockTerminator::Coda(new_trans.tblock);
+                                // If all branches are identical, we can eliminate the branching
+                                if identical_branching {
+                                    new_term = BlockTerminator::Coda(new_trans.branches[0].clone());
                                 } else {
                                     new_term = BlockTerminator::Transition(new_trans);
                                 }
@@ -359,16 +444,12 @@ fn dead_block_elimination(
         // if they have not been visited before
         match bls[cur_bl].terminator.clone() {
             BlockTerminator::Transition(t) => {
-                if let NextBlock::Label(tmp_bl) = t.tblock {
-                    if !visited[tmp_bl] {
-                        let _ = std::mem::replace(&mut visited[tmp_bl], true);
-                        next_bls.push_back(tmp_bl);
-                    }
-                }
-                if let NextBlock::Label(tmp_bl) = t.fblock {
-                    if !visited[tmp_bl] {
-                        let _ = std::mem::replace(&mut visited[tmp_bl], true);
-                        next_bls.push_back(tmp_bl);
+                for b in t.branches {
+                    if let NextBlock::Label(tmp_bl) = b.clone() {
+                        if !visited[tmp_bl] {
+                            let _ = std::mem::replace(&mut visited[tmp_bl], true);
+                            next_bls.push_back(tmp_bl);
+                        }
                     }
                 }
             }
@@ -425,16 +506,11 @@ fn dead_block_elimination(
         let mut new_term: BlockTerminator;
         match new_bls[cur_bl].terminator.clone() {
             BlockTerminator::Transition(t) => {
-                let mut new_trans = BlockTransition {
-                    cond: t.cond.clone(),
-                    tblock: NextBlock::Rp(),
-                    fblock: NextBlock::Rp()
-                };
-                if let NextBlock::Label(tmp_bl) = t.tblock {
-                    new_trans.tblock = NextBlock::Label(*label_map.get(&tmp_bl).unwrap());
-                }
-                if let NextBlock::Label(tmp_bl) = t.fblock {
-                    new_trans.fblock = NextBlock::Label(*label_map.get(&tmp_bl).unwrap());
+                let mut new_trans = t.clone();
+                for i in 0..t.branches.len() {
+                    if let NextBlock::Label(tmp_bl) = t.branches[i].clone() {
+                        new_trans.branches[i] = NextBlock::Label(*label_map.get(&tmp_bl).unwrap());
+                    }
                 }
                 new_term = BlockTerminator::Transition(new_trans);
             }

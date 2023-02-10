@@ -5,35 +5,64 @@ use crate::front::zsharp::pretty::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+fn print_cfg(
+    successor: &Vec<HashSet<usize>>,
+    predecessor: &Vec<HashSet<usize>>,
+    exit_bls: &HashSet<usize>,
+    entry_bls_fn: &HashSet<usize>,
+    successor_fn: &Vec<HashSet<usize>>,
+    predecessor_fn: &Vec<HashSet<usize>>,
+    exit_bls_fn: &HashSet<usize>,
+) {
+    println!("\n\n--\nControl Flow Graph:");
+    println!("\nSuccessor:");
+    for s in 0..successor.len() {
+        print!("Block {}: prog [ ", s);
+        for b in successor[s].iter() {
+            print!("{} ", *b);
+        }
+        print!("]; in-func [ ");
+        for b in successor_fn[s].iter() {
+            print!("{} ", *b);
+        }
+        println!("]");
+    }
+    println!("\nPredecessor:");
+    for s in 0..predecessor.len() {
+        print!("Block {}: prog [ ", s);
+        for b in predecessor[s].iter() {
+            print!("{} ", *b);
+        }
+        print!("]; in-func [ ");
+        for b in predecessor_fn[s].iter() {
+            print!("{} ", *b);
+        }
+        println!("]");
+    }
+    print!("\nExit Blocks:");
+    for b in exit_bls {
+        print!(" {}", *b);
+    }
+    println!();
+    print!("\nFunction Entry Blocks:");
+    for b in entry_bls_fn {
+        print!(" {}", *b);
+    }
+    println!();
+    print!("\nFunction Exit Blocks:");
+    for b in exit_bls_fn {
+        print!(" {}", *b);
+    }
+    println!();
+}
+
 pub fn optimize_block(
     mut bls: Vec<Block>,
     mut entry_bl: usize
 ) -> (Vec<Block>, usize) {
-    let (successor, mut predecessor, exit_bls) = construct_flow_graph(&bls, entry_bl);
-    /*
-    println!("\n\n--\nControl Flow Graph:");
-    println!("\nSuccessor:");
-    for s in 0..successor.len() {
-        print!("Block {}: ", s);
-        for b in successor[s].iter() {
-            print!("{} ", b);
-        }
-        println!("");
-    }
-    println!("\nPredecessor:");
-    for p in 0..predecessor.len() {
-        print!("Block {}: ", p);
-        for b in predecessor[p].iter() {
-            print!("{} ", b);
-        }
-        println!("");
-    }
-    print!("\nExit Blocks:");
-    for b in &exit_bls {
-        print!(" {}", *b);
-    }
-    println!("");
-    */
+    let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
+        construct_flow_graph(&bls, entry_bl);
+    print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
     println!("\n\n--\nOptimization:");
     (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
     (bls, entry_bl) = dead_block_elimination(bls, entry_bl, predecessor);
@@ -193,44 +222,50 @@ fn bl_trans_replace<'ast>(e: &Expression<'ast>, old_val: usize, new_val: &Expres
     }
 }
 
-// Return value: successor, rp_successor, visited, next_bls
+// Return value: successor, rp_successor, successor_fn, visited, next_bls
 fn flow_graph_transition<const IS_RP: bool>(
     cur_bl: &usize,
-    next_bl: NextBlock,
+    next_bl: &NextBlock,
     rp_slot: usize,
     mut successor: Vec<HashSet<usize>>,
     mut rp_successor: Vec<HashSet<usize>>,
+    mut successor_fn: Vec<HashSet<usize>>,
     mut visited: Vec<bool>,
     mut next_bls: VecDeque<usize>
-) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, Vec<bool>, VecDeque<usize>) {
+) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, Vec<HashSet<usize>>, Vec<bool>, VecDeque<usize>) {
 
     match next_bl {
         NextBlock::Label(tmp_bl) => {
-            // Add next_bl to successor of cur_bl if not RP
-            if !IS_RP {
-                successor[*cur_bl].insert(tmp_bl);
+            // If RP is set, only add RP to successor_fn of cur_bl
+            if rp_slot == 0 || IS_RP {
+                successor_fn[*cur_bl].insert(*tmp_bl);
             }
             
-            let old_rp_successor = rp_successor[tmp_bl].clone();
+            // Add next_bl to successor of cur_bl if not RP
+            if !IS_RP {
+                successor[*cur_bl].insert(*tmp_bl);
+            }
+            
+            let old_rp_successor = rp_successor[*tmp_bl].clone();
             // If rp_slot is not 0, append rp_slot to rp_successor of tmp_bl
             // unless we are dealing with the RP block.
             // If rp_slot is 0 or if we are dealing with the RP block,
             // let next_bl inherit rp_successor of cur_bl
             if rp_slot != 0 && !IS_RP {
                 // Function call
-                rp_successor[tmp_bl].insert(rp_slot);
+                rp_successor[*tmp_bl].insert(rp_slot);
             } else {
                 // No function call
                 for i in rp_successor[*cur_bl].clone().iter() {
-                    rp_successor[tmp_bl].insert(*i);
+                    rp_successor[*tmp_bl].insert(*i);
                 }     
             }
 
-            // If next_bl is not visited or if rp_successor of tmp__bl changes,
+            // If next_bl is not visited or if rp_successor of tmp_bl changes,
             // append tmp_bl to next_bls
-            if !visited[tmp_bl] || rp_successor[tmp_bl] != old_rp_successor {
-                let _ = std::mem::replace(&mut visited[tmp_bl], true);
-                next_bls.push_back(tmp_bl);
+            if !visited[*tmp_bl] || rp_successor[*tmp_bl] != old_rp_successor {
+                let _ = std::mem::replace(&mut visited[*tmp_bl], true);
+                next_bls.push_back(*tmp_bl);
             }
         }
         NextBlock::Rp() => {
@@ -244,7 +279,7 @@ fn flow_graph_transition<const IS_RP: bool>(
             // Whatever that rp is should already be in next_bls
         }
     }
-    return (successor, rp_successor, visited, next_bls);
+    return (successor, rp_successor, successor_fn, visited, next_bls);
 }
 
 // Construct a flow graph from a set of blocks
@@ -252,14 +287,27 @@ fn flow_graph_transition<const IS_RP: bool>(
 // ret[0]: map from block to all its successors (no need to use HashMap since every block should exists right now)
 // ret[1]: map from block to all its predecessors
 // ret[2]: list of all blocks that ends with ProgTerm
+// ret[3]: list of entry blocks of all reachable functions
+// ret[4]: map from block to all its successors, with function calls redirected to %RP and function return as temination
+// ret[5]: map from block to all its predecessors, with same tweak as ret[4]
+// ret[6]: list of all blocks that ends with ProgTerm or Rp
+
+// NOTE: This is placed before EBE, so no block ends with branching will have Rp in one or more blocks
+//       Similarly, function entry blocks should only be reachable from function calls
 fn construct_flow_graph(
     bls: &Vec<Block>,
     entry_bl: usize
-) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, Vec<usize>) {
+) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, HashSet<usize>, HashSet<usize>, Vec<HashSet<usize>>, Vec<HashSet<usize>>, HashSet<usize>) {
     let bl_size = bls.len();
     
     // list of all blocks that ends with ProgTerm
-    let mut exit_bls: Vec<usize> = Vec::new();
+    let mut exit_bls: HashSet<usize> = HashSet::new();
+
+    // list of all entry blocks to a function
+    let mut entry_bl_fn: HashSet<usize> = HashSet::new();
+    entry_bl_fn.insert(entry_bl);
+    // list of all blocks that ends with ProgTerm or Rp()
+    let mut exit_bls_fn: HashSet<usize> = HashSet::new();
     
     // Start from entry_bl, do a BFS, add all blocks in its terminator to its successor
     // When we reach a function call (i.e., %RP is set), add value of %RP to the callee's rp_successor
@@ -270,11 +318,18 @@ fn construct_flow_graph(
     let mut visited: Vec<bool> = Vec::new();
     // predecessor is just the inverse of successor
     let mut predecessor: Vec<HashSet<usize>> = Vec::new();
+
+    // successor & predecessor within a function, ignoring function calls (which is redirected to %RP)
+    let mut successor_fn: Vec<HashSet<usize>> = Vec::new();
+    let mut predecessor_fn: Vec<HashSet<usize>> = Vec::new();
+
     for _ in 0..bl_size {
         successor.push(HashSet::new());
         rp_successor.push(HashSet::new());
         visited.push(false);
         predecessor.push(HashSet::new());
+        successor_fn.push(HashSet::new());
+        predecessor_fn.push(HashSet::new());
     }
 
     let mut next_bls: VecDeque<usize> = VecDeque::new();
@@ -297,8 +352,8 @@ fn construct_flow_graph(
 
         // Process RP block
         if rp_slot != 0 {
-            (successor, rp_successor, visited, next_bls) = 
-                flow_graph_transition::<true>(&cur_bl, NextBlock::Label(rp_slot), rp_slot, successor, rp_successor, visited, next_bls);
+            (successor, rp_successor, successor_fn, visited, next_bls) = 
+                flow_graph_transition::<true>(&cur_bl, &NextBlock::Label(rp_slot), rp_slot, successor, rp_successor, successor_fn, visited, next_bls);
         }
 
         // Append everything in the terminator of cur_bl to next_bls
@@ -306,13 +361,33 @@ fn construct_flow_graph(
         match bls[cur_bl].terminator.clone() {
             BlockTerminator::Transition(e) => {
                 let branches = bl_trans_find_val(&e);
+                for b in &branches {
+                    (successor, rp_successor, successor_fn, visited, next_bls) = 
+                        flow_graph_transition::<false>(&cur_bl, b, rp_slot, successor, rp_successor, successor_fn, visited, next_bls);
+                }
+                // if %RP is set, the next block must be a function entrance
+                if rp_slot != 0 {
+                    if branches.len() != 1 {
+                        panic!("Blocks that invoke function calls cannot have branches.")
+                    }
+                    if let NextBlock::Label(l) = branches[0] {
+                        entry_bl_fn.insert(l);
+                    } else {
+                        panic!("Blocks that invoke function calls cannot terminates to %RP block.")
+                    }
+                }
+                // If block terminates to %RP, add it to exit_bls_fn
                 for b in branches {
-                    (successor, rp_successor, visited, next_bls) = 
-                        flow_graph_transition::<false>(&cur_bl, b, rp_slot, successor, rp_successor, visited, next_bls);
+                    if b == NextBlock::Rp() {
+                        exit_bls_fn.insert(cur_bl);
+                    }
                 }
             }
             BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-            BlockTerminator::ProgTerm() => { exit_bls.push(cur_bl); }
+            BlockTerminator::ProgTerm() => { 
+                exit_bls.insert(cur_bl);
+                exit_bls_fn.insert(cur_bl);
+            }
         }
     }
 
@@ -320,8 +395,11 @@ fn construct_flow_graph(
         for j in successor[i].iter() {
             predecessor[*j].insert(i);
         }
+        for j in successor_fn[i].iter() {
+            predecessor_fn[*j].insert(i);
+        }
     }
-    return (successor, predecessor, exit_bls);
+    return (successor, predecessor, exit_bls, entry_bl_fn, successor_fn, predecessor_fn, exit_bls_fn);
 }
 
 // Backward analysis
@@ -335,7 +413,7 @@ fn construct_flow_graph(
 // CFG will be DESTROYED after this! Only do it after all statement analyses.
 fn empty_block_elimination(
     mut bls: Vec<Block>,
-    exit_bls: Vec<usize>,
+    exit_bls: HashSet<usize>,
     mut successor: Vec<HashSet<usize>>,
     mut predecessor: Vec<HashSet<usize>>
 ) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, Vec<Block>) {
@@ -346,14 +424,14 @@ fn empty_block_elimination(
     }
     
     // Can this ever happen?
-    if exit_bls.len() == 0 {
+    if exit_bls.is_empty() {
         panic!("The program has no exit block!");
     }
     
     // Backward analysis!
     let mut next_bls: VecDeque<usize> = VecDeque::new();
-    for eb in 0..exit_bls.len() {
-        next_bls.push_back(exit_bls[eb]);
+    for eb in exit_bls {
+        next_bls.push_back(eb);
     }
     let _ = std::mem::replace(&mut visited[next_bls[0]], true);
     while !next_bls.is_empty() {

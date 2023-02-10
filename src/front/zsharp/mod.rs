@@ -3,7 +3,7 @@
 mod parser;
 mod term;
 mod blocks;
-// mod blocks_optimization;
+mod blocks_optimization;
 mod pretty;
 pub mod zvisit;
 
@@ -87,12 +87,12 @@ impl ZSharpFE {
             b.pretty();
             println!("");
         }
-        // (blks, entry_bl) = blocks_optimization::optimize_block(blks, entry_bl);
-        // println!("Entry block: {entry_bl}");      
-        // for b in &blks {
-        //     b.pretty();
-        //     println!("");
-        // }
+        (blks, entry_bl) = blocks_optimization::optimize_block(blks, entry_bl);
+        println!("Entry block: {entry_bl}");      
+        for b in &blks {
+            b.pretty();
+            println!("");
+        }
         println!("\n\n--\nInterpretation:");
         g.bl_eval_const_entry_fn(entry_bl, &blks)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))

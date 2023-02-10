@@ -52,7 +52,7 @@ fn ty_to_dec_suffix<'ast>(ty: Type<'ast>) -> DecimalSuffix<'ast> {
     }
 }
 
-fn bl_coda<'ast>(nb: NextBlock) -> Expression<'ast> {
+pub fn bl_coda<'ast>(nb: NextBlock) -> Expression<'ast> {
     match nb {
         NextBlock::Label(val) => Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
             value: DecimalNumber {
@@ -71,7 +71,7 @@ fn bl_coda<'ast>(nb: NextBlock) -> Expression<'ast> {
     }
 }
 
-fn bl_trans<'ast>(cond: Expression<'ast>, tval: NextBlock, fval: NextBlock) -> Expression<'ast> {
+pub fn bl_trans<'ast>(cond: Expression<'ast>, tval: NextBlock, fval: NextBlock) -> Expression<'ast> {
     Expression::Ternary(TernaryExpression {
         first: Box::new(cond),
         second: Box::new(bl_coda(tval)),

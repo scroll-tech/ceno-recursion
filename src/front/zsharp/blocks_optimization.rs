@@ -9,7 +9,7 @@ pub fn optimize_block(
     mut bls: Vec<Block>,
     mut entry_bl: usize
 ) -> (Vec<Block>, usize) {
-    let (successor, predecessor, exit_bls) = construct_flow_graph(&bls, entry_bl);
+    let (successor, mut predecessor, exit_bls) = construct_flow_graph(&bls, entry_bl);
     /*
     println!("\n\n--\nControl Flow Graph:");
     println!("\nSuccessor:");
@@ -35,8 +35,8 @@ pub fn optimize_block(
     println!("");
     */
     println!("\n\n--\nOptimization:");
-    (_, _, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
-    (bls, entry_bl) = dead_block_elimination(bls, entry_bl);
+    (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
+    (bls, entry_bl) = dead_block_elimination(bls, entry_bl, predecessor);
     return (bls, entry_bl);
 } 
 
@@ -375,6 +375,8 @@ fn empty_block_elimination(
                             bls[tmp_bl].terminator = BlockTerminator::Transition(new_e);
 
                             // Update CFG
+                            successor[tmp_bl].remove(&cur_bl);
+                            predecessor[cur_bl].remove(&tmp_bl);
                             for i in successor[cur_bl].clone() {
                                 successor[tmp_bl].insert(i);
                                 predecessor[i].insert(tmp_bl);
@@ -394,66 +396,21 @@ fn empty_block_elimination(
 // Return value: bls, entry_bl, exit_bl
 fn dead_block_elimination(
     bls: Vec<Block>,
-    entry_bl: usize
+    entry_bl: usize,
+    predecessor: Vec<HashSet<usize>>
 ) -> (Vec<Block>, usize) {      
     let old_size = bls.len();
     
-    // Visited: have we ever visited the block in the following BFS?
-    let mut visited: Vec<bool> = Vec::new();
-    for _ in 0..old_size {
-        visited.push(false);
-    }
-
-    // BFS through all blocks starting from entry_bl
-    // Use next_bls to record all the nodes that we will visit next
-    // Whenever we encounter `%RP = <const>` we need to visit that block as well,
-    // however, we don't need to do anything if a block terminates with rp() (i.e. end of function call)
-    let mut next_bls: VecDeque<usize> = VecDeque::new();
-    let _ = std::mem::replace(&mut visited[entry_bl], true);
-    next_bls.push_back(entry_bl);
-    while !next_bls.is_empty() {
-        let cur_bl = next_bls.pop_front().unwrap();
-        
-        // If we encounter any %RP = <counter>, append <counter> to next_bls
-        for i in 0..bls[cur_bl].instructions.len() {
-            let bc = bls[cur_bl].instructions[i].clone();
-            if let Some(tmp_bl) = rp_find_val(bc) {
-                if !visited[tmp_bl] {
-                    let _ = std::mem::replace(&mut visited[tmp_bl], true);
-                    next_bls.push_back(tmp_bl);
-                }
-            }
-        }
-        
-        // Append everything in the terminator of cur_bl to next_bls
-        // if they have not been visited before
-        match bls[cur_bl].terminator.clone() {
-            BlockTerminator::Transition(e) => {
-                let branches = bl_trans_find_val(&e);
-                for b in branches {
-                    if let NextBlock::Label(tmp_bl) = b {
-                        if !visited[tmp_bl] {
-                            let _ = std::mem::replace(&mut visited[tmp_bl], true);
-                            next_bls.push_back(tmp_bl);
-                        }
-                    }
-                }
-            }
-            BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-            BlockTerminator::ProgTerm() => {}
-        }
-    }
-
     // Initialize map from old label of blocks to new labels
     let mut label_map = HashMap::new();
     // Initialize a new list of blocks
     let mut new_bls = Vec::new();
 
-    // Iterate through all blocks. If it was never visited, delete it and update next_bls
+    // Iterate through all blocks. If it does not have a predecessor, delete it and update next_bls
     let mut new_label = 0;
     for old_label in 0..old_size {
         label_map.insert(old_label, new_label);
-        if visited[old_label] {
+        if old_label == 0 || !predecessor[old_label].is_empty() {
             // Change block name to match new_label
             let tmp_bl = Block {
                 name: new_label,

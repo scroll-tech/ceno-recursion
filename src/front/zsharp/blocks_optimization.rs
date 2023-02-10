@@ -64,8 +64,27 @@ pub fn optimize_block(
         construct_flow_graph(&bls, entry_bl);
     print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
     println!("\n\n--\nOptimization:");
+    bls = liveness_analysis(bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
+    println!("\n\n--\nLiveness:");
+    println!("Entry block: {entry_bl}");      
+    for b in &bls {
+        b.pretty();
+        println!("");
+    }
     (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
+    println!("\n\n--\nEBE:");
+    println!("Entry block: {entry_bl}");      
+    for b in &bls {
+        b.pretty();
+        println!("");
+    }
     (bls, entry_bl) = dead_block_elimination(bls, entry_bl, predecessor);
+    println!("\n\n--\nDBE:");
+    println!("Entry block: {entry_bl}");      
+    for b in &bls {
+        b.pretty();
+        println!("");
+    }
     return (bls, entry_bl);
 } 
 
@@ -402,6 +421,201 @@ fn construct_flow_graph(
     return (successor, predecessor, exit_bls, entry_bl_fn, successor_fn, predecessor_fn, exit_bls_fn);
 }
 
+// Given an expression, find all variables it references
+fn expr_find_val(e: &Expression) -> HashSet<String> {
+    match e {
+        Expression::Ternary(t) => {
+            let mut ret: HashSet<String> = expr_find_val(&t.first);
+            ret.extend(expr_find_val(&t.second));
+            ret.extend(expr_find_val(&t.third));
+            ret
+        }
+        Expression::Binary(b) => {
+            let mut ret: HashSet<String> = expr_find_val(&b.left);
+            ret.extend(expr_find_val(&b.right));
+            ret
+        }
+        Expression::Unary(u) => expr_find_val(&u.expression),
+        Expression::Postfix(p) => {
+            let mut ret: HashSet<String> = HashSet::new();
+            ret.insert(p.id.value.clone());
+            for aa in &p.accesses {
+                if let Access::Select(a) = aa {
+                    if let RangeOrExpression::Expression(e) = &a.expression {
+                        ret.extend(expr_find_val(e));
+                    } else {
+                        panic!("Range access not supported.")
+                    }
+                } else {
+                    panic!("Unsupported membership access.")
+                }
+            }
+            ret
+        }
+        Expression::Identifier(i) => {
+            let mut ret: HashSet<String> = HashSet::new();
+            ret.insert(i.value.clone());
+            ret
+        }
+        Expression::Literal(_) => HashSet::new(),
+        _ => {
+            panic!("Unsupported Expression.");
+        }
+    }
+}
+
+// Given a statement, find all variables it defines and references
+// Return value:
+// ret[0]: all variables that S defines (KILL)
+// ret[1]: all variables that S references (GEN)
+fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
+    match s {
+        Statement::Return(_) => {
+            panic!("Blocks should not contain return statements.")
+        }
+        Statement::Definition(d) => {
+            let mut kill_set = HashSet::new();
+            for l in &d.lhs {
+                match l {
+                    TypedIdentifierOrAssignee::Assignee(p) => {
+                        kill_set.insert(p.id.value.clone());
+                        for aa in &p.accesses {
+                            if let AssigneeAccess::Select(a) = aa {
+                                if let RangeOrExpression::Expression(e) = &a.expression {
+                                    kill_set.extend(expr_find_val(e));
+                                } else {
+                                    panic!("Range access not supported.")
+                                }
+                            } else {
+                                panic!("Unsupported membership access.")
+                            }
+                        }
+                    }
+                    TypedIdentifierOrAssignee::TypedIdentifier(ti) => {
+                        kill_set.insert(ti.identifier.value.clone());
+                    }
+                }
+            }
+            (kill_set, expr_find_val(&d.expression))
+        }
+        Statement::Assertion(a) => (HashSet::new(), expr_find_val(&a.expression)),
+        Statement::Iteration(_) => {
+            panic!("Blocks should not contain iteration statements.")
+        }
+        Statement::Conditional(_) => {
+            panic!("Blocks should not contain conditional statements.")
+        }
+    }
+}
+
+// Backward Analysis, within a function only
+// GEN: Any mentioning of a variable, exclude PUSH to stack
+// KILL: Any definition or reassignment of a variable, exclude POP from stack
+// MEET: Union
+// If we encounter an assignment (including POP) of a variable that is dead, remove the assignment
+
+// Liveness analysis should not affect CFG
+fn liveness_analysis<'ast>(
+    mut bls: Vec<Block<'ast>>,
+    successor_fn: &Vec<HashSet<usize>>,
+    predecessor_fn: &Vec<HashSet<usize>>,
+    exit_bls_fn: &HashSet<usize>
+) -> Vec<Block<'ast>> {
+
+    let mut visited: Vec<bool> = Vec::new();
+    // MEET is union, so IN and OUT are Empty Set
+    let mut bl_in: Vec<HashSet<String>> = Vec::new();
+    let mut bl_out: Vec<HashSet<String>> = Vec::new();
+    for _ in 0..bls.len() {
+        visited.push(false);
+        bl_in.push(HashSet::new());
+        bl_out.push(HashSet::new());
+    }
+    
+    // Can this ever happen?
+    if exit_bls_fn.is_empty() {
+        panic!("The program has no exit block!");
+    }
+    
+    // Start from exit block
+    let mut next_bls: VecDeque<usize> = VecDeque::new();
+    for eb in exit_bls_fn {
+        next_bls.push_back(*eb);
+    }
+    // Backward analysis!
+    while !next_bls.is_empty() {
+        let cur_bl = next_bls.pop_front().unwrap();
+
+        // State is the Union of all successors AND the exit condition
+        let mut state: HashSet<String> = HashSet::new();
+        for s in &successor_fn[cur_bl] {
+            state.extend(bl_in[*s].clone());
+        }
+        match &bls[cur_bl].terminator {
+            BlockTerminator::Transition(e) => { state.extend(expr_find_val(e)); }
+            BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
+            BlockTerminator::ProgTerm() => {}            
+        }
+
+        // Only analyze if never visited before or OUT changes
+        if !visited[cur_bl] || state != bl_out[cur_bl] {
+            
+            bl_out[cur_bl] = state.clone();
+            let _ = std::mem::replace(&mut visited[cur_bl], true);
+            let mut new_instructions = Vec::new();
+
+            // KILL and GEN within the block
+            for i in bls[cur_bl].instructions.iter().rev() {
+                match i {
+                    BlockContent::MemPush(_) => {
+                        new_instructions.insert(0, i.clone());
+                    }
+                    BlockContent::MemPop((var, _)) => {
+                        if state.contains(var) || var.chars().next().unwrap() == '%' {
+                            new_instructions.insert(0, i.clone());
+                        }
+                    }
+                    BlockContent::Stmt(s) => {
+                        let (kill, gen) = stmt_find_val(s);
+                        if kill.len() > 1 {
+                            panic!("Assignment to multiple variables not supported");
+                        }
+                        // If it's not a definition or the defined variable is alive,
+                        // or if it involves register value (%RP, %BP, %SP, %RET, %ARG)
+                        // mark the variable dead and append gen to state
+                        // Otherwise remove the statement
+                        let mut contains_reg = false;
+                        for x in &kill {
+                            if x.chars().next().unwrap() == '%' {
+                                contains_reg = true;
+                            }
+                        }
+                        for x in &gen {
+                            if x.chars().next().unwrap() == '%' {
+                                contains_reg = true;
+                            }
+                        }
+                        if kill.is_empty() || kill.is_subset(&state) || contains_reg {
+                            state.retain(|x| !kill.contains(x));
+                            state.extend(gen);
+                            new_instructions.insert(0, i.clone());
+                        }
+                    }
+                }
+            }
+
+            bls[cur_bl].instructions = new_instructions;
+            bl_in[cur_bl] = state;
+
+            // Block Transition
+            for tmp_bl in predecessor_fn[cur_bl].clone() {
+                next_bls.push_back(tmp_bl);
+            }
+        }    
+    }
+    return bls;
+}
+
 // Backward analysis
 // If a block is empty and its terminator is a coda (to another block or %RP)
 // replace all the reference to it in its predecessors with that terminator
@@ -428,12 +642,13 @@ fn empty_block_elimination(
         panic!("The program has no exit block!");
     }
     
-    // Backward analysis!
+    // Start from exit block
     let mut next_bls: VecDeque<usize> = VecDeque::new();
     for eb in exit_bls {
         next_bls.push_back(eb);
+        let _ = std::mem::replace(&mut visited[eb], true);
     }
-    let _ = std::mem::replace(&mut visited[next_bls[0]], true);
+    // Backward analysis!
     while !next_bls.is_empty() {
         let cur_bl = next_bls.pop_front().unwrap();
 

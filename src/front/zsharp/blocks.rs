@@ -445,7 +445,7 @@ impl<'ast> ZGen<'ast> {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                         ty: p.ty,
                         identifier: IdentifierExpression {
-                            value: format!("@ARG{}", arg_count),
+                            value: format!("%ARG{}", arg_count),
                             span: Span::new("", 0, 0).unwrap()
                         },
                         span: Span::new("", 0, 0).unwrap()
@@ -471,7 +471,7 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     })],
                     expression: Expression::Identifier(IdentifierExpression {
-                        value: format!("@ARG{}", arg_count),
+                        value: format!("%ARG{}", arg_count),
                         span: Span::new("", 0, 0).unwrap()
                     }),
                     span: Span::new("", 0, 0).unwrap()

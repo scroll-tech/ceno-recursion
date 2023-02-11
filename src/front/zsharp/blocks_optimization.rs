@@ -543,10 +543,65 @@ fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
 //    If two variable states have different length, their MEET is undefined. This should never happen because
 //    you can only enter (or exit) a block from the same scope. 
 
-// GEN: Any mentioning of a variable, exclude PUSH to stack
-// KILL: Any definition or reassignment of a variable, exclude POP from stack
-// MEET: Union
-// If we encounter an assignment (including POP) of a variable that is dead, remove the assignment
+// MEET of liveness_analysis
+fn la_meet(
+    first: &HashMap<String, Vec<bool>>,
+    second: &HashMap<String, Vec<bool>>
+) -> HashMap<String, Vec<bool>> {
+    let mut third = first.clone();
+    for (var, state_sec) in second.iter() {
+        if let Some(state_fst) = third.get(var) {
+            if state_fst.len() != state_sec.len() {
+                panic!("Liveness analysis MEET fails: variable {} has different scoping:\nFirst state is {:?}\nSecond state is {:?}\n", var, state_fst, state_sec)
+            } else {
+                third.insert(var.to_string(), (0..state_fst.len()).map(|x| state_fst[x] || state_sec[x]).collect::<Vec<_>>());
+            }
+        } else {
+            third.insert(var.to_string(), (*state_sec.clone()).to_vec());
+        }
+    }
+    third
+}
+
+// GEN all variables in gen
+fn la_gen(
+    mut state: HashMap<String, Vec<bool>>,
+    gen: &HashSet<String>
+) -> HashMap<String, Vec<bool>> {
+    // Add all gens to state
+    for v in gen {
+        match state.get(v) {
+            None => { state.insert(v.to_string(), vec![true]); }
+            Some(_) => {
+                let mut v_state: Vec<bool> = (*state.get(v).unwrap().clone()).to_vec();
+                v_state.pop();
+                v_state.push(true);
+                state.insert(v.to_string(), v_state);
+            }                                    
+        }
+    }
+    state
+}
+
+// KILL all variables in kill
+fn la_kill(
+    mut state: HashMap<String, Vec<bool>>,
+    kill: &HashSet<String>
+) -> HashMap<String, Vec<bool>> {
+    // Remove all kills to state
+    for v in kill {
+        match state.get(v) {
+            None => { state.insert(v.to_string(), vec![false]); }
+            Some(_) => {
+                let mut v_state: Vec<bool> = (*state.get(v).unwrap().clone()).to_vec();
+                v_state.pop();
+                v_state.push(false);
+                state.insert(v.to_string(), v_state);
+            }                                    
+        }
+    }
+    state
+}
 
 // Liveness analysis should not affect CFG
 fn liveness_analysis<'ast>(
@@ -558,16 +613,16 @@ fn liveness_analysis<'ast>(
 
     let mut visited: Vec<bool> = Vec::new();
     // MEET is union, so IN and OUT are Empty Set
-    let mut bl_in: Vec<HashSet<String>> = Vec::new();
-    let mut bl_out: Vec<HashSet<String>> = Vec::new();
+    let mut bl_in: Vec<HashMap<String, Vec<bool>>> = Vec::new();
+    let mut bl_out: Vec<HashMap<String, Vec<bool>>> = Vec::new();
     for _ in 0..bls.len() {
         visited.push(false);
-        bl_in.push(HashSet::new());
-        bl_out.push(HashSet::new());
+        bl_in.push(HashMap::new());
+        bl_out.push(HashMap::new());
     }
     
     // Can this ever happen?
-    if exit_bls_fn.is_empty() {
+    if exit_bls_fn.is_empty() { 
         panic!("The program has no exit block!");
     }
     
@@ -581,12 +636,14 @@ fn liveness_analysis<'ast>(
         let cur_bl = next_bls.pop_front().unwrap();
 
         // State is the Union of all successors AND the exit condition
-        let mut state: HashSet<String> = HashSet::new();
+        let mut state: HashMap<String, Vec<bool>> = HashMap::new();
         for s in &successor_fn[cur_bl] {
-            state.extend(bl_in[*s].clone());
+            println!("{}", s);
+            state = la_meet(&state, &bl_in[*s]);
         }
+        println!();
         match &bls[cur_bl].terminator {
-            BlockTerminator::Transition(e) => { state.extend(expr_find_val(e)); }
+            BlockTerminator::Transition(e) => { state = la_gen(state, &expr_find_val(e)); }
             BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
             BlockTerminator::ProgTerm() => {}            
         }
@@ -601,12 +658,23 @@ fn liveness_analysis<'ast>(
             // KILL and GEN within the block
             for i in bls[cur_bl].instructions.iter().rev() {
                 match i {
-                    BlockContent::MemPush(_) => {
+                    BlockContent::MemPush((var, _)) => {
+                        let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
+                        v_state.pop();
+                        state.insert(var.to_string(), v_state);
                         new_instructions.insert(0, i.clone());
                     }
                     BlockContent::MemPop((var, _)) => {
-                        if state.contains(var) || var.chars().next().unwrap() == '%' {
+                        if (state.get(var) != None && state.get(var).unwrap()[state.get(var).unwrap().len() - 1]) || var.chars().next().unwrap() == '%' {
                             new_instructions.insert(0, i.clone());
+                        }
+                        match state.get(var) {
+                            None => { state.insert(var.to_string(), vec![false, false]); }
+                            Some(_) => {
+                                let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
+                                v_state.push(false);
+                                state.insert(var.to_string(), v_state);
+                            }
                         }
                     }
                     BlockContent::Stmt(s) => {
@@ -618,20 +686,15 @@ fn liveness_analysis<'ast>(
                         // or if it involves register value (%RP, %BP, %SP, %RET, %ARG)
                         // mark the variable dead and append gen to state
                         // Otherwise remove the statement
-                        let mut contains_reg = false;
-                        for x in &kill {
-                            if x.chars().next().unwrap() == '%' {
-                                contains_reg = true;
-                            }
-                        }
-                        for x in &gen {
-                            if x.chars().next().unwrap() == '%' {
-                                contains_reg = true;
-                            }
-                        }
-                        if kill.is_empty() || kill.is_subset(&state) || contains_reg {
-                            state.retain(|x| !kill.contains(x));
-                            state.extend(gen);
+                        let mut contains_reg = kill.iter().fold(false, |c, x| c || x.chars().next().unwrap() == '%');
+                        contains_reg = gen.iter().fold(contains_reg, |c, x| c || x.chars().next().unwrap() == '%');
+                        
+                        if kill.is_empty() || kill.iter().fold(false, |c, x| c || state.get(x) != None) || contains_reg {
+                            // Remove kill from state
+                            state = la_kill(state, &kill);
+
+                            // Add all gens to state
+                            state = la_gen(state, &gen);
                             new_instructions.insert(0, i.clone());
                         }
                     }

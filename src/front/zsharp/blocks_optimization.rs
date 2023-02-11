@@ -603,6 +603,14 @@ fn la_kill(
     state
 }
 
+// Decide if var is alive in the current scope given state
+fn is_alive(
+    state: &HashMap<String, Vec<bool>>,
+    var: &String
+) -> bool {
+    state.get(var) != None && state.get(var).unwrap()[state.get(var).unwrap().len() - 1]
+}
+
 // Liveness analysis should not affect CFG
 fn liveness_analysis<'ast>(
     mut bls: Vec<Block<'ast>>,
@@ -638,10 +646,8 @@ fn liveness_analysis<'ast>(
         // State is the Union of all successors AND the exit condition
         let mut state: HashMap<String, Vec<bool>> = HashMap::new();
         for s in &successor_fn[cur_bl] {
-            println!("{}", s);
             state = la_meet(&state, &bl_in[*s]);
         }
-        println!();
         match &bls[cur_bl].terminator {
             BlockTerminator::Transition(e) => { state = la_gen(state, &expr_find_val(e)); }
             BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
@@ -659,13 +665,17 @@ fn liveness_analysis<'ast>(
             for i in bls[cur_bl].instructions.iter().rev() {
                 match i {
                     BlockContent::MemPush((var, _)) => {
+                        // Pop the last state out
                         let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
                         v_state.pop();
                         state.insert(var.to_string(), v_state);
-                        new_instructions.insert(0, i.clone());
+                        // If the new last state is 1, keep the instruction
+                        if is_alive(&state, var) || var.chars().next().unwrap() == '%' {
+                            new_instructions.insert(0, i.clone());
+                        }
                     }
                     BlockContent::MemPop((var, _)) => {
-                        if (state.get(var) != None && state.get(var).unwrap()[state.get(var).unwrap().len() - 1]) || var.chars().next().unwrap() == '%' {
+                        if is_alive(&state, var) || var.chars().next().unwrap() == '%' {
                             new_instructions.insert(0, i.clone());
                         }
                         match state.get(var) {
@@ -689,7 +699,7 @@ fn liveness_analysis<'ast>(
                         let mut contains_reg = kill.iter().fold(false, |c, x| c || x.chars().next().unwrap() == '%');
                         contains_reg = gen.iter().fold(contains_reg, |c, x| c || x.chars().next().unwrap() == '%');
                         
-                        if kill.is_empty() || kill.iter().fold(false, |c, x| c || state.get(x) != None) || contains_reg {
+                        if kill.is_empty() || kill.iter().fold(false, |c, x| c || is_alive(&state, x)) || contains_reg {
                             // Remove kill from state
                             state = la_kill(state, &kill);
 

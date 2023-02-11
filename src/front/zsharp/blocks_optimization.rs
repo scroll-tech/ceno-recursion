@@ -508,7 +508,41 @@ fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
     }
 }
 
-// Backward Analysis, within a function only
+// The analysis skips function calls (go straight from func call block to return block)
+// Since we don't have SSA, liveness analysis is a lot more complicated
+// The following analysis is based on the assumption that every PUSH of a variable will
+// be accompanied by a POP sometime later before the program terminates (and there are finite many of them)
+// We do not analyze the liveness of %BP, %SP, %RP, %RET, or %ARG
+// DIRECTION: Backward
+// LATTICE:
+//   TOP: Variable does not exist in the set
+//   Otherwise, a variable state is defined as a list of bits, corresponding to its liveness in each stack frame
+//     e.g. [0, 1, 0, 0, 1]: live at current scope (last bit), live at stack frame 1, dead at stack frame 0, 2, 3
+//   BOT: Does not exist (I think?)
+// TRANSFER:
+//    GEN: If a variable is referenced, excluding PUSH to stack,
+//         - if it is TOP, set the state to [1] (live at current scope, not appearing in stack)
+//         - otherwise, update the last bit of its state to 1 (live at current scope, unchanged in stack)
+//   KILL: If a variable is assigned, excluding POP from stack,
+//         - if it is TOP or if the last bit of its state is 0, remove the statement
+//         - if it is TOP, set the state to [0] (dead at current scope, not appearing in stack)
+//         - if it is not TOP, update the last bit of its state to 0 (dead at current scope, unchanged in stack)
+//    POP: If a variable is popped out from the stack,
+//         - if it is TOP or if the last bit of its state is 0, remove the statement
+//         - if it is TOP, set the state to [0, 0] (dead at new scope, dead in stack, 
+//               we are doing backward analysis, so POP corresponds to extension of the state) 
+//         - otherwise, set the last bit to 0 and extend the state by another 0
+//   PUSH: If a variable is pushed onto stack,
+//         - remove the last bit of the variable state (again, we are doing things backwards)
+//         - the new state should not be TOP if each PUSH has a corresponding POP
+//         - if the last bit of the new state is 0, remove the statement
+//               (need to deal with holes in physical memory later)
+// MEET:
+//    TOP meets anything else is always the other things
+//    If two variable states have the same length, their MEET is the pairwise union of the two lists
+//    If two variable states have different length, their MEET is undefined. This should never happen because
+//    you can only enter (or exit) a block from the same scope. 
+
 // GEN: Any mentioning of a variable, exclude PUSH to stack
 // KILL: Any definition or reassignment of a variable, exclude POP from stack
 // MEET: Union

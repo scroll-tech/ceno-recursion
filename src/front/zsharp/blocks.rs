@@ -319,10 +319,9 @@ impl<'ast> ZGen<'ast> {
     }
 
     // Convert each function to blocks
-    // Generic: IS_MAIN determines if we are in the main function, which has three functions:
+    // Generic: IS_MAIN determines if we are in the main function, which has two properties:
     //   1. We don't need to push %RP when doing function calls in MAIN, since %RP is undefined
-    //   2. We don't need to handle scoping after a return in MAIN, since the program terminates
-    //   3. We don't update the exit block of MAIN to %RP
+    //   2. We don't update the exit block of MAIN to %RP
     // Return type:
     // Blks, blks_len
     fn bl_gen_function_init_<const IS_MAIN: bool>(
@@ -556,10 +555,7 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(ret_stmt));
 
                 // Handle scope change after return
-                // We don't need this if we are in main function
-                if !IS_MAIN {
-                    (blks, sp_offset) = self.bl_gen_return_scope_(blks, blks_len, func_phy_assign.clone(), sp_offset)?;
-                }
+                (blks, sp_offset) = self.bl_gen_return_scope_(blks, blks_len, func_phy_assign.clone(), sp_offset)?;
 
                 // Set terminator to ProgTerm if in main, point to %RP otherwise
                 if IS_MAIN {
@@ -1183,10 +1179,9 @@ impl<'ast> ZGen<'ast> {
         // POP everything out
         for scope_phy_assign in func_phy_assign.iter().rev() {
             for (addr, var) in scope_phy_assign.iter().rev() {
-                // Local variables have no use to us! We only need to pop out the %BP's
-                if var == "%BP" {
-                    blks[blks_len - 1].instructions.push(BlockContent::MemPop((var.to_string(), *addr)));                
-                }
+                // We technically only needs to pop out %BP, but popping out everything can make
+                // optimization a lot easier
+                blks[blks_len - 1].instructions.push(BlockContent::MemPop((var.to_string(), *addr)));                
             }
         }
         Ok((blks, sp_offset))

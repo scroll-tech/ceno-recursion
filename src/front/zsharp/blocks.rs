@@ -273,10 +273,16 @@ impl<'ast> ZGen<'ast> {
                 },
                 span: Span::new("", 0, 0).unwrap()
             })],
-            expression: Expression::Identifier(IdentifierExpression {
-                value: "%SP".to_string(),
+            expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: "0".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
                 span: Span::new("", 0, 0).unwrap()
-            }),
+            })),
             span: Span::new("", 0, 0).unwrap()
         });
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_init_stmt));
@@ -1241,7 +1247,7 @@ impl<'ast> ZGen<'ast> {
                     if sp + offset != phy_mem.len() {
                         return Err(format!("Error processing %PHY push: index {sp} + {offset} does not match with stack size."));
                     } else {
-                        let e = self.cvar_lookup(&var).ok_or(format!("Push to %PHY failed: pushing an out-of-scope variable."))?;
+                        let e = self.cvar_lookup(&var).ok_or(format!("Push to %PHY failed: pushing an out-of-scope variable: {}.", var))?;
                         phy_mem.push(e);
                     }
                 }

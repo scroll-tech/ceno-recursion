@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
 use zokrates_pest_ast::*;
 use crate::front::zsharp::blocks::*;
-use crate::front::zsharp::pretty::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -66,6 +65,13 @@ pub fn optimize_block(
     println!("\n\n--\nOptimization:");
     bls = liveness_analysis(bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
     println!("\n\n--\nLiveness:");
+    println!("Entry block: {entry_bl}");      
+    for b in &bls {
+        b.pretty();
+        println!("");
+    }
+    bls = phy_mem_rearrange(bls, &predecessor_fn, &successor_fn, &entry_bls_fn);
+    println!("\n\n--\nPMR:");
     println!("Entry block: {entry_bl}");      
     for b in &bls {
         b.pretty();
@@ -659,9 +665,76 @@ fn liveness_analysis<'ast>(
             
             bl_out[cur_bl] = state.clone();
             let _ = std::mem::replace(&mut visited[cur_bl], true);
+
+            // KILL and GEN within the block
+            for i in bls[cur_bl].instructions.iter().rev() {
+                match i {
+                    BlockContent::MemPush((var, _)) => {
+                        // Pop the last state out
+                        let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
+                        v_state.pop();
+                        state.insert(var.to_string(), v_state);
+                    }
+                    BlockContent::MemPop((var, _)) => {
+                        match state.get(var) {
+                            None => { state.insert(var.to_string(), vec![false, false]); }
+                            Some(_) => {
+                                let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
+                                v_state.push(false);
+                                state.insert(var.to_string(), v_state);
+                            }
+                        }
+                    }
+                    BlockContent::Stmt(s) => {
+                        let (kill, gen) = stmt_find_val(s);
+                        // If it's not a definition or the defined variable is alive,
+                        // or if it involves register value (%RP, %BP, %SP, %RET, %ARG)
+                        // mark the variable dead and append gen to state
+                        // Otherwise remove the statement
+                        let mut contains_reg = kill.iter().fold(false, |c, x| c || x.chars().next().unwrap() == '%');
+                        contains_reg = gen.iter().fold(contains_reg, |c, x| c || x.chars().next().unwrap() == '%');
+                        
+                        if kill.is_empty() || kill.iter().fold(false, |c, x| c || is_alive(&state, x)) || contains_reg {
+                            // Remove kill from state
+                            state = la_kill(state, &kill);
+
+                            // Add all gens to state
+                            state = la_gen(state, &gen);
+                        }
+                    }
+                }
+            }
+            bl_in[cur_bl] = state;
+
+            // Block Transition
+            for tmp_bl in predecessor_fn[cur_bl].clone() {
+                next_bls.push_back(tmp_bl);
+            }
+        }    
+    }
+
+    // Do this again, this time, eliminate the blocks
+    for i in 0..bls.len() {
+        visited[i] = false;
+    }
+    let mut next_bls: VecDeque<usize> = VecDeque::new();
+    for eb in exit_bls_fn {
+        next_bls.push_back(*eb);
+    }
+    while !next_bls.is_empty() {
+        let cur_bl = next_bls.pop_front().unwrap();
+
+        // State is simply bl_out
+        let mut state: HashMap<String, Vec<bool>> = bl_out[cur_bl].clone();
+
+        // Only visit each block once
+        if !visited[cur_bl] {
+            
+            let _ = std::mem::replace(&mut visited[cur_bl], true);
             let mut new_instructions = Vec::new();
 
             // KILL and GEN within the block
+            // XXX: Seems like wasting time?
             for i in bls[cur_bl].instructions.iter().rev() {
                 match i {
                     BlockContent::MemPush((var, _)) => {
@@ -692,6 +765,10 @@ fn liveness_analysis<'ast>(
                         if kill.len() > 1 {
                             panic!("Assignment to multiple variables not supported");
                         }
+                        println!("{}, {:?}, {:?}, {:?}", cur_bl, kill, gen, state);
+                        if kill.len() > 1 {
+                            panic!("Assignment to multiple variables not supported");
+                        }
                         // If it's not a definition or the defined variable is alive,
                         // or if it involves register value (%RP, %BP, %SP, %RET, %ARG)
                         // mark the variable dead and append gen to state
@@ -712,7 +789,6 @@ fn liveness_analysis<'ast>(
             }
 
             bls[cur_bl].instructions = new_instructions;
-            bl_in[cur_bl] = state;
 
             // Block Transition
             for tmp_bl in predecessor_fn[cur_bl].clone() {
@@ -720,10 +796,238 @@ fn liveness_analysis<'ast>(
             }
         }    
     }
+
     return bls;
 }
 
-// Backward analysis
+
+// Close the "gap" between PUSHes and POPpes to physical memory created by previous optimizations
+// DIRECTION: Forward
+// LATTICE:
+//   TOP: An empty list
+//   Otherwise, a list that records the size of each stack frame after previous optimizations.
+//     The last entry indicates the size of current stack frame. Note that a stack frame might have size 0.
+//   BOTTOM: None
+// TRANSFER:
+//    GEN: If a variable is pushed onto stack,
+//         - If it is %BP, delete the statement.
+//         - If it is not %BP and current stack frame size is 0, push %BP with offset 0 and 
+//           this variable with offset 1. Update current stack frame size to 2.
+//         - Otherwise, push variable to offset = current stack frame size, increment current stack frame size.
+//   KILL: If a variable is popped out from the stack,
+//         - if the current stack frame size is 0, delete the last entry in stack frame size
+//         - If it is %BP and current stack frame size is 0, remove the statement
+//         - If it is %BP and current stack frame size is 1, keep the statement and
+//           set current stack frame size to 0
+//         - If it is %BP and current stack frame is not 0 or 1, panic.
+//         - Otherwise, decrement current stack frame size, pop variable with offset = current stack frame size.
+//   PUSH: If we encounter an statement incrementing %SP:
+//         - If current stack frame size is 0, remove the statement and append 0 to stack frame size list
+//         - Otherwise, increment %SP by cur stack frame size instead and append 0 to stack frame size list
+// MEET:
+//    TOP meets anything else is always the other things
+//    Otherwise, MEET is defined only when all operands are identical
+
+// Given a statement, decide if it is of form %SP = %SP + x
+fn pmr_is_push(s: &Statement) -> bool {
+    if let Statement::Definition(d) = s {
+        if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
+            if a.id.value == "%SP".to_string() {
+                if let Expression::Binary(b) = &d.expression {
+                    if let Expression::Identifier(ie) = &*b.left {
+                        if ie.value == "%SP".to_string() && b.op == BinaryOperator::Add {
+                            return true;
+                        }
+                    }
+                }
+                panic!("Physical Memory Rearrangement failed: Unknown equation involving %SP")
+            }
+        }
+    }
+    return false;
+}
+
+// Given a statement, decide if it is of form %BP = %SP
+fn pmr_is_bp_update(s: &Statement) -> bool {
+    if let Statement::Definition(d) = s {
+        if let TypedIdentifierOrAssignee::TypedIdentifier(td) = &d.lhs[0] {
+            if td.identifier.value == "%BP".to_string() {
+                if let Expression::Identifier(ie) = &d.expression {
+                    if ie.value == "%SP".to_string() {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+fn phy_mem_rearrange<'ast>(
+    mut bls: Vec<Block<'ast>>,
+    predecessor_fn: &Vec<HashSet<usize>>,
+    successor_fn: &Vec<HashSet<usize>>,
+    entry_bls_fn: &HashSet<usize>
+) -> Vec<Block<'ast>> {
+    let mut visited: Vec<bool> = Vec::new();
+    // Since we are iterating each block at most once, there's no reason to keep track of in state
+    let mut bl_out: Vec<Vec<usize>> = Vec::new();
+    for _ in 0..bls.len() {
+        visited.push(false);
+        bl_out.push(Vec::new());
+    }
+
+    // This shouldn't happen
+    if entry_bls_fn.is_empty() { 
+        panic!("The program has no entry block!");
+    }
+    
+    // Start from exit block
+    let mut next_bls: VecDeque<usize> = VecDeque::new();
+    for eb in entry_bls_fn {
+        next_bls.push_back(*eb);
+    }
+    // Forward analysis!
+    while !next_bls.is_empty() {
+        let cur_bl = next_bls.pop_front().unwrap();
+
+        // No reason to ever visit the same block twice since there are no transition or meet
+        if !visited[cur_bl] {
+
+            let mut state: Vec<usize> = Vec::new();
+            // MEET with all predecessor
+            for p in &predecessor_fn[cur_bl] {
+                if state.len() == 0 {
+                    state = bl_out[*p].clone();
+                } else if bl_out[*p].len() != 0 && state != bl_out[*p] {
+                    panic!("Physical Memory Rearrangement failed: Stack frame size of blocks do not match.");
+                }
+            }
+
+            // Only possible if we are at entry states
+            if state.len() == 0 {
+                state = vec![0];
+            }
+
+            let _ = std::mem::replace(&mut visited[cur_bl], true);
+            let mut new_instructions = Vec::new();
+
+            // iterate through statements, keep track of the size of each stack frame
+            for i in bls[cur_bl].instructions.iter() {
+                let mut state_len = state.len() - 1;
+                match i {
+                    BlockContent::MemPush((var, _)) => {
+                        // Delay pushing %BP until we see the first non-BP push
+                        if var.to_string() != "%BP".to_string() {
+                            // Push %BP if this is the first push of the stack frame
+                            if state[state_len] == 0 {
+                                // %PHY[%SP + 0] = %BP
+                                new_instructions.push(BlockContent::MemPush(("%BP".to_string(), 0)));
+                                // %BP = %SP
+                                let bp_update_stmt = Statement::Definition(DefinitionStatement {
+                                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                        ty: Type::Basic(BasicType::Field(FieldType {
+                                            span: Span::new("", 0, 0).unwrap()
+                                        })),
+                                        identifier: IdentifierExpression {
+                                            value: "%BP".to_string(),
+                                            span: Span::new("", 0, 0).unwrap()
+                                        },
+                                        span: Span::new("", 0, 0).unwrap()
+                                    })],
+                                    expression: Expression::Identifier(IdentifierExpression {
+                                        value: "%SP".to_string(),
+                                        span: Span::new("", 0, 0).unwrap()
+                                    }),
+                                    span: Span::new("", 0, 0).unwrap()
+                                });
+                                new_instructions.push(BlockContent::Stmt(bp_update_stmt));
+                                // %PHY[%SP + 1] = var
+                                new_instructions.push(BlockContent::MemPush((var.to_string(), 1)));
+                                state[state_len] = 2;
+                            } else {
+                                new_instructions.push(BlockContent::MemPush((var.to_string(), state[state_len])));
+                                state[state_len] += 1;
+                            }
+                        }
+                    }
+                    BlockContent::MemPop((var, _)) => {
+                        // This is only possible if nothing was ever pushed to the current stack frame
+                        if state[state_len] == 0 {
+                            if state_len == 0 {
+                                panic!("Physical Memory Rearrangement failed: stack is empty but encountered a PUSH statement.")
+                            }
+                            state.pop();
+                            state_len -= 1;
+                        }
+                        if var.to_string() == "%BP".to_string() && state[state_len] > 1 {
+                            panic!("Physical Memory Rearrangement failed: %BP is not the last element to be pushed out.")
+                        } else if var.to_string() == "%BP".to_string() && state[state_len] == 1 {
+                            state[state_len] -= 1;
+                            new_instructions.push(BlockContent::MemPop(("%BP".to_string(), 0)));
+                        } else if var.to_string() != "%BP".to_string() {
+                            state[state_len] -= 1;
+                            new_instructions.push(BlockContent::MemPop((var.to_string(), state[state_len])));                         
+                        }
+                    }
+                    BlockContent::Stmt(s) => {
+                        if pmr_is_push(&s) {
+                            if state[state_len] != 0 {
+                                let sp_update_stmt = Statement::Definition(DefinitionStatement {
+                                    lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
+                                        id: IdentifierExpression {
+                                            value: "%SP".to_string(),
+                                            span: Span::new("", 0, 0).unwrap()
+                                        },
+                                        accesses: Vec::new(),
+                                        span: Span::new("", 0, 0).unwrap()
+                                    })],
+                                    expression: Expression::Binary(BinaryExpression {
+                                        op: BinaryOperator::Add,
+                                        left: Box::new(Expression::Identifier(IdentifierExpression {
+                                            value: "%SP".to_string(),
+                                            span: Span::new("", 0, 0).unwrap()
+                                        })),
+                                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                                            value: DecimalNumber {
+                                                value: state[state.len() - 1].to_string(),
+                                                span: Span::new("", 0, 0).unwrap()
+                                            },
+                                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                                span: Span::new("", 0, 0).unwrap()
+                                            })),
+                                            span: Span::new("", 0, 0).unwrap()
+                                        }))),
+                                        span: Span::new("", 0, 0).unwrap()
+                                    }),
+                                    span: Span::new("", 0, 0).unwrap()
+                                }); 
+                                new_instructions.push(BlockContent::Stmt(sp_update_stmt));                                 
+                            }
+                            state.push(0);
+                        } else {
+                            if !pmr_is_bp_update(&s) {
+                                new_instructions.push(i.clone());
+                            }
+                        }
+                    }
+                }
+            }
+
+            bls[cur_bl].instructions = new_instructions;
+            bl_out[cur_bl] = state;
+
+            // Block Transition
+            for tmp_bl in successor_fn[cur_bl].clone() {
+                next_bls.push_back(tmp_bl);
+            }
+        }  
+    }
+
+    return bls;
+}
+
+// EBE: Backward analysis
 // If a block is empty and its terminator is a coda (to another block or %RP)
 // replace all the reference to it in its predecessors with that terminator
 // If a block terminates with a branching and both branches to the same block, eliminate the branching
@@ -791,7 +1095,7 @@ fn empty_block_elimination(
     return (successor, predecessor, bls);
 }
 
-// Remove all the dead blocks in the list
+// DBE: Remove all the dead blocks in the list
 // Rename all block labels so that they are still consecutive
 // Return value: bls, entry_bl, exit_bl
 fn dead_block_elimination(

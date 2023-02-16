@@ -1,3 +1,8 @@
+// Multiple problems with liveness analysis:
+// A declaration is dead, but assignments are alive
+// PUSH is not equivalent to a change in scope. Instead of popping out the last state,
+// PUSH should result in the union of the last two states.
+
 use std::collections::VecDeque;
 use zokrates_pest_ast::*;
 use crate::front::zsharp::blocks::*;
@@ -539,10 +544,12 @@ fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
 //               we are doing backward analysis, so POP corresponds to extension of the state) 
 //         - otherwise, set the last bit to 0 and extend the state by another 0
 //   PUSH: If a variable is pushed onto stack,
-//         - remove the last bit of the variable state (again, we are doing things backwards)
-//         - the new state should not be TOP if each PUSH has a corresponding POP
-//         - if the last bit of the new state is 0, remove the statement
+//         - if there are less than 2 bits in the variable state, panic
+//         - if the second-to-last bit of the state is 0, remove the statement
 //               (need to deal with holes in physical memory later)
+//         - set the second-to-last bit to be the union of the last two bits,
+//           remove the last bit of the variable state
+//         - the new state should not be TOP if each PUSH has a corresponding POP
 // MEET:
 //    TOP meets anything else is always the other things
 //    If two variable states have the same length, their MEET is the pairwise union of the two lists
@@ -670,8 +677,14 @@ fn liveness_analysis<'ast>(
             for i in bls[cur_bl].instructions.iter().rev() {
                 match i {
                     BlockContent::MemPush((var, _)) => {
-                        // Pop the last state out
                         let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
+                        if v_state.len() < 2 {
+                            panic!("Liveness analysis failed: Stack frame size does not match number of PUSH.");
+                        }
+                        // Set the second-to-last state to be the union
+                        let v_state_len = v_state.len() - 1;
+                        v_state[v_state_len - 1] = v_state[v_state_len - 1] || v_state[v_state_len];
+                        // Pop the last state out
                         v_state.pop();
                         state.insert(var.to_string(), v_state);
                     }
@@ -738,14 +751,17 @@ fn liveness_analysis<'ast>(
             for i in bls[cur_bl].instructions.iter().rev() {
                 match i {
                     BlockContent::MemPush((var, _)) => {
-                        // Pop the last state out
                         let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
-                        v_state.pop();
-                        state.insert(var.to_string(), v_state);
-                        // If the new last state is 1, keep the instruction
-                        if is_alive(&state, var) || var.chars().next().unwrap() == '%' {
+                        // If the second-to-last state is 1, keep the instruction
+                        if v_state[v_state.len() - 2] || var.chars().next().unwrap() == '%' {
                             new_instructions.insert(0, i.clone());
                         }
+                        // Set the second-to-last state to be the union
+                        let v_state_len = v_state.len() - 1;
+                        v_state[v_state_len - 1] = v_state[v_state_len - 1] || v_state[v_state_len];
+                        // Pop the last state out
+                        v_state.pop();
+                        state.insert(var.to_string(), v_state);
                     }
                     BlockContent::MemPop((var, _)) => {
                         if is_alive(&state, var) || var.chars().next().unwrap() == '%' {
@@ -765,7 +781,6 @@ fn liveness_analysis<'ast>(
                         if kill.len() > 1 {
                             panic!("Assignment to multiple variables not supported");
                         }
-                        println!("{}, {:?}, {:?}, {:?}", cur_bl, kill, gen, state);
                         if kill.len() > 1 {
                             panic!("Assignment to multiple variables not supported");
                         }

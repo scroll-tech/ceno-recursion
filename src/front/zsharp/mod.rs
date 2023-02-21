@@ -88,11 +88,6 @@ impl ZSharpFE {
             println!("");
         }
         (blks, entry_bl) = blocks_optimization::optimize_block(blks, entry_bl);
-        println!("Entry block: {entry_bl}");      
-        for b in &blks {
-            b.pretty();
-            println!("");
-        }
         println!("\n\n--\nInterpretation:");
         g.bl_eval_const_entry_fn(entry_bl, &blks)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))

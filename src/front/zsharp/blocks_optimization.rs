@@ -62,12 +62,15 @@ fn print_cfg(
 
 pub fn optimize_block(
     mut bls: Vec<Block>,
-    mut entry_bl: usize
+    entry_bl: usize
 ) -> (Vec<Block>, usize) {
+    
     let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
         construct_flow_graph(&bls, entry_bl);
     print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
     println!("\n\n--\nOptimization:");
+    
+    /*
     bls = liveness_analysis(bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
     println!("\n\n--\nLiveness:");
     println!("Entry block: {entry_bl}");      
@@ -75,6 +78,7 @@ pub fn optimize_block(
         b.pretty();
         println!("");
     }
+
     bls = phy_mem_rearrange(bls, &predecessor_fn, &successor_fn, &entry_bls_fn);
     println!("\n\n--\nPMR:");
     println!("Entry block: {entry_bl}");      
@@ -82,6 +86,8 @@ pub fn optimize_block(
         b.pretty();
         println!("");
     }
+    */
+
     (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
     println!("\n\n--\nEBE:");
     println!("Entry block: {entry_bl}");      
@@ -89,12 +95,29 @@ pub fn optimize_block(
         b.pretty();
         println!("");
     }
-    (bls, entry_bl) = dead_block_elimination(bls, entry_bl, predecessor);
+
+    let var_list = get_read_in_vars(&bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
+
+    let (bls, entry_bl, label_map) = dead_block_elimination(bls, entry_bl, predecessor);
     println!("\n\n--\nDBE:");
     println!("Entry block: {entry_bl}");      
     for b in &bls {
         b.pretty();
         println!("");
+    }
+
+    // Reorganize var_list with new labels after DBE
+    // We are only doing this so we don't have to reconstruct CFG,
+    // which is more expensive at least at the moment
+    let mut new_var_list: Vec<HashSet<String>> = vec![HashSet::new(); bls.len() + 1];
+    for old_val in 0..var_list.len() {
+        let new_val = label_map.get(&old_val).unwrap();
+        new_var_list[*new_val] = var_list[old_val].clone();
+    }
+
+    println!("\n\n--\nRead-in Variables:");
+    for i in 0..bls.len() {
+        println!("{}: {:?}", i, new_var_list[i]);
     }
     return (bls, entry_bl);
 } 
@@ -1112,12 +1135,12 @@ fn empty_block_elimination(
 
 // DBE: Remove all the dead blocks in the list
 // Rename all block labels so that they are still consecutive
-// Return value: bls, entry_bl, exit_bl
+// Return value: bls, entry_bl, exit_bl, label_map
 fn dead_block_elimination(
     bls: Vec<Block>,
     entry_bl: usize,
     predecessor: Vec<HashSet<usize>>
-) -> (Vec<Block>, usize) {      
+) -> (Vec<Block>, usize, HashMap<usize, usize>) {      
     let old_size = bls.len();
     
     // Initialize map from old label of blocks to new labels
@@ -1160,5 +1183,81 @@ fn dead_block_elimination(
             new_bls[cur_bl].terminator = BlockTerminator::Transition(bl_trans_map(e, &label_map))
         }
     }
-    return (new_bls, new_entry_bl);
+    return (new_bls, new_entry_bl, label_map);
+}
+
+// For each block, record the set of variables that are alive during the input state of the block
+// Return: ret[i] is the list of variables alive before block i
+fn get_read_in_vars(
+    bls: &Vec<Block>,
+    successor_fn: &Vec<HashSet<usize>>,
+    predecessor_fn: &Vec<HashSet<usize>>,
+    exit_bls_fn: &HashSet<usize>
+) -> Vec<HashSet<String>> {
+
+    let mut visited: Vec<bool> = vec![false; bls.len()];
+    // MEET is union, so IN and OUT are Empty Set
+    let mut bl_in: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
+    let mut bl_out: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
+    
+    // Can this ever happen?
+    if exit_bls_fn.is_empty() { 
+        panic!("The program has no exit block!");
+    }
+    
+    // Start from exit block
+    let mut next_bls: VecDeque<usize> = VecDeque::new();
+    for eb in exit_bls_fn {
+        next_bls.push_back(*eb);
+    }
+    // Backward analysis!
+    while !next_bls.is_empty() {
+        let cur_bl = next_bls.pop_front().unwrap();
+
+        // State is the union of all successors and  exit condition
+        let mut state: HashSet<String> = HashSet::new();
+        for s in &successor_fn[cur_bl] {
+            state.extend(bl_in[*s].clone());
+        }
+        match &bls[cur_bl].terminator {
+            BlockTerminator::Transition(e) => { state.extend(expr_find_val(&e)); }
+            BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
+            BlockTerminator::ProgTerm() => {}            
+        }
+
+        // Only analyze if never visited before or OUT changes
+        if !visited[cur_bl] || state != bl_out[cur_bl] {
+            
+            bl_out[cur_bl] = state.clone();
+            let _ = std::mem::replace(&mut visited[cur_bl], true);
+
+            // KILL and GEN within the block
+            // We assume that liveness analysis has been performed, don't reason about usefulness of variables
+            for i in bls[cur_bl].instructions.iter().rev() {
+                match i {
+                    BlockContent::MemPush((var, _)) => {
+                        state.insert(var.to_string());
+                    }
+                    BlockContent::MemPop((var, _)) => {
+                        state.remove(&var.to_string());
+                    }
+                    BlockContent::Stmt(s) => {
+                        let (kill, gen) = stmt_find_val(&s);
+                        for k in kill {
+                            state.remove(&k.to_string());
+                        }
+                        state.extend(gen);
+                    }
+                }
+            }
+            bl_in[cur_bl] = state;
+
+            // Block Transition
+            for tmp_bl in predecessor_fn[cur_bl].clone() {
+                next_bls.push_back(tmp_bl);
+            }
+        }    
+    }
+
+    return bl_in;
 }

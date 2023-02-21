@@ -28,6 +28,7 @@ use crate::front::zsharp::bool;
 use crate::front::zsharp::Op;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::HashSet;
 use pest::Span;
 
 fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast>) -> Expression<'ast> {
@@ -1196,14 +1197,25 @@ impl<'ast> ZGen<'ast> {
     // I am hacking cvars_stack to do the interpretation. Ideally we want a separate var_table to do so.
     // We only need BTreeMap<String, T> to finish evaluation, so the 2 Vecs of cvars_stack should always have
     // size 1.
-    pub fn bl_eval_const_entry_fn(&self, entry_bl: usize, bls: &Vec<Block<'ast>>) -> Result<T, String> {
+    // Return values:
+    // ret[0]: the return value of the function
+    // ret[1][i]: how many times have block i been executed?
+    pub fn bl_eval_const_entry_fn(
+        &self, entry_bl: usize, 
+        bls: &Vec<Block<'ast>>
+    ) -> Result<(T, Vec<usize>), String> {
         // We assume that all errors has been handled in bl_gen functions        
         debug!("Block Eval Const entry: {}", entry_bl);
+
+        // bl_exec_count[i]: how many times have block i been executed?
+        let mut bl_exec_count: Vec<usize> = vec![0; bls.len()];
+
         self.cvar_enter_function();
         let mut nb = entry_bl;
         let mut phy_mem: Vec<T> = Vec::new();
         let mut terminated = false;
         while !terminated {
+            bl_exec_count[nb] += 1;
             self.print_all_vars_in_scope();
             print!("%PHY: [");
             for c in &phy_mem {
@@ -1217,9 +1229,11 @@ impl<'ast> ZGen<'ast> {
 
         // Return value is just the value of the variable called "%RET"
         // Type of return value is checked during assignment
-        self.cvar_lookup("%RET").ok_or(format!(
+        let ret = self.cvar_lookup("%RET").ok_or(format!(
             "Missing return value for one or more functions."
-        ))
+        ));
+
+        Ok((ret?, bl_exec_count))
     }
 
     // Return type:
@@ -1347,5 +1361,40 @@ impl<'ast> ZGen<'ast> {
             BlockTerminator::FuncCall(fc) => Err(format!("Evaluation failed: function call to {} needs to be converted to block label.", fc)),
             BlockTerminator::ProgTerm() => Ok((0, phy_mem, true))
         }
+    }
+}
+
+pub fn generate_runtime_data(len: usize, bl_exec_count: Vec<usize>, var_list: Vec<HashSet<String>>) {    
+
+    println!("\n\n--\nVariable Reference:");
+    for i in 0..len {
+        println!("{}: {:?}", i, var_list[i]);
+    }
+
+    println!("\n\n--\nRuntime Data:");
+    let bl_var_count: Vec<usize> = var_list.iter().map(|x| x.len()).collect();
+
+    println!("\nBlock\t# Exec\t# Input");
+
+    for i in 0..len {
+        println!("{}\t{}\t{}", i, bl_exec_count[i], bl_var_count[i]);
+    }
+
+    let mut total_var_list = HashSet::new();
+    for vl in &var_list {
+        total_var_list.extend(vl.clone());
+    }
+
+    println!("\nVar\t # Blk\t# Exec");
+    for v in total_var_list {
+        let mut bl_app = 0;
+        let mut ex_app = 0;
+        for i in 0..len {
+            if var_list[i].contains(&v) {
+                bl_app += 1;
+                ex_app += bl_exec_count[i];
+            }
+        }
+        println!("{}\t{}\t{}", v, bl_app, ex_app);
     }
 }

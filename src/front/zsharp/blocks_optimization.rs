@@ -63,7 +63,7 @@ fn print_cfg(
 pub fn optimize_block(
     mut bls: Vec<Block>,
     entry_bl: usize
-) -> (Vec<Block>, usize) {
+) -> (Vec<Block>, usize, Vec<HashSet<String>>) {
     
     let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
         construct_flow_graph(&bls, entry_bl);
@@ -115,11 +115,7 @@ pub fn optimize_block(
         new_var_list[*new_val] = var_list[old_val].clone();
     }
 
-    println!("\n\n--\nRead-in Variables:");
-    for i in 0..bls.len() {
-        println!("{}: {:?}", i, new_var_list[i]);
-    }
-    return (bls, entry_bl);
+    (bls, entry_bl, new_var_list)
 } 
 
 // If bc is a statement of form %RP = val,

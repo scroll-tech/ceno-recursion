@@ -81,16 +81,18 @@ impl ZSharpFE {
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
         // g.const_entry_fn("main")
-        let (mut blks, mut entry_bl) = g.bl_gen_const_entry_fn("main");
+        let (blks, entry_bl) = g.bl_gen_const_entry_fn("main");
         println!("Entry block: {entry_bl}");
         for b in &blks {
             b.pretty();
             println!("");
         }
-        (blks, entry_bl) = blocks_optimization::optimize_block(blks, entry_bl);
+        let (blks, entry_bl, var_list) = blocks_optimization::optimize_block(blks, entry_bl);
         println!("\n\n--\nInterpretation:");
-        g.bl_eval_const_entry_fn(entry_bl, &blks)
-        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))
+        let (ret, bl_exec_count) = g.bl_eval_const_entry_fn(entry_bl, &blks)
+        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+        blocks::generate_runtime_data(blks.len(), bl_exec_count, var_list);
+        return ret;
     }
 }
 

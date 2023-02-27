@@ -70,7 +70,6 @@ pub fn optimize_block(
     print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
     println!("\n\n--\nOptimization:");
     
-    /*
     bls = liveness_analysis(bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
     println!("\n\n--\nLiveness:");
     println!("Entry block: {entry_bl}");      
@@ -86,7 +85,8 @@ pub fn optimize_block(
         b.pretty();
         println!("");
     }
-    */
+
+    let var_list = get_read_in_vars(&bls, &successor, &predecessor, &exit_bls);
 
     (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
     println!("\n\n--\nEBE:");
@@ -95,8 +95,6 @@ pub fn optimize_block(
         b.pretty();
         println!("");
     }
-
-    let var_list = get_read_in_vars(&bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
 
     let (bls, entry_bl, label_map) = dead_block_elimination(bls, entry_bl, predecessor);
     println!("\n\n--\nDBE:");
@@ -451,6 +449,200 @@ fn construct_flow_graph(
     return (successor, predecessor, exit_bls, entry_bl_fn, successor_fn, predecessor_fn, exit_bls_fn);
 }
 
+/*
+// MEET of unfold_scoping
+fn us_meet(
+    first: &HashMap<String, usize>,
+    second: &HashMap<String, usize>
+) -> HashMap<String, usize> {
+    let mut third = first.clone();
+    for (var, state_sec) in second.iter() {
+        if let Some(state_fst) = third.get(var) {
+            if state_fst != state_sec {
+                panic!("Scope unfolding MEET fails: variable {} has different scoping:\nFirst state is {:?}\nSecond state is {:?}\n", var, state_fst, state_sec)
+            }
+        } else {
+            third.insert(var.to_string(), *state_sec);
+        }
+    }
+    third
+}
+
+// Unfold scoping in an expression
+// Whenever we meet a variable X, if scope_map contains X and scope_map[X] = Y, update X to X@Y
+// otherwise, update X to X@0
+fn us_update_expr(e: &Expression, scope_map: HashMap<String, usize>) -> Expression {
+    match e {
+        Expression::Ternary(t) => {
+            Expression::Ternary(TernaryExpression {
+                first: Box::new(us_update_expr(&t.first, scope_map)),
+                second: Box::new(us_update_expr(&t.second, scope_map)),
+                third: Box::new(us_update_expr(&t.third, scope_map)),
+                span: t.span.clone()
+            })
+        }
+        Expression::Binary(b) => {
+            Expression::Binary(BinaryExpression {
+                op: b.op.clone(),
+                left: Box::new(us_update_expr(&b.left, scope_map)),
+                right: Box::new(us_update_expr(&b.right, scope_map)),
+                span: b.span.clone()
+            })
+        }
+        Expression::Unary(u) => {
+            Expression::Unary(UnaryExpression {
+                op: u.op.clone(),
+                expression: Box::new(us_update_expr(&u.expression, scope_map)),
+                span: u.span.clone()
+            })
+        }
+        Expression::Postfix(p) => {
+            let mut new_accesses = Vec::new();
+            for aa in &p.accesses {
+                if let Access::Select(a) = aa {
+                    if let RangeOrExpression::Expression(e) = &a.expression {
+                        new_accesses.push(Access::Select(RangeOrExpression::Expression(us_update_expr(&a.expression, scope_map))));
+                    } else {
+                        panic!("Range access not supported.")
+                    }
+                } else {
+                    panic!("Unsupported membership access.")
+                }
+            }
+            Expression::Postfix(PostfixExpression {
+                id: us_update_id_expr(&p.id, scope_map),
+                accesses: new_accesses,
+                span: p.span.clone()
+            })
+        }
+        Expression::Identifier(i) => {
+            Expression::Identifier(us_update_id_expr(&i, scope_map))
+        }
+        Expression::Literal(_) => {
+            e.clone()
+        }
+        _ => {
+            panic!("Unsupported Expression.");
+        }
+    }
+}
+
+fn us_update_id_expr(ie: &IdentifierExpression, scope_map: HashMap<String, usize>) -> IdentifierExpression {
+    IdentifierExpression {
+        value: format!("{}@{}", ie.value.to_string(), scope_map.get(ie.value).unwrap_or_else(0).to_string()),
+        span: ie.span.clone()
+    }
+}
+
+// Transform scoping into SSA-like format where each variable at each scope will have a different name
+// For instance, variable A at scope 5 will have name A@5
+// Variable state is a mapping from variable names to their current scope (string -> usize)
+// Scoping state is a mapping from variable names to whether they have just been pushed (string -> bool)
+//   if scoping state returns true, the next declaration is a scope change, so we need to increment scope count
+//   otherwise, the next declaration is a shadowing
+//   we do not allow re-assignment in any circumstance
+fn unfold_scoping(
+    mut bls: Vec<Block<'ast>>,
+    predecessor_fn: &Vec<HashSet<usize>>,
+    successor_fn: &Vec<HashSet<usize>>,
+    entry_bls_fn: &HashSet<usize>
+) -> Vec<Block<'ast>> {
+
+    let mut visited: Vec<bool> = vec![false; bls.len()];
+    // MEET is union, so OUT is Empty Set
+    let mut bl_out: Vec<HashMap<String, usize>> = vec![HashMap::new(); bls.len()];
+    
+    // Can this ever happen?
+    if entry_bls_fn.is_empty() { 
+        panic!("The program has no entry block!");
+    }
+    
+    // Start from entry block
+    let mut next_bls: VecDeque<usize> = VecDeque::new();
+    for eb in entry_bls_fn {
+        next_bls.push_back(*eb);
+    }
+    // Forward analysis!
+    while !next_bls.is_empty() {
+        let cur_bl = next_bls.pop_front().unwrap();
+
+        // State is the Union of all predecessors
+        let mut state: HashMap<String, usize> = HashMap::new();
+        for s in &predecessor_fn[cur_bl] {
+            state = us_meet(&state, &bl_out[*s]);
+        }
+
+        // Only need to visit every block once
+        if !visited[cur_bl] {
+            
+            bl_in[cur_bl] = state.clone();
+            visited[cur_bl] = true;
+
+            // KILL and GEN within the block
+            for i in bls[cur_bl].instructions.iter().rev() {
+                match i {
+                    BlockContent::MemPush((var, _)) => {
+                        let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
+                        if v_state.len() < 2 {
+                            panic!("Liveness analysis failed: Stack frame size does not match number of PUSH.");
+                        }
+                        // Set the second-to-last state to be the union
+                        let v_state_len = v_state.len() - 1;
+                        v_state[v_state_len - 1] = v_state[v_state_len - 1] || v_state[v_state_len];
+                        // Pop the last state out
+                        v_state.pop();
+                        state.insert(var.to_string(), v_state);
+                    }
+                    BlockContent::MemPop((var, _)) => {
+                        match state.get(var) {
+                            None => { state.insert(var.to_string(), vec![false, false]); }
+                            Some(_) => {
+                                let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
+                                v_state.push(false);
+                                state.insert(var.to_string(), v_state);
+                            }
+                        }
+                    }
+                    BlockContent::Stmt(s) => {
+                        let (kill, gen) = stmt_find_val(s);
+                        // If it's not a definition or the defined variable is alive,
+                        // or if it involves register value (%RP, %BP, %SP, %RET, %ARG)
+                        // mark the variable dead and append gen to state
+                        // Otherwise remove the statement
+                        let mut contains_reg = kill.iter().fold(false, |c, x| c || x.chars().next().unwrap() == '%');
+                        contains_reg = gen.iter().fold(contains_reg, |c, x| c || x.chars().next().unwrap() == '%');
+                        
+                        if kill.is_empty() || kill.iter().fold(false, |c, x| c || is_alive(&state, x)) || contains_reg {
+                            // Remove kill from state
+                            state = la_kill(state, &kill);
+
+                            // Add all gens to state
+                            state = la_gen(state, &gen);
+                        }
+                    }
+                }
+            }
+            bl_in[cur_bl] = state;
+
+            // Update Terminator
+            match &bls[cur_bl].terminator {
+                BlockTerminator::Transition(e) => { state = la_gen(state, &expr_find_val(e)); }
+                BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
+                BlockTerminator::ProgTerm() => {}            
+            }
+
+            // Block Transition
+            for tmp_bl in predecessor_fn[cur_bl].clone() {
+                next_bls.push_back(tmp_bl);
+            }
+        }
+
+    }
+    return bls;
+}
+
+*/
+
 // Given an expression, find all variables it references
 fn expr_find_val(e: &Expression) -> HashSet<String> {
     match e {
@@ -690,7 +882,7 @@ fn liveness_analysis<'ast>(
         if !visited[cur_bl] || state != bl_out[cur_bl] {
             
             bl_out[cur_bl] = state.clone();
-            let _ = std::mem::replace(&mut visited[cur_bl], true);
+            visited[cur_bl] = true;
 
             // KILL and GEN within the block
             for i in bls[cur_bl].instructions.iter().rev() {
@@ -762,7 +954,7 @@ fn liveness_analysis<'ast>(
         // Only visit each block once
         if !visited[cur_bl] {
             
-            let _ = std::mem::replace(&mut visited[cur_bl], true);
+            visited[cur_bl] = true;
             let mut new_instructions = Vec::new();
 
             // KILL and GEN within the block
@@ -943,7 +1135,7 @@ fn phy_mem_rearrange<'ast>(
                 state = vec![0];
             }
 
-            let _ = std::mem::replace(&mut visited[cur_bl], true);
+            visited[cur_bl] = true;
             let mut new_instructions = Vec::new();
 
             // iterate through statements, keep track of the size of each stack frame
@@ -1186,9 +1378,9 @@ fn dead_block_elimination(
 // Return: ret[i] is the list of variables alive before block i
 fn get_read_in_vars(
     bls: &Vec<Block>,
-    successor_fn: &Vec<HashSet<usize>>,
-    predecessor_fn: &Vec<HashSet<usize>>,
-    exit_bls_fn: &HashSet<usize>
+    successor: &Vec<HashSet<usize>>,
+    predecessor: &Vec<HashSet<usize>>,
+    exit_bls: &HashSet<usize>
 ) -> Vec<HashSet<String>> {
 
     let mut visited: Vec<bool> = vec![false; bls.len()];
@@ -1197,13 +1389,13 @@ fn get_read_in_vars(
     let mut bl_out: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
     
     // Can this ever happen?
-    if exit_bls_fn.is_empty() { 
+    if exit_bls.is_empty() { 
         panic!("The program has no exit block!");
     }
     
     // Start from exit block
     let mut next_bls: VecDeque<usize> = VecDeque::new();
-    for eb in exit_bls_fn {
+    for eb in exit_bls {
         next_bls.push_back(*eb);
     }
     // Backward analysis!
@@ -1212,7 +1404,7 @@ fn get_read_in_vars(
 
         // State is the union of all successors and  exit condition
         let mut state: HashSet<String> = HashSet::new();
-        for s in &successor_fn[cur_bl] {
+        for s in &successor[cur_bl] {
             state.extend(bl_in[*s].clone());
         }
         match &bls[cur_bl].terminator {
@@ -1225,7 +1417,7 @@ fn get_read_in_vars(
         if !visited[cur_bl] || state != bl_out[cur_bl] {
             
             bl_out[cur_bl] = state.clone();
-            let _ = std::mem::replace(&mut visited[cur_bl], true);
+            visited[cur_bl] = true;
 
             // KILL and GEN within the block
             // We assume that liveness analysis has been performed, don't reason about usefulness of variables
@@ -1249,7 +1441,7 @@ fn get_read_in_vars(
             bl_in[cur_bl] = state;
 
             // Block Transition
-            for tmp_bl in predecessor_fn[cur_bl].clone() {
+            for tmp_bl in predecessor[cur_bl].clone() {
                 next_bls.push_back(tmp_bl);
             }
         }    

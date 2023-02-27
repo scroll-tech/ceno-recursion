@@ -522,6 +522,7 @@ impl<'ast> ZGen<'ast> {
     }
 
     // Generate blocks from statements
+    // Convert all assignments to declaration, they should behave the same since we don't have scoping.
     // Return value:
     // result[0]: list of blocks generated so far
     // result[1]: length of the generated blocks
@@ -739,6 +740,7 @@ impl<'ast> ZGen<'ast> {
                 assert!(d.lhs.len() <= 1);
 
                 // Evaluate function calls in expression
+                let mut lhs_expr = d.lhs.clone();
                 let rhs_expr: Expression;
                 (blks, blks_len, func_phy_assign, sp_offset, rhs_expr, _) =
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &d.expression, func_phy_assign, sp_offset, 0)?;
@@ -753,6 +755,17 @@ impl<'ast> ZGen<'ast> {
                             let name = &l.id.value;
                             let _ = self.cvar_lookup(name)
                                     .ok_or_else(|| format!("Assignment failed: no const variable {}", name))?;
+                            
+                            
+                            /*
+                            // Convert the assignee to a declaration
+                            lhs_expr = TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                ty: 
+                                identifier: l.id.clone(),
+                                span: Span::new("", 0, 0).unwrap()
+                            });
+                            */
+                            
                         }
                         TypedIdentifierOrAssignee::TypedIdentifier(l) => {
                             let decl_ty = self.type_impl_::<true>(&l.ty)?;
@@ -780,7 +793,7 @@ impl<'ast> ZGen<'ast> {
                     warn!("Statement with no LHS!");
                 }
                 let new_stmt = Statement::Definition(DefinitionStatement {
-                    lhs: d.lhs.clone(),
+                    lhs: lhs_expr,
                     expression: rhs_expr,
                     span: Span::new("", 0, 0).unwrap()
                 });
@@ -1374,18 +1387,23 @@ pub fn generate_runtime_data(len: usize, bl_exec_count: Vec<usize>, var_list: Ve
     println!("\n\n--\nRuntime Data:");
     let bl_var_count: Vec<usize> = var_list.iter().map(|x| x.len()).collect();
 
-    println!("\nBlock\t# Exec\t# Input");
+    println!("\nBlock\t# Exec\t# Param");
+    let mut t_exec_count = 0;
+    let mut t_var_count = 0;
 
     for i in 0..len {
         println!("{}\t{}\t{}", i, bl_exec_count[i], bl_var_count[i]);
+        t_exec_count += bl_exec_count[i];
+        t_var_count += bl_var_count[i];
     }
+    println!("T\t{}\t{}", t_exec_count, t_var_count);
 
     let mut total_var_list = HashSet::new();
     for vl in &var_list {
         total_var_list.extend(vl.clone());
     }
 
-    println!("\nVar\t # Blk\t# Exec");
+    println!("\nVar\t# Blk\t# Exec");
     for v in total_var_list {
         let mut bl_app = 0;
         let mut ex_app = 0;

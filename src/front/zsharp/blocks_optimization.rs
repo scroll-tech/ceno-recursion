@@ -8,6 +8,7 @@ use zokrates_pest_ast::*;
 use crate::front::zsharp::blocks::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use regex::Regex;
 
 fn print_cfg(
     successor: &Vec<HashSet<usize>>,
@@ -60,10 +61,11 @@ fn print_cfg(
     println!();
 }
 
-pub fn optimize_block(
+// Returns: Blocks, entry block, map from blocks to vars, # of registers
+pub fn optimize_block<const VERBOSE: bool>(
     mut bls: Vec<Block>,
     entry_bl: usize
-) -> (Vec<Block>, usize, Vec<HashSet<String>>) {
+) -> (Vec<Block>, usize, Vec<HashSet<String>>, usize) {
     
     let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
         construct_flow_graph(&bls, entry_bl);
@@ -71,34 +73,53 @@ pub fn optimize_block(
     println!("\n\n--\nOptimization:");
     
     bls = liveness_analysis(bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
-    println!("\n\n--\nLiveness:");
-    println!("Entry block: {entry_bl}");      
-    for b in &bls {
-        b.pretty();
-        println!("");
+    if VERBOSE {
+        println!("\n\n--\nLiveness:");
+        println!("Entry block: {entry_bl}");      
+        for b in &bls {
+            b.pretty();
+            println!("");
+        }
     }
 
     bls = phy_mem_rearrange(bls, &predecessor_fn, &successor_fn, &entry_bls_fn);
-    println!("\n\n--\nPMR:");
-    println!("Entry block: {entry_bl}");      
-    for b in &bls {
-        b.pretty();
-        println!("");
+    if VERBOSE {
+        println!("\n\n--\nPMR:");
+        println!("Entry block: {entry_bl}");      
+        for b in &bls {
+            b.pretty();
+            println!("");
+        }
     }
 
     let var_list = get_read_in_vars(&bls, &successor, &predecessor, &exit_bls);
 
     (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
-    println!("\n\n--\nEBE:");
-    println!("Entry block: {entry_bl}");      
-    for b in &bls {
-        b.pretty();
-        println!("");
+    if VERBOSE {
+        println!("\n\n--\nEBE:");
+        println!("Entry block: {entry_bl}");      
+        for b in &bls {
+            b.pretty();
+            println!("");
+        }
     }
 
     let (bls, entry_bl, label_map) = dead_block_elimination(bls, entry_bl, predecessor);
-    println!("\n\n--\nDBE:");
-    println!("Entry block: {entry_bl}");      
+    if VERBOSE {
+        println!("\n\n--\nDBE:");
+        println!("Entry block: {entry_bl}");      
+        for b in &bls {
+            b.pretty();
+            println!("");
+        }
+    }
+
+    let (bls, reg_map, reg_size) = var_to_reg(bls);
+    if VERBOSE {
+        println!("\n\n--\nVar -> Reg:");
+        println!("Var -> Reg map: {:?}", reg_map);
+    }
+    println!("Entry block: {entry_bl}");   
     for b in &bls {
         b.pretty();
         println!("");
@@ -113,7 +134,7 @@ pub fn optimize_block(
         new_var_list[*new_val] = var_list[old_val].clone();
     }
 
-    (bls, entry_bl, new_var_list)
+    (bls, entry_bl, new_var_list, reg_size)
 } 
 
 // If bc is a statement of form %RP = val,
@@ -448,200 +469,6 @@ fn construct_flow_graph(
     }
     return (successor, predecessor, exit_bls, entry_bl_fn, successor_fn, predecessor_fn, exit_bls_fn);
 }
-
-/*
-// MEET of unfold_scoping
-fn us_meet(
-    first: &HashMap<String, usize>,
-    second: &HashMap<String, usize>
-) -> HashMap<String, usize> {
-    let mut third = first.clone();
-    for (var, state_sec) in second.iter() {
-        if let Some(state_fst) = third.get(var) {
-            if state_fst != state_sec {
-                panic!("Scope unfolding MEET fails: variable {} has different scoping:\nFirst state is {:?}\nSecond state is {:?}\n", var, state_fst, state_sec)
-            }
-        } else {
-            third.insert(var.to_string(), *state_sec);
-        }
-    }
-    third
-}
-
-// Unfold scoping in an expression
-// Whenever we meet a variable X, if scope_map contains X and scope_map[X] = Y, update X to X@Y
-// otherwise, update X to X@0
-fn us_update_expr(e: &Expression, scope_map: HashMap<String, usize>) -> Expression {
-    match e {
-        Expression::Ternary(t) => {
-            Expression::Ternary(TernaryExpression {
-                first: Box::new(us_update_expr(&t.first, scope_map)),
-                second: Box::new(us_update_expr(&t.second, scope_map)),
-                third: Box::new(us_update_expr(&t.third, scope_map)),
-                span: t.span.clone()
-            })
-        }
-        Expression::Binary(b) => {
-            Expression::Binary(BinaryExpression {
-                op: b.op.clone(),
-                left: Box::new(us_update_expr(&b.left, scope_map)),
-                right: Box::new(us_update_expr(&b.right, scope_map)),
-                span: b.span.clone()
-            })
-        }
-        Expression::Unary(u) => {
-            Expression::Unary(UnaryExpression {
-                op: u.op.clone(),
-                expression: Box::new(us_update_expr(&u.expression, scope_map)),
-                span: u.span.clone()
-            })
-        }
-        Expression::Postfix(p) => {
-            let mut new_accesses = Vec::new();
-            for aa in &p.accesses {
-                if let Access::Select(a) = aa {
-                    if let RangeOrExpression::Expression(e) = &a.expression {
-                        new_accesses.push(Access::Select(RangeOrExpression::Expression(us_update_expr(&a.expression, scope_map))));
-                    } else {
-                        panic!("Range access not supported.")
-                    }
-                } else {
-                    panic!("Unsupported membership access.")
-                }
-            }
-            Expression::Postfix(PostfixExpression {
-                id: us_update_id_expr(&p.id, scope_map),
-                accesses: new_accesses,
-                span: p.span.clone()
-            })
-        }
-        Expression::Identifier(i) => {
-            Expression::Identifier(us_update_id_expr(&i, scope_map))
-        }
-        Expression::Literal(_) => {
-            e.clone()
-        }
-        _ => {
-            panic!("Unsupported Expression.");
-        }
-    }
-}
-
-fn us_update_id_expr(ie: &IdentifierExpression, scope_map: HashMap<String, usize>) -> IdentifierExpression {
-    IdentifierExpression {
-        value: format!("{}@{}", ie.value.to_string(), scope_map.get(ie.value).unwrap_or_else(0).to_string()),
-        span: ie.span.clone()
-    }
-}
-
-// Transform scoping into SSA-like format where each variable at each scope will have a different name
-// For instance, variable A at scope 5 will have name A@5
-// Variable state is a mapping from variable names to their current scope (string -> usize)
-// Scoping state is a mapping from variable names to whether they have just been pushed (string -> bool)
-//   if scoping state returns true, the next declaration is a scope change, so we need to increment scope count
-//   otherwise, the next declaration is a shadowing
-//   we do not allow re-assignment in any circumstance
-fn unfold_scoping(
-    mut bls: Vec<Block<'ast>>,
-    predecessor_fn: &Vec<HashSet<usize>>,
-    successor_fn: &Vec<HashSet<usize>>,
-    entry_bls_fn: &HashSet<usize>
-) -> Vec<Block<'ast>> {
-
-    let mut visited: Vec<bool> = vec![false; bls.len()];
-    // MEET is union, so OUT is Empty Set
-    let mut bl_out: Vec<HashMap<String, usize>> = vec![HashMap::new(); bls.len()];
-    
-    // Can this ever happen?
-    if entry_bls_fn.is_empty() { 
-        panic!("The program has no entry block!");
-    }
-    
-    // Start from entry block
-    let mut next_bls: VecDeque<usize> = VecDeque::new();
-    for eb in entry_bls_fn {
-        next_bls.push_back(*eb);
-    }
-    // Forward analysis!
-    while !next_bls.is_empty() {
-        let cur_bl = next_bls.pop_front().unwrap();
-
-        // State is the Union of all predecessors
-        let mut state: HashMap<String, usize> = HashMap::new();
-        for s in &predecessor_fn[cur_bl] {
-            state = us_meet(&state, &bl_out[*s]);
-        }
-
-        // Only need to visit every block once
-        if !visited[cur_bl] {
-            
-            bl_in[cur_bl] = state.clone();
-            visited[cur_bl] = true;
-
-            // KILL and GEN within the block
-            for i in bls[cur_bl].instructions.iter().rev() {
-                match i {
-                    BlockContent::MemPush((var, _)) => {
-                        let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
-                        if v_state.len() < 2 {
-                            panic!("Liveness analysis failed: Stack frame size does not match number of PUSH.");
-                        }
-                        // Set the second-to-last state to be the union
-                        let v_state_len = v_state.len() - 1;
-                        v_state[v_state_len - 1] = v_state[v_state_len - 1] || v_state[v_state_len];
-                        // Pop the last state out
-                        v_state.pop();
-                        state.insert(var.to_string(), v_state);
-                    }
-                    BlockContent::MemPop((var, _)) => {
-                        match state.get(var) {
-                            None => { state.insert(var.to_string(), vec![false, false]); }
-                            Some(_) => {
-                                let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
-                                v_state.push(false);
-                                state.insert(var.to_string(), v_state);
-                            }
-                        }
-                    }
-                    BlockContent::Stmt(s) => {
-                        let (kill, gen) = stmt_find_val(s);
-                        // If it's not a definition or the defined variable is alive,
-                        // or if it involves register value (%RP, %BP, %SP, %RET, %ARG)
-                        // mark the variable dead and append gen to state
-                        // Otherwise remove the statement
-                        let mut contains_reg = kill.iter().fold(false, |c, x| c || x.chars().next().unwrap() == '%');
-                        contains_reg = gen.iter().fold(contains_reg, |c, x| c || x.chars().next().unwrap() == '%');
-                        
-                        if kill.is_empty() || kill.iter().fold(false, |c, x| c || is_alive(&state, x)) || contains_reg {
-                            // Remove kill from state
-                            state = la_kill(state, &kill);
-
-                            // Add all gens to state
-                            state = la_gen(state, &gen);
-                        }
-                    }
-                }
-            }
-            bl_in[cur_bl] = state;
-
-            // Update Terminator
-            match &bls[cur_bl].terminator {
-                BlockTerminator::Transition(e) => { state = la_gen(state, &expr_find_val(e)); }
-                BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-                BlockTerminator::ProgTerm() => {}            
-            }
-
-            // Block Transition
-            for tmp_bl in predecessor_fn[cur_bl].clone() {
-                next_bls.push_back(tmp_bl);
-            }
-        }
-
-    }
-    return bls;
-}
-
-*/
 
 // Given an expression, find all variables it references
 fn expr_find_val(e: &Expression) -> HashSet<String> {
@@ -1448,4 +1275,231 @@ fn get_read_in_vars(
     }
 
     return bl_in;
+}
+
+// Test if variable is %SP, %BP, %RP, %RET, or %ARGx
+fn reserved_variable(var: String) -> bool {
+    let arg_match = Regex::new(r"%ARG\d").unwrap();
+    var == "%SP" || var == "%BP" || var == "%RP" || var == "%RET" || arg_match.is_match(&var)
+}
+
+// Turn all variables in an expression to a register reference
+// Whenever we meet a variable X, if reg_map contains X and scope_map[X] = Y, update X to %Y
+// otherwise, update X to %<reg_size>, add (X, reg_size) to reg_map, and increment reg_size by 1
+// Returns the new expression, new reg_map, and new reg_size
+fn var_to_reg_expr<'ast>(
+    e: &Expression<'ast>, 
+    mut reg_map: HashMap<String, usize>, 
+    mut reg_size: usize
+) -> (Expression<'ast>, HashMap<String, usize>, usize) {
+    match e {
+        Expression::Ternary(t) => {
+            let new_first: Expression;
+            let new_second: Expression;
+            let new_third: Expression;
+            (new_first, reg_map, reg_size) = var_to_reg_expr(&t.first, reg_map, reg_size);
+            (new_second, reg_map, reg_size) = var_to_reg_expr(&t.second, reg_map, reg_size);
+            (new_third, reg_map, reg_size) = var_to_reg_expr(&t.third, reg_map, reg_size);
+            return (Expression::Ternary(TernaryExpression {
+                first: Box::new(new_first),
+                second: Box::new(new_second),
+                third: Box::new(new_third),
+                span: t.span
+            }), reg_map, reg_size);
+        }
+        Expression::Binary(b) => {
+            let new_left: Expression;
+            let new_right: Expression;
+            (new_left, reg_map, reg_size) = var_to_reg_expr(&b.left, reg_map, reg_size);
+            (new_right, reg_map, reg_size) = var_to_reg_expr(&b.right, reg_map, reg_size);
+            return (Expression::Binary(BinaryExpression {
+                op: b.op.clone(),
+                left: Box::new(new_left),
+                right: Box::new(new_right),
+                span: b.span
+            }), reg_map, reg_size);
+        }
+        Expression::Unary(u) => {
+            let new_expr: Expression;
+            (new_expr, reg_map, reg_size) = var_to_reg_expr(&u.expression, reg_map, reg_size);
+            return (Expression::Unary(UnaryExpression {
+                op: u.op.clone(),
+                expression: Box::new(new_expr),
+                span: u.span
+            }), reg_map, reg_size);
+        }
+        Expression::Postfix(p) => {
+            let mut new_accesses = Vec::new();
+            for aa in &p.accesses {
+                if let Access::Select(a) = aa {
+                    if let RangeOrExpression::Expression(e) = &a.expression {
+                        let new_expr: Expression;
+                        (new_expr, reg_map, reg_size) = var_to_reg_expr(&e, reg_map, reg_size);
+                        new_accesses.push(Access::Select(ArrayAccess {
+                            expression: RangeOrExpression::Expression(new_expr),
+                            span: a.span
+                        }));
+                    } else {
+                        panic!("Range access not supported.")
+                    }
+                } else {
+                    panic!("Unsupported membership access.")
+                }
+            }
+            let new_id_expr: IdentifierExpression;
+            (new_id_expr, reg_map, reg_size) = var_to_reg_id_expr(&p.id, reg_map, reg_size);
+            return (Expression::Postfix(PostfixExpression {
+                id: new_id_expr,
+                accesses: new_accesses,
+                span: p.span
+            }), reg_map, reg_size);
+        }
+        Expression::Identifier(i) => {
+            let new_id_expr: IdentifierExpression;
+            (new_id_expr, reg_map, reg_size) = var_to_reg_id_expr(&i, reg_map, reg_size);
+            return (Expression::Identifier(new_id_expr), reg_map, reg_size);
+        }
+        Expression::Literal(_) => {
+            return (e.clone(), reg_map, reg_size);
+        }
+        _ => {
+            panic!("Unsupported Expression.");
+        }
+    };
+}
+
+fn var_to_reg_id_expr<'ast>(
+    ie: &IdentifierExpression<'ast>, 
+    mut reg_map: HashMap<String, usize>,
+    mut reg_size: usize
+) -> (IdentifierExpression<'ast>, HashMap<String, usize>, usize) {
+    if reserved_variable(ie.value.to_string()) {
+        return (ie.clone(), reg_map, reg_size);
+    }
+    if !reg_map.contains_key(&ie.value) {
+        reg_map.insert(ie.value.clone(), reg_size);
+        reg_size += 1;
+    }
+    (IdentifierExpression {
+        value: format!("%{}", reg_map.get(&ie.value).unwrap()),
+        span: ie.span
+    }, reg_map, reg_size)
+}
+
+// Convert all mentionings of variables to registers
+// Currently we take the dumbest approach: whenever we meet a new variable, assign a new register to it
+// No control flow, iterate over blocks directly
+// Returns the new blocks, register map, and # of registers used
+fn var_to_reg(
+    mut bls: Vec<Block>
+) -> (Vec<Block>, HashMap<String, usize>, usize) {
+    let mut reg_map: HashMap<String, usize> = HashMap::new();
+    // Reserve register 0 - 3 to %SP, %BP, %RP, and %RET (unordered)
+    // We decide the order of them in prover.rs
+    let mut reg_size = 4;
+    for i in 0..bls.len() {
+        let mut new_instr: Vec<BlockContent> = Vec::new();
+        for s in &bls[i].instructions {
+            match s {
+                BlockContent::MemPush((var, offset)) => {
+                    if reserved_variable(var.to_string()) {
+                        new_instr.push(s.clone());
+                    } else {
+                        if !reg_map.contains_key(&*var) {
+                            reg_map.insert(var.clone(), reg_size);
+                            reg_size += 1;
+                        }
+                        new_instr.push(BlockContent::MemPush((format!("%{}", reg_map.get(&*var).unwrap()), *offset)));
+                    }    
+                }
+                BlockContent::MemPop((var, offset)) => {
+                    if reserved_variable(var.to_string()) {
+                        new_instr.push(s.clone());
+                    } else {
+                        if !reg_map.contains_key(&*var) {
+                            reg_map.insert(var.clone(), reg_size);
+                            reg_size += 1;
+                        }
+                        new_instr.push(BlockContent::MemPop((format!("%{}", reg_map.get(&*var).unwrap()), *offset)));
+                    }
+                }
+                BlockContent::Stmt(Statement::Return(_)) => {
+                    panic!("Blocks should not contain return statements.");
+                }
+                BlockContent::Stmt(Statement::Assertion(a)) => {
+                    let new_expr: Expression;
+                    (new_expr, reg_map, reg_size) = var_to_reg_expr(&a.expression, reg_map, reg_size);
+                    let new_stmt = AssertionStatement {
+                        expression: new_expr,
+                        message: a.message.clone(),
+                        span: a.span
+                    };
+                    new_instr.push(BlockContent::Stmt(Statement::Assertion(new_stmt)));
+                }
+                BlockContent::Stmt(Statement::Iteration(_)) => {
+                    panic!("Blocks should not contain iteration statements.");
+                }
+                BlockContent::Stmt(Statement::Conditional(_)) => {
+                    panic!("Blocks should not contain if / else statements.");
+                }
+                BlockContent::Stmt(Statement::Definition(d)) => {
+                    let mut new_lhs: Vec<TypedIdentifierOrAssignee> = Vec::new();
+                    for l in &d.lhs {
+                        match l {
+                            TypedIdentifierOrAssignee::TypedIdentifier(tid) => {
+                                let new_id_expr: IdentifierExpression;
+                                (new_id_expr, reg_map, reg_size) = var_to_reg_id_expr(&tid.identifier, reg_map, reg_size);
+                                new_lhs.push(TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier{
+                                    ty: tid.ty.clone(),
+                                    identifier: new_id_expr,
+                                    span: tid.span
+                                }));
+                            }
+                            TypedIdentifierOrAssignee::Assignee(p) => {
+                                let new_id_expr: IdentifierExpression;
+                                (new_id_expr, reg_map, reg_size) = var_to_reg_id_expr(&p.id, reg_map, reg_size);
+                                let mut new_accesses: Vec<AssigneeAccess> = Vec::new();
+                                for aa in &p.accesses {
+                                    if let AssigneeAccess::Select(a) = aa {
+                                        if let RangeOrExpression::Expression(e) = &a.expression {
+                                            let new_expr: Expression;
+                                            (new_expr, reg_map, reg_size) = var_to_reg_expr(&e, reg_map, reg_size);
+                                            new_accesses.push(AssigneeAccess::Select(ArrayAccess {
+                                                expression: RangeOrExpression::Expression(new_expr),
+                                                span: a.span
+                                            }))
+                                        } else {
+                                            panic!("Range access not supported.")
+                                        }
+                                    } else {
+                                        panic!("Unsupported membership access.")
+                                    }
+                                }
+                                new_lhs.push(TypedIdentifierOrAssignee::Assignee(Assignee{
+                                    id: new_id_expr,
+                                    accesses: new_accesses,
+                                    span: p.span
+                                }));
+                            }
+                        }
+                    }
+                    let new_expr: Expression;
+                    (new_expr, reg_map, reg_size) = var_to_reg_expr(&d.expression, reg_map, reg_size);
+                    let new_stmt = DefinitionStatement {
+                        lhs: new_lhs,
+                        expression: new_expr,
+                        span: d.span
+                    };
+                    new_instr.push(BlockContent::Stmt(Statement::Definition(new_stmt)));
+                }
+            }
+        }
+        bls[i].instructions = new_instr;
+        if let BlockTerminator::Transition(e) = &bls[i].terminator {
+            let new_expr: Expression;
+            (new_expr, reg_map, reg_size) = var_to_reg_expr(&e, reg_map, reg_size);
+            bls[i].terminator = BlockTerminator::Transition(new_expr);
+        }
+    }
+    (bls, reg_map, reg_size)
 }

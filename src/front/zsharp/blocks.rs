@@ -18,14 +18,6 @@ use zokrates_pest_ast::*;
 use crate::front::zsharp::ZGen;
 use crate::front::zsharp::PathBuf;
 use crate::front::zsharp::pretty;
-use crate::front::zsharp::T;
-use crate::front::zsharp::Ty;
-use crate::front::zsharp::Value;
-use crate::front::zsharp::const_bool;
-use crate::front::zsharp::const_val;
-use crate::front::zsharp::span_to_string;
-use crate::front::zsharp::bool;
-use crate::front::zsharp::Op;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashSet;
@@ -146,48 +138,6 @@ impl<'ast> Block<'ast> {
 }
 
 impl<'ast> ZGen<'ast> {
-    fn print_all_vars_in_scope(&self) {
-        println!("\n\nVariables in scope:");
-
-        let mut all_vars = BTreeMap::new();
-        let binding = self.cvars_stack.borrow_mut();
-        let maps = binding.last().unwrap();
-        for map in maps {
-            for (key, value) in map.iter() {
-                all_vars.insert(key, value);
-            }
-        }
-        
-        for (key, value) in all_vars {
-            print!("{key} = ");
-            value.pretty(&mut std::io::stdout().lock())
-            .expect("error pretty-printing value");
-            println!();
-        }
-    }
-
-    fn t_to_usize(&self, a: T) -> Result<usize, String> {
-        let t = const_val(a)?;
-        match t.ty {
-            Ty::Field => {
-                match &t.term.get().op {
-                    Op::Const(val) => {
-                        match val {
-                            Value::Field(f) => {
-                                let intg = f.i().to_usize().ok_or("Stack Overflow: %SP or %BP exceeds usize limit.")?;
-                                return Ok(intg);
-                            }
-                            _ => {
-                                return Err(format!("This line should not be triggered unless const_val has been modified. Const_val needs to return Op::Const for Term."));
-                            }
-                        }
-                    }
-                    _ => { return Err(format!("This line should not be triggered unless const_val has been modified. Const_val needs to return Op::Const for Term.")) }
-                }
-            }
-            _ => { return Err(format!("Fail to evaluate %BP or %SP: %BP and %SP should be stored as Field type.")) }
-        }
-    }
 
     pub fn bl_gen_const_entry_fn(&'ast self, n: &str) -> (Vec<Block<'ast>>, usize) {
         debug!("Block Gen Const entry: {}", n);
@@ -740,7 +690,7 @@ impl<'ast> ZGen<'ast> {
                 assert!(d.lhs.len() <= 1);
 
                 // Evaluate function calls in expression
-                let mut lhs_expr = d.lhs.clone();
+                let lhs_expr = d.lhs.clone();
                 let rhs_expr: Expression;
                 (blks, blks_len, func_phy_assign, sp_offset, rhs_expr, _) =
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &d.expression, func_phy_assign, sp_offset, 0)?;
@@ -1206,183 +1156,9 @@ impl<'ast> ZGen<'ast> {
         }
         Ok((blks, sp_offset))
     }
-
-    // I am hacking cvars_stack to do the interpretation. Ideally we want a separate var_table to do so.
-    // We only need BTreeMap<String, T> to finish evaluation, so the 2 Vecs of cvars_stack should always have
-    // size 1.
-    // Return values:
-    // ret[0]: the return value of the function
-    // ret[1][i]: how many times have block i been executed?
-    pub fn bl_eval_const_entry_fn(
-        &self, entry_bl: usize, 
-        bls: &Vec<Block<'ast>>
-    ) -> Result<(T, Vec<usize>), String> {
-        // We assume that all errors has been handled in bl_gen functions        
-        debug!("Block Eval Const entry: {}", entry_bl);
-
-        // bl_exec_count[i]: how many times have block i been executed?
-        let mut bl_exec_count: Vec<usize> = vec![0; bls.len()];
-
-        self.cvar_enter_function();
-        let mut nb = entry_bl;
-        let mut phy_mem: Vec<T> = Vec::new();
-        let mut terminated = false;
-        while !terminated {
-            bl_exec_count[nb] += 1;
-            self.print_all_vars_in_scope();
-            print!("%PHY: [");
-            for c in &phy_mem {
-                c.pretty(&mut std::io::stdout().lock())
-                .expect("error pretty-printing value");
-                print!(", ");
-            }
-            println!("]");
-            (nb, phy_mem, terminated) = self.bl_eval_impl_::<true>(&bls[nb], phy_mem)?;
-        }
-
-        // Return value is just the value of the variable called "%RET"
-        // Type of return value is checked during assignment
-        let ret = self.cvar_lookup("%RET").ok_or(format!(
-            "Missing return value for one or more functions."
-        ));
-
-        Ok((ret?, bl_exec_count))
-    }
-
-    // Return type:
-    // ret[0]: Index of next block,
-    // ret[1]: Physical memory arrangement,
-    // ret[2]: Has the program terminated?
-    fn bl_eval_impl_<const IS_CNST: bool>(
-        &self, 
-        bl: &Block<'ast>,
-        mut phy_mem: Vec<T>,
-    ) -> Result<(usize, Vec<T>, bool), String> {
-        if IS_CNST {
-            debug!("Const block: ");
-            let _ = &bl.pretty();
-        } else {
-            debug!("Block: ");
-            let _ = &bl.pretty();
-        }
-
-        for s in &bl.instructions {
-            match s {
-                BlockContent::MemPush((var, offset)) => {
-                    let sp_t = self.cvar_lookup("%SP").ok_or(format!("Push to %PHY failed: %SP is uninitialized."))?;
-                    let sp = self.t_to_usize(sp_t)?;
-                    if sp + offset != phy_mem.len() {
-                        return Err(format!("Error processing %PHY push: index {sp} + {offset} does not match with stack size."));
-                    } else {
-                        let e = self.cvar_lookup(&var).ok_or(format!("Push to %PHY failed: pushing an out-of-scope variable: {}.", var))?;
-                        phy_mem.push(e);
-                    }
-                }
-                BlockContent::MemPop((var, offset)) => {
-                    let bp_t = self.cvar_lookup("%BP").ok_or(format!("Pop from %PHY failed: %BP is uninitialized."))?;
-                    let bp = self.t_to_usize(bp_t)?;
-                    if bp + offset >= phy_mem.len() {
-                        return Err(format!("Error processing %PHY pop: index out of bound."));
-                    } else {
-                        let t = phy_mem[bp + offset].clone();
-                        self.cvar_assign(&var, t)?;
-                    }              
-                }
-                BlockContent::Stmt(Statement::Return(_)) => {
-                    return Err(format!("Blocks should not contain return statements."));
-                }
-                // %PHY should never appear in an assertion statement
-                BlockContent::Stmt(Statement::Assertion(e)) => {
-                    match self.expr_impl_::<true>(&e.expression).and_then(|v| {
-                        const_bool(v)
-                            .ok_or_else(|| "interpreting expr as const bool failed".to_string())
-                    }) {
-                        Ok(true) => {},
-                        Ok(false) => return Err(format!(
-                            "Const assert failed: {} at\n{}",
-                            e.message
-                                .as_ref()
-                                .map(|m| m.value.as_ref())
-                                .unwrap_or("(no error message given)"),
-                            span_to_string(e.expression.span()),
-                        )),
-                        Err(err) if IS_CNST => return Err(format!(
-                            "Const assert expression eval failed {} at\n{}",
-                            err,
-                            span_to_string(e.expression.span()),
-                        )),
-                        _ => {
-                            let b = bool(self.expr_impl_::<true>(&e.expression)?)?;
-                            self.assert(b);
-                        }
-                    }
-                }
-                BlockContent::Stmt(Statement::Iteration(_)) => {
-                    return Err(format!("Blocks should not contain iteration statements."));
-                }
-                BlockContent::Stmt(Statement::Conditional(_)) => {
-                    return Err(format!("Blocks should not contain if / else statements."));
-                }
-                BlockContent::Stmt(Statement::Definition(d)) => {
-                    // XXX(unimpl) multi-assignment unimplemented
-                    assert!(d.lhs.len() <= 1);
-
-                    self.set_lhs_ty_defn::<true>(d)?;
-                    let e = self.expr_impl_::<true>(&d.expression)?;
-    
-                    if let Some(l) = d.lhs.first() {
-                        match l {
-                            TypedIdentifierOrAssignee::Assignee(l) => {
-                                let strict = match &d.expression {
-                                    Expression::Unary(u) => {
-                                        matches!(&u.op, UnaryOperator::Strict(_))
-                                    }
-                                    _ => false,
-                                };
-                                self.assign_impl_::<true>(&l.id.value, &l.accesses[..], e, strict)?;
-                            }
-                            TypedIdentifierOrAssignee::TypedIdentifier(l) => {
-                                let decl_ty = self.type_impl_::<true>(&l.ty)?;
-                                let ty = e.type_();
-                                if &decl_ty != ty {
-                                    return Err(format!(
-                                        "Assignment type mismatch: {} annotated vs {} actual",
-                                        decl_ty, ty,
-                                    ));
-                                }
-                                self.declare_init_impl_::<true>(
-                                    l.identifier.value.clone(),
-                                    decl_ty,
-                                    e,
-                                )?;
-                            }
-                        }
-                    } else {
-                        warn!("Statement with no LHS!");
-                    }
-                }
-            }
-        };
-
-        match &bl.terminator {
-            BlockTerminator::Transition(e) => {
-                match self.t_to_usize(self.expr_impl_::<true>(&e)?) {
-                    Ok(nb) => { return Ok((nb, phy_mem, false)); }, 
-                    _ => { return Err("Evaluation failed: block transition evaluated to an invalid block label".to_string()); }
-                }
-            }
-            BlockTerminator::FuncCall(fc) => Err(format!("Evaluation failed: function call to {} needs to be converted to block label.", fc)),
-            BlockTerminator::ProgTerm() => Ok((0, phy_mem, true))
-        }
-    }
 }
 
 pub fn generate_runtime_data(len: usize, bl_exec_count: Vec<usize>, var_list: Vec<HashSet<String>>) {    
-
-    println!("\n\n--\nVariable Reference:");
-    for i in 0..len {
-        println!("{}: {:?}", i, var_list[i]);
-    }
 
     println!("\n\n--\nRuntime Data:");
     let bl_var_count: Vec<usize> = var_list.iter().map(|x| x.len()).collect();

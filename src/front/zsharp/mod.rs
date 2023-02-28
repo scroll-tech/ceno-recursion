@@ -7,6 +7,8 @@ mod blocks_optimization;
 mod pretty;
 pub mod zvisit;
 
+mod prover;
+
 use super::{FrontEnd, Mode};
 use crate::circify::{CircError, Circify, Loc, Val};
 use crate::front::{PROVER_VIS, PUBLIC_VIS};
@@ -87,10 +89,11 @@ impl ZSharpFE {
             b.pretty();
             println!("");
         }
-        let (blks, entry_bl, var_list) = blocks_optimization::optimize_block(blks, entry_bl);
+        let (blks, entry_bl, var_list, reg_size) = blocks_optimization::optimize_block::<false>(blks, entry_bl);
         println!("\n\n--\nInterpretation:");
-        let (ret, bl_exec_count) = g.bl_eval_const_entry_fn(entry_bl, &blks)
+        let (ret, bl_exec_count, bl_exec_state) = g.bl_eval_const_entry_fn::<false>(entry_bl, &blks, reg_size)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+        prover::print_state_list(&bl_exec_state);
         blocks::generate_runtime_data(blks.len(), bl_exec_count, var_list);
         return ret;
     }

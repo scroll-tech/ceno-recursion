@@ -16,6 +16,7 @@ use log::{debug, warn};
 
 use zokrates_pest_ast::*;
 use crate::front::zsharp::ZGen;
+use crate::front::zsharp::Ty;
 use crate::front::zsharp::PathBuf;
 use crate::front::zsharp::pretty;
 use std::collections::BTreeMap;
@@ -42,6 +43,30 @@ fn ty_to_dec_suffix<'ast>(ty: Type<'ast>) -> DecimalSuffix<'ast> {
         Type::Basic(BasicType::U32(_)) => { DecimalSuffix::U32(U32Suffix { span }) }
         Type::Basic(BasicType::U64(_)) => { DecimalSuffix::U64(U64Suffix { span }) }
         _ => { panic!("Type not supported for loop iterator.") }
+    }
+}
+
+fn ty_to_type<'ast>(ty: Ty) -> Result<Type<'ast>, String> {
+    match ty {
+        Ty::Uint(8) => Ok(Type::Basic(BasicType::U8(U8Type {
+            span: Span::new("", 0, 0).unwrap()
+        }))),
+        Ty::Uint(16) => Ok(Type::Basic(BasicType::U16(U16Type {
+            span: Span::new("", 0, 0).unwrap()
+        }))),
+        Ty::Uint(32) => Ok(Type::Basic(BasicType::U32(U32Type {
+            span: Span::new("", 0, 0).unwrap()
+        }))),
+        Ty::Uint(64) => Ok(Type::Basic(BasicType::U64(U64Type {
+            span: Span::new("", 0, 0).unwrap()
+        }))),
+        Ty::Bool => Ok(Type::Basic(BasicType::Boolean(BooleanType {
+            span: Span::new("", 0, 0).unwrap()
+        }))),
+        Ty::Field => Ok(Type::Basic(BasicType::Field(FieldType {
+            span: Span::new("", 0, 0).unwrap()
+        }))),
+        _ => Err(format!("Type not supported!"))
     }
 }
 
@@ -1173,22 +1198,4 @@ pub fn generate_runtime_data(len: usize, bl_exec_count: Vec<usize>, var_list: Ve
         t_var_count += bl_var_count[i];
     }
     println!("T\t{}\t{}", t_exec_count, t_var_count);
-
-    let mut total_var_list = HashSet::new();
-    for vl in &var_list {
-        total_var_list.extend(vl.clone());
-    }
-
-    println!("\nVar\t# Blk\t# Exec");
-    for v in total_var_list {
-        let mut bl_app = 0;
-        let mut ex_app = 0;
-        for i in 0..len {
-            if var_list[i].contains(&v) {
-                bl_app += 1;
-                ex_app += bl_exec_count[i];
-            }
-        }
-        println!("{}\t{}\t{}", v, bl_app, ex_app);
-    }
 }

@@ -513,7 +513,13 @@ impl<'ast> ZGen<'ast> {
         s: &'ast Statement<'ast>,
         ret_ty: &'ast Type<'ast>,
         mut sp_offset: usize,
-        mut func_phy_assign: Vec<Vec<(usize, String)>>
+        mut func_phy_assign: Vec<Vec<(usize, String)>>,
+        // We want to unroll scoping as we construct the blocks,
+        // so we use a HashMap: String -> (usize, bool) to record scoping information for each variable
+        // For each variable, usize indicates the number of times it has been defined in previous scopes
+        //                    bool indicates whether it has yet to be defined in the current scope
+        //                    true ==> for the next definition, we need to increment the usize
+        // mut var_scope_info: HashMap<String, (usize, bool)>
     ) -> Result<(Vec<Block>, usize, Vec<Vec<(usize, String)>>, usize), String> {
         debug!("Block Gen Stmt: {}", s.span().as_str());
 
@@ -715,7 +721,7 @@ impl<'ast> ZGen<'ast> {
                 assert!(d.lhs.len() <= 1);
 
                 // Evaluate function calls in expression
-                let lhs_expr = d.lhs.clone();
+                let mut lhs_expr = d.lhs.clone();
                 let rhs_expr: Expression;
                 (blks, blks_len, func_phy_assign, sp_offset, rhs_expr, _) =
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &d.expression, func_phy_assign, sp_offset, 0)?;
@@ -731,16 +737,12 @@ impl<'ast> ZGen<'ast> {
                             let _ = self.cvar_lookup(name)
                                     .ok_or_else(|| format!("Assignment failed: no const variable {}", name))?;
                             
-                            
-                            /*
                             // Convert the assignee to a declaration
-                            lhs_expr = TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                                ty: 
+                            lhs_expr = vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                ty: ty_to_type(e.type_().clone())?,
                                 identifier: l.id.clone(),
                                 span: Span::new("", 0, 0).unwrap()
-                            });
-                            */
-                            
+                            })];
                         }
                         TypedIdentifierOrAssignee::TypedIdentifier(l) => {
                             let decl_ty = self.type_impl_::<true>(&l.ty)?;
@@ -792,7 +794,8 @@ impl<'ast> ZGen<'ast> {
         e: &'ast Expression<'ast>,
         mut func_phy_assign: Vec<Vec<(usize, String)>>,
         mut sp_offset: usize,
-        mut func_count: usize
+        mut func_count: usize,
+        // mut var_scope_info: HashMap<String, (usize, bool)>
     ) -> Result<(Vec<Block>, usize, Vec<Vec<(usize, String)>>, usize, Expression, usize), String> {
         debug!("Block Gen Expr: {}", e.span().as_str());
 

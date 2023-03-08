@@ -72,6 +72,7 @@ pub fn optimize_block<const VERBOSE: bool>(
     print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
     println!("\n\n--\nOptimization:");
     
+    /*
     bls = liveness_analysis(bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
     if VERBOSE {
         println!("\n\n--\nLiveness:");
@@ -81,6 +82,7 @@ pub fn optimize_block<const VERBOSE: bool>(
             println!("");
         }
     }
+    */
 
     bls = phy_mem_rearrange(bls, &predecessor_fn, &successor_fn, &entry_bls_fn);
     if VERBOSE {

@@ -422,16 +422,19 @@ impl<'ast> ZGen<'ast> {
     // The head block of the function is already created to facilitate any required initialization
     // Arguments have already been pre-processed (func-call replacement, scope unrolling)
     // Return type:
-    // Blks, blks_len, entry_blk, sp_offset
-    fn bl_gen_function_call_(
+    // Blks, blks_len, entry_blk, func_phy_assign, sp_offset, func_count, var_scope_info
+    fn bl_gen_function_call_<const IS_MAIN: bool>(
         &'ast self,
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
-        sp_offset: usize,
+        mut func_phy_assign: Vec<Vec<(usize, String)>>,
+        mut sp_offset: usize,
         args: Vec<Expression<'ast>>, // We do not use &args here because Expressions might be reconstructed
         f_path: PathBuf,
-        f_name: String
-    ) -> Result<(Vec<Block>, usize, usize, usize), String> {
+        f_name: String,
+        func_count: usize,
+        mut var_scope_info: HashMap<String, (usize, bool)>
+    ) -> Result<(Vec<Block>, usize, usize, Vec<Vec<(usize, String)>>, usize, usize, HashMap<String, (usize, bool)>), String> {
         debug!("Block Gen Function call: {} {:?}", f_name, f_path);
 
         let f = self
@@ -481,9 +484,69 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(param_stmt));
                 arg_count += 1;
             }
-            arg_count = 0;
+
+            // Push all local variables onto the stack
+            let mut var_map: BTreeSet<String> = BTreeSet::new();
+            if let Some(st) = self.cvars_stack.borrow().last() {
+                for var_list in st.iter().rev() {
+                    for var in var_list.clone().into_keys() {
+                        var_map.insert(var);
+                    }
+                }
+            }
+            // Push all %RETx onto the stack
+            for ret_count in 0..func_count {
+                var_map.insert(format!("%RET{}", ret_count));
+            }
+            for var in var_map {
+                (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_scoping_::<true>(blks, blks_len, &var, func_phy_assign, sp_offset, var_scope_info);
+            }
+
+            // Push %RP onto the stack if not in main
+            if !IS_MAIN {
+                (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_scoping_::<true>(blks, blks_len, &"%RP".to_string(), func_phy_assign, sp_offset, var_scope_info);
+            }
+
+            // Update %SP again to finalize the call stack
+            // We technically shouldn't need it before %SP will be updated by the next enter_scope,
+            // but there's no harm doing it here
+            if sp_offset > 0 {
+                // %SP = %SP + sp_offset
+                let sp_update_stmt = Statement::Definition(DefinitionStatement {
+                    lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
+                        id: IdentifierExpression {
+                            value: "%SP".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        accesses: Vec::new(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })],
+                    expression: Expression::Binary(BinaryExpression {
+                        op: BinaryOperator::Add,
+                        left: Box::new(Expression::Identifier(IdentifierExpression {
+                            value: "%SP".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                            value: DecimalNumber {
+                                value: sp_offset.to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            span: Span::new("", 0, 0).unwrap()
+                        }))),
+                        span: Span::new("", 0, 0).unwrap()
+                    }),
+                    span: Span::new("", 0, 0).unwrap()
+                });
+                blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_update_stmt));
+                sp_offset = 0;
+            }
+        
             // Assign p@0 to @ARGx
-            // p has been pushed to stack before function call
+            arg_count = 0;
             for p in f.parameters.clone().into_iter() {
                 let p_id = p.id.value.clone();
                 let param_stmt = Statement::Definition(DefinitionStatement {
@@ -529,15 +592,49 @@ impl<'ast> ZGen<'ast> {
                 span: Span::new("", 0, 0).unwrap()
             });
             blks[blks_len - 1].instructions.push(BlockContent::Stmt(rp_update_stmt));            
-            let term = BlockTerminator::FuncCall(f_name);
+            let term = BlockTerminator::FuncCall(f_name.clone());
             blks[blks_len - 1].terminator = term;
 
             // Create new Block
             blks.push(Block::new(blks_len));
-            blks_len += 1;
+            blks_len += 1; 
+            
+            // Store Return value to a temporary %RETx
+            let ret_ty = self
+            .functions
+            .get(&f_path)
+            .ok_or_else(|| format!("No file '{:?}' attempting fn call", &f_path))?
+            .get(&f_name)
+            .ok_or_else(|| format!("No function '{}' attempting fn call", &f_name))?
+            .returns
+            .first().ok_or("No return type provided for one or more function")?;
+
+            let update_ret_stmt = Statement::Definition(DefinitionStatement {
+                lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                    ty: ret_ty.clone(),
+                    identifier: IdentifierExpression {
+                        value: format!("%RET{}", func_count),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    span: Span::new("", 0, 0).unwrap()
+                })],
+                // Assume that we only have ONE return variable
+                expression: Expression::Identifier(IdentifierExpression {
+                    value: "%RET".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                }),
+                span: Span::new("", 0, 0).unwrap()
+            });
+            blks[blks_len - 1].instructions.push(BlockContent::Stmt(update_ret_stmt));
+            
+            // Exit Scoping
+            // We need to do it AFTER %RET has been stored somewhere else to prevent it from being overrided
+            // We also need to do it BEFORE some assigning some variable to %RET because otherwise its
+            // value might be overrided again after being assigned to %RET
+            (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset, var_scope_info)?;
         }
 
-        Ok((blks, blks_len, 0, sp_offset))
+        Ok((blks, blks_len, 0, func_phy_assign, sp_offset, func_count, var_scope_info))
     }
 
     // Generate blocks from statements
@@ -933,102 +1030,11 @@ impl<'ast> ZGen<'ast> {
 
                     // Update %SP and %BP before function call started since we won't know what happens to them
                     (blks, func_phy_assign, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
-                    
-                    // Push all local variables onto the stack
-                    let mut var_map: BTreeSet<String> = BTreeSet::new();
-                    if let Some(st) = self.cvars_stack.borrow().last() {
-                        for var_list in st.iter().rev() {
-                            for var in var_list.clone().into_keys() {
-                                var_map.insert(var);
-                            }
-                        }
-                    }
-                    // Push all %RETx onto the stack
-                    for ret_count in 0..func_count {
-                        var_map.insert(format!("%RET{}", ret_count));
-                    }
-                    for var in var_map {
-                        (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_scoping_::<true>(blks, blks_len, &var, func_phy_assign, sp_offset, var_scope_info);
-                    }
+ 
+                    // Do the function call
+                    (blks, blks_len, _, func_phy_assign, sp_offset, func_count, var_scope_info) =
+                        self.bl_gen_function_call_::<IS_MAIN>(blks, blks_len, func_phy_assign, sp_offset, args, f_path.clone(), f_name.clone(), func_count, var_scope_info)?;
 
-                    // Push %RP onto the stack if not in main
-                    if !IS_MAIN {
-                        (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_scoping_::<true>(blks, blks_len, &"%RP".to_string(), func_phy_assign, sp_offset, var_scope_info);
-                    }
-
-                    // Update %SP again to finalize the call stack
-                    // We technically shouldn't need it before %SP will be updated by the next enter_scope,
-                    // but there's no harm doing it here
-                    if sp_offset > 0 {
-                        // %SP = %SP + sp_offset
-                        let sp_update_stmt = Statement::Definition(DefinitionStatement {
-                            lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
-                                id: IdentifierExpression {
-                                    value: "%SP".to_string(),
-                                    span: Span::new("", 0, 0).unwrap()
-                                },
-                                accesses: Vec::new(),
-                                span: Span::new("", 0, 0).unwrap()
-                            })],
-                            expression: Expression::Binary(BinaryExpression {
-                                op: BinaryOperator::Add,
-                                left: Box::new(Expression::Identifier(IdentifierExpression {
-                                    value: "%SP".to_string(),
-                                    span: Span::new("", 0, 0).unwrap()
-                                })),
-                                right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                                    value: DecimalNumber {
-                                        value: sp_offset.to_string(),
-                                        span: Span::new("", 0, 0).unwrap()
-                                    },
-                                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                                        span: Span::new("", 0, 0).unwrap()
-                                    })),
-                                    span: Span::new("", 0, 0).unwrap()
-                                }))),
-                                span: Span::new("", 0, 0).unwrap()
-                            }),
-                            span: Span::new("", 0, 0).unwrap()
-                        });
-                        blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_update_stmt));
-                        sp_offset = 0;
-                    }
-                
-                    (blks, blks_len, _, sp_offset) =
-                        self.bl_gen_function_call_(blks, blks_len, sp_offset, args, f_path.clone(), f_name.clone())?;
-                    let ret_ty = self
-                    .functions
-                    .get(&f_path)
-                    .ok_or_else(|| format!("No file '{:?}' attempting fn call", &f_path))?
-                    .get(&f_name)
-                    .ok_or_else(|| format!("No function '{}' attempting fn call", &f_name))?
-                    .returns
-                    .first().ok_or("No return type provided for one or more function")?;
-
-                    let update_ret_stmt = Statement::Definition(DefinitionStatement {
-                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                            ty: ret_ty.clone(),
-                            identifier: IdentifierExpression {
-                                value: format!("%RET{}", func_count),
-                                span: Span::new("", 0, 0).unwrap()
-                            },
-                            span: Span::new("", 0, 0).unwrap()
-                        })],
-                        // Assume that we only have ONE return variable
-                        expression: Expression::Identifier(IdentifierExpression {
-                            value: "%RET".to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        }),
-                        span: Span::new("", 0, 0).unwrap()
-                    });
-                    blks[blks_len - 1].instructions.push(BlockContent::Stmt(update_ret_stmt));
-                    
-                    // Exit Scoping
-                    // We need to do it AFTER %RET has been stored somewhere else to prevent it from being overrided
-                    // We also need to do it BEFORE some assigning some variable to %RET because otherwise its
-                    // value might be overrided again after being assigned to %RET
-                    (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset, var_scope_info)?;
-                    
                     ret_e = Expression::Identifier(IdentifierExpression {
                         value: format!("%RET{}", func_count),
                         span: Span::new("", 0, 0).unwrap()
@@ -1223,19 +1229,18 @@ impl<'ast> ZGen<'ast> {
             if var.chars().nth(0).unwrap() != '%' {
                 // Unroll scoping on ID
                 if !var_scope_info.contains_key(&new_var) {
-                    panic!("Variable {} referenced before definition in bl_gen_exit_scope!", new_var);
+                    return Err(format!("Variable {} referenced before definition in bl_gen_exit_scope!", new_var));
+                }
+                // Set ID to the previous scope IF it has been defined in the current scope
+                if !var_scope_info.get(&new_var).unwrap().1 && var_scope_info.get(&new_var).unwrap().0 == 0 {
+                    return Err(format!("Variable {} referenced before definition in bl_gen_exit_scope!", new_var))
+                } else if !var_scope_info.get(&new_var).unwrap().1 {
+                    var_scope_info.insert(new_var.clone(), (var_scope_info.get(&new_var).unwrap().0 - 1, false));
+                } else {
+                    var_scope_info.insert(new_var.clone(), (var_scope_info.get(&new_var).unwrap().0, false));
                 }
                 // Actual Unroll
                 new_var = format!("{}@{}", new_var, var_scope_info.get(&new_var).unwrap().0);
-                let var_str = var.to_string();
-                // Set ID to the previous scope IF it has been defined in the current scope
-                if !var_scope_info.get(&var_str).unwrap().1 && var_scope_info.get(&var_str).unwrap().0 == 0 {
-                    var_scope_info.remove(&var_str);
-                } else if !var_scope_info.get(&var_str).unwrap().1 {
-                    var_scope_info.insert(var_str.clone(), (var_scope_info.get(&var_str).unwrap().0 - 1, false));
-                } else {
-                    var_scope_info.insert(var_str.clone(), (var_scope_info.get(&var_str).unwrap().0, false));
-                }
             }
             blks[blks_len - 1].instructions.push(BlockContent::MemPop((new_var, *addr)));
         }

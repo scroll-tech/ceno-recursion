@@ -69,10 +69,11 @@ pub fn optimize_block<const VERBOSE: bool>(
     
     let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
         construct_flow_graph(&bls, entry_bl);
-    print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+    if VERBOSE {
+        print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+    }
     println!("\n\n--\nOptimization:");
     
-    /*
     bls = liveness_analysis(bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
     if VERBOSE {
         println!("\n\n--\nLiveness:");
@@ -82,7 +83,6 @@ pub fn optimize_block<const VERBOSE: bool>(
             println!("");
         }
     }
-    */
 
     bls = phy_mem_rearrange(bls, &predecessor_fn, &successor_fn, &entry_bls_fn);
     if VERBOSE {
@@ -559,109 +559,57 @@ fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
     }
 }
 
-// The analysis skips function calls (go straight from func call block to return block)
-// Since we don't have SSA, liveness analysis is a lot more complicated
-// The following analysis is based on the assumption that every PUSH of a variable will
-// be accompanied by a POP sometime later before the program terminates (and there are finite many of them)
+// Standard Liveness Analysis
 // We do not analyze the liveness of %BP, %SP, %RP, %RET, or %ARG
 // DIRECTION: Backward
 // LATTICE:
 //   TOP: Variable does not exist in the set
-//   Otherwise, a variable state is defined as a list of bits, corresponding to its liveness in each stack frame
-//     e.g. [0, 1, 0, 0, 1]: live at current scope (last bit), live at stack frame 1, dead at stack frame 0, 2, 3
-//   BOT: Does not exist (I think?)
+//   A variable in set indicates that it is alive
 // TRANSFER:
-//    GEN: If a variable is referenced, excluding PUSH to stack,
-//         - if it is TOP, set the state to [1] (live at current scope, not appearing in stack)
-//         - otherwise, update the last bit of its state to 1 (live at current scope, unchanged in stack)
-//   KILL: If a variable is assigned, excluding POP from stack,
-//         - if it is TOP or if the last bit of its state is 0, remove the statement
-//         - if it is TOP, set the state to [0] (dead at current scope, not appearing in stack)
-//         - if it is not TOP, update the last bit of its state to 0 (dead at current scope, unchanged in stack)
-//    POP: If a variable is popped out from the stack,
-//         - if it is TOP or if the last bit of its state is 0, remove the statement
-//         - if it is TOP, set the state to [0, 0] (dead at new scope, dead in stack, 
-//               we are doing backward analysis, so POP corresponds to extension of the state) 
-//         - otherwise, set the last bit to 0 and extend the state by another 0
-//   PUSH: If a variable is pushed onto stack,
-//         - if there are less than 2 bits in the variable state, panic
-//         - if the second-to-last bit of the state is 0, remove the statement
-//               (need to deal with holes in physical memory later)
-//         - set the second-to-last bit to be the union of the last two bits,
-//           remove the last bit of the variable state
-//         - the new state should not be TOP if each PUSH has a corresponding POP
+//    GEN: If a variable is referenced, excluding PUSH into stack, add it into set
+//   KILL: If a variable is assigned, excluding POP from stack, remove it from the set
+//         PUSH and POPs do not affect the liveness of the variable.
 // MEET:
-//    TOP meets anything else is always the other things
-//    If two variable states have the same length, their MEET is the pairwise union of the two lists
-//    If two variable states have different length, their MEET is undefined. This should never happen because
-//    you can only enter (or exit) a block from the same scope. 
+//    Set Union
 
 // MEET of liveness_analysis
 fn la_meet(
-    first: &HashMap<String, Vec<bool>>,
-    second: &HashMap<String, Vec<bool>>
-) -> HashMap<String, Vec<bool>> {
+    first: &HashSet<String>,
+    second: &HashSet<String>
+) -> HashSet<String> {
     let mut third = first.clone();
-    for (var, state_sec) in second.iter() {
-        if let Some(state_fst) = third.get(var) {
-            if state_fst.len() != state_sec.len() {
-                panic!("Liveness analysis MEET fails: variable {} has different scoping:\nFirst state is {:?}\nSecond state is {:?}\n", var, state_fst, state_sec)
-            } else {
-                third.insert(var.to_string(), (0..state_fst.len()).map(|x| state_fst[x] || state_sec[x]).collect::<Vec<_>>());
-            }
-        } else {
-            third.insert(var.to_string(), (*state_sec.clone()).to_vec());
-        }
-    }
+    third.extend(second.clone());
     third
 }
 
 // GEN all variables in gen
 fn la_gen(
-    mut state: HashMap<String, Vec<bool>>,
+    mut state: HashSet<String>,
     gen: &HashSet<String>
-) -> HashMap<String, Vec<bool>> {
+) -> HashSet<String> {
     // Add all gens to state
-    for v in gen {
-        match state.get(v) {
-            None => { state.insert(v.to_string(), vec![true]); }
-            Some(_) => {
-                let mut v_state: Vec<bool> = (*state.get(v).unwrap().clone()).to_vec();
-                v_state.pop();
-                v_state.push(true);
-                state.insert(v.to_string(), v_state);
-            }                                    
-        }
-    }
+    state.extend(gen.clone());
     state
 }
 
 // KILL all variables in kill
 fn la_kill(
-    mut state: HashMap<String, Vec<bool>>,
+    mut state: HashSet<String>,
     kill: &HashSet<String>
-) -> HashMap<String, Vec<bool>> {
+) -> HashSet<String> {
     // Remove all kills to state
     for v in kill {
-        match state.get(v) {
-            None => { state.insert(v.to_string(), vec![false]); }
-            Some(_) => {
-                let mut v_state: Vec<bool> = (*state.get(v).unwrap().clone()).to_vec();
-                v_state.pop();
-                v_state.push(false);
-                state.insert(v.to_string(), v_state);
-            }                                    
-        }
+        state.remove(v);
     }
     state
 }
 
 // Decide if var is alive in the current scope given state
 fn is_alive(
-    state: &HashMap<String, Vec<bool>>,
+    state: &HashSet<String>,
     var: &String
 ) -> bool {
-    state.get(var) != None && state.get(var).unwrap()[state.get(var).unwrap().len() - 1]
+    state.get(var) != None
 }
 
 // Liveness analysis should not affect CFG
@@ -672,15 +620,10 @@ fn liveness_analysis<'ast>(
     exit_bls_fn: &HashSet<usize>
 ) -> Vec<Block<'ast>> {
 
-    let mut visited: Vec<bool> = Vec::new();
+    let mut visited: Vec<bool> = vec![false; bls.len()];
     // MEET is union, so IN and OUT are Empty Set
-    let mut bl_in: Vec<HashMap<String, Vec<bool>>> = Vec::new();
-    let mut bl_out: Vec<HashMap<String, Vec<bool>>> = Vec::new();
-    for _ in 0..bls.len() {
-        visited.push(false);
-        bl_in.push(HashMap::new());
-        bl_out.push(HashMap::new());
-    }
+    let mut bl_in: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
+    let mut bl_out: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
     
     // Can this ever happen?
     if exit_bls_fn.is_empty() { 
@@ -697,7 +640,7 @@ fn liveness_analysis<'ast>(
         let cur_bl = next_bls.pop_front().unwrap();
 
         // State is the Union of all successors AND the exit condition
-        let mut state: HashMap<String, Vec<bool>> = HashMap::new();
+        let mut state: HashSet<String> = HashSet::new();
         for s in &successor_fn[cur_bl] {
             state = la_meet(&state, &bl_in[*s]);
         }
@@ -716,28 +659,9 @@ fn liveness_analysis<'ast>(
             // KILL and GEN within the block
             for i in bls[cur_bl].instructions.iter().rev() {
                 match i {
-                    BlockContent::MemPush((var, _)) => {
-                        let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
-                        if v_state.len() < 2 {
-                            panic!("Liveness analysis failed: Stack frame size does not match number of PUSH.");
-                        }
-                        // Set the second-to-last state to be the union
-                        let v_state_len = v_state.len() - 1;
-                        v_state[v_state_len - 1] = v_state[v_state_len - 1] || v_state[v_state_len];
-                        // Pop the last state out
-                        v_state.pop();
-                        state.insert(var.to_string(), v_state);
-                    }
-                    BlockContent::MemPop((var, _)) => {
-                        match state.get(var) {
-                            None => { state.insert(var.to_string(), vec![false, false]); }
-                            Some(_) => {
-                                let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
-                                v_state.push(false);
-                                state.insert(var.to_string(), v_state);
-                            }
-                        }
-                    }
+                    // PUSH and POP do not affect liveness
+                    BlockContent::MemPush(_) => {}
+                    BlockContent::MemPop(_) => {}
                     BlockContent::Stmt(s) => {
                         let (kill, gen) = stmt_find_val(s);
                         // If it's not a definition or the defined variable is alive,
@@ -748,8 +672,10 @@ fn liveness_analysis<'ast>(
                         contains_reg = gen.iter().fold(contains_reg, |c, x| c || x.chars().next().unwrap() == '%');
                         
                         if kill.is_empty() || kill.iter().fold(false, |c, x| c || is_alive(&state, x)) || contains_reg {
-                            // Remove kill from state
-                            state = la_kill(state, &kill);
+                            // Remove kill from state if the operation does not involve registers
+                            if !contains_reg {
+                                state = la_kill(state, &kill);
+                            }
 
                             // Add all gens to state
                             state = la_gen(state, &gen);
@@ -778,7 +704,7 @@ fn liveness_analysis<'ast>(
         let cur_bl = next_bls.pop_front().unwrap();
 
         // State is simply bl_out
-        let mut state: HashMap<String, Vec<bool>> = bl_out[cur_bl].clone();
+        let mut state: HashSet<String> = bl_out[cur_bl].clone();
 
         // Only visit each block once
         if !visited[cur_bl] {
@@ -791,29 +717,13 @@ fn liveness_analysis<'ast>(
             for i in bls[cur_bl].instructions.iter().rev() {
                 match i {
                     BlockContent::MemPush((var, _)) => {
-                        let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
-                        // If the second-to-last state is 1, keep the instruction
-                        if v_state[v_state.len() - 2] || var.chars().next().unwrap() == '%' {
+                        if is_alive(&state, var) || var.chars().next().unwrap() == '%' {
                             new_instructions.insert(0, i.clone());
                         }
-                        // Set the second-to-last state to be the union
-                        let v_state_len = v_state.len() - 1;
-                        v_state[v_state_len - 1] = v_state[v_state_len - 1] || v_state[v_state_len];
-                        // Pop the last state out
-                        v_state.pop();
-                        state.insert(var.to_string(), v_state);
                     }
                     BlockContent::MemPop((var, _)) => {
                         if is_alive(&state, var) || var.chars().next().unwrap() == '%' {
                             new_instructions.insert(0, i.clone());
-                        }
-                        match state.get(var) {
-                            None => { state.insert(var.to_string(), vec![false, false]); }
-                            Some(_) => {
-                                let mut v_state: Vec<bool> = (*state.get(var).unwrap().clone()).to_vec();
-                                v_state.push(false);
-                                state.insert(var.to_string(), v_state);
-                            }
                         }
                     }
                     BlockContent::Stmt(s) => {
@@ -832,8 +742,10 @@ fn liveness_analysis<'ast>(
                         contains_reg = gen.iter().fold(contains_reg, |c, x| c || x.chars().next().unwrap() == '%');
                         
                         if kill.is_empty() || kill.iter().fold(false, |c, x| c || is_alive(&state, x)) || contains_reg {
-                            // Remove kill from state
-                            state = la_kill(state, &kill);
+                            // Remove kill from state if the operation does not involve registers
+                            if !contains_reg {
+                                state = la_kill(state, &kill);
+                            }
 
                             // Add all gens to state
                             state = la_gen(state, &gen);
@@ -1280,7 +1192,7 @@ fn get_read_in_vars(
 }
 
 // Test if variable is %SP, %BP, %RP, %RET, or %ARGx
-fn reserved_variable(var: String) -> bool {
+fn reserved_variable(var: &String) -> bool {
     let arg_match = Regex::new(r"%ARG\d").unwrap();
     var == "%SP" || var == "%BP" || var == "%RP" || var == "%RET" || arg_match.is_match(&var)
 }
@@ -1375,17 +1287,31 @@ fn var_to_reg_id_expr<'ast>(
     mut reg_map: HashMap<String, usize>,
     mut reg_size: usize
 ) -> (IdentifierExpression<'ast>, HashMap<String, usize>, usize) {
-    if reserved_variable(ie.value.to_string()) {
-        return (ie.clone(), reg_map, reg_size);
-    }
-    if !reg_map.contains_key(&ie.value) {
-        reg_map.insert(ie.value.clone(), reg_size);
-        reg_size += 1;
-    }
+    let var_name: String;
+    (var_name, reg_map, reg_size) = var_name_to_reg_id_expr(ie.value.to_string(), reg_map, reg_size);
     (IdentifierExpression {
-        value: format!("%{}", reg_map.get(&ie.value).unwrap()),
+        value: var_name,
         span: ie.span
     }, reg_map, reg_size)
+}
+
+fn var_name_to_reg_id_expr(
+    str_name: String,
+    mut reg_map: HashMap<String, usize>,
+    mut reg_size: usize    
+) -> (String, HashMap<String, usize>, usize) {
+    if reserved_variable(&str_name) {
+        return (str_name, reg_map, reg_size);
+    }
+    
+    // Strip the scoping "@x" from the variable name
+    let var_name = str_name.split('@').collect::<Vec<&str>>()[0].to_string();
+
+    if !reg_map.contains_key(&var_name) {
+        reg_map.insert(var_name.clone(), reg_size);
+        reg_size += 1;
+    }
+    (format!("%{}", reg_map.get(&var_name).unwrap()), reg_map, reg_size)
 }
 
 // Convert all mentionings of variables to registers
@@ -1404,26 +1330,14 @@ fn var_to_reg(
         for s in &bls[i].instructions {
             match s {
                 BlockContent::MemPush((var, offset)) => {
-                    if reserved_variable(var.to_string()) {
-                        new_instr.push(s.clone());
-                    } else {
-                        if !reg_map.contains_key(&*var) {
-                            reg_map.insert(var.clone(), reg_size);
-                            reg_size += 1;
-                        }
-                        new_instr.push(BlockContent::MemPush((format!("%{}", reg_map.get(&*var).unwrap()), *offset)));
-                    }    
+                    let var_name: String;
+                    (var_name, reg_map, reg_size) = var_name_to_reg_id_expr(var.to_string(), reg_map, reg_size);
+                    new_instr.push(BlockContent::MemPush((var_name, *offset)));
                 }
                 BlockContent::MemPop((var, offset)) => {
-                    if reserved_variable(var.to_string()) {
-                        new_instr.push(s.clone());
-                    } else {
-                        if !reg_map.contains_key(&*var) {
-                            reg_map.insert(var.clone(), reg_size);
-                            reg_size += 1;
-                        }
-                        new_instr.push(BlockContent::MemPop((format!("%{}", reg_map.get(&*var).unwrap()), *offset)));
-                    }
+                    let var_name: String;
+                    (var_name, reg_map, reg_size) = var_name_to_reg_id_expr(var.to_string(), reg_map, reg_size);
+                    new_instr.push(BlockContent::MemPop((var_name, *offset)));
                 }
                 BlockContent::Stmt(Statement::Return(_)) => {
                     panic!("Blocks should not contain return statements.");

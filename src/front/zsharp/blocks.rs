@@ -7,8 +7,6 @@
 //       What would happen if we put function calls in loop to / from?
 //       Function call inside if / else condition?
 
-// BUG:  Need to push %RET's for function calls
-
 // Other Cleanups:
 //   Cross check edge-case detection with original ZSharp
 

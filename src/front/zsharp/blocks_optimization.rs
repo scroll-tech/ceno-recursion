@@ -922,16 +922,16 @@ fn phy_mem_rearrange<'ast>(
                         // This is only possible if nothing was ever pushed to the current stack frame
                         if state[state_len] == 0 {
                             if state_len == 0 {
-                                panic!("Physical Memory Rearrangement failed: stack is empty but encountered a PUSH statement.")
+                                panic!("Physical Memory Rearrangement failed: stack is empty but encountered a POP request. Error at block {}.", cur_bl);
                             }
                             state.pop();
                             state_len -= 1;
                         }
-                        if var.to_string() == "%BP".to_string() && state[state_len] > 1 {
-                            panic!("Physical Memory Rearrangement failed: %BP is not the last element to be pushed out.")
-                        } else if var.to_string() == "%BP".to_string() && state[state_len] == 1 {
-                            state[state_len] -= 1;
+                        // If we encounter a pop of %BP and the stack frame exists, remove the entire stack frame
+                        if var.to_string() == "%BP".to_string() && state[state_len] >= 1 {
+                            state[state_len] = 0;
                             new_instructions.push(BlockContent::MemPop(("%BP".to_string(), 0)));
+                        // If we encounter some other variable, pop it out
                         } else if var.to_string() != "%BP".to_string() {
                             state[state_len] -= 1;
                             new_instructions.push(BlockContent::MemPop((var.to_string(), state[state_len])));                         

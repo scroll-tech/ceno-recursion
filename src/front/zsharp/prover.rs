@@ -97,30 +97,32 @@ impl ExecState {
     fn pretty(&self) {
         println!("Block ID: {}", self.blk_id);
         println!("Active: {}", self.active);
-        print!("Reg\t%RP\t%SP\t%BP\t%RET");
-        for i in 4..self.reg_in.len() {
-            print!("\t%{}", i);
-        }
-        print!("\nIn:");
-        for i in &self.reg_in {
-            print!("\t");
-            if let Some(t) = i {
-                t.pretty(&mut std::io::stdout().lock())
-                    .expect("error pretty-printing value");
+        if self.active {
+            print!("Reg\t%RP\t%SP\t%BP\t%RET");
+            for i in 4..self.reg_in.len() {
+                print!("\t%{}", i);
             }
-        }
-        print!("\nOut:");
-        for i in &self.reg_out {
-            print!("\t");
-            if let Some(t) = i {
-                t.pretty(&mut std::io::stdout().lock())
-                    .expect("error pretty-printing value");
+            print!("\nIn:");
+            for i in &self.reg_in {
+                print!("\t");
+                if let Some(t) = i {
+                    t.pretty(&mut std::io::stdout().lock())
+                        .expect("error pretty-printing value");
+                }
             }
-        }
-        println!("\nSuccessor ID: {}", self.succ_id);
-        println!("Memory Operations:");
-        for m in &self.mem_op {
-            m.pretty();
+            print!("\nOut:");
+            for i in &self.reg_out {
+                print!("\t");
+                if let Some(t) = i {
+                    t.pretty(&mut std::io::stdout().lock())
+                        .expect("error pretty-printing value");
+                }
+            }
+            println!("\nSuccessor ID: {}", self.succ_id);
+            println!("Memory Operations:");
+            for m in &self.mem_op {
+                m.pretty();
+            }
         }
     }
 }

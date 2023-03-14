@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use crate::front::zsharp::blocks::*;
 use log::warn;
 use log::debug;
+use std::cmp::Ordering;
 
 #[derive(Debug, Clone)]
 pub struct MemOp {
@@ -27,7 +28,31 @@ impl MemOp {
         };
         input
     }
+
+    fn pretty(&self) {
+        print!("Addr: {:02}\tData: ", self.addr);
+        self.data.pretty(&mut std::io::stdout().lock())
+            .expect("error pretty-printing value");
+        println!();
+    }
 }
+// Ordering of MemOp solely by address
+impl Ord for MemOp {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.addr.cmp(&other.addr)
+    }
+}
+impl PartialOrd for MemOp {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for MemOp {
+    fn eq(&self, other: &Self) -> bool {
+        self.addr == other.addr
+    }
+}
+impl Eq for MemOp {}
 
 // We reserve index 0 - 3 for reg_in and reg_out to:
 // reg_in[0]: %RP
@@ -95,13 +120,27 @@ impl ExecState {
         println!("\nSuccessor ID: {}", self.succ_id);
         println!("Memory Operations:");
         for m in &self.mem_op {
-            print!("Addr: {}\tData: ", m.addr);
-            m.data.pretty(&mut std::io::stdout().lock())
-                .expect("error pretty-printing value");
-            println!();
+            m.pretty();
         }
     }
 }
+// Ordering of ExecState solely by block ID and then active (true > false)
+impl Ord for ExecState {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (self.blk_id, !self.active).cmp(&(other.blk_id, !other.active))
+    }
+}
+impl PartialOrd for ExecState {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for ExecState {
+    fn eq(&self, other: &Self) -> bool {
+        self.blk_id == other.blk_id && self.active == other.active
+    }
+}
+impl Eq for ExecState {}
 
 impl<'ast> ZGen<'ast> {
     fn print_all_vars_in_scope(&self) {
@@ -352,4 +391,28 @@ pub fn print_state_list(bl_exec_state: &Vec<ExecState>) {
         println!("--\nSTATE {}", i);
         bl_exec_state[i].pretty();
     }
+}
+
+pub fn sort_by_block(bl_exec_state: &Vec<ExecState>) -> Vec<ExecState> {
+    let mut bl_sorted_state = bl_exec_state.clone();
+    bl_sorted_state.sort();
+    println!("\n==========\nSorting by Block:");
+    for i in 0..bl_exec_state.len() {
+        println!("--\nSORTED STATE {}", i);
+        bl_sorted_state[i].pretty();
+    }
+    bl_sorted_state
+}
+
+pub fn sort_by_mem(bl_exec_state: &Vec<ExecState>) -> Vec<MemOp> {
+    let mut sorted_memop_list = Vec::new();
+    for b in bl_exec_state {
+        sorted_memop_list.append(&mut b.mem_op.clone());
+    }
+    sorted_memop_list.sort();
+    println!("\n==========\nSorting by Memory Address:");
+    for i in 0..sorted_memop_list.len() {
+        sorted_memop_list[i].pretty();
+    }
+    sorted_memop_list   
 }

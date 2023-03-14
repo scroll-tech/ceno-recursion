@@ -96,6 +96,8 @@ impl ZSharpFE {
         let padding = blocks::generate_runtime_data(blks.len(), &bl_exec_count, var_list);
         bl_exec_state = blocks::append_dummy_exec_state(blks.len(), &bl_exec_count, &padding, bl_exec_state, &reg_size);
         prover::print_state_list(&bl_exec_state);
+        let _ = prover::sort_by_block(&bl_exec_state);
+        let _ = prover::sort_by_mem(&bl_exec_state);
         return ret;
     }
 }

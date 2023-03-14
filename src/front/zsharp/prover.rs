@@ -37,6 +37,7 @@ impl MemOp {
 #[derive(Debug, Clone)]
 pub struct ExecState {
     pub blk_id: usize,      // ID of the block
+    pub active: bool,       // Is this block active (not a dummy)?
     pub reg_in: Vec<Option<T>>,     // Input register State
     pub reg_out: Vec<Option<T>>,    // Output register State
     pub succ_id: usize,     // ID of the successor block
@@ -44,9 +45,22 @@ pub struct ExecState {
 }
 
 impl ExecState {
-    fn new(blk_id: usize, reg_size: usize) -> Self {
+    pub fn new(blk_id: usize, reg_size: usize) -> Self {
         let input = Self {
             blk_id,
+            active: true,
+            reg_in: vec![None; reg_size],
+            reg_out: vec![None; reg_size],
+            succ_id: 0,
+            mem_op: Vec::new()
+        };
+        input
+    }
+
+    pub fn new_dummy(blk_id: usize, reg_size: usize) -> Self {
+        let input = Self {
+            blk_id,
+            active: false,
             reg_in: vec![None; reg_size],
             reg_out: vec![None; reg_size],
             succ_id: 0,
@@ -57,6 +71,7 @@ impl ExecState {
 
     fn pretty(&self) {
         println!("Block ID: {}", self.blk_id);
+        println!("Active: {}", self.active);
         print!("Reg\t%RP\t%SP\t%BP\t%RET");
         for i in 4..self.reg_in.len() {
             print!("\t%{}", i);
@@ -142,7 +157,7 @@ impl<'ast> ZGen<'ast> {
     pub fn bl_eval_const_entry_fn<const VERBOSE: bool>(
         &self, entry_bl: usize, 
         bls: &Vec<Block<'ast>>,
-        reg_size: usize
+        reg_size: &usize
     ) -> Result<(T, Vec<usize>, Vec<ExecState>), String> {
         // We assume that all errors has been handled in bl_gen functions        
         debug!("Block Eval Const entry: {}", entry_bl);
@@ -163,7 +178,7 @@ impl<'ast> ZGen<'ast> {
             bl_exec_count[nb] += 1;
 
             // Push-in new block state
-            bl_exec_state.push(ExecState::new(nb, reg_size));
+            bl_exec_state.push(ExecState::new(nb, *reg_size));
             // Match reg_in with reg_out of last block
             if tr_size > 0 {
                 bl_exec_state[tr_size].reg_in = bl_exec_state[tr_size - 1].reg_out.clone();
@@ -187,7 +202,7 @@ impl<'ast> ZGen<'ast> {
             bl_exec_state[tr_size].reg_out[1] = self.cvar_lookup("%SP");
             bl_exec_state[tr_size].reg_out[2] = self.cvar_lookup("%BP");
             bl_exec_state[tr_size].reg_out[3] = self.cvar_lookup("%RET");
-            for i in 4..reg_size {
+            for i in 4..*reg_size {
                 bl_exec_state[tr_size].reg_out[i] = self.cvar_lookup(&format!("%{}", i));
             }
             // Update successor block ID
@@ -332,7 +347,7 @@ impl<'ast> ZGen<'ast> {
 }
 
 pub fn print_state_list(bl_exec_state: &Vec<ExecState>) {
-    println!("Execution Trace:");
+    println!("\nExecution Trace:");
     for i in 0..bl_exec_state.len() {
         println!("--\nSTATE {}", i);
         bl_exec_state[i].pretty();

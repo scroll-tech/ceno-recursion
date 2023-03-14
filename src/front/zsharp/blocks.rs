@@ -21,6 +21,7 @@ use crate::front::zsharp::ZGen;
 use crate::front::zsharp::Ty;
 use crate::front::zsharp::PathBuf;
 use crate::front::zsharp::pretty;
+use crate::front::zsharp::prover::ExecState;
 use std::collections::HashMap;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -1307,19 +1308,80 @@ impl<'ast> ZGen<'ast> {
     }
 }
 
-pub fn generate_runtime_data(len: usize, bl_exec_count: Vec<usize>, var_list: Vec<HashSet<String>>) {    
+// Compute waste as explained below
+// Return values:
+// ret[0]: the waste score of the given padding
+// ret[1]: set to TRUE if no block is "splitted", i.e. there's no reason to increase padding further
+fn compute_waste<const TRADEOFF: usize>(padding: usize, bl_exec_count: &Vec<usize>) -> (usize, bool) {
+    let mut waste = 0;
+    let mut split = false;
+    for i in bl_exec_count {
+        let mut count = *i;
+        if count > padding {
+            split = true;
+            while count > padding {
+                waste += TRADEOFF;
+                count -= padding;
+            }
+        }
+        if count != 0 {
+            waste += padding - count;
+        }
+    }
+    return (waste, split);
+}
+
+pub fn generate_runtime_data(len: usize, bl_exec_count: &Vec<usize>, var_list: Vec<HashSet<String>>) -> usize {    
+
+    let bl_var_count: Vec<usize> = var_list.iter().map(|x| x.len()).collect();
+    // How many dummy inputs would cost the same as "splitting" a block into two?
+    // A large tradeoff value corresponds to a high padding value.
+    const TRADEOFF: usize = 64;
+
+    // WASTE = # OF BLOCKS SPLITTED * TRADEOFF + # OF DUMMY IMPUTS
+    // Start with PADDING = 1 and keep doubling until find the minimum WASTE
+    let mut padding = 1;
+    let mut waste: usize;
+    let mut min_waste = 0;
+    let mut best_pad = 0;
+    let mut split = true;
+    while split {
+        (waste, split) = compute_waste::<TRADEOFF>(padding, bl_exec_count);
+        if best_pad == 0 || waste < min_waste {
+            min_waste = waste;
+            best_pad = padding;
+        }
+        padding *= 2;
+    }
 
     println!("\n\n--\nRuntime Data:");
-    let bl_var_count: Vec<usize> = var_list.iter().map(|x| x.len()).collect();
-
     println!("\nBlock\t# Exec\t# Param");
-    let mut t_exec_count = 0;
-    let mut t_var_count = 0;
 
     for i in 0..len {
         println!("{}\t{}\t{}", i, bl_exec_count[i], bl_var_count[i]);
-        t_exec_count += bl_exec_count[i];
-        t_var_count += bl_var_count[i];
     }
-    println!("T\t{}\t{}", t_exec_count, t_var_count);
+
+    println!("Padding: {}", best_pad);
+
+    best_pad
+}
+
+// Append dummy exec states to the list according to padding
+pub fn append_dummy_exec_state(
+    len: usize,
+    bl_exec_count: &Vec<usize>,
+    padding: &usize,
+    mut bl_exec_state: Vec<ExecState>,
+    reg_size: &usize
+) -> Vec<ExecState> {
+    for i in 0..len {
+        let mut count = bl_exec_count[i];
+        while count > *padding {
+            count -= *padding;
+        }
+        if count != 0 {
+            bl_exec_state.append(&mut vec![ExecState::new_dummy(i, *reg_size); *padding - count]);
+        }
+    }
+    bl_exec_state
 }

@@ -61,6 +61,14 @@ fn print_cfg(
     println!();
 }
 
+fn print_bls(bls: &Vec<Block>, entry_bl: &usize) {
+    println!("Entry block: {entry_bl}");  
+    for b in bls {
+        b.pretty();
+        println!("");
+    }    
+}
+
 // Returns: Blocks, entry block, map from blocks to vars, # of registers
 pub fn optimize_block<const VERBOSE: bool>(
     mut bls: Vec<Block>,
@@ -76,22 +84,14 @@ pub fn optimize_block<const VERBOSE: bool>(
     
     bls = liveness_analysis(bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
     if VERBOSE {
-        println!("\n\n--\nLiveness:");
-        println!("Entry block: {entry_bl}");      
-        for b in &bls {
-            b.pretty();
-            println!("");
-        }
+        println!("\n\n--\nLiveness:");   
+        print_bls(&bls, &entry_bl);
     }
 
     bls = phy_mem_rearrange(bls, &predecessor_fn, &successor_fn, &entry_bls_fn);
     if VERBOSE {
         println!("\n\n--\nPMR:");
-        println!("Entry block: {entry_bl}");      
-        for b in &bls {
-            b.pretty();
-            println!("");
-        }
+        print_bls(&bls, &entry_bl);
     }
 
     let var_list = get_read_in_vars(&bls, &successor, &predecessor, &exit_bls);
@@ -99,33 +99,23 @@ pub fn optimize_block<const VERBOSE: bool>(
     (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
     if VERBOSE {
         println!("\n\n--\nEBE:");
-        println!("Entry block: {entry_bl}");      
-        for b in &bls {
-            b.pretty();
-            println!("");
-        }
+        print_bls(&bls, &entry_bl);
     }
 
     let (bls, entry_bl, label_map) = dead_block_elimination(bls, entry_bl, predecessor);
     if VERBOSE {
         println!("\n\n--\nDBE:");
-        println!("Entry block: {entry_bl}");      
-        for b in &bls {
-            b.pretty();
-            println!("");
-        }
+        print_bls(&bls, &entry_bl);
     }
 
-    let (bls, reg_map, reg_size) = var_to_reg(bls);
+    // Convert variables to registers
+    // Append inputs to blocks
+    let (bls, reg_map, reg_size) = var_to_reg(bls, entry_bl.clone());
     if VERBOSE {
         println!("\n\n--\nVar -> Reg:");
         println!("Var -> Reg map: {:?}", reg_map);
     }
-    println!("Entry block: {entry_bl}");   
-    for b in &bls {
-        b.pretty();
-        println!("");
-    }
+    print_bls(&bls, &entry_bl);
 
     // Reorganize var_list with new labels after DBE
     // We are only doing this so we don't have to reconstruct CFG,
@@ -215,7 +205,7 @@ fn bl_trans_find_val(e: &Expression) -> Vec<NextBlock> {
         }
         Expression::Identifier(ie) => {
             if ie.value == "%RP".to_string() {
-                return vec![NextBlock::Rp()]
+                return vec![NextBlock::Rp]
             } else {
                 panic!("Unexpected variable in Block Transition")
             }
@@ -338,7 +328,7 @@ fn flow_graph_transition<const IS_RP: bool>(
                 next_bls.push_back(*tmp_bl);
             }
         }
-        NextBlock::Rp() => {
+        NextBlock::Rp => {
             if rp_successor.len() == 0 {
                 panic!("Control flow graph construction fails: reaching end of function point but %RP not set!")
             }
@@ -376,7 +366,7 @@ fn construct_flow_graph(
     // list of all entry blocks to a function
     let mut entry_bl_fn: HashSet<usize> = HashSet::new();
     entry_bl_fn.insert(entry_bl);
-    // list of all blocks that ends with ProgTerm or Rp()
+    // list of all blocks that ends with ProgTerm or Rp
     let mut exit_bls_fn: HashSet<usize> = HashSet::new();
     
     // Start from entry_bl, do a BFS, add all blocks in its terminator to its successor
@@ -448,13 +438,13 @@ fn construct_flow_graph(
                 }
                 // If block terminates to %RP, add it to exit_bls_fn
                 for b in branches {
-                    if b == NextBlock::Rp() {
+                    if b == NextBlock::Rp {
                         exit_bls_fn.insert(cur_bl);
                     }
                 }
             }
             BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-            BlockTerminator::ProgTerm() => { 
+            BlockTerminator::ProgTerm => { 
                 exit_bls.insert(cur_bl);
                 exit_bls_fn.insert(cur_bl);
             }
@@ -647,7 +637,7 @@ fn liveness_analysis<'ast>(
         match &bls[cur_bl].terminator {
             BlockTerminator::Transition(e) => { state = la_gen(state, &expr_find_val(e)); }
             BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-            BlockTerminator::ProgTerm() => {}            
+            BlockTerminator::ProgTerm => {}            
         }
 
         // Only analyze if never visited before or OUT changes
@@ -1085,6 +1075,7 @@ fn dead_block_elimination(
             // Change block name to match new_label
             let tmp_bl = Block {
                 name: new_label,
+                inputs: bls[old_label].inputs.clone(),
                 // No need to store statements if we are at the exit block
                 instructions: bls[old_label].instructions.clone(),
                 terminator: bls[old_label].terminator.clone()
@@ -1151,7 +1142,7 @@ fn get_read_in_vars(
         match &bls[cur_bl].terminator {
             BlockTerminator::Transition(e) => { state.extend(expr_find_val(&e)); }
             BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-            BlockTerminator::ProgTerm() => {}            
+            BlockTerminator::ProgTerm => {}            
         }
 
         // Only analyze if never visited before or OUT changes
@@ -1319,10 +1310,11 @@ fn var_name_to_reg_id_expr(
 // No control flow, iterate over blocks directly
 // Returns the new blocks, register map, and # of registers used
 fn var_to_reg(
-    mut bls: Vec<Block>
+    mut bls: Vec<Block>,
+    entry_bl: usize
 ) -> (Vec<Block>, HashMap<String, usize>, usize) {
     let mut reg_map: HashMap<String, usize> = HashMap::new();
-    // Reserve register 0 - 3 to %SP, %BP, %RP, and %RET (unordered)
+    // Reserve register 0 - 3 to %RP, %SP, %BP, and %RET
     // We decide the order of them in prover.rs
     let mut reg_size = 4;
     for i in 0..bls.len() {
@@ -1415,6 +1407,18 @@ fn var_to_reg(
             let new_expr: Expression;
             (new_expr, reg_map, reg_size) = var_to_reg_expr(&e, reg_map, reg_size);
             bls[i].terminator = BlockTerminator::Transition(new_expr);
+        }
+        // For this primitive implementation, take every register up to reg_size as input
+        // For entry block, these inputs are public
+        // For all other blocks, the inputs are only visible to the prover
+        let vis = if i == entry_bl {InputVisibility::Public} else {InputVisibility::Prover};
+        assert!(bls[i].inputs.len() == 0);
+        bls[i].inputs.push(("%RP".to_string(), vis.clone()));
+        bls[i].inputs.push(("%SP".to_string(), vis.clone()));
+        bls[i].inputs.push(("%BP".to_string(), vis.clone()));
+        bls[i].inputs.push(("%RET".to_string(), vis.clone()));
+        for j in 4..reg_size {
+            bls[i].inputs.push(((format!("%{}", j)), vis.clone()));
         }
     }
     (bls, reg_map, reg_size)

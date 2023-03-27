@@ -6,6 +6,8 @@
 //       Multi-file program not supported
 //       What would happen if we put function calls in loop to / from?
 //       Function call inside if / else condition?
+//       If b@1 is dead, can we avoid pushing-in b@0?
+//       Might be a good idea to avoid using physical memory at all here.
 
 // Other Cleanups:
 //   Cross check edge-case detection with original ZSharp
@@ -86,7 +88,7 @@ pub fn bl_coda<'ast>(nb: NextBlock) -> Expression<'ast> {
             })))),
             span: Span::new("", 0, 0).unwrap()
         })),
-        NextBlock::Rp() => Expression::Identifier(IdentifierExpression {
+        NextBlock::Rp => Expression::Identifier(IdentifierExpression {
             value: "%RP".to_string(),
             span: Span::new("", 0, 0).unwrap()
         })
@@ -102,9 +104,26 @@ pub fn bl_trans<'ast>(cond: Expression<'ast>, tval: NextBlock, fval: NextBlock) 
     })
 }
 
+// Which party can see the input?
+#[derive(Clone)]
+pub enum InputVisibility {
+    Prover,
+    Public
+}
+
+impl InputVisibility {
+    pub fn pretty(&self) {
+        match &self {
+            InputVisibility::Prover => {println!("Prover")}
+            InputVisibility::Public => {println!("Public")}
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Block<'ast> {
     pub name: usize,
+    pub inputs: Vec<(String, InputVisibility)>,
     pub instructions: Vec<BlockContent<'ast>>,
     pub terminator: BlockTerminator<'ast>,
 }
@@ -121,7 +140,7 @@ pub enum BlockContent<'ast> {
 pub enum BlockTerminator<'ast> {
     Transition(Expression<'ast>), // Expression that should be evaluated to either a const int or "%RP"
     FuncCall(String), // Placeholders before blocks corresponding to each function has been determined
-    ProgTerm() // The program terminates
+    ProgTerm // The program terminates
 }
 
 #[derive(Clone, PartialEq)]
@@ -129,13 +148,14 @@ pub enum BlockTerminator<'ast> {
 // Used to construct Block Transition
 pub enum NextBlock {
     Label(usize),
-    Rp()
+    Rp
 }
 
 impl<'ast> Block<'ast> {
     fn new(name: usize) -> Self {
         let input = Self {
             name,
+            inputs: Vec::new(),
             instructions: Vec::new(),
             terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1)))
         };
@@ -144,6 +164,13 @@ impl<'ast> Block<'ast> {
 
     pub fn pretty(&self) {
         println!("\nBlock {}:", self.name);
+        println!("Inputs:");
+        for i in &self.inputs {
+            let (name, vis) = i;
+            print!("    {}: ", name);
+            vis.pretty();
+        }
+        println!("Instructions:");
         for c in &self.instructions {
             match c {
                 BlockContent::MemPush((id, offset)) => { println!("    %PHY[%SP + {offset}] = {id}") }
@@ -159,7 +186,7 @@ impl<'ast> Block<'ast> {
             BlockTerminator::FuncCall(fc) => {
                 print!("Transition: -> function call on {}.", fc);
             }
-            BlockTerminator::ProgTerm() => {
+            BlockTerminator::ProgTerm => {
                 print!("Program terminates.")
             }
         }
@@ -405,9 +432,9 @@ impl<'ast> ZGen<'ast> {
 
             // Set terminator to ProgTerm if in main, point to %RP otherwise
             if IS_MAIN {
-                blks[blks_len - 1].terminator = BlockTerminator::ProgTerm();
+                blks[blks_len - 1].terminator = BlockTerminator::ProgTerm;
             } else {
-                blks[blks_len - 1].terminator = BlockTerminator::Transition(bl_coda(NextBlock::Rp()));
+                blks[blks_len - 1].terminator = BlockTerminator::Transition(bl_coda(NextBlock::Rp));
             }
 
             self.cvar_exit_function();
@@ -690,9 +717,9 @@ impl<'ast> ZGen<'ast> {
 
                 // Set terminator to ProgTerm if in main, point to %RP otherwise
                 if IS_MAIN {
-                    blks[blks_len - 1].terminator = BlockTerminator::ProgTerm();
+                    blks[blks_len - 1].terminator = BlockTerminator::ProgTerm;
                 } else {
-                    blks[blks_len - 1].terminator = BlockTerminator::Transition(bl_coda(NextBlock::Rp()));
+                    blks[blks_len - 1].terminator = BlockTerminator::Transition(bl_coda(NextBlock::Rp));
                 }
 
                 // Create a dummy block in case there are anything after return

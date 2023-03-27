@@ -382,7 +382,7 @@ impl<'ast> ZGen<'ast> {
                 }
             }
             BlockTerminator::FuncCall(fc) => Err(format!("Evaluation failed: function call to {} needs to be converted to block label.", fc)),
-            BlockTerminator::ProgTerm() => Ok((0, phy_mem, true, mem_op))
+            BlockTerminator::ProgTerm => Ok((0, phy_mem, true, mem_op))
         }
     }
 }

@@ -89,7 +89,7 @@ impl ZSharpFE {
             b.pretty();
             println!("");
         }
-        let (blks, entry_bl, var_list, reg_size) = blocks_optimization::optimize_block::<true>(blks, entry_bl);
+        let (blks, entry_bl, var_list, reg_size) = blocks_optimization::optimize_block::<false>(blks, entry_bl);
         println!("\n\n--\nInterpretation:");
         let (ret, bl_exec_count, mut bl_exec_state) = g.bl_eval_const_entry_fn::<false>(entry_bl, &blks, &reg_size)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));

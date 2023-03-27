@@ -27,7 +27,6 @@ use crate::front::zsharp::prover::ExecState;
 use std::collections::HashMap;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
-use std::collections::HashSet;
 use pest::Span;
 
 fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast>) -> Expression<'ast> {
@@ -123,7 +122,7 @@ impl InputVisibility {
 #[derive(Clone)]
 pub struct Block<'ast> {
     pub name: usize,
-    pub inputs: Vec<(String, InputVisibility)>,
+    pub inputs: Vec<(String, Ty, InputVisibility)>,
     pub instructions: Vec<BlockContent<'ast>>,
     pub terminator: BlockTerminator<'ast>,
 }
@@ -166,8 +165,8 @@ impl<'ast> Block<'ast> {
         println!("\nBlock {}:", self.name);
         println!("Inputs:");
         for i in &self.inputs {
-            let (name, vis) = i;
-            print!("    {}: ", name);
+            let (name, ty, vis) = i;
+            print!("    {}: {}, ", name, ty);
             vis.pretty();
         }
         println!("Instructions:");
@@ -1358,9 +1357,8 @@ fn compute_waste<const TRADEOFF: usize>(padding: usize, bl_exec_count: &Vec<usiz
     return (waste, split);
 }
 
-pub fn generate_runtime_data(len: usize, bl_exec_count: &Vec<usize>, var_list: Vec<HashSet<String>>) -> usize {    
+pub fn generate_runtime_data(len: usize, bl_exec_count: &Vec<usize>) -> usize {    
 
-    let bl_var_count: Vec<usize> = var_list.iter().map(|x| x.len()).collect();
     // How many dummy inputs would cost the same as "splitting" a block into two?
     // A large tradeoff value corresponds to a high padding value.
     const TRADEOFF: usize = 64;
@@ -1379,13 +1377,6 @@ pub fn generate_runtime_data(len: usize, bl_exec_count: &Vec<usize>, var_list: V
             best_pad = padding;
         }
         padding *= 2;
-    }
-
-    println!("\n\n--\nRuntime Data:");
-    println!("\nBlock\t# Exec\t# Param");
-
-    for i in 0..len {
-        println!("{}\t{}\t{}", i, bl_exec_count[i], bl_var_count[i]);
     }
 
     println!("Padding: {}", best_pad);

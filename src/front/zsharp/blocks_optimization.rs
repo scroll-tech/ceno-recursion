@@ -9,6 +9,26 @@ use crate::front::zsharp::blocks::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use regex::Regex;
+use crate::front::zsharp::Ty;
+
+fn type_to_ty(t: Type) -> Result<Ty, String> {
+    fn lift(t: BasicOrStructType) -> Type {
+        match t {
+            BasicOrStructType::Basic(b) => Type::Basic(b.clone()),
+            BasicOrStructType::Struct(b) => Type::Struct(b.clone()),
+        }
+    }
+    match t {
+        Type::Basic(BasicType::U8(_)) => Ok(Ty::Uint(8)),
+        Type::Basic(BasicType::U16(_)) => Ok(Ty::Uint(16)),
+        Type::Basic(BasicType::U32(_)) => Ok(Ty::Uint(32)),
+        Type::Basic(BasicType::U64(_)) => Ok(Ty::Uint(64)),
+        Type::Basic(BasicType::Boolean(_)) => Ok(Ty::Bool),
+        Type::Basic(BasicType::Field(_)) => Ok(Ty::Field),
+        Type::Array(_) => Err(format!("Arrays not supported")),
+        Type::Struct(_) => Err(format!("Structs not supported")),
+    }
+}
 
 fn print_cfg(
     successor: &Vec<HashSet<usize>>,
@@ -69,12 +89,13 @@ fn print_bls(bls: &Vec<Block>, entry_bl: &usize) {
     }    
 }
 
-// Returns: Blocks, entry block, map from blocks to vars, # of registers
+// Returns: Blocks, entry block, # of registers
 pub fn optimize_block<const VERBOSE: bool>(
     mut bls: Vec<Block>,
     entry_bl: usize
-) -> (Vec<Block>, usize, Vec<HashSet<String>>, usize) {
+) -> (Vec<Block>, usize, usize) {
     
+    // Construct CFG
     let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
         construct_flow_graph(&bls, entry_bl);
     if VERBOSE {
@@ -82,51 +103,46 @@ pub fn optimize_block<const VERBOSE: bool>(
     }
     println!("\n\n--\nOptimization:");
     
+    // Liveness
     bls = liveness_analysis(bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
     if VERBOSE {
         println!("\n\n--\nLiveness:");   
         print_bls(&bls, &entry_bl);
     }
 
+    // PMR
     bls = phy_mem_rearrange(bls, &predecessor_fn, &successor_fn, &entry_bls_fn);
     if VERBOSE {
         println!("\n\n--\nPMR:");
         print_bls(&bls, &entry_bl);
     }
 
-    let var_list = get_read_in_vars(&bls, &successor, &predecessor, &exit_bls);
+    // Set Input
+    bls = set_input(bls, &successor, &predecessor, &entry_bl, &exit_bls);
 
+    // EBE
     (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
     if VERBOSE {
         println!("\n\n--\nEBE:");
         print_bls(&bls, &entry_bl);
     }
 
+    // DBE
     let (bls, entry_bl, label_map) = dead_block_elimination(bls, entry_bl, predecessor);
     if VERBOSE {
         println!("\n\n--\nDBE:");
         print_bls(&bls, &entry_bl);
     }
 
-    // Convert variables to registers
-    // Append inputs to blocks
-    let (bls, reg_map, reg_size) = var_to_reg(bls, entry_bl.clone());
+    // VtR
+    let (bls, reg_map, reg_size) = var_to_reg(bls);
     if VERBOSE {
         println!("\n\n--\nVar -> Reg:");
         println!("Var -> Reg map: {:?}", reg_map);
     }
     print_bls(&bls, &entry_bl);
 
-    // Reorganize var_list with new labels after DBE
-    // We are only doing this so we don't have to reconstruct CFG,
-    // which is more expensive at least at the moment
-    let mut new_var_list: Vec<HashSet<String>> = vec![HashSet::new(); bls.len() + 1];
-    for old_val in 0..var_list.len() {
-        let new_val = label_map.get(&old_val).unwrap();
-        new_var_list[*new_val] = var_list[old_val].clone();
-    }
-
-    (bls, entry_bl, new_var_list, reg_size)
+    (bls, entry_bl, reg_size)
 } 
 
 // If bc is a statement of form %RP = val,
@@ -1106,15 +1122,18 @@ fn dead_block_elimination(
     return (new_bls, new_entry_bl, label_map);
 }
 
-// For each block, record the set of variables that are alive during the input state of the block
-// Return: ret[i] is the list of variables alive before block i
-fn get_read_in_vars(
-    bls: &Vec<Block>,
+// For each block, set its input to be variables that are alive at the entry point of the block and their type
+// Returns: bls
+// This pass consists of a liveness analysis and a reaching definition (for typing)
+fn set_input<'bl>(
+    mut bls: Vec<Block<'bl>>,
     successor: &Vec<HashSet<usize>>,
     predecessor: &Vec<HashSet<usize>>,
+    entry_bl: &usize,
     exit_bls: &HashSet<usize>
-) -> Vec<HashSet<String>> {
+) -> Vec<Block<'bl>> {
 
+    // Liveness
     let mut visited: Vec<bool> = vec![false; bls.len()];
     // MEET is union, so IN and OUT are Empty Set
     let mut bl_in: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
@@ -1134,7 +1153,7 @@ fn get_read_in_vars(
     while !next_bls.is_empty() {
         let cur_bl = next_bls.pop_front().unwrap();
 
-        // State is the union of all successors and  exit condition
+        // State is the union of all successors and exit condition
         let mut state: HashSet<String> = HashSet::new();
         for s in &successor[cur_bl] {
             state.extend(bl_in[*s].clone());
@@ -1179,7 +1198,91 @@ fn get_read_in_vars(
         }    
     }
 
-    return bl_in;
+    let name_lst = bl_in;
+
+    // bl_in now consists of all the variables alive at the entry point of each block, now use a forward analysis
+    // to find their types
+    // Assume that there are no generic / dynamic types
+
+    // Typing
+    let mut visited: Vec<bool> = vec![false; bls.len()];
+    // MEET is union, so IN and OUT are Empty Set
+    let mut bl_in: Vec<HashMap<String, Ty>> = vec![HashMap::new(); bls.len()];
+    let mut bl_out: Vec<HashMap<String, Ty>> = vec![HashMap::new(); bls.len()];
+    
+    // Start from entry block
+    let mut next_bls: VecDeque<usize> = VecDeque::new();
+    next_bls.push_back(*entry_bl);
+    // Forward analysis!
+    while !next_bls.is_empty() {
+        let cur_bl = next_bls.pop_front().unwrap();
+
+        // State is the union of all predecessors
+        let mut state: HashMap<String, Ty> = HashMap::new();
+        for s in &predecessor[cur_bl] {
+            for (name, ty) in &bl_out[*s] {
+                if let Some(k) = state.get(name) {
+                    if *ty != *k {
+                        panic!("Dynamic and generic types not supported!")
+                    }
+                }
+                if state.get(name) == None {
+                    state.insert(name.to_string(), ty.clone());
+                }
+            }
+        }
+
+        // Only analyze if never visited before or OUT changes
+        if !visited[cur_bl] || state != bl_in[cur_bl] {
+            
+            bl_in[cur_bl] = state.clone();
+            visited[cur_bl] = true;
+
+            // No KILL, GEN if we meet a typed definition
+            // The only case we need to process is Typed Definition
+            for i in bls[cur_bl].instructions.iter().rev() {
+                match i {
+                    BlockContent::MemPush((var, _)) => {}
+                    BlockContent::MemPop((var, _)) => {}
+                    BlockContent::Stmt(s) => {
+                        if let Statement::Definition(ds) = s {
+                            for d in &ds.lhs {
+                                if let TypedIdentifierOrAssignee::TypedIdentifier(p) = d {
+                                    let name = p.identifier.value.to_string();
+                                    let ty = type_to_ty(p.ty.clone());
+                                    state.insert(name, ty.unwrap());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            bl_out[cur_bl] = state;
+
+            // Terminator is just an expression so we don't need to worry about it
+
+            // Block Transition
+            for tmp_bl in successor[cur_bl].clone() {
+                next_bls.push_back(tmp_bl);
+            }
+        }    
+    }
+
+    let ty_map = bl_in;
+
+    // Update input of all blocks
+    for i in 0..bls.len() {
+        // For this primitive implementation, take every register up to reg_size as input
+        // For entry block, these inputs are public
+        // For all other blocks, the inputs are only visible to the prover
+        let vis = if i == *entry_bl {InputVisibility::Public} else {InputVisibility::Prover};
+        assert!(bls[i].inputs.len() == 0);
+        for name in &name_lst[i] {
+            bls[i].inputs.push((name.to_string(), ty_map[i].get(name).unwrap().clone(), vis.clone()));
+        }
+    }
+
+    return bls;
 }
 
 // Test if variable is %SP, %BP, %RP, %RET, or %ARGx
@@ -1310,14 +1413,22 @@ fn var_name_to_reg_id_expr(
 // No control flow, iterate over blocks directly
 // Returns the new blocks, register map, and # of registers used
 fn var_to_reg(
-    mut bls: Vec<Block>,
-    entry_bl: usize
+    mut bls: Vec<Block>
 ) -> (Vec<Block>, HashMap<String, usize>, usize) {
     let mut reg_map: HashMap<String, usize> = HashMap::new();
     // Reserve register 0 - 3 to %RP, %SP, %BP, and %RET
     // We decide the order of them in prover.rs
     let mut reg_size = 4;
     for i in 0..bls.len() {
+        // Map the inputs
+        let mut new_inputs: Vec<(String, Ty, InputVisibility)> = Vec::new();
+        for (name, ty, vis) in &bls[i].inputs {
+            let new_name: String;
+            (new_name, reg_map, reg_size) = var_name_to_reg_id_expr(name.to_string(), reg_map, reg_size);
+            new_inputs.push((new_name, ty.clone(), vis.clone()));
+        }
+        bls[i].inputs = new_inputs;
+        // Map the instructions
         let mut new_instr: Vec<BlockContent> = Vec::new();
         for s in &bls[i].instructions {
             match s {
@@ -1408,18 +1519,7 @@ fn var_to_reg(
             (new_expr, reg_map, reg_size) = var_to_reg_expr(&e, reg_map, reg_size);
             bls[i].terminator = BlockTerminator::Transition(new_expr);
         }
-        // For this primitive implementation, take every register up to reg_size as input
-        // For entry block, these inputs are public
-        // For all other blocks, the inputs are only visible to the prover
-        let vis = if i == entry_bl {InputVisibility::Public} else {InputVisibility::Prover};
-        assert!(bls[i].inputs.len() == 0);
-        bls[i].inputs.push(("%RP".to_string(), vis.clone()));
-        bls[i].inputs.push(("%SP".to_string(), vis.clone()));
-        bls[i].inputs.push(("%BP".to_string(), vis.clone()));
-        bls[i].inputs.push(("%RET".to_string(), vis.clone()));
-        for j in 4..reg_size {
-            bls[i].inputs.push(((format!("%{}", j)), vis.clone()));
-        }
     }
     (bls, reg_map, reg_size)
 }
+

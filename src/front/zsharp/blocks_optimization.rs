@@ -12,12 +12,14 @@ use regex::Regex;
 use crate::front::zsharp::Ty;
 
 fn type_to_ty(t: Type) -> Result<Ty, String> {
+    /*
     fn lift(t: BasicOrStructType) -> Type {
         match t {
             BasicOrStructType::Basic(b) => Type::Basic(b.clone()),
             BasicOrStructType::Struct(b) => Type::Struct(b.clone()),
         }
     }
+    */
     match t {
         Type::Basic(BasicType::U8(_)) => Ok(Ty::Uint(8)),
         Type::Basic(BasicType::U16(_)) => Ok(Ty::Uint(16)),
@@ -128,7 +130,7 @@ pub fn optimize_block<const VERBOSE: bool>(
     }
 
     // DBE
-    let (bls, entry_bl, label_map) = dead_block_elimination(bls, entry_bl, predecessor);
+    let (bls, entry_bl, _) = dead_block_elimination(bls, entry_bl, predecessor);
     if VERBOSE {
         println!("\n\n--\nDBE:");
         print_bls(&bls, &entry_bl);
@@ -1242,8 +1244,8 @@ fn set_input<'bl>(
             // The only case we need to process is Typed Definition
             for i in bls[cur_bl].instructions.iter().rev() {
                 match i {
-                    BlockContent::MemPush((var, _)) => {}
-                    BlockContent::MemPop((var, _)) => {}
+                    BlockContent::MemPush(_) => {}
+                    BlockContent::MemPop(_) => {}
                     BlockContent::Stmt(s) => {
                         if let Statement::Definition(ds) = s {
                             for d in &ds.lhs {
@@ -1277,6 +1279,8 @@ fn set_input<'bl>(
         // For all other blocks, the inputs are only visible to the prover
         let vis = if i == *entry_bl {InputVisibility::Public} else {InputVisibility::Prover};
         assert!(bls[i].inputs.len() == 0);
+        println!("{:?}", name_lst);
+        println!("{:?}", ty_map);
         for name in &name_lst[i] {
             bls[i].inputs.push((name.to_string(), ty_map[i].get(name).unwrap().clone(), vis.clone()));
         }

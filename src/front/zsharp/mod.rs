@@ -60,7 +60,17 @@ impl FrontEnd for ZSharpFE {
         g.visit_files();
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
-        g.entry_fn("main");
+        // g.entry_fn("main");
+        let (blks, entry_bl) = g.bl_gen_const_entry_fn("main");
+        println!("Entry block: {entry_bl}");
+        for b in &blks {
+            b.pretty();
+            println!("");
+        }
+        let (blks, _, _) = blocks_optimization::optimize_block::<false>(blks, entry_bl);
+        println!("\n\n--\nCirc IR:");
+        g.bls_to_circ(&blks);
+
         g.generics_stack_pop();
         g.file_stack_pop();
 
@@ -93,7 +103,7 @@ impl ZSharpFE {
         println!("\n\n--\nInterpretation:");
         let (ret, bl_exec_count, mut bl_exec_state) = g.bl_eval_const_entry_fn::<false>(entry_bl, &blks, &reg_size)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-        let padding = blocks::generate_runtime_data(blks.len(), &bl_exec_count);
+        let padding = blocks::generate_runtime_data(&bl_exec_count);
         bl_exec_state = blocks::append_dummy_exec_state(blks.len(), &bl_exec_count, &padding, bl_exec_state, &reg_size);
         prover::print_state_list(&bl_exec_state);
         let _ = prover::sort_by_block(&bl_exec_state);
@@ -778,6 +788,7 @@ impl<'ast> ZGen<'ast> {
             }
         }
     }
+
     fn interpret_visibility(&self, visibility: &Option<ast::Visibility<'ast>>) -> Option<PartyId> {
         match visibility {
             None | Some(ast::Visibility::Public(_)) => PUBLIC_VIS,

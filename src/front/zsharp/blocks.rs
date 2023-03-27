@@ -27,6 +27,7 @@ use crate::front::zsharp::prover::ExecState;
 use std::collections::HashMap;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use crate::front::zsharp::*;
 use pest::Span;
 
 fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast>) -> Expression<'ast> {
@@ -104,7 +105,7 @@ pub fn bl_trans<'ast>(cond: Expression<'ast>, tval: NextBlock, fval: NextBlock) 
 }
 
 // Which party can see the input?
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum InputVisibility {
     Prover,
     Public
@@ -1332,6 +1333,102 @@ impl<'ast> ZGen<'ast> {
         }
         Ok((blks, sp_offset))
     }
+
+    // Convert a block to circ_ir
+    fn bl_to_circ(&'ast self, blk: &Block) {
+        debug!("Into CirC: {}", blk.name);
+
+        // setup stack frame for entry function
+        let ret_ty = None;
+        self.circ_enter_fn(format!("Block {}", blk.name), ret_ty.clone());
+
+        for (name, ty, vis) in &blk.inputs {
+            let r = self.circ_declare_input(
+                name.clone(),
+                ty,
+                if *vis == InputVisibility::Public { None } else { Some(0) },
+                None,
+                true,
+            );
+            self.unwrap(r, &Span::new("", 0, 0).unwrap());
+        }
+
+        // self.gen_stmt(&f.body);
+
+        if let Some(r) = self.circ_exit_fn() {
+            match self.mode {
+                Mode::Mpc(_) => {
+                    let ret_term = r.unwrap_term();
+                    let ret_terms = ret_term.terms();
+                    self.circ
+                        .borrow()
+                        .cir_ctx()
+                        .cs
+                        .borrow_mut()
+                        .outputs
+                        .extend(ret_terms);
+                }
+                Mode::Proof => {
+                    let ty = ret_ty.as_ref().unwrap();
+                    let name = "return".to_owned();
+                    let ret_val = r.unwrap_term();
+                    let ret_var_val = self
+                        .circ_declare_input(name, ty, PUBLIC_VIS, Some(ret_val.clone()), false)
+                        .expect("circ_declare return");
+                    let ret_eq = eq(ret_val, ret_var_val).unwrap().term;
+                    let mut assertions = std::mem::take(&mut *self.assertions.borrow_mut());
+                    let to_assert = if assertions.is_empty() {
+                        ret_eq
+                    } else {
+                        assertions.push(ret_eq);
+                        term(AND, assertions)
+                    };
+                    self.circ.borrow_mut().assert(to_assert);
+                }
+                Mode::Opt => {
+                    let ret_term = r.unwrap_term();
+                    let ret_terms = ret_term.terms();
+                    assert!(
+                        ret_terms.len() == 1,
+                        "When compiling to optimize, there can only be one output"
+                    );
+                    let t = ret_terms.into_iter().next().unwrap();
+                    let t_sort = check(&t);
+                    if !matches!(t_sort, Sort::BitVector(_)) {
+                        panic!("Cannot maximize output of type {}", t_sort);
+                    }
+                    self.circ.borrow().cir_ctx().cs.borrow_mut().outputs.push(t);
+                }
+                Mode::ProofOfHighValue(v) => {
+                    let ret_term = r.unwrap_term();
+                    let ret_terms = ret_term.terms();
+                    assert!(
+                        ret_terms.len() == 1,
+                        "When compiling to optimize, there can only be one output"
+                    );
+                    let t = ret_terms.into_iter().next().unwrap();
+                    let cmp = match check(&t) {
+                        Sort::BitVector(w) => term![BV_UGE; t, bv_lit(v, w)],
+                        s => panic!("Cannot maximize output of type {}", s),
+                    };
+                    self.circ
+                        .borrow()
+                        .cir_ctx()
+                        .cs
+                        .borrow_mut()
+                        .outputs
+                        .push(cmp);
+                }
+            }
+        }
+    }
+
+    // Convert a list of blocks to circ_ir
+    pub fn bls_to_circ(&'ast self, blks: &Vec<Block>) {
+        for b in blks {
+            self.bl_to_circ(b);
+        }
+    }
 }
 
 // Compute waste as explained below
@@ -1357,7 +1454,7 @@ fn compute_waste<const TRADEOFF: usize>(padding: usize, bl_exec_count: &Vec<usiz
     return (waste, split);
 }
 
-pub fn generate_runtime_data(len: usize, bl_exec_count: &Vec<usize>) -> usize {    
+pub fn generate_runtime_data(bl_exec_count: &Vec<usize>) -> usize {    
 
     // How many dummy inputs would cost the same as "splitting" a block into two?
     // A large tradeoff value corresponds to a high padding value.

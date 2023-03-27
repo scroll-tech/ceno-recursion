@@ -200,6 +200,13 @@ impl<'ast> ZGen<'ast> {
         bls: &Vec<Block<'ast>>,
         reg_size: &usize
     ) -> Result<(T, Vec<usize>, Vec<ExecState>), String> {
+        if bls.len() < entry_bl {
+            return Err(format!("Invalid entry_bl: entry_bl exceeds block size."));
+        }
+        if bls[entry_bl].inputs.len() > 0 {
+            return Err(format!("const_entry_fn must be called on a function with zero arguments"));
+        }
+
         // We assume that all errors has been handled in bl_gen functions        
         debug!("Block Eval Const entry: {}", entry_bl);
 

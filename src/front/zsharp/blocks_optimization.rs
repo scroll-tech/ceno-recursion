@@ -1091,13 +1091,10 @@ fn dead_block_elimination(
         label_map.insert(old_label, new_label);
         if old_label == 0 || !predecessor[old_label].is_empty() {
             // Change block name to match new_label
-            let tmp_bl = Block {
-                name: new_label,
-                inputs: bls[old_label].inputs.clone(),
-                // No need to store statements if we are at the exit block
-                instructions: bls[old_label].instructions.clone(),
-                terminator: bls[old_label].terminator.clone()
-            };
+            let mut tmp_bl = Block::new(new_label);
+            tmp_bl.inputs = bls[old_label].inputs.clone();
+            tmp_bl.instructions = bls[old_label].instructions.clone();
+            tmp_bl.terminator = bls[old_label].terminator.clone();
             new_bls.push(tmp_bl);
             new_label += 1;
         }
@@ -1279,8 +1276,6 @@ fn set_input<'bl>(
         // For all other blocks, the inputs are only visible to the prover
         let vis = if i == *entry_bl {InputVisibility::Public} else {InputVisibility::Prover};
         assert!(bls[i].inputs.len() == 0);
-        println!("{:?}", name_lst);
-        println!("{:?}", ty_map);
         for name in &name_lst[i] {
             bls[i].inputs.push((name.to_string(), ty_map[i].get(name).unwrap().clone(), vis.clone()));
         }

@@ -60,7 +60,9 @@ impl FrontEnd for ZSharpFE {
         g.visit_files();
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
-        // g.entry_fn("main");
+        g.entry_fn("main");
+        
+        /*
         let (blks, entry_bl) = g.bl_gen_const_entry_fn("main");
         println!("Entry block: {entry_bl}");
         for b in &blks {
@@ -70,15 +72,26 @@ impl FrontEnd for ZSharpFE {
         let (blks, _, _) = blocks_optimization::optimize_block::<false>(blks, entry_bl);
         println!("\n\n--\nCirc IR:");
         g.bls_to_circ(&blks);
+        */
 
         g.generics_stack_pop();
         g.file_stack_pop();
 
         let mut cs = Computations::new();
+        /*
+        for b in blks {
+            let name = b.name.clone();
+            let blk_comp = std::rc::Rc::try_unwrap(b.get_circify().consume())
+                .unwrap_or_else(|rc| (*rc).clone())
+                .into_inner();
+            cs.comps.insert(format!("Block {}", name), blk_comp);
+        }
+        */
         let main_comp = std::rc::Rc::try_unwrap(g.into_circify().consume())
             .unwrap_or_else(|rc| (*rc).clone())
             .into_inner();
         cs.comps.insert("main".to_string(), main_comp);
+
         cs
     }
 }

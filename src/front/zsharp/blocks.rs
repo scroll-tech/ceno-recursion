@@ -5,9 +5,10 @@
 //       Function within array index?
 //       Multi-file program not supported
 //       What would happen if we put function calls in loop to / from?
-//       Function call inside if / else condition?
 //       If b@1 is dead, can we avoid pushing-in b@0?
 //       Might be a good idea to avoid using physical memory at all here.
+//       Can try eliminate ternaries with a constant condition
+//       How to convert assertions to Circify for each block?
 
 // Other Cleanups:
 //   Cross check edge-case detection with original ZSharp
@@ -120,12 +121,13 @@ impl InputVisibility {
     }
 }
 
-#[derive(Clone)]
 pub struct Block<'ast> {
     pub name: usize,
     pub inputs: Vec<(String, Ty, InputVisibility)>,
     pub instructions: Vec<BlockContent<'ast>>,
     pub terminator: BlockTerminator<'ast>,
+    pub circ: RefCell<Circify<ZSharp>>,
+    pub assertions: RefCell<Vec<Term>>
 }
 
 #[derive(Clone)]
@@ -152,12 +154,14 @@ pub enum NextBlock {
 }
 
 impl<'ast> Block<'ast> {
-    fn new(name: usize) -> Self {
+    pub fn new(name: usize) -> Self {
         let input = Self {
             name,
             inputs: Vec::new(),
             instructions: Vec::new(),
-            terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1)))
+            terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1))),
+            circ: RefCell::new(Circify::new(ZSharp::new())),
+            assertions: Default::default()
         };
         input
     }
@@ -190,6 +194,413 @@ impl<'ast> Block<'ast> {
                 print!("Program terminates.")
             }
         }
+    }
+
+    // Convert a block to circ_ir
+    pub fn bl_to_circ(&self, mode: &Mode, isolate_asserts: &bool) {
+        debug!("Into CirC: {}", self.name);
+
+        // setup stack frame for entry function
+        let ret_ty = None;
+        self.circ_enter_fn(format!("Block {}", self.name), ret_ty.clone());
+
+        for (name, ty, vis) in &self.inputs {
+            let r = self.circ_declare_input(
+                name.clone(),
+                ty,
+                if *vis == InputVisibility::Public { None } else { Some(0) },
+                None,
+                true,
+            );
+            r.unwrap();
+        }
+
+        for i in &self.instructions {
+            match i {
+                BlockContent::MemPush(_) => {}
+                BlockContent::MemPop(_) => {}
+                BlockContent::Stmt(stmt) => { self.stmt_impl_(&stmt, isolate_asserts).unwrap(); }
+            }
+        }
+
+        if let Some(r) = self.circ_exit_fn() {
+            match mode {
+                Mode::Mpc(_) => {
+                    let ret_term = r.unwrap_term();
+                    let ret_terms = ret_term.terms();
+                    self.circ
+                        .borrow()
+                        .cir_ctx()
+                        .cs
+                        .borrow_mut()
+                        .outputs
+                        .extend(ret_terms);
+                }
+                Mode::Proof => {
+                    let ty = ret_ty.as_ref().unwrap();
+                    let name = "return".to_owned();
+                    let ret_val = r.unwrap_term();
+                    let ret_var_val = self
+                        .circ_declare_input(name, ty, PUBLIC_VIS, Some(ret_val.clone()), false)
+                        .expect("circ_declare return");
+                    let ret_eq = eq(ret_val, ret_var_val).unwrap().term;
+                    let mut assertions = std::mem::take(&mut *self.assertions.borrow_mut());
+                    let to_assert = if assertions.is_empty() {
+                        ret_eq
+                    } else {
+                        assertions.push(ret_eq);
+                        term(AND, assertions)
+                    };
+                    self.circ.borrow_mut().assert(to_assert);
+                }
+                Mode::Opt => {
+                    let ret_term = r.unwrap_term();
+                    let ret_terms = ret_term.terms();
+                    assert!(
+                        ret_terms.len() == 1,
+                        "When compiling to optimize, there can only be one output"
+                    );
+                    let t = ret_terms.into_iter().next().unwrap();
+                    let t_sort = check(&t);
+                    if !matches!(t_sort, Sort::BitVector(_)) {
+                        panic!("Cannot maximize output of type {}", t_sort);
+                    }
+                    self.circ.borrow().cir_ctx().cs.borrow_mut().outputs.push(t);
+                }
+                /*
+                Mode::ProofOfHighValue(v) => {
+                    let ret_term = r.unwrap_term();
+                    let ret_terms = ret_term.terms();
+                    assert!(
+                        ret_terms.len() == 1,
+                        "When compiling to optimize, there can only be one output"
+                    );
+                    let t = ret_terms.into_iter().next().unwrap();
+                    let cmp = match check(&t) {
+                        Sort::BitVector(w) => term![BV_UGE; t, bv_lit(v, w)],
+                        s => panic!("Cannot maximize output of type {}", s),
+                    };
+                    self.circ
+                        .borrow()
+                        .cir_ctx()
+                        .cs
+                        .borrow_mut()
+                        .outputs
+                        .push(cmp);
+                }
+                */
+                _ => { panic!("Supported Mode!") }
+            }
+        }
+    }
+
+    pub fn get_circify(self) -> Circify<ZSharp> {
+        self.circ.replace(Circify::new(ZSharp::new()))
+    }
+
+    // Convert a stmt to circ_ir, copied from ZSharp with only IS_CNST = False case
+    fn stmt_impl_(&self, s: &Statement<'ast>, isolate_asserts: &bool) -> Result<(), String> {
+        match s {
+            Statement::Return(_) => { Err(format!("Blocks should not contain return statements.")) }
+            Statement::Assertion(e) => {
+                let b = bool(self.expr_impl_(&e.expression)?)?;
+                self.assert(b, isolate_asserts);
+                Ok(())
+            }
+            Statement::Iteration(_) => { Err(format!("Blocks should not contain iteration statements.")) }
+            Statement::Conditional(_) => { Err(format!("Blocks should not contain conditional statements.")) }
+            Statement::Definition(d) => {
+                // XXX(unimpl) multi-assignment unimplemented
+                assert!(d.lhs.len() <= 1);
+
+                let e = self.expr_impl_(&d.expression)?;
+
+                if let Some(l) = d.lhs.first() {
+                    match l {
+                        TypedIdentifierOrAssignee::Assignee(l) => {
+                            let strict = match &d.expression {
+                                Expression::Unary(u) => {
+                                    matches!(&u.op, UnaryOperator::Strict(_))
+                                }
+                                _ => false,
+                            };
+                            self.assign_impl_(&l.id.value, &l.accesses[..], e, strict)
+                        }
+                        TypedIdentifierOrAssignee::TypedIdentifier(l) => {
+                            let decl_ty = self.type_impl_(&l.ty)?;
+                            let ty = e.type_();
+                            if &decl_ty != ty {
+                                return Err(format!(
+                                    "Assignment type mismatch: {} annotated vs {} actual",
+                                    decl_ty, ty,
+                                ));
+                            }
+                            self.declare_init_impl_(
+                                l.identifier.value.clone(),
+                                decl_ty,
+                                e,
+                            )
+                        }
+                    }
+                } else {
+                    warn!("Statement with no LHS!");
+                    Ok(())
+                }
+            }
+        }
+        .map_err(|err| format!("{}; context:\n{}", err, span_to_string(s.span())))
+    }
+
+    fn expr_impl_(&self, e: &Expression<'ast>) -> Result<T, String> {
+        match e {
+            Expression::Ternary(u) => {
+                let c = self.expr_impl_(&u.first)?;
+                let cbool = bool(c.clone())?;
+                self.circ_enter_condition(cbool.clone());
+                let a = self.expr_impl_(&u.second)?;
+                self.circ_exit_condition();
+                self.circ_enter_condition(term![NOT; cbool]);
+                let b = self.expr_impl_(&u.third)?;
+                self.circ_exit_condition();
+                cond(c, a, b)
+            }
+            Expression::Binary(b) => {
+                let left = self.expr_impl_(&b.left)?;
+                let right = self.expr_impl_(&b.right)?;
+                let op = self.bin_op(&b.op);
+                op(left, right)
+            }
+            Expression::Unary(u) => {
+                let arg = self.expr_impl_(&u.expression)?;
+                let op = self.unary_op(&u.op);
+                op(arg)
+            }
+            Expression::Identifier(i) => self.identifier_impl_(i),
+            Expression::Literal(l) => self.literal_(l),
+            Expression::InlineArray(_) => { Err(format!("Arrays not implemented.")) }
+            Expression::ArrayInitializer(_) => { Err(format!("Arrays not implemented.")) }
+            Expression::Postfix(p) => {
+                if let Some(Access::Call(_)) = p.accesses.first() {
+                    return Err(format!("Blocks should not contain function calls."));
+                } else {
+                    return Err(format!("Arrays not implemented."));
+                };
+            }
+            Expression::InlineStruct(_) => { Err(format!("Structs not implemented.")) },
+        }
+        .and_then(|res| Ok(res) )
+        .map_err(|err| format!("{}; context:\n{}", err, span_to_string(e.span())))
+    }
+
+    fn assert(&self, asrt: Term, isolate_asserts: &bool) {
+        debug_assert!(matches!(check(&asrt), Sort::Bool));
+        if *isolate_asserts {
+            let path = self.circ_condition();
+            self.assertions
+                .borrow_mut()
+                .push(term![IMPLIES; path, asrt]);
+        } else {
+            self.assertions.borrow_mut().push(asrt);
+        }
+    }
+
+    fn type_impl_(&self, t: &Type<'ast>) -> Result<Ty, String> {
+        match t {
+            Type::Basic(BasicType::U8(_)) => Ok(Ty::Uint(8)),
+            Type::Basic(BasicType::U16(_)) => Ok(Ty::Uint(16)),
+            Type::Basic(BasicType::U32(_)) => Ok(Ty::Uint(32)),
+            Type::Basic(BasicType::U64(_)) => Ok(Ty::Uint(64)),
+            Type::Basic(BasicType::Boolean(_)) => Ok(Ty::Bool),
+            Type::Basic(BasicType::Field(_)) => Ok(Ty::Field),
+            Type::Array(_) => Err(format!("Arrays not implemented.")),
+            Type::Struct(_) => Err(format!("Structs not implemented."))
+        }
+    }
+
+    fn zaccs_impl_(
+        &self,
+        accs: &[ast::AssigneeAccess<'ast>],
+    ) -> Result<Vec<ZAccess>, String> {
+        accs.iter()
+            .map(|acc| match acc {
+                AssigneeAccess::Member(m) => Ok(ZAccess::Member(m.id.value.clone())),
+                AssigneeAccess::Select(m) => match &m.expression {
+                    RangeOrExpression::Expression(e) => {
+                        self.expr_impl_(e).map(ZAccess::Idx)
+                    }
+                    _ => Err(format!(
+                        "Cannot assign to slice: {}",
+                        span_to_string(&m.span)
+                    )),
+                },
+            })
+            .collect()
+    }
+
+    fn assign_impl_(&self,
+        name: &str,
+        accs: &[AssigneeAccess<'ast>],
+        val: T,
+        strict: bool,
+    ) -> Result<(), String> {
+        let zaccs = self.zaccs_impl_(accs)?;
+        let old = self.circ_get_value(Loc::local(name.to_string()))
+                .map_err(|e| format!("{}", e))?
+                .unwrap_term();
+        let new =
+            loc_store(old, &zaccs[..], val)
+                .and_then(|n| if strict { const_val(n) } else { Ok(n) })?;
+        debug!("Assign: {}", name);
+        self.circ_assign(Loc::local(name.to_string()), Val::Term(new))
+                .map_err(|e| format!("{}", e))
+                .map(|_| ())
+    }
+
+    fn declare_init_impl_(
+        &self,
+        name: String,
+        ty: Ty,
+        val: T,
+    ) -> Result<(), String> {
+        self.circ_declare_init(name, ty, Val::Term(val))
+            .map(|_| ())
+            .map_err(|e| format!("{}", e))
+    }
+
+    fn identifier_impl_(
+        &self,
+        i: &IdentifierExpression<'ast>,
+    ) -> Result<T, String> {
+        match self
+            .circ_get_value(Loc::local(i.value.clone()))
+            .map_err(|e| format!("{}", e))?
+        {
+            Val::Term(t) => Ok(t),
+            _ => Err(format!("Non-Term identifier {}", &i.value)),
+        }
+    }
+
+    fn literal_(&self, e: &ast::LiteralExpression<'ast>) -> Result<T, String> {
+        match e {
+            ast::LiteralExpression::DecimalLiteral(d) => {
+                let vstr = &d.value.value;
+                match &d.suffix {
+                    Some(ast::DecimalSuffix::U8(_)) => Ok(uint_lit(vstr.parse::<u8>().unwrap(), 8)),
+                    Some(ast::DecimalSuffix::U16(_)) => {
+                        Ok(uint_lit(vstr.parse::<u16>().unwrap(), 16))
+                    }
+                    Some(ast::DecimalSuffix::U32(_)) => {
+                        Ok(uint_lit(vstr.parse::<u32>().unwrap(), 32))
+                    }
+                    Some(ast::DecimalSuffix::U64(_)) => {
+                        Ok(uint_lit(vstr.parse::<u64>().unwrap(), 64))
+                    }
+                    Some(ast::DecimalSuffix::Field(_)) => {
+                        Ok(field_lit(Integer::from_str_radix(vstr, 10).unwrap()))
+                    }
+                    _ => Err("Could not infer literal type. Annotation needed.".to_string()),
+                }
+            }
+            ast::LiteralExpression::BooleanLiteral(b) => {
+                Ok(z_bool_lit(bool::from_str(&b.value).unwrap()))
+            }
+            ast::LiteralExpression::HexLiteral(h) => match &h.value {
+                ast::HexNumberExpression::U8(h) => {
+                    Ok(uint_lit(u8::from_str_radix(&h.value, 16).unwrap(), 8))
+                }
+                ast::HexNumberExpression::U16(h) => {
+                    Ok(uint_lit(u16::from_str_radix(&h.value, 16).unwrap(), 16))
+                }
+                ast::HexNumberExpression::U32(h) => {
+                    Ok(uint_lit(u32::from_str_radix(&h.value, 16).unwrap(), 32))
+                }
+                ast::HexNumberExpression::U64(h) => {
+                    Ok(uint_lit(u64::from_str_radix(&h.value, 16).unwrap(), 64))
+                }
+            },
+        }
+        .map_err(|err| format!("{}; context:\n{}", err, span_to_string(e.span())))
+    }
+
+    fn unary_op(&self, o: &ast::UnaryOperator) -> fn(T) -> Result<T, String> {
+        match o {
+            ast::UnaryOperator::Pos(_) => Ok,
+            ast::UnaryOperator::Neg(_) => neg,
+            ast::UnaryOperator::Not(_) => not,
+            ast::UnaryOperator::Strict(_) => const_val,
+        }
+    }
+
+    fn bin_op(&self, o: &ast::BinaryOperator) -> fn(T, T) -> Result<T, String> {
+        match o {
+            ast::BinaryOperator::BitXor => bitxor,
+            ast::BinaryOperator::BitAnd => bitand,
+            ast::BinaryOperator::BitOr => bitor,
+            ast::BinaryOperator::RightShift => shr,
+            ast::BinaryOperator::LeftShift => shl,
+            ast::BinaryOperator::Or => or,
+            ast::BinaryOperator::And => and,
+            ast::BinaryOperator::Add => add,
+            ast::BinaryOperator::Sub => sub,
+            ast::BinaryOperator::Mul => mul,
+            ast::BinaryOperator::Div => div,
+            ast::BinaryOperator::Rem => rem,
+            ast::BinaryOperator::Eq => eq,
+            ast::BinaryOperator::NotEq => neq,
+            ast::BinaryOperator::Lt => ult,
+            ast::BinaryOperator::Gt => ugt,
+            ast::BinaryOperator::Lte => ule,
+            ast::BinaryOperator::Gte => uge,
+            ast::BinaryOperator::Pow => pow,
+        }
+    }
+
+
+    /*** circify wrapper functions (hides RefCell) ***/
+
+    fn circ_enter_condition(&self, cond: Term) {
+        self.circ.borrow_mut().enter_condition(cond).unwrap();
+    }
+
+    fn circ_exit_condition(&self) {
+        self.circ.borrow_mut().exit_condition()
+    }
+
+    fn circ_condition(&self) -> Term {
+        self.circ.borrow().condition()
+    }
+
+    fn circ_enter_fn(&self, f_name: String, ret_ty: Option<Ty>) {
+        self.circ.borrow_mut().enter_fn(f_name, ret_ty)
+    }
+
+    fn circ_exit_fn(&self) -> Option<Val<T>> {
+        self.circ.borrow_mut().exit_fn()
+    }
+
+    fn circ_declare_input(
+        &self,
+        name: String,
+        ty: &Ty,
+        vis: Option<PartyId>,
+        precomputed_value: Option<T>,
+        mangle_name: bool,
+    ) -> Result<T, CircError> {
+        self.circ
+            .borrow_mut()
+            .declare_input(name, ty, vis, precomputed_value, mangle_name)
+    }
+
+    fn circ_declare_init(&self, name: String, ty: Ty, val: Val<T>) -> Result<Val<T>, CircError> {
+        self.circ.borrow_mut().declare_init(name, ty, val)
+    }
+
+    fn circ_get_value(&self, loc: Loc) -> Result<Val<T>, CircError> {
+        self.circ.borrow().get_value(loc)
+    }
+
+    fn circ_assign(&self, loc: Loc, val: Val<T>) -> Result<Val<T>, CircError> {
+        self.circ.borrow_mut().assign(loc, val)
     }
 }
 
@@ -1334,99 +1745,10 @@ impl<'ast> ZGen<'ast> {
         Ok((blks, sp_offset))
     }
 
-    // Convert a block to circ_ir
-    fn bl_to_circ(&'ast self, blk: &Block) {
-        debug!("Into CirC: {}", blk.name);
-
-        // setup stack frame for entry function
-        let ret_ty = None;
-        self.circ_enter_fn(format!("Block {}", blk.name), ret_ty.clone());
-
-        for (name, ty, vis) in &blk.inputs {
-            let r = self.circ_declare_input(
-                name.clone(),
-                ty,
-                if *vis == InputVisibility::Public { None } else { Some(0) },
-                None,
-                true,
-            );
-            self.unwrap(r, &Span::new("", 0, 0).unwrap());
-        }
-
-        // self.gen_stmt(&f.body);
-
-        if let Some(r) = self.circ_exit_fn() {
-            match self.mode {
-                Mode::Mpc(_) => {
-                    let ret_term = r.unwrap_term();
-                    let ret_terms = ret_term.terms();
-                    self.circ
-                        .borrow()
-                        .cir_ctx()
-                        .cs
-                        .borrow_mut()
-                        .outputs
-                        .extend(ret_terms);
-                }
-                Mode::Proof => {
-                    let ty = ret_ty.as_ref().unwrap();
-                    let name = "return".to_owned();
-                    let ret_val = r.unwrap_term();
-                    let ret_var_val = self
-                        .circ_declare_input(name, ty, PUBLIC_VIS, Some(ret_val.clone()), false)
-                        .expect("circ_declare return");
-                    let ret_eq = eq(ret_val, ret_var_val).unwrap().term;
-                    let mut assertions = std::mem::take(&mut *self.assertions.borrow_mut());
-                    let to_assert = if assertions.is_empty() {
-                        ret_eq
-                    } else {
-                        assertions.push(ret_eq);
-                        term(AND, assertions)
-                    };
-                    self.circ.borrow_mut().assert(to_assert);
-                }
-                Mode::Opt => {
-                    let ret_term = r.unwrap_term();
-                    let ret_terms = ret_term.terms();
-                    assert!(
-                        ret_terms.len() == 1,
-                        "When compiling to optimize, there can only be one output"
-                    );
-                    let t = ret_terms.into_iter().next().unwrap();
-                    let t_sort = check(&t);
-                    if !matches!(t_sort, Sort::BitVector(_)) {
-                        panic!("Cannot maximize output of type {}", t_sort);
-                    }
-                    self.circ.borrow().cir_ctx().cs.borrow_mut().outputs.push(t);
-                }
-                Mode::ProofOfHighValue(v) => {
-                    let ret_term = r.unwrap_term();
-                    let ret_terms = ret_term.terms();
-                    assert!(
-                        ret_terms.len() == 1,
-                        "When compiling to optimize, there can only be one output"
-                    );
-                    let t = ret_terms.into_iter().next().unwrap();
-                    let cmp = match check(&t) {
-                        Sort::BitVector(w) => term![BV_UGE; t, bv_lit(v, w)],
-                        s => panic!("Cannot maximize output of type {}", s),
-                    };
-                    self.circ
-                        .borrow()
-                        .cir_ctx()
-                        .cs
-                        .borrow_mut()
-                        .outputs
-                        .push(cmp);
-                }
-            }
-        }
-    }
-
     // Convert a list of blocks to circ_ir
     pub fn bls_to_circ(&'ast self, blks: &Vec<Block>) {
         for b in blks {
-            self.bl_to_circ(b);
+            b.bl_to_circ(&self.mode, &self.isolate_asserts);
         }
     }
 }

@@ -97,6 +97,27 @@ fn main() {
         ZSharpFE::gen(inputs)
     };
 
+    for (name, c) in &cs.comps {
+        println!("\n--\nName: {}", name);
+        println!("Pre-Comp:");
+        for (inst, t) in c.precomputes.outputs() {
+            println!("  Inst: {}, Term: {}", inst, t);
+        }
+        println!("Party ID:");
+        for (n, pid) in &c.metadata.party_ids {
+            println!("  Name: {}, ID: {}", n, pid);
+        }
+        println!("Party Visibility:");
+        for (i, (t, pid)) in &c.metadata.input_vis {
+            println!("  Input: {}, Term: {}, Vis: {:?}", i, t, pid);
+        }
+        println!("Output:");
+        for t in &c.outputs {
+            println!("  {}", t.get());
+        }
+    }
+
+    /*
     print!("Optimizing IR... ");
     let cs = opt(
         cs,
@@ -189,4 +210,5 @@ fn main() {
             */
         }
     };
+    */
 }

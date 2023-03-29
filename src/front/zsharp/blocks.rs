@@ -105,6 +105,42 @@ pub fn bl_trans<'ast>(cond: Expression<'ast>, tval: NextBlock, fval: NextBlock) 
     })
 }
 
+// Generate the statement: %SP = %SP + sp_offset
+fn bl_gen_update_sp<'ast>(sp_offset: usize) -> Statement<'ast> {
+    let sp_update_stmt = Statement::Definition(DefinitionStatement {
+        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+            ty: Type::Basic(BasicType::Field(FieldType {
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            identifier: IdentifierExpression {
+                value: "%SP".to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            },
+            span: Span::new("", 0, 0).unwrap()
+        })],
+        expression: Expression::Binary(BinaryExpression {
+            op: BinaryOperator::Add,
+            left: Box::new(Expression::Identifier(IdentifierExpression {
+                value: "%SP".to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: sp_offset.to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            }))),
+            span: Span::new("", 0, 0).unwrap()
+        }),
+        span: Span::new("", 0, 0).unwrap()
+    });     
+    sp_update_stmt   
+}
+
 // Which party can see the input?
 #[derive(Clone, PartialEq)]
 pub enum InputVisibility {
@@ -198,7 +234,7 @@ impl<'ast> Block<'ast> {
 
     // Convert a block to circ_ir
     pub fn bl_to_circ(&self, mode: &Mode, isolate_asserts: &bool) {
-        debug!("Into CirC: {}", self.name);
+        println!("Into CirC: {}", self.name);
 
         // setup stack frame for entry function
         let ret_ty = None;
@@ -217,8 +253,12 @@ impl<'ast> Block<'ast> {
 
         for i in &self.instructions {
             match i {
-                BlockContent::MemPush(_) => {}
-                BlockContent::MemPop(_) => {}
+                BlockContent::MemPush(_) => {
+                    // Currently there's nothing we need to do for Push
+                }
+                BlockContent::MemPop(_) => {
+                    // Non-deterministically supply the POP value
+                }
                 BlockContent::Stmt(stmt) => { self.stmt_impl_(&stmt, isolate_asserts).unwrap(); }
             }
         }
@@ -949,36 +989,7 @@ impl<'ast> ZGen<'ast> {
             // but there's no harm doing it here
             if sp_offset > 0 {
                 // %SP = %SP + sp_offset
-                let sp_update_stmt = Statement::Definition(DefinitionStatement {
-                    lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
-                        id: IdentifierExpression {
-                            value: "%SP".to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        accesses: Vec::new(),
-                        span: Span::new("", 0, 0).unwrap()
-                    })],
-                    expression: Expression::Binary(BinaryExpression {
-                        op: BinaryOperator::Add,
-                        left: Box::new(Expression::Identifier(IdentifierExpression {
-                            value: "%SP".to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                            value: DecimalNumber {
-                                value: sp_offset.to_string(),
-                                span: Span::new("", 0, 0).unwrap()
-                            },
-                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                                span: Span::new("", 0, 0).unwrap()
-                            })),
-                            span: Span::new("", 0, 0).unwrap()
-                        }))),
-                        span: Span::new("", 0, 0).unwrap()
-                    }),
-                    span: Span::new("", 0, 0).unwrap()
-                });
-                blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_update_stmt));
+                blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_update_sp(sp_offset)));
                 sp_offset = 0;
             }
         
@@ -1008,12 +1019,14 @@ impl<'ast> ZGen<'ast> {
             // %RP has been pushed to stack before function call
             // Set up %RP and block terminator
             let rp_update_stmt = Statement::Definition(DefinitionStatement {
-                lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
-                    id: IdentifierExpression {
+                lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                    ty: Type::Basic(BasicType::Field(FieldType {
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    identifier: IdentifierExpression {
                         value: "%RP".to_string(),
                         span: Span::new("", 0, 0).unwrap()
                     },
-                    accesses: Vec::new(),
                     span: Span::new("", 0, 0).unwrap()
                 })],
                 expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
@@ -1204,9 +1217,9 @@ impl<'ast> ZGen<'ast> {
 
                 // Create and push STEP statement
                 let step_stmt = Statement::Definition(DefinitionStatement {
-                    lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
-                        id: new_id.clone(),
-                        accesses: Vec::new(),
+                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        ty: it.ty.clone(),
+                        identifier: new_id.clone(),
                         span: Span::new("", 0, 0).unwrap()
                     })],
                     expression: Expression::Binary(BinaryExpression {
@@ -1495,8 +1508,8 @@ impl<'ast> ZGen<'ast> {
             Expression::InlineArray(_) => { return Err(format!("Array not supported!")); }
         }
         Ok((blks, blks_len, func_phy_assign, sp_offset, var_scope_info, ret_e, func_count))
-    }   
-    
+    }
+
     // Handle scoping change by pushing old values onto the stack
     // When IS_FUNC_CALL is activated, we don't care about shadowing
     fn bl_gen_scoping_<const IS_FUNC_CALL: bool>(
@@ -1574,36 +1587,7 @@ impl<'ast> ZGen<'ast> {
         // Update %SP if any changes has been made
         if sp_offset > 0 {
             // %SP = %SP + sp_offset
-            let sp_update_stmt = Statement::Definition(DefinitionStatement {
-                lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
-                    id: IdentifierExpression {
-                        value: "%SP".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    accesses: Vec::new(),
-                    span: Span::new("", 0, 0).unwrap()
-                })],
-                expression: Expression::Binary(BinaryExpression {
-                    op: BinaryOperator::Add,
-                    left: Box::new(Expression::Identifier(IdentifierExpression {
-                        value: "%SP".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: sp_offset.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
-                    }))),
-                    span: Span::new("", 0, 0).unwrap()
-                }),
-                span: Span::new("", 0, 0).unwrap()
-            });
-            blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_update_stmt));
+            blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_update_sp(sp_offset)));
             sp_offset = 0;
         }
 
@@ -1627,36 +1611,7 @@ impl<'ast> ZGen<'ast> {
         // Update %SP and %BP if any changes has been made
         if sp_offset > 0 {
             // %SP = %SP + sp_offset
-            let sp_update_stmt = Statement::Definition(DefinitionStatement {
-                lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
-                    id: IdentifierExpression {
-                        value: "%SP".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    accesses: Vec::new(),
-                    span: Span::new("", 0, 0).unwrap()
-                })],
-                expression: Expression::Binary(BinaryExpression {
-                    op: BinaryOperator::Add,
-                    left: Box::new(Expression::Identifier(IdentifierExpression {
-                        value: "%SP".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: sp_offset.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
-                    }))),
-                    span: Span::new("", 0, 0).unwrap()
-                }),
-                span: Span::new("", 0, 0).unwrap()
-            });
-            blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_update_stmt));
+            blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_update_sp(sp_offset)));
             sp_offset = 0;
         }
 
@@ -1700,36 +1655,7 @@ impl<'ast> ZGen<'ast> {
         // Update %SP and %BP if any changes has been made
         if sp_offset > 0 {
             // %SP = %SP + sp_offset
-            let sp_update_stmt = Statement::Definition(DefinitionStatement {
-                lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
-                    id: IdentifierExpression {
-                        value: "%SP".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    accesses: Vec::new(),
-                    span: Span::new("", 0, 0).unwrap()
-                })],
-                expression: Expression::Binary(BinaryExpression {
-                    op: BinaryOperator::Add,
-                    left: Box::new(Expression::Identifier(IdentifierExpression {
-                        value: "%SP".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: sp_offset.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
-                    }))),
-                    span: Span::new("", 0, 0).unwrap()
-                }),
-                span: Span::new("", 0, 0).unwrap()
-            });
-            blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_update_stmt));
+            blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_update_sp(sp_offset)));
             sp_offset = 0;
         }
 

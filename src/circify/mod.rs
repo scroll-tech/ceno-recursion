@@ -142,6 +142,16 @@ impl<Ty> LexEntry<Ty> {
         this.set_ssa_name();
         this
     }
+    pub fn new_ver(name: String, ty: Ty, ver: usize) -> Self {
+        let mut this = Self {
+            ver,
+            ssa_name: "".to_string(),
+            name,
+            ty,
+        };
+        this.set_ssa_name();
+        this
+    }
 }
 
 #[derive(Debug)]
@@ -159,12 +169,13 @@ impl<Ty: Display> LexScope<Ty> {
     }
     fn declare(&mut self, name: VarName, ty: Ty) -> Result<&SsaName> {
         let p = &self.prefix;
-        match self.entries.entry(name.clone()) {
-            Entry::Vacant(v) => Ok(&v
-                .insert(LexEntry::new(format!("{}_{}", p, name), ty))
-                .ssa_name),
-            Entry::Occupied(o) => Err(CircError::Rebind(name, format!("{}", o.get().ty))),
-        }
+        let new_le = match self.entries.entry(name.clone()) {
+            Entry::Vacant(_) => LexEntry::new(format!("{}_{}", p, name), ty),
+            Entry::Occupied(_) => LexEntry::new_ver(format!("{}_{}", p, name), ty, self.entries.get(&name).unwrap().ver.clone() + 1)
+            // Entry::Occupied(o) => Err(CircError::Rebind(name, format!("{}", o.get().ty))),
+        };
+        self.entries.insert(name.clone(), new_le);
+        Ok(&self.entries.get(&name).ok_or_else(|| CircError::NoName(name.to_owned()))?.ssa_name)
     }
     fn get_name(&self, name: &str) -> Result<&SsaName> {
         Ok(&self
@@ -482,6 +493,7 @@ impl<E: Embeddable> Circify<E> {
         } else {
             nice_name
         };
+        println!("Declare Input: {}", name);
         let t = self
             .e
             .declare_input(&mut self.cir_ctx, ty, name, visibility, precomputed_value);
@@ -570,6 +582,7 @@ impl<E: Embeddable> Circify<E> {
     pub fn declare_init(&mut self, name: VarName, ty: E::Ty, val: Val<E::T>) -> Result<Val<E::T>> {
         let ssa_name = self.declare_env_name(name, &ty)?.clone();
         // TODO: add language-specific coersion here if needed
+        println!("Declare Init: {}", ssa_name);
         assert!(self.vals.insert(ssa_name, val.clone()).is_none());
         Ok(val)
     }
@@ -817,6 +830,16 @@ impl<E: Embeddable> Circify<E> {
     pub fn store(&mut self, id: AllocId, offset: Term, val: Term) {
         let cond = self.condition();
         self.cir_ctx.mem.borrow_mut().store(id, offset, val, cond);
+    }
+
+    /// Read from Physical Memory
+    /// Currently a dummy function
+    pub fn read(&self, _addr: Term) {
+    }
+
+    /// Push to Physical Memory
+    /// Currently a dummy function
+    pub fn push(&mut self, _val: Term) {
     }
 
     /// Zero allocate an array

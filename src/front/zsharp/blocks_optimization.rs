@@ -147,12 +147,22 @@ pub fn optimize_block<const VERBOSE: bool>(
     (bls, entry_bl, reg_size)
 } 
 
-// If bc is a statement of form %RP = val,
+// If bc is a statement of form field %RP = val,
 // return val
 fn rp_find_val(bc: BlockContent) -> Option<usize> {
     // We can ignore memory for now
     // The only case currently is %RP on the left & constant on the right
     if let BlockContent::Stmt(Statement::Definition(d)) = bc {
+        if let TypedIdentifierOrAssignee::TypedIdentifier(ty) = &d.lhs[0] {
+            if ty.identifier.value == "%RP".to_string() {
+                if let Expression::Literal(LiteralExpression::DecimalLiteral(dle)) = &d.expression {
+                    let tmp_bl: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: %RP is assigned to a non-constant value");
+                    return Some(tmp_bl);
+                } else {
+                    panic!("Dead Block Elimination failed: %RP is assigned to a non-constant value")
+                }
+            }
+        }
         if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
             if a.id.value == "%RP".to_string() {
                 if let Expression::Literal(LiteralExpression::DecimalLiteral(dle)) = &d.expression {
@@ -171,34 +181,45 @@ fn rp_find_val(bc: BlockContent) -> Option<usize> {
 // replace it with %RP = val_map[val]
 fn rp_replacement_stmt(bc: BlockContent, val_map: HashMap<usize, usize>) -> Option<BlockContent> {
     if let BlockContent::Stmt(Statement::Definition(d)) = bc {
+        let mut is_rp = false;
         if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
             if a.id.value == "%RP".to_string() {
-                if let Expression::Literal(LiteralExpression::DecimalLiteral(dle)) = &d.expression {
-                    let tmp_bl: usize = dle.value.value.trim().parse().unwrap();
-                    if let Some(new_bl) = val_map.get(&tmp_bl) {
-                        let new_rp_stmt = Statement::Definition(DefinitionStatement {
-                            lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
-                                id: IdentifierExpression {
-                                    value: "%RP".to_string(),
-                                    span: Span::new("", 0, 0).unwrap()
-                                },
-                                accesses: Vec::new(),
+                is_rp = true;
+            }
+        }
+        if let TypedIdentifierOrAssignee::TypedIdentifier(ty) = &d.lhs[0] {
+            if ty.identifier.value == "%RP".to_string() {
+                is_rp = true;
+            }
+        }
+        if is_rp {
+            if let Expression::Literal(LiteralExpression::DecimalLiteral(dle)) = &d.expression {
+                let tmp_bl: usize = dle.value.value.trim().parse().unwrap();
+                if let Some(new_bl) = val_map.get(&tmp_bl) {
+                    let new_rp_stmt = Statement::Definition(DefinitionStatement {
+                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                            ty: Type::Basic(BasicType::Field(FieldType {
                                 span: Span::new("", 0, 0).unwrap()
-                            })],
-                            expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                                value: DecimalNumber {
-                                    value: new_bl.to_string(),
-                                    span: Span::new("", 0, 0).unwrap()
-                                },
-                                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                                    span: Span::new("", 0, 0).unwrap()
-                                })),
+                            })),
+                            identifier: IdentifierExpression {
+                                value: "%RP".to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            span: Span::new("", 0, 0).unwrap()
+                        })],
+                        expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                            value: DecimalNumber {
+                                value: new_bl.to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
                                 span: Span::new("", 0, 0).unwrap()
                             })),
                             span: Span::new("", 0, 0).unwrap()
-                        });
-                        return Some(BlockContent::Stmt(new_rp_stmt));
-                    }
+                        })),
+                        span: Span::new("", 0, 0).unwrap()
+                    });
+                    return Some(BlockContent::Stmt(new_rp_stmt));
                 }
             }
         }
@@ -806,16 +827,24 @@ fn liveness_analysis<'ast>(
 // Given a statement, decide if it is of form %SP = %SP + x
 fn pmr_is_push(s: &Statement) -> bool {
     if let Statement::Definition(d) = s {
+        let mut is_sp = false;
         if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
             if a.id.value == "%SP".to_string() {
-                if let Expression::Binary(b) = &d.expression {
-                    if let Expression::Identifier(ie) = &*b.left {
-                        if ie.value == "%SP".to_string() && b.op == BinaryOperator::Add {
-                            return true;
-                        }
+                is_sp = true;
+            }
+        }
+        if let TypedIdentifierOrAssignee::TypedIdentifier(ty) = &d.lhs[0] {
+            if ty.identifier.value == "%SP".to_string() {
+                is_sp = true;
+            }
+        }
+        if is_sp {
+            if let Expression::Binary(b) = &d.expression {
+                if let Expression::Identifier(ie) = &*b.left {
+                    if ie.value == "%SP".to_string() && b.op == BinaryOperator::Add {
+                        return true;
                     }
                 }
-                panic!("Physical Memory Rearrangement failed: Unknown equation involving %SP")
             }
         }
     }
@@ -827,6 +856,15 @@ fn pmr_is_bp_update(s: &Statement) -> bool {
     if let Statement::Definition(d) = s {
         if let TypedIdentifierOrAssignee::TypedIdentifier(td) = &d.lhs[0] {
             if td.identifier.value == "%BP".to_string() {
+                if let Expression::Identifier(ie) = &d.expression {
+                    if ie.value == "%SP".to_string() {
+                        return true;
+                    }
+                }
+            }
+        }
+        if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
+            if a.id.value == "%BP".to_string() {
                 if let Expression::Identifier(ie) = &d.expression {
                     if ie.value == "%SP".to_string() {
                         return true;
@@ -949,12 +987,14 @@ fn phy_mem_rearrange<'ast>(
                         if pmr_is_push(&s) {
                             if state[state_len] != 0 {
                                 let sp_update_stmt = Statement::Definition(DefinitionStatement {
-                                    lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
-                                        id: IdentifierExpression {
+                                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                        ty: Type::Basic(BasicType::Field(FieldType {
+                                            span: Span::new("", 0, 0).unwrap()
+                                        })),
+                                        identifier: IdentifierExpression {
                                             value: "%SP".to_string(),
                                             span: Span::new("", 0, 0).unwrap()
                                         },
-                                        accesses: Vec::new(),
                                         span: Span::new("", 0, 0).unwrap()
                                     })],
                                     expression: Expression::Binary(BinaryExpression {
@@ -1149,8 +1189,13 @@ fn set_input<'bl>(
         next_bls.push_back(*eb);
     }
     // Backward analysis!
-    while !next_bls.is_empty() {
+    while !next_bls.is_empty() { 
+
         let cur_bl = next_bls.pop_front().unwrap();
+
+        println!("\nBlock {}:", cur_bl);
+        println!("{:?}", bl_in);
+        println!("{:?}", bl_out);   
 
         // State is the union of all successors and exit condition
         let mut state: HashSet<String> = HashSet::new();
@@ -1175,9 +1220,11 @@ fn set_input<'bl>(
                 match i {
                     BlockContent::MemPush((var, _)) => {
                         state.insert(var.to_string());
+                        state.insert("%SP".to_string());
                     }
                     BlockContent::MemPop((var, _)) => {
                         state.remove(&var.to_string());
+                        state.insert("%BP".to_string());
                     }
                     BlockContent::Stmt(s) => {
                         let (kill, gen) = stmt_find_val(&s);

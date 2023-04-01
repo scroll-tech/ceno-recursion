@@ -168,8 +168,8 @@ pub struct Block<'ast> {
 
 #[derive(Clone)]
 pub enum BlockContent<'ast> {
-    MemPush((String, usize)), // %PHY[%SP + offset] = id
-    MemPop((String, usize)),  // id = %PHY[%BP + offset]
+    MemPush((String, Ty, usize)), // %PHY[%SP + offset] = id
+    MemPop((String, Ty, usize)),  // id = %PHY[%BP + offset]
     Stmt(Statement<'ast>) // other statements
 }
 
@@ -213,8 +213,8 @@ impl<'ast> Block<'ast> {
         println!("Instructions:");
         for c in &self.instructions {
             match c {
-                BlockContent::MemPush((id, offset)) => { println!("    %PHY[%SP + {offset}] = {id}") }
-                BlockContent::MemPop((id, offset)) => { println!("    {id} = %PHY[%BP + {offset}]") }
+                BlockContent::MemPush((id, ty, offset)) => { println!("    %PHY[%SP + {offset}] = {id} <{ty}>") }
+                BlockContent::MemPop((id, ty, offset)) => { println!("    {ty} {id} = %PHY[%BP + {offset}]") }
                 BlockContent::Stmt(s) => { pretty::pretty_stmt(1, &s); }
             }
         }
@@ -234,7 +234,6 @@ impl<'ast> Block<'ast> {
 
     // Convert a block to circ_ir
     pub fn bl_to_circ(&self, mode: &Mode, isolate_asserts: &bool) {
-        println!("Into CirC: {}", self.name);
 
         // setup stack frame for entry function
         let ret_ty = None;
@@ -256,8 +255,16 @@ impl<'ast> Block<'ast> {
                 BlockContent::MemPush(_) => {
                     // Currently there's nothing we need to do for Push
                 }
-                BlockContent::MemPop(_) => {
+                BlockContent::MemPop((var, ty, _)) => {
                     // Non-deterministically supply the POP value
+                    let r = self.circ_declare_input(
+                        var.clone(),
+                        ty,
+                        Some(0),
+                        None,
+                        true,
+                    );
+                    r.unwrap();                    
                 }
                 BlockContent::Stmt(stmt) => { self.stmt_impl_(&stmt, isolate_asserts).unwrap(); }
             }
@@ -677,15 +684,23 @@ fn bl_gen_unroll_scope<const IS_DECL: bool>(
 
 impl<'ast> ZGen<'ast> {
 
-    pub fn bl_gen_const_entry_fn(&'ast self, n: &str) -> (Vec<Block<'ast>>, usize) {
-        debug!("Block Gen Const entry: {}", n);
+    fn cvar_lookup_type(&self, name: &str) -> Option<Ty> {
+        match name {
+            "%BP" => Some(Ty::Field),
+            "%SP" => Some(Ty::Field),
+            "%RP" => Some(Ty::Field),
+            _ => Some(self.cvar_lookup(name)?.ty)
+        }
+    }
+
+    // Returns blocks, block_size, and arguments and their types
+    pub fn bl_gen_entry_fn(&'ast self, n: &str) -> (Vec<Block<'ast>>, usize, Vec<(String, Ty)>) {
+        debug!("Block Gen entry: {}", n);
 
         let (f_file, f_name) = self.deref_import(n);
         if let Some(f) = self.functions.get(&f_file).and_then(|m| m.get(&f_name)) {
             if !f.generics.is_empty() {
                 panic!("const_entry_fn cannot be called on a generic function")
-            } else if !f.parameters.is_empty() {
-                panic!("const_entry_fn must be called on a function with zero arguments")
             }
         } else {
             panic!(
@@ -776,7 +791,8 @@ impl<'ast> ZGen<'ast> {
         });
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_init_stmt));
 
-        (blks, blks_len) = self.bl_gen_function_init_::<true>(blks, blks_len, f_file.clone(), f_name)
+        let inputs: Vec<(String, Ty)>;
+        (blks, blks_len, inputs) = self.bl_gen_function_init_::<true>(blks, blks_len, f_file.clone(), f_name)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
 
         // Create a mapping from each function name to the beginning of their blocks
@@ -794,7 +810,7 @@ impl<'ast> ZGen<'ast> {
                         );
                     }
                     func_blk_map.insert(f_name.clone(), blks_len);
-                    (blks, blks_len) = self.bl_gen_function_init_::<false>(blks, blks_len, f_file.clone(), f_name)
+                    (blks, blks_len, _) = self.bl_gen_function_init_::<false>(blks, blks_len, f_file.clone(), f_name)
                         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 }
             }
@@ -810,7 +826,7 @@ impl<'ast> ZGen<'ast> {
             new_blks.push(blk);
         }
 
-        (new_blks, 0)
+        (new_blks, 0, inputs)
     }
 
     // Convert each function to blocks
@@ -826,7 +842,7 @@ impl<'ast> ZGen<'ast> {
         mut blks_len: usize,
         f_path: PathBuf,
         f_name: String,
-    ) -> Result<(Vec<Block>, usize), String> {
+    ) -> Result<(Vec<Block>, usize, Vec<(String, Ty)>), String> {
         debug!("Block Gen Function init: {} {:?}", f_name, f_path);
 
         let f = self
@@ -835,6 +851,8 @@ impl<'ast> ZGen<'ast> {
             .ok_or_else(|| format!("No file '{:?}' attempting fn call", &f_path))?
             .get(&f_name)
             .ok_or_else(|| format!("No function '{}' attempting fn call", &f_name))?;
+
+        let mut inputs: Vec<(String, Ty)> = Vec::new();
 
         if self.stdlib.is_embed(&f_path) {
             // Leave embedded functions in the blocks
@@ -846,8 +864,6 @@ impl<'ast> ZGen<'ast> {
                 return Err(format!("Generics not implemented"));
             }
 
-            // XXX(unimpl) multi-return unimplemented
-            assert!(f.returns.len() <= 1);
             // Get the return type because we need to convert it into a variable
             let ret_ty = f
                 .returns
@@ -860,17 +876,14 @@ impl<'ast> ZGen<'ast> {
             blks.push(Block::new(blks_len));
             blks_len += 1;
 
-            // Add parameters to scope
-            for p in f.parameters.clone().into_iter() {
-                let p_id = p.id.value.clone();
-                let p_ty = self.type_impl_::<true>(&p.ty)?;
-                self.decl_impl_::<true>(p_id, &p_ty)?;                
-            }
-
-            // Add all parameters to var_scope_info
+            // Add scoping to parameters and process the scoped parameters
             let mut var_scope_info: HashMap<String, (usize, bool)> = HashMap::new();
             for p in f.parameters.clone().into_iter() {
-                var_scope_info.insert(p.id.value.clone(), (0, false));                
+                let p_id = p.id.value.clone();
+                var_scope_info.insert(p_id.clone(), (0, false));
+                let p_ty = self.type_impl_::<true>(&p.ty)?;
+                self.decl_impl_::<true>(p_id.clone(), &p_ty)?;
+                inputs.push((format!("{}@0", p_id), p_ty.clone()));     
             }
 
             // Since the out-most scope of a function does not have a stack frame,
@@ -892,7 +905,7 @@ impl<'ast> ZGen<'ast> {
             self.maybe_garbage_collect();
         }
 
-        Ok((blks, blks_len))
+        Ok((blks, blks_len, inputs))
     }
 
     // TODO: Error handling in function call
@@ -976,12 +989,12 @@ impl<'ast> ZGen<'ast> {
                 var_map.insert(format!("%RET{}", ret_count));
             }
             for var in var_map {
-                (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_scoping_::<true>(blks, blks_len, &var, func_phy_assign, sp_offset, var_scope_info);
+                (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_scoping_::<true>(blks, blks_len, &var, func_phy_assign, sp_offset, var_scope_info)?;
             }
 
             // Push %RP onto the stack if not in main
             if !IS_MAIN {
-                (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_scoping_::<true>(blks, blks_len, &"%RP".to_string(), func_phy_assign, sp_offset, var_scope_info);
+                (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_scoping_::<true>(blks, blks_len, &"%RP".to_string(), func_phy_assign, sp_offset, var_scope_info)?;
             }
 
             // Update %SP again to finalize the call stack
@@ -1168,20 +1181,20 @@ impl<'ast> ZGen<'ast> {
                 (blks, func_phy_assign, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
 
                 // STORE iterator value in Physical Mem if has appeared before                
-                (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_scoping_::<false>(blks, blks_len, &it.index.value, func_phy_assign, sp_offset, var_scope_info);
+                (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_scoping_::<false>(blks, blks_len, &it.index.value, func_phy_assign, sp_offset, var_scope_info)?;
 
-                // Initialize the iterator
+                // Initialize the scoped iterator
                 let v_name = it.index.value.clone();
                 let ty = self.type_impl_::<true>(&it.ty)?;
                 self.decl_impl_::<true>(v_name.clone(), &ty)?;
+                let new_v_name: String;
+                (new_v_name, var_scope_info) = bl_gen_unroll_scope::<true>(v_name.clone(), var_scope_info)?;
 
                 // Create and push FROM statement
                 let from_expr: Expression;
                 (blks, blks_len, func_phy_assign, sp_offset, var_scope_info, from_expr, _) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &it.from, func_phy_assign, sp_offset, 0, var_scope_info)?;
 
-                let new_v_name: String;
-                (new_v_name, var_scope_info) = bl_gen_unroll_scope::<true>(v_name, var_scope_info)?;
                 let new_id = IdentifierExpression {
                     value: new_v_name,
                     span: Span::new("", 0, 0).unwrap()
@@ -1332,21 +1345,18 @@ impl<'ast> ZGen<'ast> {
                 if let Some(l) = d.lhs.first() {
                     match l {
                         TypedIdentifierOrAssignee::Assignee(l) => {
-                            // No scoping if lhs is an assignee, only need to make sure it has appeared before
-                            let name = &l.id.value;
-                            let _ = self.cvar_lookup(name)
-                                    .ok_or_else(|| format!("Assignment failed: no const variable {}", name))?;
-
+                            // No scoping change if lhs is an assignee, only need to make sure it has appeared before
                             let new_l: String;
                             (new_l, var_scope_info) = bl_gen_unroll_scope::<false>(l.id.value.clone(), var_scope_info)?;
+
                             let new_id = IdentifierExpression {
-                                value: new_l,
+                                value: new_l.clone(),
                                 span: Span::new("", 0, 0).unwrap()
                             };
 
                             // Convert the assignee to a declaration
                             lhs_expr = vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                                ty: ty_to_type(e.type_().clone())?,
+                                ty: ty_to_type(self.cvar_lookup_type(&l.id.value).ok_or_else(|| format!("Assignment failed: no variable {}", &new_l))?)?,
                                 identifier: new_id.clone(),
                                 span: Span::new("", 0, 0).unwrap()
                             })];
@@ -1363,7 +1373,11 @@ impl<'ast> ZGen<'ast> {
 
                             // Scoping change
                             let id = &l.identifier.value;
-                            (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_scoping_::<false>(blks, blks_len, id, func_phy_assign, sp_offset, var_scope_info);
+                            (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_scoping_::<false>(blks, blks_len, id, func_phy_assign, sp_offset, var_scope_info)?;
+
+                            // Unroll scoping on LHS
+                            let new_l: String;
+                            (new_l, var_scope_info) = bl_gen_unroll_scope::<true>(l.identifier.value.clone(), var_scope_info)?;
 
                             // Add the identifier to current scope
                             self.declare_init_impl_::<true>(
@@ -1372,9 +1386,6 @@ impl<'ast> ZGen<'ast> {
                                 e,
                             )?;
 
-                            // Unroll scoping on LHS
-                            let new_l: String;
-                            (new_l, var_scope_info) = bl_gen_unroll_scope::<true>(l.identifier.value.clone(), var_scope_info)?;
                             let new_id = IdentifierExpression {
                                 value: new_l,
                                 span: Span::new("", 0, 0).unwrap()
@@ -1520,7 +1531,7 @@ impl<'ast> ZGen<'ast> {
         mut func_phy_assign: Vec<Vec<(usize, String)>>,
         mut sp_offset: usize,
         mut var_scope_info: HashMap<String, (usize, bool)>
-    ) -> (Vec<Block>, Vec<Vec<(usize, String)>>, usize, HashMap<String, (usize, bool)>) {
+    ) -> Result<(Vec<Block>, Vec<Vec<(usize, String)>>, usize, HashMap<String, (usize, bool)>), String> {
         // We don't care about shadowing
         if !self.cvar_cur_scope_find(id) || IS_FUNC_CALL {
             // If the identifier is used in the previous scopes of the current function,
@@ -1530,7 +1541,7 @@ impl<'ast> ZGen<'ast> {
                 // Initialize a new stack frame
                 if sp_offset == 0 {
                     // push %BP onto STACK
-                    blks[blks_len - 1].instructions.push(BlockContent::MemPush(("%BP".to_string(), sp_offset)));
+                    blks[blks_len - 1].instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));
                     func_phy_assign.last_mut().unwrap_or_else(|| panic!("Pushing into a non-existing scope in func_phy_assign!")).push((sp_offset, "%BP".to_string()));
                     sp_offset += 1;
                     // %BP = %SP
@@ -1565,13 +1576,13 @@ impl<'ast> ZGen<'ast> {
                     new_id = format!("{}@{}", new_id.clone(), var_scope_info.get(&new_id).unwrap().0);
                 }
                 // Push ID onto stack
-                blks[blks_len - 1].instructions.push(BlockContent::MemPush((new_id, sp_offset)));
+                blks[blks_len - 1].instructions.push(BlockContent::MemPush((new_id.clone(), self.cvar_lookup_type(&id).ok_or_else(|| format!("Variable {} referenced before assignment", &new_id))?, sp_offset)));
                 // NOTE: we push ID onto func_phy_assign instead of NEW_ID!!!
                 func_phy_assign.last_mut().unwrap_or_else(|| panic!("Pushing into a non-existing scope in func_phy_assign!")).push((sp_offset, id.clone()));
                 sp_offset += 1;
             }
         }
-        (blks, func_phy_assign, sp_offset, var_scope_info)
+        Ok((blks, func_phy_assign, sp_offset, var_scope_info))
     }
 
     fn bl_gen_enter_scope_(
@@ -1634,7 +1645,7 @@ impl<'ast> ZGen<'ast> {
                 // Actual Unroll
                 new_var = format!("{}@{}", new_var, var_scope_info.get(&new_var).unwrap().0);
             }
-            blks[blks_len - 1].instructions.push(BlockContent::MemPop((new_var, *addr)));
+            blks[blks_len - 1].instructions.push(BlockContent::MemPop((new_var.clone(), self.cvar_lookup_type(&var).ok_or_else(|| format!("Variable {} referenced before assignment", &new_var))?, *addr)));
         }
         Ok((blks, func_phy_assign, sp_offset, var_scope_info))
     }
@@ -1664,7 +1675,7 @@ impl<'ast> ZGen<'ast> {
             for (addr, var) in scope_phy_assign.iter().rev() {
                 // We only need to pop out %BP
                 if var.to_string() == "%BP".to_string() {
-                    blks[blks_len - 1].instructions.push(BlockContent::MemPop((var.to_string(), *addr)));
+                    blks[blks_len - 1].instructions.push(BlockContent::MemPop((var.to_string(), self.cvar_lookup_type(&var).ok_or_else(|| format!("Variable {} referenced before assignment", &var))?, *addr)));
                 }
             }
         }

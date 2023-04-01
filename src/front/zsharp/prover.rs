@@ -6,7 +6,6 @@ use crate::front::zsharp::Value;
 use crate::front::zsharp::const_bool;
 use crate::front::zsharp::const_val;
 use crate::front::zsharp::span_to_string;
-use crate::front::zsharp::bool;
 use crate::front::zsharp::Op;
 use std::collections::BTreeMap;
 use crate::front::zsharp::blocks::*;
@@ -243,7 +242,7 @@ impl<'ast> ZGen<'ast> {
                 println!("]");
                 let _ = &bls[nb].pretty();
             }
-            (nb, phy_mem, terminated, mem_op) = self.bl_eval_impl_::<true>(&bls[nb], phy_mem)?;
+            (nb, phy_mem, terminated, mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem)?;
             
             // Update reg_out
             bl_exec_state[tr_size].reg_out[0] = self.cvar_lookup("%RP");
@@ -274,7 +273,7 @@ impl<'ast> ZGen<'ast> {
     // ret[1]: Physical memory arrangement,
     // ret[2]: Has the program terminated?
     // ret[3]: Pair of [addr, data] for all memory operations in the block
-    fn bl_eval_impl_<const IS_CNST: bool>(
+    fn bl_eval_impl_(
         &self, 
         bl: &Block<'ast>,
         mut phy_mem: Vec<T>,
@@ -283,7 +282,7 @@ impl<'ast> ZGen<'ast> {
 
         for s in &bl.instructions {
             match s {
-                BlockContent::MemPush((var, offset)) => {
+                BlockContent::MemPush((var, _, offset)) => {
                     let sp_t = self.cvar_lookup("%SP").ok_or(format!("Push to %PHY failed: %SP is uninitialized."))?;
                     let sp = self.t_to_usize(sp_t)?;
                     if sp + offset != phy_mem.len() {
@@ -294,7 +293,7 @@ impl<'ast> ZGen<'ast> {
                     }
                     mem_op.push(MemOp::new(sp + offset, self.cvar_lookup(&var).unwrap()));
                 }
-                BlockContent::MemPop((var, offset)) => {
+                BlockContent::MemPop((var, _, offset)) => {
                     let bp_t = self.cvar_lookup("%BP").ok_or(format!("Pop from %PHY failed: %BP is uninitialized."))?;
                     let bp = self.t_to_usize(bp_t)?;
                     if bp + offset >= phy_mem.len() {
@@ -323,15 +322,11 @@ impl<'ast> ZGen<'ast> {
                                 .unwrap_or("(no error message given)"),
                             span_to_string(a.expression.span()),
                         )),
-                        Err(err) if IS_CNST => return Err(format!(
+                        Err(err) => return Err(format!(
                             "Const assert expression eval failed {} at\n{}",
                             err,
                             span_to_string(a.expression.span()),
-                        )),
-                        _ => {
-                            let b = bool(self.expr_impl_::<true>(&a.expression)?)?;
-                            self.assert(b);
-                        }
+                        ))
                     }
                 }
                 BlockContent::Stmt(Statement::Iteration(_)) => {

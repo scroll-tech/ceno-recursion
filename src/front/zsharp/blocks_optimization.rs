@@ -94,7 +94,8 @@ fn print_bls(bls: &Vec<Block>, entry_bl: &usize) {
 // Returns: Blocks, entry block, # of registers
 pub fn optimize_block<const VERBOSE: bool>(
     mut bls: Vec<Block>,
-    entry_bl: usize
+    entry_bl: usize,
+    inputs: Vec<(String, Ty)>
 ) -> (Vec<Block>, usize, usize) {
     
     // Construct CFG
@@ -120,7 +121,7 @@ pub fn optimize_block<const VERBOSE: bool>(
     }
 
     // Set Input
-    bls = set_input(bls, &successor, &predecessor, &entry_bl, &exit_bls);
+    bls = set_input(bls, &successor, &predecessor, &entry_bl, &exit_bls, inputs);
 
     // EBE
     (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
@@ -745,12 +746,12 @@ fn liveness_analysis<'ast>(
             // XXX: Seems like wasting time?
             for i in bls[cur_bl].instructions.iter().rev() {
                 match i {
-                    BlockContent::MemPush((var, _)) => {
+                    BlockContent::MemPush((var, _, _)) => {
                         if is_alive(&state, var) || var.chars().next().unwrap() == '%' {
                             new_instructions.insert(0, i.clone());
                         }
                     }
-                    BlockContent::MemPop((var, _)) => {
+                    BlockContent::MemPop((var, _, _)) => {
                         if is_alive(&state, var) || var.chars().next().unwrap() == '%' {
                             new_instructions.insert(0, i.clone());
                         }
@@ -929,13 +930,13 @@ fn phy_mem_rearrange<'ast>(
             for i in bls[cur_bl].instructions.iter() {
                 let mut state_len = state.len() - 1;
                 match i {
-                    BlockContent::MemPush((var, _)) => {
+                    BlockContent::MemPush((var, ty, _)) => {
                         // Delay pushing %BP until we see the first non-BP push
                         if var.to_string() != "%BP".to_string() {
                             // Push %BP if this is the first push of the stack frame
                             if state[state_len] == 0 {
                                 // %PHY[%SP + 0] = %BP
-                                new_instructions.push(BlockContent::MemPush(("%BP".to_string(), 0)));
+                                new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, 0)));
                                 // %BP = %SP
                                 let bp_update_stmt = Statement::Definition(DefinitionStatement {
                                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
@@ -956,15 +957,15 @@ fn phy_mem_rearrange<'ast>(
                                 });
                                 new_instructions.push(BlockContent::Stmt(bp_update_stmt));
                                 // %PHY[%SP + 1] = var
-                                new_instructions.push(BlockContent::MemPush((var.to_string(), 1)));
+                                new_instructions.push(BlockContent::MemPush((var.to_string(), ty.clone(), 1)));
                                 state[state_len] = 2;
                             } else {
-                                new_instructions.push(BlockContent::MemPush((var.to_string(), state[state_len])));
+                                new_instructions.push(BlockContent::MemPush((var.to_string(), ty.clone(), state[state_len])));
                                 state[state_len] += 1;
                             }
                         }
                     }
-                    BlockContent::MemPop((var, _)) => {
+                    BlockContent::MemPop((var, ty, _)) => {
                         // This is only possible if nothing was ever pushed to the current stack frame
                         if state[state_len] == 0 {
                             if state_len == 0 {
@@ -976,11 +977,11 @@ fn phy_mem_rearrange<'ast>(
                         // If we encounter a pop of %BP and the stack frame exists, remove the entire stack frame
                         if var.to_string() == "%BP".to_string() && state[state_len] >= 1 {
                             state[state_len] = 0;
-                            new_instructions.push(BlockContent::MemPop(("%BP".to_string(), 0)));
+                            new_instructions.push(BlockContent::MemPop(("%BP".to_string(), Ty::Field, 0)));
                         // If we encounter some other variable, pop it out
                         } else if var.to_string() != "%BP".to_string() {
                             state[state_len] -= 1;
-                            new_instructions.push(BlockContent::MemPop((var.to_string(), state[state_len])));                         
+                            new_instructions.push(BlockContent::MemPop((var.to_string(), ty.clone(), state[state_len])));                         
                         }
                     }
                     BlockContent::Stmt(s) => {
@@ -1169,7 +1170,8 @@ fn set_input<'bl>(
     successor: &Vec<HashSet<usize>>,
     predecessor: &Vec<HashSet<usize>>,
     entry_bl: &usize,
-    exit_bls: &HashSet<usize>
+    exit_bls: &HashSet<usize>,
+    inputs: Vec<(String, Ty)>
 ) -> Vec<Block<'bl>> {
 
     // Liveness
@@ -1191,11 +1193,7 @@ fn set_input<'bl>(
     // Backward analysis!
     while !next_bls.is_empty() { 
 
-        let cur_bl = next_bls.pop_front().unwrap();
-
-        println!("\nBlock {}:", cur_bl);
-        println!("{:?}", bl_in);
-        println!("{:?}", bl_out);   
+        let cur_bl = next_bls.pop_front().unwrap();   
 
         // State is the union of all successors and exit condition
         let mut state: HashSet<String> = HashSet::new();
@@ -1218,11 +1216,11 @@ fn set_input<'bl>(
             // We assume that liveness analysis has been performed, don't reason about usefulness of variables
             for i in bls[cur_bl].instructions.iter().rev() {
                 match i {
-                    BlockContent::MemPush((var, _)) => {
+                    BlockContent::MemPush((var, _, _)) => {
                         state.insert(var.to_string());
                         state.insert("%SP".to_string());
                     }
-                    BlockContent::MemPop((var, _)) => {
+                    BlockContent::MemPop((var, _, _)) => {
                         state.remove(&var.to_string());
                         state.insert("%BP".to_string());
                     }
@@ -1275,6 +1273,12 @@ fn set_input<'bl>(
                 if state.get(name) == None {
                     state.insert(name.to_string(), ty.clone());
                 }
+            }
+        }
+        // If we are at entry block, state also includes program parameters
+        if cur_bl == *entry_bl {
+            for (var, ty) in &inputs {
+                state.insert(var.clone(), ty.clone());
             }
         }
 
@@ -1478,15 +1482,15 @@ fn var_to_reg(
         let mut new_instr: Vec<BlockContent> = Vec::new();
         for s in &bls[i].instructions {
             match s {
-                BlockContent::MemPush((var, offset)) => {
+                BlockContent::MemPush((var, ty, offset)) => {
                     let var_name: String;
                     (var_name, reg_map, reg_size) = var_name_to_reg_id_expr(var.to_string(), reg_map, reg_size);
-                    new_instr.push(BlockContent::MemPush((var_name, *offset)));
+                    new_instr.push(BlockContent::MemPush((var_name, ty.clone(), *offset)));
                 }
-                BlockContent::MemPop((var, offset)) => {
+                BlockContent::MemPop((var, ty, offset)) => {
                     let var_name: String;
                     (var_name, reg_map, reg_size) = var_name_to_reg_id_expr(var.to_string(), reg_map, reg_size);
-                    new_instr.push(BlockContent::MemPop((var_name, *offset)));
+                    new_instr.push(BlockContent::MemPop((var_name, ty.clone(), *offset)));
                 }
                 BlockContent::Stmt(Statement::Return(_)) => {
                     panic!("Blocks should not contain return statements.");

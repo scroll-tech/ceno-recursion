@@ -493,7 +493,6 @@ impl<E: Embeddable> Circify<E> {
         } else {
             nice_name
         };
-        println!("Declare Input: {}", name);
         let t = self
             .e
             .declare_input(&mut self.cir_ctx, ty, name, visibility, precomputed_value);
@@ -582,7 +581,6 @@ impl<E: Embeddable> Circify<E> {
     pub fn declare_init(&mut self, name: VarName, ty: E::Ty, val: Val<E::T>) -> Result<Val<E::T>> {
         let ssa_name = self.declare_env_name(name, &ty)?.clone();
         // TODO: add language-specific coersion here if needed
-        println!("Declare Init: {}", ssa_name);
         assert!(self.vals.insert(ssa_name, val.clone()).is_none());
         Ok(val)
     }

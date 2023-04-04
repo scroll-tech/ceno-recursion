@@ -581,7 +581,7 @@ impl<E: Embeddable> Circify<E> {
     pub fn declare_init(&mut self, name: VarName, ty: E::Ty, val: Val<E::T>) -> Result<Val<E::T>> {
         let ssa_name = self.declare_env_name(name, &ty)?.clone();
         // TODO: add language-specific coersion here if needed
-        assert!(self.vals.insert(ssa_name, val.clone()).is_none());
+        assert!(self.vals.insert(ssa_name.clone(), val.clone()).is_none());
         Ok(val)
     }
 
@@ -619,12 +619,14 @@ impl<E: Embeddable> Circify<E> {
                 };
                 let ite_val = Val::Term(ite);
                 // TODO: add language-specific coersion here if needed
-                assert!(self.vals.insert(new_name, ite_val.clone()).is_none());
+                assert!(self.vals.insert(new_name.clone(), ite_val.clone()).is_none());
+                self.break_(&new_name)?;
                 Ok(ite_val)
             }
             (_, v @ Val::Ref(_)) => {
                 // TODO: think about this more...
-                self.vals.insert(new_name, v.clone());
+                self.vals.insert(new_name.clone(), v.clone());
+                self.break_(&new_name)?;
                 Ok(v)
             }
             (_, v) => Err(CircError::MisTypedAssign(

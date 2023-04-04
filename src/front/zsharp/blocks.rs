@@ -236,8 +236,9 @@ impl<'ast> Block<'ast> {
     pub fn bl_to_circ(&self, mode: &Mode, isolate_asserts: &bool) {
 
         // setup stack frame for entry function
-        let ret_ty = None;
-        self.circ_enter_fn(format!("Block {}", self.name), ret_ty.clone());
+        // returns the next block, so return type is Field
+        let ret_ty = Some(Ty::Field);
+        self.circ_enter_fn(format!("Block_{}", self.name), ret_ty.clone());
 
         for (name, ty, vis) in &self.inputs {
             let r = self.circ_declare_input(
@@ -268,6 +269,16 @@ impl<'ast> Block<'ast> {
                 }
                 BlockContent::Stmt(stmt) => { self.stmt_impl_(&stmt, isolate_asserts).unwrap(); }
             }
+        }
+
+        // Returns block transition
+        match &self.terminator {
+            BlockTerminator::Transition(e) => {
+                let ret = self.expr_impl_(e).unwrap();
+                self.circ_return_(Some(ret));
+            }
+            BlockTerminator::FuncCall(_) => { panic!("Blocks pending evaluation should not have FuncCall as terminator.") }
+            BlockTerminator::ProgTerm => {}
         }
 
         if let Some(r) = self.circ_exit_fn() {
@@ -364,15 +375,7 @@ impl<'ast> Block<'ast> {
 
                 if let Some(l) = d.lhs.first() {
                     match l {
-                        TypedIdentifierOrAssignee::Assignee(l) => {
-                            let strict = match &d.expression {
-                                Expression::Unary(u) => {
-                                    matches!(&u.op, UnaryOperator::Strict(_))
-                                }
-                                _ => false,
-                            };
-                            self.assign_impl_(&l.id.value, &l.accesses[..], e, strict)
-                        }
+                        TypedIdentifierOrAssignee::Assignee(l) => { Err(format!("Blocks should only contain typed declarations, not assignments.")) }
                         TypedIdentifierOrAssignee::TypedIdentifier(l) => {
                             let decl_ty = self.type_impl_(&l.ty)?;
                             let ty = e.type_();
@@ -382,11 +385,22 @@ impl<'ast> Block<'ast> {
                                     decl_ty, ty,
                                 ));
                             }
+                            // Evaluate RHS expression
+                            let rhs_t = self.expr_impl_(&d.expression)?;
+                            // Definition is the same as an assertion of a prover-supplied variable
                             self.declare_init_impl_(
                                 l.identifier.value.clone(),
                                 decl_ty,
                                 e,
-                            )
+                            );
+                            // Convert LHS to an expression
+                            let lhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
+                                value: l.identifier.value.clone(),
+                                span: Span::new("", 0, 0).unwrap()
+                            }))?;
+                            let b = bool(eq(lhs_t, rhs_t)?)?;
+                            self.assert(b, isolate_asserts);
+                            Ok(())
                         }
                     }
                 } else {
@@ -484,34 +498,20 @@ impl<'ast> Block<'ast> {
             .collect()
     }
 
-    fn assign_impl_(&self,
-        name: &str,
-        accs: &[AssigneeAccess<'ast>],
-        val: T,
-        strict: bool,
-    ) -> Result<(), String> {
-        let zaccs = self.zaccs_impl_(accs)?;
-        let old = self.circ_get_value(Loc::local(name.to_string()))
-                .map_err(|e| format!("{}", e))?
-                .unwrap_term();
-        let new =
-            loc_store(old, &zaccs[..], val)
-                .and_then(|n| if strict { const_val(n) } else { Ok(n) })?;
-        debug!("Assign: {}", name);
-        self.circ_assign(Loc::local(name.to_string()), Val::Term(new))
-                .map_err(|e| format!("{}", e))
-                .map(|_| ())
-    }
-
     fn declare_init_impl_(
         &self,
         name: String,
         ty: Ty,
         val: T,
     ) -> Result<(), String> {
-        self.circ_declare_init(name, ty, Val::Term(val))
-            .map(|_| ())
-            .map_err(|e| format!("{}", e))
+        self.circ_declare_input(
+            name.clone(),
+            &ty,
+            Some(0),
+            None,
+            true,
+        );
+        Ok(())
     }
 
     fn identifier_impl_(
@@ -638,16 +638,16 @@ impl<'ast> Block<'ast> {
             .declare_input(name, ty, vis, precomputed_value, mangle_name)
     }
 
-    fn circ_declare_init(&self, name: String, ty: Ty, val: Val<T>) -> Result<Val<T>, CircError> {
-        self.circ.borrow_mut().declare_init(name, ty, val)
-    }
-
     fn circ_get_value(&self, loc: Loc) -> Result<Val<T>, CircError> {
         self.circ.borrow().get_value(loc)
     }
 
     fn circ_assign(&self, loc: Loc, val: Val<T>) -> Result<Val<T>, CircError> {
         self.circ.borrow_mut().assign(loc, val)
+    }
+
+    fn circ_return_(&self, ret: Option<T>) -> Result<(), CircError> {
+        self.circ.borrow_mut().return_(ret)
     }
 }
 

@@ -110,6 +110,23 @@ impl MemManager {
         alloc.cur_term = ite_store;
     }
 
+    /// Append a new size-one entry to the end of the memory, set it to val
+    /// If the condition does not meet, set it to old
+    /// Currently there are no array implementations
+    pub fn push(&mut self, old: Term, val: Term, cond: Term) -> AllocId {
+        let id = self.take_next_id();
+        let alloc = Alloc::new(1, check(&val).as_bv(), 1, term![Op::Ite; cond, val, old]);
+        self.allocs.insert(id, alloc);
+        id
+    }
+
+    /// Read the value of index `offest = 0` from the allocation `id`.
+    /// Again, assume no array implementation
+    pub fn read(&self, id: AllocId) -> Term {
+        let alloc = self.allocs.get(&id).expect("Missing allocation");
+        alloc.var().clone()
+    }
+
     /// Is `offset` in bounds for the allocation `id`?
     pub fn in_bounds(&self, id: AllocId, offset: Term) -> Term {
         let alloc = self.allocs.get(&id).expect("Missing allocation");

@@ -232,6 +232,15 @@ impl<'ast> Block<'ast> {
         }
     }
 
+    pub fn contains_input(&self, input: &str) -> bool {
+        for i in &self.inputs {
+            if i.0 == input.to_string() {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Convert a block to circ_ir
     pub fn bl_to_circ(&self, mode: &Mode, isolate_asserts: &bool) {
 
@@ -271,11 +280,34 @@ impl<'ast> Block<'ast> {
             }
         }
 
+        // Check the output variables
+        for (name, ty, vis) in &self.inputs {
+            let r = self.circ_declare_input(
+                format!("{}_out", name),
+                ty,
+                Some(0),
+                None,
+                true,
+            );
+            r.unwrap();
+            // Generate assertion statement
+            let lhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
+                value: format!("{}_out", name),
+                span: Span::new("", 0, 0).unwrap()
+            })).unwrap();
+            let rhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
+                value: name.to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            })).unwrap();
+            let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+            self.assert(b, isolate_asserts);
+        }        
+
         // Returns block transition
         match &self.terminator {
             BlockTerminator::Transition(e) => {
                 let ret = self.expr_impl_(e).unwrap();
-                self.circ_return_(Some(ret));
+                self.circ_return_(Some(ret)).unwrap();
             }
             BlockTerminator::FuncCall(_) => { panic!("Blocks pending evaluation should not have FuncCall as terminator.") }
             BlockTerminator::ProgTerm => {}
@@ -375,7 +407,7 @@ impl<'ast> Block<'ast> {
 
                 if let Some(l) = d.lhs.first() {
                     match l {
-                        TypedIdentifierOrAssignee::Assignee(l) => { Err(format!("Blocks should only contain typed declarations, not assignments.")) }
+                        TypedIdentifierOrAssignee::Assignee(_) => { Err(format!("Blocks should only contain typed declarations, not assignments.")) }
                         TypedIdentifierOrAssignee::TypedIdentifier(l) => {
                             let decl_ty = self.type_impl_(&l.ty)?;
                             let ty = e.type_();
@@ -385,22 +417,11 @@ impl<'ast> Block<'ast> {
                                     decl_ty, ty,
                                 ));
                             }
-                            // Evaluate RHS expression
-                            let rhs_t = self.expr_impl_(&d.expression)?;
-                            // Definition is the same as an assertion of a prover-supplied variable
                             self.declare_init_impl_(
                                 l.identifier.value.clone(),
                                 decl_ty,
                                 e,
-                            );
-                            // Convert LHS to an expression
-                            let lhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
-                                value: l.identifier.value.clone(),
-                                span: Span::new("", 0, 0).unwrap()
-                            }))?;
-                            let b = bool(eq(lhs_t, rhs_t)?)?;
-                            self.assert(b, isolate_asserts);
-                            Ok(())
+                            )
                         }
                     }
                 } else {
@@ -504,14 +525,9 @@ impl<'ast> Block<'ast> {
         ty: Ty,
         val: T,
     ) -> Result<(), String> {
-        self.circ_declare_input(
-            name.clone(),
-            &ty,
-            Some(0),
-            None,
-            true,
-        );
-        Ok(())
+        self.circ_declare_init(name, ty, Val::Term(val))
+                .map(|_| ())
+                .map_err(|e| format!("{}", e))
     }
 
     fn identifier_impl_(
@@ -636,6 +652,10 @@ impl<'ast> Block<'ast> {
         self.circ
             .borrow_mut()
             .declare_input(name, ty, vis, precomputed_value, mangle_name)
+    }
+
+    fn circ_declare_init(&self, name: String, ty: Ty, val: Val<T>) -> Result<Val<T>, CircError> {
+        self.circ.borrow_mut().declare_init(name, ty, val)
     }
 
     fn circ_get_value(&self, loc: Loc) -> Result<Val<T>, CircError> {
@@ -1713,7 +1733,7 @@ fn compute_waste<const TRADEOFF: usize>(padding: usize, bl_exec_count: &Vec<usiz
     return (waste, split);
 }
 
-pub fn generate_runtime_data(bl_exec_count: &Vec<usize>) -> usize {    
+pub fn generate_padding(bl_exec_count: &Vec<usize>) -> usize {    
 
     // How many dummy inputs would cost the same as "splitting" a block into two?
     // A large tradeoff value corresponds to a high padding value.

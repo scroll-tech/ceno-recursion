@@ -620,13 +620,11 @@ impl<E: Embeddable> Circify<E> {
                 let ite_val = Val::Term(ite);
                 // TODO: add language-specific coersion here if needed
                 assert!(self.vals.insert(new_name.clone(), ite_val.clone()).is_none());
-                self.break_(&new_name)?;
                 Ok(ite_val)
             }
             (_, v @ Val::Ref(_)) => {
                 // TODO: think about this more...
                 self.vals.insert(new_name.clone(), v.clone());
-                self.break_(&new_name)?;
                 Ok(v)
             }
             (_, v) => Err(CircError::MisTypedAssign(

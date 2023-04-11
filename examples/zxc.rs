@@ -97,27 +97,6 @@ fn main() {
         ZSharpFE::gen(inputs)
     };
 
-    for (name, c) in &cs.comps {
-        println!("\n--\nName: {}", name);
-        println!("Pre-Comp:");
-        for (inst, t) in c.precomputes.outputs() {
-            println!("  Inst: {}, Term: {}", inst, t);
-        }
-        println!("Party ID:");
-        for (n, pid) in &c.metadata.party_ids {
-            println!("  Name: {}, ID: {}", n, pid);
-        }
-        println!("Party Visibility:");
-        for (i, (t, pid)) in &c.metadata.input_vis {
-            println!("  Input: {}, Term: {}, Vis: {:?}", i, t, pid);
-        }
-        println!("Output:");
-        for t in &c.outputs {
-            println!("  {}", t.get());
-        }
-    }
-
-    /*
     print!("Optimizing IR... ");
     let cs = opt(
         cs,
@@ -144,6 +123,27 @@ fn main() {
     );
     println!("done.");
 
+    for (name, c) in &cs.comps {
+        println!("\n--\nName: {}", name);
+        println!("Pre-Comp:");
+        for (inst, t) in c.precomputes.outputs() {
+            println!("  Inst: {}, Term: {}", inst, t);
+        }
+        println!("Party ID:");
+        for (n, pid) in &c.metadata.party_ids {
+            println!("  Name: {}, ID: {}", n, pid);
+        }
+        println!("Party Visibility:");
+        for (i, (t, pid)) in &c.metadata.input_vis {
+            println!("  Input: {}, Term: {}, Vis: {:?}", i, t, pid);
+        }
+        println!("Output:");
+        for t in &c.outputs {
+            println!("  {}", t.get());
+        }
+    }
+
+    /*
     let action = options.action;
     /*
     let proof = options.proof;
@@ -153,62 +153,70 @@ fn main() {
     */
 
     println!("Converting to r1cs");
-    let (r1cs, _, _) = to_r1cs(cs.get("main").clone(), FieldT::from(DFL_T.modulus()));
-    let r1cs = if options.skip_linred {
-        println!("Skipping linearity reduction, as requested.");
-        r1cs
-    } else {
-        println!(
-            "R1cs size before linearity reduction: {}",
-            r1cs.constraints().len()
-        );
-        reduce_linearities(r1cs, Some(options.lc_elimination_thresh))
-    };
-    println!("Final R1cs size: {}", r1cs.constraints().len());
-    match action {
-        ProofAction::Count => {
-            if !options.quiet {
-                eprintln!("{:#?}", r1cs.constraints());
+    let mut block_num = 0;
+    let mut block_name = format!("Block {}", block_num);
+    while cs.contains(&block_name) {
+        println!("{}:", block_name);
+        let (r1cs, _, _) = to_r1cs(cs.get(&block_name).clone(), FieldT::from(DFL_T.modulus()));
+        let r1cs = if options.skip_linred {
+            println!("Skipping linearity reduction, as requested.");
+            r1cs
+        } else {
+            println!(
+                "R1cs size before linearity reduction: {}",
+                r1cs.constraints().len()
+            );
+            reduce_linearities(r1cs, Some(options.lc_elimination_thresh))
+        };
+        println!("Final R1cs size: {}", r1cs.constraints().len());
+        match action {
+            ProofAction::Count => {
+                if !options.quiet {
+                    eprintln!("{:#?}", r1cs.constraints());
+                }
             }
-        }
-        ProofAction::Prove => {
-            unimplemented!()
-            /*
-            println!("Proving");
-            r1cs.check_all();
-            let rng = &mut rand::thread_rng();
-            let mut pk_file = File::open(prover_key).unwrap();
-            let pk = Parameters::<Bls12>::read(&mut pk_file, false).unwrap();
-            let pf = create_random_proof(&r1cs, &pk, rng).unwrap();
-            let mut pf_file = File::create(proof).unwrap();
-            pf.write(&mut pf_file).unwrap();
-            */
-        }
-        ProofAction::Setup => {
-            unimplemented!()
-            /*
-            let rng = &mut rand::thread_rng();
-            let p =
-                generate_random_parameters::<bls12_381::Bls12, _, _>(&r1cs, rng).unwrap();
-            let mut pk_file = File::create(prover_key).unwrap();
-            p.write(&mut pk_file).unwrap();
-            let mut vk_file = File::create(verifier_key).unwrap();
-            p.vk.write(&mut vk_file).unwrap();
-            */
-        }
-        ProofAction::Verify => {
-            unimplemented!()
-            /*
-            println!("Verifying");
-            let mut vk_file = File::open(verifier_key).unwrap();
-            let vk = VerifyingKey::<Bls12>::read(&mut vk_file).unwrap();
-            let pvk = prepare_verifying_key(&vk);
-            let mut pf_file = File::open(proof).unwrap();
-            let pf = Proof::read(&mut pf_file).unwrap();
-            let instance_vec = parse_instance(&instance);
-            verify_proof(&pvk, &pf, &instance_vec).unwrap();
-            */
-        }
-    };
+            ProofAction::Prove => {
+                unimplemented!()
+                /*
+                println!("Proving");
+                r1cs.check_all();
+                let rng = &mut rand::thread_rng();
+                let mut pk_file = File::open(prover_key).unwrap();
+                let pk = Parameters::<Bls12>::read(&mut pk_file, false).unwrap();
+                let pf = create_random_proof(&r1cs, &pk, rng).unwrap();
+                let mut pf_file = File::create(proof).unwrap();
+                pf.write(&mut pf_file).unwrap();
+                */
+            }
+            ProofAction::Setup => {
+                unimplemented!()
+                /*
+                let rng = &mut rand::thread_rng();
+                let p =
+                    generate_random_parameters::<bls12_381::Bls12, _, _>(&r1cs, rng).unwrap();
+                let mut pk_file = File::create(prover_key).unwrap();
+                p.write(&mut pk_file).unwrap();
+                let mut vk_file = File::create(verifier_key).unwrap();
+                p.vk.write(&mut vk_file).unwrap();
+                */
+            }
+            ProofAction::Verify => {
+                unimplemented!()
+                /*
+                println!("Verifying");
+                let mut vk_file = File::open(verifier_key).unwrap();
+                let vk = VerifyingKey::<Bls12>::read(&mut vk_file).unwrap();
+                let pvk = prepare_verifying_key(&vk);
+                let mut pf_file = File::open(proof).unwrap();
+                let pf = Proof::read(&mut pf_file).unwrap();
+                let instance_vec = parse_instance(&instance);
+                verify_proof(&pvk, &pf, &instance_vec).unwrap();
+                */
+            }
+        };
+
+        block_num += 1;
+        block_name = format!("Block {}", block_num);
+    }
     */
 }

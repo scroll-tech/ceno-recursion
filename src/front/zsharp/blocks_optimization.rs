@@ -94,7 +94,7 @@ fn print_bls(bls: &Vec<Block>, entry_bl: &usize) {
 // Returns: Blocks, entry block, # of registers
 pub fn optimize_block<const VERBOSE: bool>(
     mut bls: Vec<Block>,
-    entry_bl: usize,
+    mut entry_bl: usize,
     inputs: Vec<(String, Ty)>
 ) -> (Vec<Block>, usize, usize) {
     
@@ -121,7 +121,7 @@ pub fn optimize_block<const VERBOSE: bool>(
     }
 
     // Set Input
-    bls = set_input(bls, &successor, &predecessor, &entry_bl, &exit_bls, inputs);
+    bls = set_input(bls, &successor, &predecessor, &entry_bl, &exit_bls, inputs.clone());
 
     // EBE
     (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
@@ -131,18 +131,24 @@ pub fn optimize_block<const VERBOSE: bool>(
     }
 
     // DBE
-    let (bls, entry_bl, _) = dead_block_elimination(bls, entry_bl, predecessor);
+    (bls, entry_bl, _) = dead_block_elimination(bls, entry_bl, predecessor);
     if VERBOSE {
         println!("\n\n--\nDBE:");
         print_bls(&bls, &entry_bl);
     }
 
     // VtR
-    let (bls, reg_map, reg_size) = var_to_reg(bls);
+    let reg_map: HashMap<String, usize>;
+    let reg_size: usize;
+    (bls, reg_map, reg_size) = var_to_reg(bls, inputs);
     if VERBOSE {
         println!("\n\n--\nVar -> Reg:");
         println!("Var -> Reg map: {:?}", reg_map);
     }
+
+    // Fill remaining inputs with dummy fields
+    bls = fill_input(bls, &entry_bl, &reg_size);
+
     print_bls(&bls, &entry_bl);
 
     (bls, entry_bl, reg_size)
@@ -1463,12 +1469,16 @@ fn var_name_to_reg_id_expr(
 // No control flow, iterate over blocks directly
 // Returns the new blocks, register map, and # of registers used
 fn var_to_reg(
-    mut bls: Vec<Block>
+    mut bls: Vec<Block>,
+    inputs: Vec<(String, Ty)>
 ) -> (Vec<Block>, HashMap<String, usize>, usize) {
     let mut reg_map: HashMap<String, usize> = HashMap::new();
     // Reserve register 0 - 3 to %RP, %SP, %BP, and %RET
     // We decide the order of them in prover.rs
     let mut reg_size = 4;
+    for (v, _) in inputs {
+        (_, reg_map, reg_size) = var_name_to_reg_id_expr(v.to_string(), reg_map, reg_size);
+    }
     for i in 0..bls.len() {
         // Map the inputs
         let mut new_inputs: Vec<(String, Ty, InputVisibility)> = Vec::new();
@@ -1573,3 +1583,26 @@ fn var_to_reg(
     (bls, reg_map, reg_size)
 }
 
+// Fill input of every block with %RP, %SP, %BP, %RET, %4 ~ %(reg_size - 1) if they did not exist
+// Use dummy field type for these values
+fn fill_input<'bl>(
+    mut bls: Vec<Block<'bl>>,
+    entry_bl: &usize,
+    reg_size: &usize
+) -> Vec<Block<'bl>> {
+    let mut reg_list = vec!["%RP".to_string(), "%SP".to_string(), "%BP".to_string(), "%RET".to_string()];
+    for i in 4..*reg_size {
+        reg_list.push(format!("%{}", i))
+    }
+
+    for i in 0..bls.len() {
+        let vis = if i == *entry_bl {InputVisibility::Public} else {InputVisibility::Prover};
+        for reg in &reg_list {
+            if !bls[i].contains_input(reg) {
+                bls[i].inputs.push((reg.to_string(), Ty::Field, vis.clone()));
+            }
+        }
+    }
+
+    return bls;
+}

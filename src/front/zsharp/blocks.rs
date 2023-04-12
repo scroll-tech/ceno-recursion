@@ -8,14 +8,13 @@
 //       If b@1 is dead, can we avoid pushing-in b@0?
 //       Might be a good idea to avoid using physical memory at all here.
 //       Can try eliminate ternaries with a constant condition
-//       How to convert assertions to Circify for each block?
-
-// Other Cleanups:
-//   Cross check edge-case detection with original ZSharp
 
 // Note:
 //   Scopes are not unrolled UNTIL we actually write the variables into blocks
 //   As a result, decl_impl_, type_impl_, etc. should not be affected by scope unrolling
+
+// Questions:
+//   Should we use a VAR_in instead of VAR_v0? VAR_v0 could potentially be generated from a memory POP.
 
 use log::{debug, warn};
 
@@ -159,7 +158,8 @@ impl InputVisibility {
 
 pub struct Block<'ast> {
     pub name: usize,
-    pub inputs: Vec<(String, Ty, InputVisibility)>,
+    pub inputs: Vec<(String, Option<Ty>, InputVisibility)>,
+    pub outputs: Vec<(String, Option<Ty>)>,
     pub instructions: Vec<BlockContent<'ast>>,
     pub terminator: BlockTerminator<'ast>,
     pub circ: RefCell<Circify<ZSharp>>,
@@ -194,8 +194,22 @@ impl<'ast> Block<'ast> {
         let input = Self {
             name,
             inputs: Vec::new(),
+            outputs: Vec::new(),
             instructions: Vec::new(),
             terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1))),
+            circ: RefCell::new(Circify::new(ZSharp::new())),
+            assertions: Default::default()
+        };
+        input
+    }
+
+    pub fn clone(name: usize, old_bl: &Block<'ast>) -> Self {
+        let input = Self {
+            name,
+            inputs: old_bl.inputs.clone(),
+            outputs: old_bl.outputs.clone(),
+            instructions: old_bl.instructions.clone(),
+            terminator: old_bl.terminator.clone(),
             circ: RefCell::new(Circify::new(ZSharp::new())),
             assertions: Default::default()
         };
@@ -207,8 +221,17 @@ impl<'ast> Block<'ast> {
         println!("Inputs:");
         for i in &self.inputs {
             let (name, ty, vis) = i;
-            print!("    {}: {}, ", name, ty);
-            vis.pretty();
+            if let Some(x) = ty {
+                print!("    {}: {}, ", name, x);
+                vis.pretty();
+            }
+        }
+        println!("Outputs:");
+        for i in &self.outputs {
+            let (name, ty) = i;
+            if let Some(x) = ty {
+                println!("    {}: {}, ", name, x);
+            }
         }
         println!("Instructions:");
         for c in &self.instructions {
@@ -241,6 +264,15 @@ impl<'ast> Block<'ast> {
         return false;
     }
 
+    pub fn contains_output(&self, output: &str) -> bool {
+        for i in &self.outputs {
+            if i.0 == output.to_string() {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Convert a block to circ_ir
     pub fn bl_to_circ(&self, mode: &Mode, isolate_asserts: &bool) {
 
@@ -250,14 +282,16 @@ impl<'ast> Block<'ast> {
         self.circ_enter_fn(format!("Block_{}", self.name), ret_ty.clone());
 
         for (name, ty, vis) in &self.inputs {
-            let r = self.circ_declare_input(
-                name.clone(),
-                ty,
-                if *vis == InputVisibility::Public { None } else { Some(0) },
-                None,
-                true,
-            );
-            r.unwrap();
+            if let Some(x) = ty {
+                let r = self.circ_declare_input(
+                    name.clone(),
+                    x,
+                    if *vis == InputVisibility::Public { None } else { Some(0) },
+                    None,
+                    true,
+                );
+                r.unwrap();
+            }
         }
 
         for i in &self.instructions {
@@ -274,34 +308,36 @@ impl<'ast> Block<'ast> {
                         None,
                         true,
                     );
-                    r.unwrap();                    
+                    r.unwrap();                   
                 }
                 BlockContent::Stmt(stmt) => { self.stmt_impl_(&stmt, isolate_asserts).unwrap(); }
             }
         }
 
         // Check the output variables
-        for (name, ty, vis) in &self.inputs {
-            let r = self.circ_declare_input(
-                format!("{}_out", name),
-                ty,
-                Some(0),
-                None,
-                true,
-            );
-            r.unwrap();
-            // Generate assertion statement
-            let lhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
-                value: format!("{}_out", name),
-                span: Span::new("", 0, 0).unwrap()
-            })).unwrap();
-            let rhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
-                value: name.to_string(),
-                span: Span::new("", 0, 0).unwrap()
-            })).unwrap();
-            let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-            self.assert(b, isolate_asserts);
-        }        
+        for (name, ty) in &self.outputs {
+            if let Some(x) = ty {
+                let r = self.circ_declare_input(
+                    format!("{}_out", name),
+                    x,
+                    Some(0),
+                    None,
+                    true,
+                );
+                r.unwrap();
+                // Generate assertion statement
+                let lhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
+                    value: format!("{}_out", name),
+                    span: Span::new("", 0, 0).unwrap()
+                })).unwrap();
+                let rhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
+                    value: name.to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                })).unwrap();
+                let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                self.assert(b, isolate_asserts);
+            }
+        }
 
         // Returns block transition
         match &self.terminator {

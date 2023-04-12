@@ -121,7 +121,8 @@ pub fn optimize_block<const VERBOSE: bool>(
     }
 
     // Set Input
-    bls = set_input(bls, &successor, &predecessor, &entry_bl, &exit_bls, inputs.clone());
+    // Putting this here because EBE and DBE destroys CFG
+    bls = set_input_output(bls, &successor, &predecessor, &entry_bl, &exit_bls, inputs.clone());
 
     // EBE
     (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
@@ -147,7 +148,7 @@ pub fn optimize_block<const VERBOSE: bool>(
     }
 
     // Fill remaining inputs with dummy fields
-    bls = fill_input(bls, &entry_bl, &reg_size);
+    bls = fill_input_output(bls, &entry_bl, &reg_size);
 
     print_bls(&bls, &entry_bl);
 
@@ -1138,10 +1139,7 @@ fn dead_block_elimination(
         label_map.insert(old_label, new_label);
         if old_label == 0 || !predecessor[old_label].is_empty() {
             // Change block name to match new_label
-            let mut tmp_bl = Block::new(new_label);
-            tmp_bl.inputs = bls[old_label].inputs.clone();
-            tmp_bl.instructions = bls[old_label].instructions.clone();
-            tmp_bl.terminator = bls[old_label].terminator.clone();
+            let tmp_bl = Block::clone(new_label, &bls[old_label]);
             new_bls.push(tmp_bl);
             new_label += 1;
         }
@@ -1171,7 +1169,7 @@ fn dead_block_elimination(
 // For each block, set its input to be variables that are alive at the entry point of the block and their type
 // Returns: bls
 // This pass consists of a liveness analysis and a reaching definition (for typing)
-fn set_input<'bl>(
+fn set_input_output<'bl>(
     mut bls: Vec<Block<'bl>>,
     successor: &Vec<HashSet<usize>>,
     predecessor: &Vec<HashSet<usize>>,
@@ -1248,7 +1246,8 @@ fn set_input<'bl>(
         }    
     }
 
-    let name_lst = bl_in;
+    let input_lst = bl_in;
+    let output_lst = bl_out;
 
     // bl_in now consists of all the variables alive at the entry point of each block, now use a forward analysis
     // to find their types
@@ -1324,7 +1323,8 @@ fn set_input<'bl>(
         }    
     }
 
-    let ty_map = bl_in;
+    let ty_map_in = bl_in;
+    let ty_map_out = bl_out;
 
     // Update input of all blocks
     for i in 0..bls.len() {
@@ -1332,9 +1332,14 @@ fn set_input<'bl>(
         // For entry block, these inputs are public
         // For all other blocks, the inputs are only visible to the prover
         let vis = if i == *entry_bl {InputVisibility::Public} else {InputVisibility::Prover};
+        // Something fishy is going on if inputs or outputs have been defined
         assert!(bls[i].inputs.len() == 0);
-        for name in &name_lst[i] {
-            bls[i].inputs.push((name.to_string(), ty_map[i].get(name).unwrap().clone(), vis.clone()));
+        for name in &input_lst[i] {
+            bls[i].inputs.push((name.to_string(), Some(ty_map_in[i].get(name).unwrap().clone()), vis.clone()));
+        }
+        assert!(bls[i].outputs.len() == 0);
+        for name in &output_lst[i] {
+            bls[i].outputs.push((name.to_string(), Some(ty_map_out[i].get(name).unwrap().clone())));
         }
     }
 
@@ -1481,13 +1486,21 @@ fn var_to_reg(
     }
     for i in 0..bls.len() {
         // Map the inputs
-        let mut new_inputs: Vec<(String, Ty, InputVisibility)> = Vec::new();
+        let mut new_inputs = Vec::new();
         for (name, ty, vis) in &bls[i].inputs {
             let new_name: String;
             (new_name, reg_map, reg_size) = var_name_to_reg_id_expr(name.to_string(), reg_map, reg_size);
             new_inputs.push((new_name, ty.clone(), vis.clone()));
         }
         bls[i].inputs = new_inputs;
+        // Map the outputs
+        let mut new_outputs = Vec::new();
+        for (name, ty) in &bls[i].outputs {
+            let new_name: String;
+            (new_name, reg_map, reg_size) = var_name_to_reg_id_expr(name.to_string(), reg_map, reg_size);
+            new_outputs.push((new_name, ty.clone()));
+        }
+        bls[i].outputs = new_outputs;
         // Map the instructions
         let mut new_instr: Vec<BlockContent> = Vec::new();
         for s in &bls[i].instructions {
@@ -1585,7 +1598,7 @@ fn var_to_reg(
 
 // Fill input of every block with %RP, %SP, %BP, %RET, %4 ~ %(reg_size - 1) if they did not exist
 // Use dummy field type for these values
-fn fill_input<'bl>(
+fn fill_input_output<'bl>(
     mut bls: Vec<Block<'bl>>,
     entry_bl: &usize,
     reg_size: &usize
@@ -1599,7 +1612,10 @@ fn fill_input<'bl>(
         let vis = if i == *entry_bl {InputVisibility::Public} else {InputVisibility::Prover};
         for reg in &reg_list {
             if !bls[i].contains_input(reg) {
-                bls[i].inputs.push((reg.to_string(), Ty::Field, vis.clone()));
+                bls[i].inputs.push((reg.to_string(), None, vis.clone()));
+            }
+            if !bls[i].contains_output(reg) {
+                bls[i].outputs.push((reg.to_string(), None));
             }
         }
     }

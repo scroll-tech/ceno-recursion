@@ -1,5 +1,7 @@
 //! The stack-allocation memory manager
 
+use hashconsing::UniqueConsign;
+
 use crate::ir::term::*;
 use std::collections::HashMap;
 
@@ -11,6 +13,7 @@ struct Alloc {
     val_width: usize,
     size: usize,
     cur_term: Term,
+    sp: usize
 }
 
 impl Alloc {
@@ -20,6 +23,7 @@ impl Alloc {
             val_width,
             size,
             cur_term,
+            sp: 0
         }
     }
 
@@ -110,21 +114,25 @@ impl MemManager {
         alloc.cur_term = ite_store;
     }
 
-    /// Append a new size-one entry to the end of the memory, set it to val
-    /// If the condition does not meet, set it to old
+    /// Append a new value to the end of AllocId
     /// Currently there are no array implementations
-    pub fn push(&mut self, old: Term, val: Term, cond: Term) -> AllocId {
-        let id = self.take_next_id();
-        let alloc = Alloc::new(1, check(&val).as_bv(), 1, term![Op::Ite; cond, val, old]);
-        self.allocs.insert(id, alloc);
-        id
-    }
-
-    /// Read the value of index `offest = 0` from the allocation `id`.
-    /// Again, assume no array implementation
-    pub fn read(&self, id: AllocId) -> Term {
-        let alloc = self.allocs.get(&id).expect("Missing allocation");
-        alloc.var().clone()
+    pub fn push(&mut self, id: AllocId, val: Term, cond: Term) -> usize {
+        let alloc = self.allocs.get_mut(&id).expect("Missing allocation");
+        // Construct Index based on sp and addr_width
+        let offset = TermData {
+            op: Op::Const(Value::BitVector(BitVector::new(
+                rug::Integer::from(alloc.sp),
+                alloc.addr_width
+            ))),
+            cs: Vec::new()
+        }.unique_make();
+        assert_eq!(alloc.val_width, check(&val).as_bv());
+        alloc.sp += 1;
+        let old = alloc.cur_term.clone();
+        let new = term![Op::Store; alloc.var().clone(), offset, val];
+        let ite_store = term![Op::Ite; cond, new, old];
+        alloc.cur_term = ite_store;
+        alloc.sp
     }
 
     /// Is `offset` in bounds for the allocation `id`?

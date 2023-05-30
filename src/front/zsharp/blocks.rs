@@ -29,6 +29,11 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use crate::front::zsharp::*;
 use pest::Span;
+use crate::circify::mem::AllocId;
+
+const MEM_SIZE: usize = 65536;
+const MEM_ADDR_WIDTH: usize = 16;
+const MEM_VALUE_WIDTH: usize = 32;
 
 fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast>) -> Expression<'ast> {
     let ce = Expression::Binary(BinaryExpression {
@@ -156,6 +161,7 @@ impl InputVisibility {
     }
 }
 
+// #[derive(Clone)]
 pub struct Block<'ast> {
     pub name: usize,
     pub inputs: Vec<(String, Option<Ty>, InputVisibility)>,
@@ -275,6 +281,8 @@ impl<'ast> Block<'ast> {
 
     // Convert a block to circ_ir
     pub fn bl_to_circ(&self, mode: &Mode, isolate_asserts: &bool) {
+        // Allocate PHY_MEM
+        let phy_mem_id = self.circ_zero_allocate(MEM_SIZE, MEM_ADDR_WIDTH, MEM_VALUE_WIDTH);
 
         // setup stack frame for entry function
         // returns the next block, so return type is Field
@@ -296,10 +304,14 @@ impl<'ast> Block<'ast> {
 
         for i in &self.instructions {
             match i {
-                BlockContent::MemPush(_) => {
-                    // Currently there's nothing we need to do for Push
+                BlockContent::MemPush((var, _, _)) => {
+                    /*let val = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
+                        value: format!("{}", var.clone()),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    self.circ_push(phy_mem_id, val.term);*/
                 }
-                BlockContent::MemPop((var, ty, _)) => {
+                BlockContent::MemPop((var, ty, offset)) => {
                     // Non-deterministically supply the POP value
                     let r = self.circ_declare_input(
                         var.clone(),
@@ -308,7 +320,22 @@ impl<'ast> Block<'ast> {
                         None,
                         true,
                     );
-                    r.unwrap();                   
+                    r.unwrap();
+                    /*let offset_term = TermData {
+                        op: Op::Const(Value::BitVector(BitVector::new(
+                            rug::Integer::from(*offset),
+                            MEM_ADDR_WIDTH
+                        ))),
+                        cs: Vec::new()
+                    }.unique_make();
+                    // Generate assertion statement
+                    let lhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
+                        value: format!("{}", var.clone()),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let rhs_t = self.circ_read(phy_mem_id, offset_term);
+                    let b = bool(eq(lhs_t, T::new(ty.clone(), rhs_t)).unwrap()).unwrap();
+                    self.assert(b, isolate_asserts);  */          
                 }
                 BlockContent::Stmt(stmt) => { self.stmt_impl_(&stmt, isolate_asserts).unwrap(); }
             }
@@ -535,26 +562,6 @@ impl<'ast> Block<'ast> {
         }
     }
 
-    fn zaccs_impl_(
-        &self,
-        accs: &[ast::AssigneeAccess<'ast>],
-    ) -> Result<Vec<ZAccess>, String> {
-        accs.iter()
-            .map(|acc| match acc {
-                AssigneeAccess::Member(m) => Ok(ZAccess::Member(m.id.value.clone())),
-                AssigneeAccess::Select(m) => match &m.expression {
-                    RangeOrExpression::Expression(e) => {
-                        self.expr_impl_(e).map(ZAccess::Idx)
-                    }
-                    _ => Err(format!(
-                        "Cannot assign to slice: {}",
-                        span_to_string(&m.span)
-                    )),
-                },
-            })
-            .collect()
-    }
-
     fn declare_init_impl_(
         &self,
         name: String,
@@ -657,6 +664,12 @@ impl<'ast> Block<'ast> {
 
     /*** circify wrapper functions (hides RefCell) ***/
 
+    fn circ_zero_allocate(&self, size: usize, addr_width: usize, val_width: usize) -> AllocId {
+        self.circ
+            .borrow_mut()
+            .zero_allocate(size, addr_width, val_width)
+    }
+
     fn circ_enter_condition(&self, cond: Term) {
         self.circ.borrow_mut().enter_condition(cond).unwrap();
     }
@@ -698,12 +711,16 @@ impl<'ast> Block<'ast> {
         self.circ.borrow().get_value(loc)
     }
 
-    fn circ_assign(&self, loc: Loc, val: Val<T>) -> Result<Val<T>, CircError> {
-        self.circ.borrow_mut().assign(loc, val)
-    }
-
     fn circ_return_(&self, ret: Option<T>) -> Result<(), CircError> {
         self.circ.borrow_mut().return_(ret)
+    }
+
+    fn circ_read(&self, phy_mem_id: AllocId, idx: Term) -> Term {
+        self.circ.borrow_mut().read(phy_mem_id, idx)
+    }
+
+    fn circ_push(&self, phy_mem_id: AllocId, v: Term) {
+        self.circ.borrow_mut().push(phy_mem_id, v)
     }
 }
 

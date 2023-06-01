@@ -120,7 +120,7 @@ impl FixedSizeDist {
             }
             Sort::BitVector(w) => vec![
                 self.sample_value(sort, rng),
-                Op::Var(self.sample_ident(&format!("bv{}", w), rng), sort.clone()),
+                Op::Var(self.sample_ident(&format!("bv{w}"), rng), sort.clone()),
                 Op::BvUnOp(BvUnOp::Neg),
                 Op::BvUnOp(BvUnOp::Not),
                 Op::BvUext(rng.gen_range(0..*w)),
@@ -152,7 +152,7 @@ impl FixedSizeDist {
                     // No variables!
                     Op::Var(
                         self.sample_ident(
-                            &format!("tp_{}", sort)
+                            &format!("tp_{sort}")
                                 .replace('(', "[")
                                 .replace(')', "]")
                                 .replace(' ', "_"),
@@ -209,7 +209,7 @@ impl FixedSizeDist {
                 let s = Sort::BitVector(self.bv_width.unwrap());
                 vec![s.clone(), s]
             }
-            o if o.arity() == None && o != &Op::BvConcat => repeat(sort.clone())
+            o if o.arity().is_none() && o != &Op::BvConcat => repeat(sort.clone())
                 .take(rng.gen_range(1..self.size))
                 .collect(),
             // perhaps allow concat?
@@ -316,12 +316,40 @@ impl rand::distributions::Distribution<Term> for FixedSizeDist {
 pub mod test {
     use super::*;
 
-    use crate::util::field::DFL_T;
-
     use fxhash::FxHashMap as HashMap;
     use quickcheck::{Arbitrary, Gen};
     use rand::distributions::Distribution;
     use rand::SeedableRng;
+
+    #[derive(Clone, Debug)]
+    pub struct PureBool(pub Term, pub FxHashMap<String, Value>);
+
+    impl Arbitrary for PureBool {
+        fn arbitrary(g: &mut Gen) -> Self {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(u64::arbitrary(g));
+            let t = PureBoolDist(g.size()).sample(&mut rng);
+            let values: FxHashMap<String, Value> = PostOrderIter::new(t.clone())
+                .filter_map(|c| {
+                    if let Op::Var(n, _) = &c.op() {
+                        Some((n.clone(), Value::Bool(bool::arbitrary(g))))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            PureBool(t, values)
+        }
+
+        fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
+            let vs = self.1.clone();
+            let ts = PostOrderIter::new(self.0.clone())
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev();
+
+            Box::new(ts.skip(1).map(move |t| PureBool(t, vs.clone())))
+        }
+    }
 
     #[derive(Clone)]
     pub struct ArbitraryTerm(pub Term);
@@ -337,7 +365,7 @@ pub mod test {
             let mut rng = rand::rngs::StdRng::seed_from_u64(u64::arbitrary(g));
             let d = FixedSizeDist {
                 bv_width: Some(8),
-                pf_t: Some(DFL_T.clone()),
+                pf_t: Some(FieldT::FBls12381),
                 tuples: true,
                 size: g.size(),
                 sort: Sort::Bool,
@@ -366,7 +394,7 @@ pub mod test {
             let d = PureBoolDist(g.size());
             let t = d.sample(&mut rng);
             let values: HashMap<String, Value> = PostOrderIter::new(t.clone())
-                .filter_map(|c| match &c.op {
+                .filter_map(|c| match &c.op() {
                     Op::Var(n, Sort::Bool) => Some((n.clone(), Value::Bool(bool::arbitrary(g)))),
                     _ => None,
                 })
@@ -407,7 +435,7 @@ pub mod test {
             };
             let t = d.sample(&mut rng);
             let values: HashMap<String, Value> = PostOrderIter::new(t.clone())
-                .filter_map(|c| match &c.op {
+                .filter_map(|c| match &c.op() {
                     Op::Var(n, s) => Some((n.clone(), UniformValue(s).sample(&mut rng))),
                     _ => None,
                 })

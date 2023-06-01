@@ -12,7 +12,7 @@ use crate::front::PUBLIC_VIS;
 pub struct FnInfo {
     pub name: String,
     pub ret_ty: Option<Ty>,
-    pub args: Vec<ParameterDeclaration>,
+    pub params: Vec<ParamInfo>,
     pub body: Statement,
 }
 
@@ -22,7 +22,7 @@ pub struct DeclInfo {
     pub ty: Ty,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ParamInfo {
     pub name: String,
     pub ty: Ty,
@@ -38,7 +38,7 @@ impl Display for FnInfo {
         write!(
             f,
             "name: {},\nargs: {:#?},\nbody: {:#?}",
-            self.name, self.args, self.body
+            self.name, self.params, self.body
         )
     }
 }

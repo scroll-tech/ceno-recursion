@@ -2,7 +2,6 @@
 
 use super::*;
 use std::cmp::Ordering;
-use std::fmt::{self, Display, Formatter};
 
 /// Convert `t` to width `w`, though unsigned extension or extraction
 pub fn to_width(t: &Term, w: usize) -> Term {
@@ -11,55 +10,6 @@ pub fn to_width(t: &Term, w: usize) -> Term {
         Ordering::Less => term(Op::BvUext(w - old_w), vec![t.clone()]),
         Ordering::Equal => t.clone(),
         Ordering::Greater => term(Op::BvExtract(w - 1, 0), vec![t.clone()]),
-    }
-}
-
-/// A wrapper for `Term`, which displays the term in a letified fashion, so that no term is
-/// duplicated.
-///
-/// This is a pretty stupid implementation. It replaces every term.
-pub struct Letified(pub Term);
-
-impl Display for Letified {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        //let parent_count = {
-        //    let mut parent_count = HashMap::default();
-        //    for t in PostOrderIter::new(self.0.clone()) {
-        //        for c in &t.cs {
-        //            let mut parents = parent_count.entry(&c).or_insert_with(|| 0);
-        //            *parents += 1;
-        //        }
-        //    }
-        //    parent_count
-        //};
-        let mut let_ct = 0;
-        let mut print_as = TermMap::new();
-
-        let mut parent_counts = TermMap::<usize>::new();
-        for t in PostOrderIter::new(self.0.clone()) {
-            for c in t.cs.iter().cloned() {
-                *parent_counts.entry(c).or_insert(0) += 1;
-            }
-        }
-
-        writeln!(f, "(let (")?;
-        for t in PostOrderIter::new(self.0.clone()) {
-            let letify = if parent_counts.get(&t).unwrap_or(&0) > &1 && !t.cs.is_empty() {
-                true
-            } else {
-                matches!(&t.op, Op::Const(Value::Array(..)))
-            };
-            if letify {
-                let name = format!("let_{}", let_ct);
-                let_ct += 1;
-                let sort = check(&t);
-                write!(f, "  ({} ", name)?;
-                let var = leaf_term(Op::Var(name, sort));
-                writeln!(f, "{})", substitute_cache(&t, &mut print_as))?;
-                print_as.insert(t, var);
-            }
-        }
-        writeln!(f, ") {})", substitute_cache(&self.0, &mut print_as))
     }
 }
 
@@ -79,12 +29,13 @@ pub fn substitute_cache(t: &Term, subs: &mut TermMap<Term>) -> Term {
         }
         if !children_pushed {
             stack.push((n.clone(), true));
-            stack.extend(n.cs.iter().map(|c| (c.clone(), false)));
+            stack.extend(n.cs().iter().map(|c| (c.clone(), false)));
             continue;
         }
         let new_n = term(
-            n.op.clone(),
-            n.cs.iter()
+            n.op().clone(),
+            n.cs()
+                .iter()
                 .map(|c| subs.get(c).expect("postorder").clone())
                 .collect(),
         );
@@ -106,29 +57,25 @@ pub fn substitute(t: &Term, mut subs: TermMap<Term>) -> Term {
 /// The substitution map is taken mutably; this function will add rewrites to it.
 /// This allows the same map to be re-used across multiple rewrites, with caching.
 pub fn substitute_single(t: &Term, from: Term, to: Term) -> Term {
-    let mut c = TermMap::new();
+    let mut c = TermMap::default();
     c.insert(from, to);
     substitute_cache(t, &mut c)
 }
 
 /// Is `needle` not in `haystack`?
 pub fn does_not_contain(haystack: Term, needle: &Term) -> bool {
-    PostOrderIter::new(haystack)
-        .into_iter()
-        .all(|descendent| &descendent != needle)
+    PostOrderIter::new(haystack).all(|descendent| &descendent != needle)
 }
 
 /// Is `needle` in `haystack`?
 pub fn contains(haystack: Term, needle: &Term) -> bool {
-    PostOrderIter::new(haystack)
-        .into_iter()
-        .any(|descendent| &descendent == needle)
+    PostOrderIter::new(haystack).any(|descendent| &descendent == needle)
 }
 
 /// Is `v` free in `t`? Wrong in the presence of lets.
 pub fn free_in(v: &str, t: Term) -> bool {
     for n in PostOrderIter::new(t) {
-        match &n.op {
+        match &n.op() {
             Op::Var(name, _) if v == name => {
                 return true;
             }
@@ -141,7 +88,7 @@ pub fn free_in(v: &str, t: Term) -> bool {
 /// Get all the free variables in this term
 pub fn free_variables(t: Term) -> FxHashSet<String> {
     PostOrderIter::new(t)
-        .filter_map(|n| match &n.op {
+        .filter_map(|n| match &n.op() {
             Op::Var(name, _) => Some(name.into()),
             _ => None,
         })
@@ -151,7 +98,7 @@ pub fn free_variables(t: Term) -> FxHashSet<String> {
 /// Get all the free variables in this term, with sorts
 pub fn free_variables_with_sorts(t: Term) -> FxHashSet<(String, Sort)> {
     PostOrderIter::new(t)
-        .filter_map(|n| match &n.op {
+        .filter_map(|n| match &n.op() {
             Op::Var(name, sort) => Some((name.into(), sort.clone())),
             _ => None,
         })
@@ -160,7 +107,7 @@ pub fn free_variables_with_sorts(t: Term) -> FxHashSet<(String, Sort)> {
 
 /// If this term is a constant field or bit-vector, get the unsigned int value.
 pub fn as_uint_constant(t: &Term) -> Option<Integer> {
-    match &t.op {
+    match &t.op() {
         Op::Const(Value::BitVector(bv)) => Some(bv.uint().clone()),
         Op::Const(Value::Field(f)) => Some(f.i()),
         _ => None,
@@ -170,10 +117,10 @@ pub fn as_uint_constant(t: &Term) -> Option<Integer> {
 /// Assert that all variables in the term graph are declared in the metadata.
 #[cfg(test)]
 pub fn assert_all_vars_declared(c: &Computation) {
-    let vars: FxHashSet<String> = c.metadata.input_vis.iter().map(|p| p.0.clone()).collect();
+    let vars: FxHashSet<String> = c.metadata.vars.iter().map(|p| p.0.clone()).collect();
     for o in &c.outputs {
         for v in free_variables(o.clone()) {
-            assert!(vars.contains(&v), "Variable {} is not declared", v);
+            assert!(vars.contains(&v), "{}", "Variable {v} is not declared");
         }
     }
 }
@@ -183,10 +130,10 @@ pub fn assert_all_vars_declared(c: &Computation) {
 /// Guarantees that every computation term is a key in the map. If there are no
 /// parents, the value will be empty.
 pub fn parents_map(c: &Computation) -> TermMap<Vec<Term>> {
-    let mut parents = TermMap::new();
+    let mut parents = TermMap::default();
     for t in c.terms_postorder() {
         parents.insert(t.clone(), Vec::new());
-        for c in &t.cs {
+        for c in t.cs() {
             parents.get_mut(c).unwrap().push(t.clone());
         }
     }
@@ -211,33 +158,75 @@ pub fn array_to_tuple(t: &Term) -> Term {
     term(Op::Tuple, array_elements(t))
 }
 
-#[cfg(test)]
-mod test {
-
-    use super::*;
-    use crate::term;
-
-    fn remove_whitespace(a: &str) -> String {
-        let mut aa = a.to_owned();
-        aa.retain(|c| !c.is_whitespace());
-        aa
+/// Print operator stats
+pub fn dump_op_stats() {
+    use std::mem::size_of;
+    println!("Op size: {}bytes", size_of::<Op>());
+    let mut counts: FxHashMap<Op, usize> = FxHashMap::default();
+    let mut children: FxHashMap<Op, usize> = FxHashMap::default();
+    let add = |map: &mut FxHashMap<Op, usize>, key: &Op, value: usize| {
+        if let Some(present_value) = map.get_mut(key) {
+            *present_value += value;
+        } else {
+            map.insert(key.clone(), value);
+        }
+    };
+    hc::Table::for_each(|op, cs| {
+        add(&mut counts, op, 1);
+        add(&mut children, op, cs.len());
+    });
+    let mut vector = Vec::new();
+    for k in counts.keys() {
+        let ct = *counts.get(k).unwrap();
+        let cs_ct = *children.get(k).unwrap();
+        let ave = cs_ct as f64 / ct as f64;
+        vector.push((k.clone(), ct, cs_ct, ave));
     }
-
-    #[test]
-    fn letified_no_dups() {
-        let t = term![Op::Eq; term![Op::BvNaryOp(BvNaryOp::Add); bv_lit(4,3), bv_lit(1,3)], bv_lit(5,3)];
-        assert_eq!(
-            remove_whitespace("(let ()(= (bvadd #b100 #b001) #b101))"),
-            remove_whitespace(&format!("{}", Letified(t))),
-        );
+    vector.sort_by_key(|t| t.1);
+    for (k, ct, cs_ct, ave) in vector {
+        let mem = size_of::<Op>() * ct + size_of::<Vec<Term>>() * ct + size_of::<Term>() * cs_ct;
+        let s: String = format!("{k}");
+        println!("Op {s:>20}, Count {ct:>8}, Children {cs_ct:>8}, Ave {ave:>8.2}, Mem {mem:>20}");
     }
-    #[test]
-    fn letified_1_dup() {
-        let a = term![Op::BvNaryOp(BvNaryOp::Add); bv_lit(4,3), bv_lit(1,3)];
-        let t = term![Op::Eq; a.clone(), a];
-        assert_eq!(
-            remove_whitespace("(let ((let_0 (bvadd #b100 #b001)))(= let_0 let_0))"),
-            remove_whitespace(&format!("{}", Letified(t))),
-        );
+}
+
+/// Iterator over descendents in child-first order.
+pub struct PostOrderSkipIter<'a, F: Fn(&Term) -> bool + 'a> {
+    // (cs stacked, term)
+    stack: Vec<(bool, Term)>,
+    visited: TermSet,
+    skip_if: &'a F,
+}
+
+impl<'a, F: Fn(&Term) -> bool + 'a> PostOrderSkipIter<'a, F> {
+    /// Make an iterator over the descendents of `root`.
+    pub fn new(root: Term, skip_if: &'a F) -> Self {
+        Self {
+            stack: vec![(false, root)],
+            visited: TermSet::default(),
+            skip_if,
+        }
+    }
+}
+
+impl<'a, F: Fn(&Term) -> bool + 'a> std::iter::Iterator for PostOrderSkipIter<'a, F> {
+    type Item = Term;
+    fn next(&mut self) -> Option<Term> {
+        while let Some((children_pushed, t)) = self.stack.last() {
+            if self.visited.contains(t) || (self.skip_if)(t) {
+                self.stack.pop();
+            } else if !children_pushed {
+                self.stack.last_mut().unwrap().0 = true;
+                let last = self.stack.last().unwrap().1.clone();
+                self.stack
+                    .extend(last.cs().iter().map(|c| (false, c.clone())));
+            } else {
+                break;
+            }
+        }
+        self.stack.pop().map(|(_, t)| {
+            self.visited.insert(t.clone());
+            t
+        })
     }
 }

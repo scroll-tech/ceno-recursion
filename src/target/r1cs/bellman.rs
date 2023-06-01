@@ -1,46 +1,43 @@
 //! Exporting our R1CS to bellman
-use ::bellman::{
-    groth16::{
-        create_random_proof, generate_random_parameters, prepare_verifying_key, verify_proof,
-        Parameters, Proof, VerifyingKey,
-    },
-    Circuit, ConstraintSystem, LinearCombination, SynthesisError, Variable,
-};
-use bincode::{deserialize_from, serialize_into};
+use ::bellman::{groth16, Circuit, ConstraintSystem, LinearCombination, SynthesisError, Variable};
 use ff::{Field, PrimeField, PrimeFieldBits};
 use fxhash::FxHashMap;
 use gmp_mpfr_sys::gmp::limb_t;
 use group::WnafGroup;
 use log::debug;
 use pairing::{Engine, MultiMillerLoop};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{BufRead, BufReader};
+use std::marker::PhantomData;
 use std::path::Path;
 use std::str::FromStr;
 
 use rug::integer::{IsPrime, Order};
 use rug::Integer;
 
-use super::*;
+use super::proof;
+use super::{wit_comp::StagedWitCompEvaluator, Lc, ProverData, Var, VarType, VerifierData};
+use crate::ir::term::Value;
 
 /// Convert a (rug) integer to a prime field element.
-fn int_to_ff<F: PrimeField>(i: Integer) -> F {
+pub(super) fn int_to_ff<F: PrimeField>(i: Integer) -> F {
     let mut accumulator = F::from(0);
     let limb_bits = (std::mem::size_of::<limb_t>() as u64) << 3;
-    let limb_base = F::from(2).pow_vartime(&[limb_bits]);
+    let limb_base = F::from(2).pow_vartime([limb_bits]);
     // as_ref yeilds a least-significant-first array.
     for digit in i.as_ref().iter().rev() {
         accumulator *= limb_base;
-        accumulator += F::from(*digit as u64);
+        accumulator += F::from(*digit);
     }
     accumulator
 }
 
 /// Convert one our our linear combinations to a bellman linear combination.
 /// Takes a zero linear combination. We could build it locally, but bellman provides one, so...
-fn lc_to_bellman<F: PrimeField, CS: ConstraintSystem<F>>(
-    vars: &HashMap<usize, Variable>,
+pub(super) fn lc_to_bellman<F: PrimeField, CS: ConstraintSystem<F>>(
+    vars: &HashMap<Var, Variable>,
     lc: &Lc,
     zero_lc: LinearCombination<F>,
 ) -> LinearCombination<F> {
@@ -59,7 +56,7 @@ fn lc_to_bellman<F: PrimeField, CS: ConstraintSystem<F>>(
 }
 
 // hmmm... this should work essentially all the time, I think
-fn get_modulus<F: Field + PrimeField>() -> Integer {
+pub(super) fn get_modulus<F: Field + PrimeField>() -> Integer {
     let neg_1_f = -F::one();
     let p_lsf: Integer = Integer::from_digits(neg_1_f.to_repr().as_ref(), Order::Lsf) + 1;
     let p_msf: Integer = Integer::from_digits(neg_1_f.to_repr().as_ref(), Order::Msf) + 1;
@@ -76,7 +73,7 @@ fn get_modulus<F: Field + PrimeField>() -> Integer {
 ///
 /// Optionally contains a variable value map. This must be populated to use the
 /// bellman prover.
-pub struct SynthInput<'a>(&'a R1cs<String>, &'a Option<FxHashMap<String, Value>>);
+pub struct SynthInput<'a>(&'a ProverData, Option<&'a FxHashMap<String, Value>>);
 
 impl<'a, F: PrimeField> Circuit<F> for SynthInput<'a> {
     #[track_caller]
@@ -86,57 +83,55 @@ impl<'a, F: PrimeField> Circuit<F> for SynthInput<'a> {
     {
         let f_mod = get_modulus::<F>();
         assert_eq!(
-            self.0.modulus.modulus(),
+            self.0.r1cs.field.modulus(),
             &f_mod,
             "\nR1CS has modulus \n{},\n but Bellman CS expects \n{}",
-            self.0.modulus,
+            self.0.r1cs.field,
             f_mod
         );
-        let mut uses = HashMap::with_capacity(self.0.next_idx);
-        for (a, b, c) in self.0.constraints.iter() {
-            [a, b, c].iter().for_each(|y| {
-                y.monomials.keys().for_each(|k| {
-                    uses.get_mut(k)
-                        .map(|i| {
-                            *i += 1;
-                        })
-                        .or_else(|| {
-                            uses.insert(*k, 1);
-                            None
-                        });
+        let mut vars = HashMap::with_capacity(self.0.r1cs.vars.len());
+        let values: Option<Vec<_>> = self.1.map(|values| {
+            let mut evaluator = StagedWitCompEvaluator::new(&self.0.precompute);
+            let mut ffs = Vec::new();
+            ffs.extend(evaluator.eval_stage(values.clone()).into_iter().cloned());
+            ffs.extend(
+                evaluator
+                    .eval_stage(Default::default())
+                    .into_iter()
+                    .cloned(),
+            );
+            ffs
+        });
+        for (i, var) in self.0.r1cs.vars.iter().copied().enumerate() {
+            assert!(
+                !matches!(var.ty(), VarType::CWit),
+                "Bellman doesn't support committed witnesses"
+            );
+            assert!(
+                !matches!(var.ty(), VarType::RoundWit | VarType::Chall),
+                "Bellman doesn't support rounds"
+            );
+            let public = matches!(var.ty(), VarType::Inst);
+            let name_f = || format!("{var:?}");
+            let val_f = || {
+                Ok({
+                    let i_val = &values.as_ref().expect("missing values")[i];
+                    let ff_val = int_to_ff(i_val.as_pf().into());
+                    debug!("value : {var:?} -> {ff_val:?} ({i_val})");
+                    ff_val
                 })
-            });
+            };
+            debug!("var: {:?}, public: {}", var, public);
+            let v = if public {
+                cs.alloc_input(name_f, val_f)?
+            } else {
+                cs.alloc(name_f, val_f)?
+            };
+            vars.insert(var, v);
         }
-        let mut vars = HashMap::with_capacity(self.0.next_idx);
-        for i in 0..self.0.next_idx {
-            if let Some(s) = self.0.idxs_signals.get(&i) {
-                //for (_i, s) in self.0.idxs_signals.get() {
-                if uses.get(&i).is_some() {
-                    let name_f = || s.to_string();
-                    let val_f = || {
-                        Ok({
-                            let i_val = self.1.as_ref().expect("missing values").get(s).unwrap();
-                            let ff_val = int_to_ff(i_val.as_pf().into());
-                            debug!("value : {} -> {:?} ({})", s, ff_val, i_val);
-                            ff_val
-                        })
-                    };
-                    let public = self.0.public_idxs.contains(&i);
-                    debug!("var: {}, public: {}", s, public);
-                    let v = if public {
-                        cs.alloc_input(name_f, val_f)?
-                    } else {
-                        cs.alloc(name_f, val_f)?
-                    };
-                    vars.insert(i, v);
-                } else {
-                    debug!("drop dead var: {}", s);
-                }
-            }
-        }
-        for (i, (a, b, c)) in self.0.constraints.iter().enumerate() {
+        for (i, (a, b, c)) in self.0.r1cs.constraints.iter().enumerate() {
             cs.enforce(
-                || format!("con{}", i),
+                || format!("con{i}"),
                 |z| lc_to_bellman::<F, CS>(&vars, a, z),
                 |z| lc_to_bellman::<F, CS>(&vars, b, z),
                 |z| lc_to_bellman::<F, CS>(&vars, c, z),
@@ -145,7 +140,7 @@ impl<'a, F: PrimeField> Circuit<F> for SynthInput<'a> {
         debug!(
             "done with synth: {} vars {} cs",
             vars.len(),
-            self.0.constraints.len()
+            self.0.r1cs.constraints.len()
         );
         Ok(())
     }
@@ -163,123 +158,125 @@ pub fn parse_instance<P: AsRef<Path>, F: PrimeField>(path: P) -> Vec<F> {
         .collect()
 }
 
-/// Given
-/// * a proving-key path,
-/// * a verifying-key path,
-/// * prover data, and
-/// * verifier data
-/// generate parameters and write them and the data to files at those paths.
-pub fn gen_params<E: Engine, P1: AsRef<Path>, P2: AsRef<Path>>(
-    pk_path: P1,
-    vk_path: P2,
-    p_data: &ProverData,
-    v_data: &VerifierData,
-) -> io::Result<()>
+mod serde_pk {
+    use bellman::groth16::Parameters;
+    use pairing::Engine;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer, E: Engine>(
+        p: &Parameters<E>,
+        ser: S,
+    ) -> Result<S::Ok, S::Error> {
+        let mut bs: Vec<u8> = Vec::new();
+        p.write(&mut bs).unwrap();
+        serde_bytes::ByteBuf::from(bs).serialize(ser)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>, E: Engine>(
+        de: D,
+    ) -> Result<Parameters<E>, D::Error> {
+        let bs: serde_bytes::ByteBuf = Deserialize::deserialize(de)?;
+        Ok(Parameters::read(&**bs, false).unwrap())
+    }
+}
+
+mod serde_vk {
+    use bellman::groth16::VerifyingKey;
+    use pairing::Engine;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer, E: Engine>(
+        p: &VerifyingKey<E>,
+        ser: S,
+    ) -> Result<S::Ok, S::Error> {
+        let mut bs: Vec<u8> = Vec::new();
+        p.write(&mut bs).unwrap();
+        serde_bytes::ByteBuf::from(bs).serialize(ser)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>, E: Engine>(
+        de: D,
+    ) -> Result<VerifyingKey<E>, D::Error> {
+        let bs: serde_bytes::ByteBuf = Deserialize::deserialize(de)?;
+        Ok(VerifyingKey::read(&**bs).unwrap())
+    }
+}
+
+mod serde_pf {
+    use bellman::groth16::Proof;
+    use pairing::Engine;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer, E: Engine>(p: &Proof<E>, ser: S) -> Result<S::Ok, S::Error> {
+        let mut bs: Vec<u8> = Vec::new();
+        p.write(&mut bs).unwrap();
+        serde_bytes::ByteBuf::from(bs).serialize(ser)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>, E: Engine>(de: D) -> Result<Proof<E>, D::Error> {
+        let bs: serde_bytes::ByteBuf = Deserialize::deserialize(de)?;
+        Ok(Proof::read(&**bs).unwrap())
+    }
+}
+
+/// The [::bellman] implementation of Groth16.
+pub struct Bellman<E: Engine>(PhantomData<E>);
+
+/// The pk for [Bellman]
+#[derive(Serialize, Deserialize)]
+pub struct ProvingKey<E: Engine>(
+    ProverData,
+    #[serde(with = "serde_pk")] groth16::Parameters<E>,
+);
+
+/// The vk for [Bellman]
+#[derive(Serialize, Deserialize)]
+pub struct VerifyingKey<E: Engine>(
+    VerifierData,
+    #[serde(with = "serde_vk")] groth16::VerifyingKey<E>,
+);
+
+/// The proof for [Bellman]
+#[derive(Serialize, Deserialize)]
+pub struct Proof<E: Engine>(#[serde(with = "serde_pf")] groth16::Proof<E>);
+
+impl<E: Engine> proof::ProofSystem for Bellman<E>
 where
+    E: MultiMillerLoop,
     E::G1: WnafGroup,
     E::G2: WnafGroup,
-{
-    let rng = &mut rand::thread_rng();
-    let p = generate_random_parameters::<E, _, _>(SynthInput(&p_data.r1cs, &None), rng).unwrap();
-    write_prover_key_and_data(pk_path, &p, p_data)?;
-    write_verifier_key_and_data(vk_path, &p.vk, v_data)?;
-    Ok(())
-}
-
-fn write_prover_key_and_data<P: AsRef<Path>, E: Engine>(
-    path: P,
-    params: &Parameters<E>,
-    data: &ProverData,
-) -> io::Result<()> {
-    let mut pk: Vec<u8> = Vec::new();
-    params.write(&mut pk)?;
-    let mut file = File::create(path)?;
-    serialize_into(&mut file, &(&pk, &data)).unwrap();
-    Ok(())
-}
-
-fn read_prover_key_and_data<P: AsRef<Path>, E: Engine>(
-    path: P,
-) -> io::Result<(Parameters<E>, ProverData)> {
-    let mut file = File::open(path)?;
-    let (pk_bytes, data): (Vec<u8>, ProverData) = deserialize_from(&mut file).unwrap();
-    let pk: Parameters<E> = Parameters::read(pk_bytes.as_slice(), false)?;
-    Ok((pk, data))
-}
-
-fn write_verifier_key_and_data<P: AsRef<Path>, E: Engine>(
-    path: P,
-    key: &VerifyingKey<E>,
-    data: &VerifierData,
-) -> io::Result<()> {
-    let mut vk: Vec<u8> = Vec::new();
-    key.write(&mut vk)?;
-    let mut file = File::create(path)?;
-    serialize_into(&mut file, &(&vk, &data)).unwrap();
-    Ok(())
-}
-
-fn read_verifier_key_and_data<P: AsRef<Path>, E: Engine>(
-    path: P,
-) -> io::Result<(VerifyingKey<E>, VerifierData)> {
-    let mut file = File::open(path)?;
-    let (vk_bytes, data): (Vec<u8>, VerifierData) = deserialize_from(&mut file).unwrap();
-    let vk: VerifyingKey<E> = VerifyingKey::read(vk_bytes.as_slice())?;
-    Ok((vk, data))
-}
-
-/// Given
-/// * a proving-key path,
-/// * a proof path, and
-/// * a prover input map
-/// generate a random proof and writes it to the path
-pub fn prove<E: Engine, P1: AsRef<Path>, P2: AsRef<Path>>(
-    pk_path: P1,
-    pf_path: P2,
-    inputs_map: &FxHashMap<String, Value>,
-) -> io::Result<()>
-where
     E::Fr: PrimeFieldBits,
 {
-    let (pk, prover_data) = read_prover_key_and_data::<_, E>(pk_path)?;
-    let rng = &mut rand::thread_rng();
-    for (input, sort) in &prover_data.precompute_inputs {
-        let value = inputs_map
-            .get(input)
-            .unwrap_or_else(|| panic!("No input for {}", input));
-        let sort2 = value.sort();
-        assert_eq!(
-            sort, &sort2,
-            "Sort mismatch for {}. Expected\n\t{} but got\n\t{}",
-            input, sort, sort2
-        );
-    }
-    let new_map = prover_data.precompute.eval(inputs_map);
-    prover_data.r1cs.check_all(&new_map);
-    let pf = create_random_proof(SynthInput(&prover_data.r1cs, &Some(new_map)), &pk, rng).unwrap();
-    let mut pf_file = File::create(pf_path)?;
-    pf.write(&mut pf_file)?;
-    Ok(())
-}
+    type VerifyingKey = VerifyingKey<E>;
 
-/// Given
-/// * a verifying-key path,
-/// * a proof path,
-/// * and a verifier input map
-/// checks the proof at that path
-pub fn verify<E: MultiMillerLoop, P1: AsRef<Path>, P2: AsRef<Path>>(
-    vk_path: P1,
-    pf_path: P2,
-    inputs_map: &FxHashMap<String, Value>,
-) -> io::Result<()> {
-    let (vk, verifier_data) = read_verifier_key_and_data::<_, E>(vk_path)?;
-    let pvk = prepare_verifying_key(&vk);
-    let inputs = verifier_data.eval(inputs_map);
-    let inputs_as_ff: Vec<E::Fr> = inputs.into_iter().map(int_to_ff).collect();
-    let mut pf_file = File::open(pf_path).unwrap();
-    let pf = Proof::read(&mut pf_file).unwrap();
-    verify_proof(&pvk, &pf, &inputs_as_ff).unwrap();
-    Ok(())
+    type ProvingKey = ProvingKey<E>;
+
+    type Proof = Proof<E>;
+
+    fn setup(p_data: ProverData, v_data: VerifierData) -> (Self::ProvingKey, Self::VerifyingKey) {
+        assert_eq!(p_data.r1cs.commitments.len(), 0);
+        let rng = &mut rand::thread_rng();
+        let params =
+            groth16::generate_random_parameters::<E, _, _>(SynthInput(&p_data, None), rng).unwrap();
+        let v_params = params.vk.clone();
+        (ProvingKey(p_data, params), VerifyingKey(v_data, v_params))
+    }
+
+    fn prove(pk: &Self::ProvingKey, witness: &FxHashMap<String, Value>) -> Self::Proof {
+        let rng = &mut rand::thread_rng();
+        pk.0.check_all(witness);
+        Proof(groth16::create_random_proof(SynthInput(&pk.0, Some(witness)), &pk.1, rng).unwrap())
+    }
+
+    fn verify(vk: &Self::VerifyingKey, inst: &FxHashMap<String, Value>, pf: &Self::Proof) -> bool {
+        let pvk = groth16::prepare_verifying_key(&vk.1);
+        let r1cs_inst_map = vk.0.eval(inst);
+        let r1cs_inst: Vec<E::Fr> = r1cs_inst_map
+            .into_iter()
+            .map(|i| int_to_ff(i.i()))
+            .collect();
+        groth16::verify_proof(&pvk, &pf.0, &r1cs_inst).is_ok()
+    }
 }
 
 #[cfg(test)]
@@ -312,13 +309,13 @@ mod test {
     #[quickcheck]
     fn int_to_ff_random(BlsScalar(i): BlsScalar) -> bool {
         let by_fn = int_to_ff::<Scalar>(i.clone());
-        let by_str = Scalar::from_str_vartime(&format!("{}", i)).unwrap();
+        let by_str = Scalar::from_str_vartime(&format!("{i}")).unwrap();
         by_fn == by_str
     }
 
     fn convert(i: Integer) {
         let by_fn = int_to_ff::<Scalar>(i.clone());
-        let by_str = Scalar::from_str_vartime(&format!("{}", i)).unwrap();
+        let by_str = Scalar::from_str_vartime(&format!("{i}")).unwrap();
         assert_eq!(by_fn, by_str);
     }
 

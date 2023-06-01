@@ -60,7 +60,8 @@
 //! fast vector type, instead of standard terms. This allows for log-time updates.
 
 use crate::ir::term::{
-    check, leaf_term, term, Array, Computation, Op, PostOrderIter, Sort, Term, TermMap, Value, AND,
+    bv_lit, check, leaf_term, term, Array, Computation, Node, Op, PostOrderIter, Sort, Term,
+    TermMap, Value, AND,
 };
 use std::collections::BTreeMap;
 
@@ -105,9 +106,28 @@ impl TupleTree {
     fn bimap(&self, mut f: impl FnMut(Term, Term) -> Term, other: &Self) -> Self {
         self.structure(itertools::zip_eq(self.flatten(), other.flatten()).map(|(a, b)| f(a, b)))
     }
+    fn transpose_map(vs: Vec<Self>, f: impl FnMut(Vec<Term>) -> Term) -> Self {
+        assert!(!vs.is_empty());
+        let n = vs[0].flatten().count();
+        let mut ts = vec![Vec::new(); n];
+        for v in &vs {
+            for (i, t) in v.flatten().enumerate() {
+                ts[i].push(t);
+            }
+        }
+        vs[0].structure(ts.into_iter().map(f))
+    }
     fn get(&self, i: usize) -> Self {
         match self {
-            TupleTree::NonTuple(_) => panic!("Get ({}) on non-tuple {:?}", i, self),
+            TupleTree::NonTuple(cs) => {
+                if let Sort::Tuple(_) = check(cs) {
+                    TupleTree::NonTuple(term![Op::Field(i); cs.clone()])
+                } else if let Sort::Array(_, _, _) = check(cs) {
+                    TupleTree::NonTuple(term![Op::Select; cs.clone(), bv_lit(i, 32)])
+                } else {
+                    panic!("Get ({}) on non-tuple {:?}", i, self)
+                }
+            }
             TupleTree::Tuple(t) => {
                 assert!(i < t.len());
                 t.get(i).unwrap().clone()
@@ -211,13 +231,14 @@ fn tuple_free(t: Term) -> bool {
 
 /// Run the tuple elimination pass.
 pub fn eliminate_tuples(cs: &mut Computation) {
-    let mut lifted: TermMap<TupleTree> = TermMap::new();
+    let mut lifted: TermMap<TupleTree> = TermMap::default();
     for t in cs.terms_postorder() {
-        let mut cs: Vec<TupleTree> =
-            t.cs.iter()
-                .map(|c| lifted.get(c).unwrap().clone())
-                .collect();
-        let new_t = match &t.op {
+        let mut cs: Vec<TupleTree> = t
+            .cs()
+            .iter()
+            .map(|c| lifted.get(c).unwrap().clone())
+            .collect();
+        let new_t = match t.op() {
             Op::Const(v) => termify_val_tuples(untuple_value(v)),
             Op::Ite => {
                 let f = cs.pop().unwrap();
@@ -240,6 +261,15 @@ pub fn eliminate_tuples(cs: &mut Computation) {
                 debug_assert!(cs.is_empty());
                 a.bimap(|a, v| term![Op::Store; a, i.clone(), v], &v)
             }
+            Op::Array(k, _v) => TupleTree::transpose_map(cs, |children| {
+                assert!(!children.is_empty());
+                let v_s = check(&children[0]);
+                term(Op::Array(k.clone(), v_s), children)
+            }),
+            Op::Fill(key_sort, size) => {
+                let values = cs.pop().unwrap();
+                values.map(|v| term![Op::Fill(key_sort.clone(), *size); v])
+            }
             Op::Select => {
                 let i = cs.pop().unwrap().unwrap_non_tuple();
                 let a = cs.pop().unwrap();
@@ -259,7 +289,7 @@ pub fn eliminate_tuples(cs: &mut Computation) {
             }
             Op::Tuple => TupleTree::Tuple(cs.into()),
             _ => TupleTree::NonTuple(term(
-                t.op.clone(),
+                t.op().clone(),
                 cs.into_iter().map(|c| c.unwrap_non_tuple()).collect(),
             )),
         };

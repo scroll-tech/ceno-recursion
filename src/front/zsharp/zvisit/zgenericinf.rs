@@ -6,15 +6,14 @@ use crate::ir::term::{bv_lit, leaf_term, term, BoolNaryOp, Op, Sort, Term, Value
 #[cfg(feature = "smt")]
 use crate::target::smt::find_unique_model;
 
-use lazy_static::lazy_static;
 use log::debug;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::RwLock;
 use zokrates_pest_ast as ast;
 
-lazy_static! {
-    static ref CACHE: RwLock<HashMap<Term, HashMap<String, T>>> = RwLock::new(HashMap::new());
+thread_local! {
+    static CACHE: RefCell<HashMap<Term, HashMap<String, T>>> = RefCell::new(HashMap::new());
 }
 
 pub(in super::super) struct ZGenericInf<'ast, 'gen, const IS_CNST: bool> {
@@ -152,7 +151,7 @@ impl<'ast, 'gen, const IS_CNST: bool> ZGenericInf<'ast, 'gen, IS_CNST> {
         if let Some(res) = self
             .constr
             .as_ref()
-            .and_then(|t| CACHE.read().unwrap().get(t).cloned())
+            .and_then(|t| CACHE.with(|c| c.borrow().get(t).cloned()))
         {
             assert!(self.gens.len() == res.len());
             assert!(self.gens.iter().all(|g| res.contains_key(&g.value)));
@@ -190,10 +189,10 @@ impl<'ast, 'gen, const IS_CNST: bool> ZGenericInf<'ast, 'gen, IS_CNST> {
                 }
             });
         if self.constr.is_some() {
-            CACHE
-                .write()
-                .unwrap()
-                .insert(self.constr.take().unwrap(), res.clone());
+            CACHE.with(|c| {
+                c.borrow_mut()
+                    .insert(self.constr.take().unwrap(), res.clone())
+            });
         }
         debug!("done (finished inference)");
         Ok(res)
@@ -216,8 +215,7 @@ impl<'ast, 'gen, const IS_CNST: bool> ZGenericInf<'ast, 'gen, IS_CNST> {
                 .type_impl_::<IS_CNST>(&ast::Type::Basic(bas_ty.clone()))?
         {
             Err(format!(
-                "Type mismatch unifying generics: got {}, decl was {:?}",
-                arg_ty, bas_ty
+                "Type mismatch unifying generics: got {arg_ty}, decl was {bas_ty:?}"
             ))
         } else {
             Ok(())
@@ -231,8 +229,7 @@ impl<'ast, 'gen, const IS_CNST: bool> ZGenericInf<'ast, 'gen, IS_CNST> {
     ) -> Result<(), String> {
         if !matches!(arg_ty, Ty::Array(_, _)) {
             return Err(format!(
-                "Type mismatch unifying generics: got {}, decl was Array",
-                arg_ty
+                "Type mismatch unifying generics: got {arg_ty}, decl was Array",
             ));
         }
 
@@ -360,12 +357,11 @@ impl<'ast, 'gen, const IS_CNST: bool> ZGenericInf<'ast, 'gen, IS_CNST> {
                         Ok(aty_map.into_map())
                     }
                     Ty::Struct(aty_n, _) => Err(format!(
-                        "Type mismatch: got struct {}, decl was struct {}",
-                        &aty_n, &def_ty.id.value
+                        "Type mismatch: got struct {aty_n}, decl was struct {}",
+                        &def_ty.id.value
                     )),
                     arg_ty => Err(format!(
-                        "Type mismatch unifying generics: got {}, decl was Struct",
-                        arg_ty
+                        "Type mismatch unifying generics: got {arg_ty}, decl was Struct",
                     )),
                 }?;
                 for ast::StructField { ty, id, .. } in strdef.fields.iter() {
@@ -453,8 +449,7 @@ fn u32_term(t: T) -> Result<Term, String> {
     match t.ty {
         Ty::Uint(32) => Ok(t.term),
         ty => Err(format!(
-            "ZGenericInf: got {} for expr, expected T::Uint(32)",
-            ty
+            "ZGenericInf: got {ty} for expr, expected T::Uint(32)"
         )),
     }
 }

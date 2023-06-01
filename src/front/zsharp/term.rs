@@ -1,14 +1,14 @@
 //! Symbolic Z# terms
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fmt::{self, Display, Formatter};
 
 use rug::Integer;
 
+use crate::cfg::cfg;
 use crate::circify::{CirCtx, Embeddable, Typed};
 use crate::front::field_list::FieldList;
 use crate::ir::opt::cfold::fold as constant_fold;
 use crate::ir::term::*;
-use crate::util::field::DFL_T;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Ty {
@@ -17,13 +17,14 @@ pub enum Ty {
     Field,
     Struct(String, FieldList<Ty>),
     Array(usize, Box<Ty>),
+    MutArray(usize),
 }
 
 impl Display for Ty {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             Ty::Bool => write!(f, "bool"),
-            Ty::Uint(w) => write!(f, "u{}", w),
+            Ty::Uint(w) => write!(f, "u{w}"),
             Ty::Field => write!(f, "field"),
             Ty::Struct(n, fields) => {
                 let mut o = f.debug_struct(n);
@@ -39,17 +40,26 @@ impl Display for Ty {
                     bb = b.as_ref();
                     dims.push(n);
                 }
-                write!(f, "{}", bb)?;
-                dims.iter().try_for_each(|d| write!(f, "[{}]", d))
+                write!(f, "{bb}")?;
+                dims.iter().try_for_each(|d| write!(f, "[{d}]"))
             }
+            Ty::MutArray(n) => write!(f, "MutArray({n})"),
         }
     }
 }
 
 impl fmt::Debug for Ty {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
+}
+
+pub fn default_field() -> circ_fields::FieldT {
+    cfg().field().clone()
+}
+
+fn default_field_sort() -> Sort {
+    Sort::Field(default_field())
 }
 
 impl Ty {
@@ -57,10 +67,15 @@ impl Ty {
         match self {
             Self::Bool => Sort::Bool,
             Self::Uint(w) => Sort::BitVector(*w),
-            Self::Field => Sort::Field(DFL_T.clone()),
+            Self::Field => default_field_sort(),
             Self::Array(n, b) => {
-                Sort::Array(Box::new(Sort::Field(DFL_T.clone())), Box::new(b.sort()), *n)
+                Sort::Array(Box::new(default_field_sort()), Box::new(b.sort()), *n)
             }
+            Self::MutArray(n) => Sort::Array(
+                Box::new(default_field_sort()),
+                Box::new(default_field_sort()),
+                *n,
+            ),
             Self::Struct(_name, fs) => {
                 Sort::Tuple(fs.fields().map(|(_f_name, f_ty)| f_ty.sort()).collect())
             }
@@ -83,6 +98,7 @@ impl Ty {
     pub fn array_val_ty(&self) -> &Self {
         match self {
             Self::Array(_, b) => b,
+            // TODO: MutArray?
             _ => panic!("Not an array type: {:?}", self),
         }
     }
@@ -128,7 +144,10 @@ impl T {
             Ty::Array(size, _sort) => Ok((0..*size)
                 .map(|i| term![Op::Select; self.term.clone(), pf_lit_ir(i)])
                 .collect()),
-            s => Err(format!("Not an array: {}", s)),
+            Ty::MutArray(size) => Ok((0..*size)
+                .map(|i| term![Op::Select; self.term.clone(), pf_lit_ir(i)])
+                .collect()),
+            s => Err(format!("Not an array: {s}")),
         }
     }
     pub fn unwrap_array(self) -> Result<Vec<T>, String> {
@@ -141,7 +160,12 @@ impl T {
                     .map(|t| T::new(sort.clone(), t))
                     .collect())
             }
-            s => Err(format!("Not an array: {}", s)),
+            Ty::MutArray(_size) => Ok(self
+                .unwrap_array_ir()?
+                .into_iter()
+                .map(|t| T::new(Ty::Field, t))
+                .collect()),
+            s => Err(format!("Not an array: {s}")),
         }
     }
     pub fn new_array(v: Vec<T>) -> Result<T, String> {
@@ -159,7 +183,7 @@ impl T {
                 .into_iter()
                 .map(|(name, t)| (field_ty_list.search(&name).unwrap().0, t))
                 .collect();
-            with_indices.into_iter().map(|(_i, t)| t).collect()
+            with_indices.into_values().collect()
         });
         T::new(Ty::Struct(name, field_ty_list), ir_term)
     }
@@ -202,12 +226,12 @@ impl T {
 
     pub fn pretty<W: std::io::Write>(&self, f: &mut W) -> Result<(), std::io::Error> {
         use std::io::{Error, ErrorKind};
-        let val = match &self.term.op {
+        let val = match &self.term.op() {
             Op::Const(v) => Ok(v),
             _ => Err(Error::new(ErrorKind::Other, "not a const val")),
         }?;
         match val {
-            Value::Bool(b) => write!(f, "{}", b),
+            Value::Bool(b) => write!(f, "{b}"),
             Value::Field(fe) => write!(f, "{}f", fe.i()),
             Value::BitVector(bv) => match bv.width() {
                 8 => write!(f, "0x{:02x}", bv.uint()),
@@ -225,9 +249,9 @@ impl T {
                         "expected struct, got something else",
                     ))
                 }?;
-                write!(f, "{} {{ ", n)?;
+                write!(f, "{n} {{ ")?;
                 fl.fields().zip(vs.iter()).try_for_each(|((n, ty), v)| {
-                    write!(f, "{}: ", n)?;
+                    write!(f, "{n}: ")?;
                     T::new(ty.clone(), leaf_term(Op::Const(v.clone()))).pretty(f)?;
                     write!(f, ", ")
                 })?;
@@ -285,7 +309,7 @@ fn wrap_bin_op(
         (Ty::Field, Ty::Field, _, Some(ff), _) => {
             Ok(T::new(Ty::Field, ff(a.term.clone(), b.term.clone())))
         }
-        (x, y, _, _, _) => Err(format!("Cannot perform op '{}' on {} and {}", name, x, y)),
+        (x, y, _, _, _) => Err(format!("Cannot perform op '{name}' on {x} and {y}")),
     }
 }
 
@@ -307,7 +331,7 @@ fn wrap_bin_pred(
         (Ty::Field, Ty::Field, _, Some(ff), _) => {
             Ok(T::new(Ty::Bool, ff(a.term.clone(), b.term.clone())))
         }
-        (x, y, _, _, _) => Err(format!("Cannot perform op '{}' on {} and {}", name, x, y)),
+        (x, y, _, _, _) => Err(format!("Cannot perform op '{name}' on {x} and {y}")),
     }
 }
 
@@ -360,10 +384,10 @@ pub fn div(a: T, b: T) -> Result<T, String> {
 }
 
 fn rem_field(a: Term, b: Term) -> Term {
-    let len = DFL_T.modulus().significant_bits() as usize;
+    let len = cfg().field().modulus().significant_bits() as usize;
     let a_bv = term![Op::PfToBv(len); a];
     let b_bv = term![Op::PfToBv(len); b];
-    term![Op::UbvToPf(DFL_T.clone()); term![Op::BvBinOp(BvBinOp::Urem); a_bv, b_bv]]
+    term![Op::UbvToPf(default_field()); term![Op::BvBinOp(BvBinOp::Urem); a_bv, b_bv]]
 }
 
 fn rem_uint(a: Term, b: Term) -> Term {
@@ -441,7 +465,7 @@ fn ult_uint(a: Term, b: Term) -> Term {
 // XXX(constr_opt) see TODO file - only need to expand to MIN of two bit-lengths if done right
 // XXX(constr_opt) do this using subtraction instead?
 fn field_comp(a: Term, b: Term, op: BvBinPred) -> Term {
-    let len = DFL_T.modulus().significant_bits() as usize;
+    let len = cfg().field().modulus().significant_bits() as usize;
     let a_bv = term![Op::PfToBv(len); a];
     let b_bv = term![Op::PfToBv(len); b];
     term![Op::BvBinPred(op); a_bv, b_bv]
@@ -493,10 +517,7 @@ pub fn uge(a: T, b: T) -> Result<T, String> {
 
 pub fn pow(a: T, b: T) -> Result<T, String> {
     if a.ty != Ty::Field || b.ty != Ty::Uint(32) {
-        return Err(format!(
-            "Cannot compute {} ** {} : must be Field ** U32",
-            a, b
-        ));
+        return Err(format!("Cannot compute {a} ** {b} : must be Field ** U32"));
     }
 
     let a = a.term;
@@ -529,7 +550,7 @@ fn wrap_un_op(
         (Ty::Uint(_), Some(fu), _, _) => Ok(T::new(a.ty.clone(), fu(a.term.clone()))),
         (Ty::Bool, _, _, Some(fb)) => Ok(T::new(Ty::Bool, fb(a.term.clone()))),
         (Ty::Field, _, Some(ff), _) => Ok(T::new(Ty::Field, ff(a.term.clone()))),
-        (x, _, _, _) => Err(format!("Cannot perform op '{}' on {}", name, x)),
+        (x, _, _, _) => Err(format!("Cannot perform op '{name}' on {x}")),
     }
 }
 
@@ -562,7 +583,7 @@ pub fn const_int(a: T) -> Result<Integer, String> {
     match const_value(&a.term) {
         Some(Value::Field(f)) => Ok(f.i()),
         Some(Value::BitVector(f)) => Ok(f.uint().clone()),
-        _ => Err(format!("{} is not a constant integer", a)),
+        _ => Err(format!("{a} is not a constant integer")),
     }
 }
 
@@ -582,7 +603,7 @@ pub fn const_val(a: T) -> Result<T, String> {
 
 fn const_value(t: &Term) -> Option<Value> {
     let folded = constant_fold(t, &[]);
-    match &folded.op {
+    match &folded.op() {
         Op::Const(v) => Some(v.clone()),
         _ => None,
     }
@@ -591,7 +612,7 @@ fn const_value(t: &Term) -> Option<Value> {
 pub fn bool(a: T) -> Result<Term, String> {
     match &a.ty {
         Ty::Bool => Ok(a.term),
-        a => Err(format!("{} is not a boolean", a)),
+        a => Err(format!("{a} is not a boolean")),
     }
 }
 
@@ -599,7 +620,7 @@ fn wrap_shift(name: &str, op: BvBinOp, a: T, b: T) -> Result<T, String> {
     let bc = const_int(b)?;
     match &a.ty {
         &Ty::Uint(na) => Ok(T::new(a.ty, term![Op::BvBinOp(op); a.term, bv_lit(bc, na)])),
-        x => Err(format!("Cannot perform op '{}' on {} and {}", name, x, bc)),
+        x => Err(format!("Cannot perform op '{name}' on {x} and {bc}")),
     }
 }
 
@@ -613,7 +634,7 @@ pub fn shr(a: T, b: T) -> Result<T, String> {
 
 fn ite(c: Term, a: T, b: T) -> Result<T, String> {
     if a.ty != b.ty {
-        Err(format!("Cannot perform ITE on {} and {}", a, b))
+        Err(format!("Cannot perform ITE on {a} and {b}"))
     } else {
         Ok(T::new(a.ty.clone(), term![Op::Ite; c, a.term, b.term]))
     }
@@ -634,7 +655,7 @@ fn pf_val<I>(i: I) -> Value
 where
     Integer: From<I>,
 {
-    Value::Field(DFL_T.new_v(i))
+    Value::Field(cfg().field().new_v(i))
 }
 
 pub fn field_lit<I>(i: I) -> T
@@ -662,7 +683,12 @@ pub fn slice(arr: T, start: Option<usize>, end: Option<usize>) -> Result<T, Stri
             let end = end.unwrap_or(*size);
             array(arr.unwrap_array()?.drain(start..end))
         }
-        a => Err(format!("Cannot slice {}", a)),
+        Ty::MutArray(size) => {
+            let start = start.unwrap_or(0);
+            let end = end.unwrap_or(*size);
+            array(arr.unwrap_array()?.drain(start..end))
+        }
+        a => Err(format!("Cannot slice {a}")),
     }
 }
 
@@ -675,10 +701,10 @@ pub fn field_select(struct_: &T, field: &str) -> Result<T, String> {
                     term![Op::Field(idx); struct_.term.clone()],
                 ))
             } else {
-                Err(format!("No field '{}'", field))
+                Err(format!("No field '{field}'"))
             }
         }
-        a => Err(format!("{} is not a struct", a)),
+        a => Err(format!("{a} is not a struct")),
     }
 }
 
@@ -693,39 +719,56 @@ pub fn field_store(struct_: T, field: &str, val: T) -> Result<T, String> {
                     ))
                 } else {
                     Err(format!(
-                        "term {} assigned to field {} of type {}",
-                        val,
-                        field,
+                        "term {val} assigned to field {field} of type {}",
                         map.get(idx).1
                     ))
                 }
             } else {
-                Err(format!("No field '{}'", field))
+                Err(format!("No field '{field}'"))
             }
         }
-        a => Err(format!("{} is not a struct", a)),
+        a => Err(format!("{a} is not a struct")),
+    }
+}
+
+fn coerce_to_field(i: T) -> Result<Term, String> {
+    match &i.ty {
+        Ty::Uint(_) => Ok(term![Op::UbvToPf(default_field()); i.term]),
+        Ty::Field => Ok(i.term),
+        _ => Err(format!("Cannot coerce {} to a field element", &i)),
     }
 }
 
 pub fn array_select(array: T, idx: T) -> Result<T, String> {
     match array.ty {
         Ty::Array(_, elem_ty) if matches!(idx.ty, Ty::Uint(_) | Ty::Field) => {
-            let iterm = if matches!(idx.ty, Ty::Uint(_)) {
-                term![Op::UbvToPf(DFL_T.clone()); idx.term]
-            } else {
-                idx.term
-            };
+            let iterm = coerce_to_field(idx).unwrap();
             Ok(T::new(*elem_ty, term![Op::Select; array.term, iterm]))
+        }
+        Ty::MutArray(_) if matches!(idx.ty, Ty::Uint(_) | Ty::Field) => {
+            let iterm = coerce_to_field(idx).unwrap();
+            Ok(T::new(Ty::Field, term![Op::Select; array.term, iterm]))
         }
         _ => Err(format!("Cannot index {} using {}", &array.ty, &idx.ty)),
     }
+}
+
+pub fn mut_array_store(array: T, idx: T, val: T, cond: Term) -> Result<T, String> {
+    if !matches!(array.ty, Ty::MutArray(_) | Ty::Array(..)) {
+        return Err(format!(
+            "Can only call mut_array_store on arrays, not {array}"
+        ));
+    }
+    let i = coerce_to_field(idx).map_err(|s| format!("{s}: mutable array index"))?;
+    let v = coerce_to_field(val).map_err(|s| format!("{s}: mutable array value"))?;
+    Ok(T::new(array.ty, term![Op::CStore; array.term, i, v, cond]))
 }
 
 pub fn array_store(array: T, idx: T, val: T) -> Result<T, String> {
     if matches!(&array.ty, Ty::Array(_, _)) && matches!(&idx.ty, Ty::Uint(_) | Ty::Field) {
         // XXX(q) typecheck here?
         let iterm = if matches!(idx.ty, Ty::Uint(_)) {
-            term![Op::UbvToPf(DFL_T.clone()); idx.term]
+            term![Op::UbvToPf(default_field()); idx.term]
         } else {
             idx.term
         };
@@ -738,34 +781,17 @@ pub fn array_store(array: T, idx: T, val: T) -> Result<T, String> {
     }
 }
 
-fn ir_array<I: IntoIterator<Item = Term>>(sort: Sort, elems: I) -> Term {
-    let mut values = HashMap::new();
-    let to_insert = elems
-        .into_iter()
-        .enumerate()
-        .filter_map(|(i, t)| {
-            let i_val = pf_val(i);
-            match const_value(&t) {
-                Some(v) => {
-                    values.insert(i_val, v);
-                    None
-                }
-                None => Some((leaf_term(Op::Const(i_val)), t)),
-            }
-        })
-        .collect::<Vec<(Term, Term)>>();
-    let len = values.len() + to_insert.len();
-    let arr = leaf_term(Op::Const(Value::Array(Array::new(
-        Sort::Field(DFL_T.clone()),
-        Box::new(sort.default_value()),
-        values.into_iter().collect::<BTreeMap<_, _>>(),
-        len,
-    ))));
-    to_insert
-        .into_iter()
-        .fold(arr, |arr, (idx, val)| term![Op::Store; arr, idx, val])
+fn ir_array<I: IntoIterator<Item = Term>>(value_sort: Sort, elems: I) -> Term {
+    let key_sort = Sort::Field(cfg().field().clone());
+    term(Op::Array(key_sort, value_sort), elems.into_iter().collect())
 }
 
+pub fn fill_array(value: T, size: usize) -> Result<T, String> {
+    Ok(T::new(
+        Ty::Array(size, Box::new(value.ty)),
+        term![Op::Fill(default_field_sort(), size); value.term],
+    ))
+}
 pub fn array<I: IntoIterator<Item = T>>(elems: I) -> Result<T, String> {
     let v: Vec<T> = elems.into_iter().collect();
     if let Some(e) = v.first() {
@@ -786,16 +812,19 @@ pub fn array<I: IntoIterator<Item = T>>(elems: I) -> Result<T, String> {
 
 pub fn uint_to_field(u: T) -> Result<T, String> {
     match &u.ty {
-        Ty::Uint(_) => Ok(T::new(Ty::Field, term![Op::UbvToPf(DFL_T.clone()); u.term])),
-        u => Err(format!("Cannot do uint-to-field on {}", u)),
+        Ty::Uint(_) => Ok(T::new(
+            Ty::Field,
+            term![Op::UbvToPf(default_field()); u.term],
+        )),
+        u => Err(format!("Cannot do uint-to-field on {u}")),
     }
 }
 
 pub fn uint_to_uint(u: T, w: usize) -> Result<T, String> {
     match &u.ty {
         Ty::Uint(n) if *n <= w => Ok(T::new(Ty::Uint(w), term![Op::BvUext(w - n); u.term])),
-        Ty::Uint(n) => Err(format!("Tried narrowing uint{}-to-uint{} attempted", n, w)),
-        u => Err(format!("Cannot do uint-to-uint on {}", u)),
+        Ty::Uint(n) => Err(format!("Tried narrowing uint{n}-to-uint{w} attempted")),
+        u => Err(format!("Cannot do uint-to-uint on {u}")),
     }
 }
 
@@ -808,7 +837,7 @@ pub fn uint_to_bits(u: T) -> Result<T, String> {
                 (0..*n).rev().map(|i| term![Op::BvBit(i); u.term.clone()]),
             ),
         )),
-        u => Err(format!("Cannot do uint-to-bits on {}", u)),
+        u => Err(format!("Cannot do uint-to-bits on {u}")),
     }
 }
 
@@ -826,16 +855,16 @@ pub fn uint_from_bits(u: T) -> Result<T, String> {
                         .collect(),
                 ),
             )),
-            l => Err(format!("Cannot do uint-from-bits on len {} array", l,)),
+            l => Err(format!("Cannot do uint-from-bits on len {l} array")),
         },
-        u => Err(format!("Cannot do uint-from-bits on {}", u)),
+        u => Err(format!("Cannot do uint-from-bits on {u}")),
     }
 }
 
 pub fn field_to_bits(f: T, n: usize) -> Result<T, String> {
     match &f.ty {
         Ty::Field => uint_to_bits(T::new(Ty::Uint(n), term![Op::PfToBv(n); f.term])),
-        u => Err(format!("Cannot do uint-to-bits on {}", u)),
+        u => Err(format!("Cannot do uint-to-bits on {u}")),
     }
 }
 
@@ -855,13 +884,11 @@ pub fn bit_array_le(a: T, b: T, n: usize) -> Result<T, String> {
                 Err("bit-array-le must be called on arrays of Bools".to_string())
             } else if la != lb {
                 Err(format!(
-                    "bit-array-le called on arrays with lengths {} != {}",
-                    la, lb
+                    "bit-array-le called on arrays with lengths {la} != {lb}"
                 ))
             } else if *la != n {
                 Err(format!(
-                    "bit-array-le::<{}> called on arrays with length {}",
-                    n, la
+                    "bit-array-le::<{n}> called on arrays with length {la}"
                 ))
             } else {
                 Ok(())
@@ -881,11 +908,11 @@ pub fn bit_array_le(a: T, b: T, n: usize) -> Result<T, String> {
 pub struct ZSharp {}
 
 fn field_name(struct_name: &str, field_name: &str) -> String {
-    format!("{}.{}", struct_name, field_name)
+    format!("{struct_name}.{field_name}")
 }
 
 fn idx_name(struct_name: &str, idx: usize) -> String {
-    format!("{}.{}", struct_name, idx)
+    format!("{struct_name}.{idx}")
 }
 
 impl ZSharp {
@@ -925,7 +952,7 @@ impl Embeddable for ZSharp {
                 Ty::Field,
                 ctx.cs.borrow_mut().new_var(
                     &name,
-                    Sort::Field(DFL_T.clone()),
+                    default_field_sort(),
                     visibility,
                     precompute.map(|p| p.term),
                 ),
@@ -949,6 +976,20 @@ impl Embeddable for ZSharp {
                 array(
                     ps.into_iter().enumerate().map(|(i, p)| {
                         self.declare_input(ctx, ty, idx_name(&name, i), visibility, p)
+                    }),
+                )
+                .unwrap()
+            }
+            Ty::MutArray(n) => {
+                let ps: Vec<Option<T>> = match precompute.map(|p| p.unwrap_array()) {
+                    Some(Ok(v)) => v.into_iter().map(Some).collect(),
+                    Some(Err(e)) => panic!("{}", e),
+                    None => std::iter::repeat(None).take(*n).collect(),
+                };
+                debug_assert_eq!(*n, ps.len());
+                array(
+                    ps.into_iter().enumerate().map(|(i, p)| {
+                        self.declare_input(ctx, &Ty::Field, idx_name(&name, i), visibility, p)
                     }),
                 )
                 .unwrap()
@@ -981,5 +1022,10 @@ impl Embeddable for ZSharp {
 
     fn initialize_return(&self, ty: &Self::Ty, _ssa_name: &String) -> Self::T {
         ty.default()
+    }
+
+    fn wrap_persistent_array(&self, t: Term) -> Self::T {
+        let size = check(&t).as_array().2;
+        T::new(Ty::MutArray(size), t)
     }
 }

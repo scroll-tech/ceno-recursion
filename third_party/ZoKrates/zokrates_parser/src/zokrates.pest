@@ -47,7 +47,8 @@ struct_field = { ty ~ identifier }
 vis_private_num = @{ "<" ~ ASCII_DIGIT* ~ ">" }
 vis_private = {"private" ~ vis_private_num? }
 vis_public = {"public"}
-vis = { vis_private | vis_public }
+vis_committed = {"committed"}
+vis = { vis_private | vis_public | vis_committed }
 
 // Statements
 statement = { (return_statement // does not require subsequent newline
@@ -55,6 +56,7 @@ statement = { (return_statement // does not require subsequent newline
                 | conditional_statement
                 | definition_statement
                 | expression_statement
+                | cond_store_statement
                 ) ~ NEWLINE
             ) ~ NEWLINE* }
 
@@ -64,6 +66,7 @@ conditional_else_statement = _{ "els" ~ dummy_else ~ " "* ~ NEWLINE* ~ statement
 return_statement = { "return" ~ expression_list}
 definition_statement = { typed_identifier_or_assignee_list ~ "=" ~ expression } // declare and assign, so only identifiers are allowed, unlike `assignment_statement`
 expression_statement = {"assert" ~ "(" ~ expression ~ ("," ~ quoted_string)? ~ ")"}
+cond_store_statement = {"cond_store" ~ "(" ~ identifier ~ "," ~ expression ~ "," ~ expression ~ "," ~ expression ~ ")"}
 
 typed_identifier_or_assignee_list = _{ typed_identifier_or_assignee ~ ("," ~ typed_identifier_or_assignee)* }
 typed_identifier_or_assignee = { typed_identifier | assignee } // we don't use { ty? ~ identifier } as with a single token, it gets parsed as `ty` but we want `identifier`

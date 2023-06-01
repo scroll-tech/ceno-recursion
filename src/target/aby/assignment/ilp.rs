@@ -35,7 +35,8 @@ use super::{ShareType, SharingMap, SHARE_TYPES};
 use crate::ir::term::*;
 use crate::target::aby::assignment::CostModel;
 
-use crate::target::ilp::{variable, Expression, Ilp, Variable};
+use crate::target::ilp::{Expression, Ilp, Variable};
+use good_lp::variable;
 
 use std::env::var;
 
@@ -56,12 +57,12 @@ pub fn assign(c: &Computation, cm: &str) -> SharingMap {
 }
 
 fn build_ilp(c: &Computation, costs: &CostModel) -> SharingMap {
-    let mut terms: TermSet = TermSet::new();
+    let mut terms: TermSet = TermSet::default();
     let mut def_uses: FxHashSet<(Term, Term)> = FxHashSet::default();
     for o in &c.outputs {
         for t in PostOrderIter::new(o.clone()) {
             terms.insert(t.clone());
-            for c in &t.cs {
+            for c in t.cs() {
                 def_uses.insert((c.clone(), t.clone()));
             }
         }
@@ -76,8 +77,13 @@ fn build_ilp(c: &Computation, costs: &CostModel) -> SharingMap {
     // build variables for all term assignments
     for (t, i) in terms.iter() {
         let mut vars = vec![];
-        match &t.op {
-            Op::Var(..) | Op::Const(_) => {
+        match &t.op() {
+            Op::Var(..)
+            | Op::Const(_)
+            | Op::Call(..)
+            | Op::Field(_)
+            | Op::Update(..)
+            | Op::Tuple => {
                 for ty in &SHARE_TYPES {
                     let name = format!("t_{}_{}", i, ty.char());
                     let v = ilp.new_variable(variable().binary(), name.clone());
@@ -85,8 +91,11 @@ fn build_ilp(c: &Computation, costs: &CostModel) -> SharingMap {
                     vars.push(v);
                 }
             }
+            Op::Select | Op::Store => {
+                panic!("Requires def-use-graph, tests should not have secret indices.")
+            }
             _ => {
-                if let Some(costs) = costs.ops.get(&t.op) {
+                if let Some(costs) = costs.ops.get(t.op()) {
                     for (ty, cost) in costs {
                         let name = format!("t_{}_{}", i, ty.char());
                         let v = ilp.new_variable(variable().binary(), name.clone());
@@ -94,7 +103,7 @@ fn build_ilp(c: &Computation, costs: &CostModel) -> SharingMap {
                         vars.push(v);
                     }
                 } else {
-                    panic!("No cost for op {}", &t.op)
+                    panic!("No cost for op {}", &t.op())
                 }
             }
         }
@@ -164,7 +173,7 @@ fn build_ilp(c: &Computation, costs: &CostModel) -> SharingMap {
 
     let (_opt, solution) = ilp.default_solve().unwrap();
 
-    let mut assignment = TermMap::new();
+    let mut assignment = TermMap::default();
     for ((term, ty), (_, _, var_name)) in &term_vars {
         if solution.get(var_name).unwrap() == &1.0 {
             assignment.insert(term.clone(), *ty);
@@ -215,12 +224,11 @@ mod tests {
         );
         let costs = CostModel::from_opa_cost_file(&p);
         let cs = Computation {
-            precomputes: Default::default(),
             outputs: vec![term![BV_MUL;
                 leaf_term(Op::Var("a".to_owned(), Sort::BitVector(32))),
                 leaf_term(Op::Var("b".to_owned(), Sort::BitVector(32)))
             ]],
-            metadata: ComputationMetadata::default(),
+            ..Default::default()
         };
         let _assignment = build_ilp(&cs, &costs);
     }
@@ -233,7 +241,6 @@ mod tests {
         );
         let costs = CostModel::from_opa_cost_file(&p);
         let cs = Computation {
-            precomputes: Default::default(),
             outputs: vec![term![Op::Eq;
                 term![BV_MUL;
                 leaf_term(Op::Var("a".to_owned(), Sort::BitVector(32))),
@@ -259,13 +266,13 @@ mod tests {
             ],
             leaf_term(Op::Var("a".to_owned(), Sort::BitVector(32)))
             ]],
-            metadata: ComputationMetadata::default(),
+            ..Default::default()
         };
         let assignment = build_ilp(&cs, &costs);
         // Big enough to do the math with arith
         assert_eq!(
             &ShareType::Arithmetic,
-            assignment.get(&cs.outputs[0].cs[0]).unwrap()
+            assignment.get(&cs.outputs[0].cs()[0]).unwrap()
         );
         // Then convert to boolean
         assert_eq!(&ShareType::Boolean, assignment.get(&cs.outputs[0]).unwrap());
@@ -279,7 +286,6 @@ mod tests {
         );
         let costs = CostModel::from_opa_cost_file(&p);
         let cs = Computation {
-            precomputes: Default::default(),
             outputs: vec![term![Op::Eq;
                 term![BV_MUL;
                 leaf_term(Op::Var("a".to_owned(), Sort::BitVector(32))),
@@ -296,13 +302,13 @@ mod tests {
             ],
             leaf_term(Op::Var("a".to_owned(), Sort::BitVector(32)))
             ]],
-            metadata: ComputationMetadata::default(),
+            ..Default::default()
         };
         let assignment = build_ilp(&cs, &costs);
         // All yao
         assert_eq!(
             &ShareType::Yao,
-            assignment.get(&cs.outputs[0].cs[0]).unwrap()
+            assignment.get(&cs.outputs[0].cs()[0]).unwrap()
         );
         assert_eq!(&ShareType::Yao, assignment.get(&cs.outputs[0]).unwrap());
     }

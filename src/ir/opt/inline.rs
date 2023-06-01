@@ -31,9 +31,9 @@ pub struct Inliner<'a> {
 impl<'a> Inliner<'a> {
     fn new(protected: &'a FxHashSet<String>) -> Self {
         Self {
-            substs: TermMap::new(),
-            subst_cache: TermMap::new(),
-            stale_vars: TermSet::new(),
+            substs: TermMap::default(),
+            subst_cache: TermMap::default(),
+            stale_vars: TermSet::default(),
             protected,
         }
     }
@@ -47,43 +47,35 @@ impl<'a> Inliner<'a> {
             for child in PostOrderIter::new(value.clone()) {
                 assert!(
                     !keys.contains(&child),
-                    "Substituted variable {} is in the substitution for {}, {}",
-                    child,
-                    key,
-                    value
+                    "{}",
+                    "Substituted variable {child} is in the substitution for {key}, {value}"
                 );
                 if child.is_var() {
                     assert!(
                         self.stale_vars.contains(&child),
-                        "Variable {} in the substitution for {}, {} is not marked stale",
-                        child,
-                        key,
-                        value
+                        "{}",
+                        "Variable {child} in the substitution for {key}, {value} is not marked stale"
                     );
                 }
             }
             assert!(
                 self.stale_vars.contains(key),
-                "Variable {}, which is being susbstituted",
-                key
+                "{}",
+                "Variable {key}, which is being susbstituted",
             );
         }
         for (key, value) in &self.subst_cache {
             for child in PostOrderIter::new(value.clone()) {
                 assert!(
                     !keys.contains(&child),
-                    "Substituted variable {} is in the cache for {}, {}",
-                    child,
-                    key,
-                    value
+                    "{}",
+                    format!("Substituted variable {child} is in the cache for {key}, {value}"),
                 );
                 if child.is_var() {
                     assert!(
                         self.stale_vars.contains(&child),
-                        "Variable {} in the substitution cache for {}, {} is not marked stale",
-                        child,
-                        key,
-                        value
+                        "{}",
+                        format!("Variable {child} in the substitution cache for {key}, {value} is not marked stale")
                     );
                 }
             }
@@ -107,21 +99,21 @@ impl<'a> Inliner<'a> {
     ///
     /// Will not return `v` which are protected.
     fn as_fresh_def(&self, t: &Term) -> Option<(Term, Term)> {
-        if EQ == t.op {
-            if let Op::Var(name, _) = &t.cs[0].op {
-                if !self.stale_vars.contains(&t.cs[0])
+        if &EQ == t.op() {
+            if let Op::Var(name, _) = &t.cs()[0].op() {
+                if !self.stale_vars.contains(&t.cs()[0])
                     && !self.protected.contains(name)
-                    && does_not_contain(t.cs[1].clone(), &t.cs[0])
+                    && does_not_contain(t.cs()[1].clone(), &t.cs()[0])
                 {
-                    return Some((t.cs[0].clone(), t.cs[1].clone()));
+                    return Some((t.cs()[0].clone(), t.cs()[1].clone()));
                 }
             }
-            if let Op::Var(name, _) = &t.cs[1].op {
-                if !self.stale_vars.contains(&t.cs[1])
+            if let Op::Var(name, _) = &t.cs()[1].op() {
+                if !self.stale_vars.contains(&t.cs()[1])
                     && !self.protected.contains(name)
-                    && does_not_contain(t.cs[0].clone(), &t.cs[1])
+                    && does_not_contain(t.cs()[0].clone(), &t.cs()[1])
                 {
-                    return Some((t.cs[1].clone(), t.cs[0].clone()));
+                    return Some((t.cs()[1].clone(), t.cs()[0].clone()));
                 }
             }
         }
@@ -148,18 +140,15 @@ impl<'a> Inliner<'a> {
             // marked stale.
             self.stale_vars.insert(var);
             self.stale_vars
-                .extend(PostOrderIter::new(val).into_iter().filter(|t| t.is_var()));
+                .extend(PostOrderIter::new(val).filter(|t| t.is_var()));
 
             // Comment out?
             //self.check_substs();
 
             None
         } else {
-            self.stale_vars.extend(
-                PostOrderIter::new(t.clone())
-                    .into_iter()
-                    .filter(|t| t.is_var()),
-            );
+            self.stale_vars
+                .extend(PostOrderIter::new(t.clone()).filter(|t| t.is_var()));
             let subst_t = self.apply(t);
             Some(subst_t)
         }

@@ -6,6 +6,8 @@
 //!
 //! Includes a parser ([parse_computation]) and serializer ([serialize_computation]) for [Computation]s.
 //!
+//! Includes a parser ([parse_precompute]) and serializer ([serialize_precompute]) for [precomp::PreComp]s.
+//!
 //!
 //! * IR Textual format
 //!   * It's s-expressions.
@@ -13,11 +15,24 @@
 //!   * `I`: integer (arbitrary-precision)
 //!   * `X`: identifier
 //!     * regex: `[^()0-9#; \t\n\f][^(); \t\n\f#]*`
-//!   * Computation `C`: `(computation M T)`
-//!     * Metadata `M`: `(metadata PARTIES INPUTS VISIBILITIES)`
-//!       * PARTIES is `(X1 .. Xn)`
+//!   * Computation `C`: `(computation M P ARRAYS T)`
+//!     * Metadata `M`: `(metadata PARTIES INPUTS COMMITMENTS)`
+//!       * PARTIES is `(parties X1 .. Xn)`
+//!       * INPUTS is `(inputs INPUT1 .. INPUTn)`
+//!         * INPUT is `(X S PARTY)`
+//!         * PARTY is `(party X)` or nothing (public)
+//!       * COMMITMENTS is `(commitments COMMITMENT1 .. COMMITMENTn)`
+//!         * COMMITMENT is `(commitment X1 .. Xn)`
+//!       * ARRAYS is `(commitments COMMITMENT1 .. COMMITMENTn)`
+//!     * Precompute `P`: `(precompute INPUTS OUTPUTS TUPLE_TERM)`
 //!       * INPUTS is `((X1 S1) .. (Xn Sn))`
-//!       * VISIBILITIES is `((X_INPUT_1 X_PARTY_1) .. (X_INPUT_n X_PARTY_n))`
+//!       * OUTPUTS is `((X1 S1) .. (Xn Sn))`
+//!       * TUPLE_TERM is a tuple of the same arity as the output
+//!     * ARRAYS (optional): `(persistent_arrays ARRAY*)`:
+//!       * ARRAY is `(X S T)`
+//!         * X is the name of the inital state
+//!         * S is the size
+//!         * T is the state (final)
 //!   * Sort `S`:
 //!     * `bool`
 //!     * `f32`
@@ -34,6 +49,8 @@
 //!       * In the former case, an ambient modulus must be set.
 //!     * tuple: `(#t V1 ... Vn)`
 //!     * array: `(#a Sk V N ((Vk1 Vv1) ... (Vkn Vvn)))`
+//!     * list: `(#l Sk (V1 ... Vn))`
+//!       * gives an array with default value sort, length n, and increasing keys for the values
 //!   * Term `T`:
 //!     * value: `V`
 //!     * let: `(let ((X1 T1) ... (Xn Tn)) T)`
@@ -45,6 +62,7 @@
 //!   * Operator `O`:
 //!     * Plain operators: (`bvmul`, `and`, ...)
 //!     * Composite operators: `(field N)`, `(update N)`, `(sext N)`, `(uext N)`, `(bit N)`, ...
+//!       * call operator: `(call X (X1 ... XN) (S1 ... SN) (RS1 ... RSN))`
 
 use circ_fields::{FieldT, FieldV};
 
@@ -59,7 +77,6 @@ use std::fmt::{self, Debug, Display, Formatter, Write};
 use std::str::{from_utf8, FromStr};
 use std::sync::Arc;
 
-use super::extras::substitute_cache;
 use super::*;
 
 /// A token tree, LISP-style.
@@ -86,7 +103,7 @@ impl<'src> Display for TokTree<'src> {
                     } else {
                         write!(f, " ")?;
                     }
-                    write!(f, "{}", tt)?;
+                    write!(f, "{tt}")?;
                 }
                 write!(f, ")")
             }
@@ -153,7 +170,15 @@ enum CtrlOp {
     Declare,
     TupleValue,
     ArrayValue,
+    ListValue,
     SetDefaultModulus,
+}
+
+enum VariableMetadataItem {
+    Party(PartyId),
+    Round(Round),
+    Committed,
+    Random,
 }
 
 impl<'src> IrInterp<'src> {
@@ -198,6 +223,7 @@ impl<'src> IrInterp<'src> {
             Leaf(Ident, b"declare") => Err(CtrlOp::Declare),
             Leaf(Ident, b"#t") => Err(CtrlOp::TupleValue),
             Leaf(Ident, b"#a") => Err(CtrlOp::ArrayValue),
+            Leaf(Ident, b"#l") => Err(CtrlOp::ListValue),
             Leaf(Ident, b"set_default_modulus") => Err(CtrlOp::SetDefaultModulus),
             Leaf(Ident, b"ite") => Ok(Op::Ite),
             Leaf(Ident, b"=") => Ok(Op::Eq),
@@ -266,19 +292,43 @@ impl<'src> IrInterp<'src> {
             Leaf(Ident, b"intmul") => Ok(INT_MUL),
             Leaf(Ident, b"select") => Ok(Op::Select),
             Leaf(Ident, b"store") => Ok(Op::Store),
+            Leaf(Ident, b"cstore") => Ok(Op::CStore),
             Leaf(Ident, b"tuple") => Ok(Op::Tuple),
+            Leaf(Ident, b"pf2bool_trusted") => Ok(Op::PfToBoolTrusted),
+            Leaf(Ident, bytes) => {
+                if let Some(e) = ext::ExtOp::parse(bytes) {
+                    Ok(Op::ExtOp(e))
+                } else {
+                    todo!("Unparsed op: {}", tt)
+                }
+            }
             List(tts) => match &tts[..] {
                 [Leaf(Ident, b"extract"), a, b] => Ok(Op::BvExtract(self.usize(a), self.usize(b))),
                 [Leaf(Ident, b"uext"), a] => Ok(Op::BvUext(self.usize(a))),
                 [Leaf(Ident, b"sext"), a] => Ok(Op::BvSext(self.usize(a))),
                 [Leaf(Ident, b"pf2bv"), a] => Ok(Op::PfToBv(self.usize(a))),
+                [Leaf(Ident, b"pf_fits_in_bits"), a] => Ok(Op::PfFitsInBits(self.usize(a))),
                 [Leaf(Ident, b"bit"), a] => Ok(Op::BvBit(self.usize(a))),
                 [Leaf(Ident, b"ubv2fp"), a] => Ok(Op::UbvToFp(self.usize(a))),
                 [Leaf(Ident, b"sbv2fp"), a] => Ok(Op::SbvToFp(self.usize(a))),
                 [Leaf(Ident, b"fp2fp"), a] => Ok(Op::FpToFp(self.usize(a))),
+                [Leaf(Ident, b"challenge"), name, field] => Ok(Op::PfChallenge(
+                    self.ident_string(name),
+                    FieldT::from(self.int(field)),
+                )),
+                [Leaf(Ident, b"array"), k, v] => Ok(Op::Array(self.sort(k), self.sort(v))),
                 [Leaf(Ident, b"bv2pf"), a] => Ok(Op::UbvToPf(FieldT::from(self.int(a)))),
                 [Leaf(Ident, b"field"), a] => Ok(Op::Field(self.usize(a))),
                 [Leaf(Ident, b"update"), a] => Ok(Op::Update(self.usize(a))),
+                [Leaf(Ident, b"call"), Leaf(Ident, name), arg_sorts, ret_sort] => {
+                    let name = from_utf8(name).unwrap().to_owned();
+                    let arg_sorts = self.sorts(arg_sorts);
+                    let ret_sort = self.sort(ret_sort);
+                    Ok(Op::Call(name, arg_sorts, ret_sort))
+                }
+                [Leaf(Ident, b"fill"), key_sort, size] => {
+                    Ok(Op::Fill(self.sort(key_sort), self.usize(size)))
+                }
                 _ => todo!("Unparsed op: {}", tt),
             },
             _ => todo!("Unparsed op: {}", tt),
@@ -286,7 +336,7 @@ impl<'src> IrInterp<'src> {
     }
     fn value(&mut self, tt: &TokTree<'src>) -> Value {
         let t = self.term(tt);
-        match &t.op {
+        match &t.op() {
             Op::Const(v) => v.clone(),
             _ => panic!("Expected value, found term {}", t),
         }
@@ -315,6 +365,14 @@ impl<'src> IrInterp<'src> {
                 }
             }
             _ => panic!("Expected sort, found {}", tt),
+        }
+    }
+    /// Parse sorts, in-order
+    fn sorts(&mut self, tt: &TokTree<'src>) -> Vec<Sort> {
+        if let List(tts) = tt {
+            tts.iter().map(|tti| self.sort(tti)).collect()
+        } else {
+            panic!("Expected sort list, found: {}", tt)
         }
     }
 
@@ -361,6 +419,13 @@ impl<'src> IrInterp<'src> {
         } else {
             panic!("Expected let list, found: {}", tt)
         }
+    }
+    /// Parse a value list
+    fn value_list(&mut self, tt: &TokTree<'src>) -> Vec<Value> {
+        self.unwrap_list(tt, "value list")
+            .iter()
+            .map(|tti| self.value(tti))
+            .collect()
     }
     /// Parse associative value list
     fn value_alist(&mut self, tt: &TokTree<'src>) -> Vec<(Value, Value)> {
@@ -448,8 +513,7 @@ impl<'src> IrInterp<'src> {
                         assert_eq!(
                             tts.len(),
                             3,
-                            "A decl should have 2 arguments: (declare ((v1 s1) ... (vn sn)) t), found {:#?}",
-                            tts
+                            "A decl should have 2 arguments: (declare ((v1 s1) ... (vn sn)) t), found {tts:#?}",
                         );
                         let bindings = self.decl_list(&tts[1]);
                         let t = self.term(&tts[2]);
@@ -467,6 +531,16 @@ impl<'src> IrInterp<'src> {
                             Box::new(default),
                             vals.into_iter().collect(),
                             size,
+                        ))))
+                    }
+                    Err(CtrlOp::ListValue) => {
+                        assert_eq!(tts.len(), 3);
+                        let key_sort = self.sort(&tts[1]);
+                        let vals = self.value_list(&tts[2]);
+                        leaf_term(Op::Const(Value::Array(Array::from_vec(
+                            key_sort,
+                            vals.first().unwrap().sort(),
+                            vals,
                         ))))
                     }
                     Err(CtrlOp::TupleValue) => leaf_term(Op::Const(Value::Tuple(
@@ -508,28 +582,110 @@ impl<'src> IrInterp<'src> {
         }
     }
 
-    fn visibility_list(&self, tt: &TokTree<'src>) -> Vec<(String, String)> {
+    #[track_caller]
+    fn unwrap_list<'a>(&self, tt: &'a TokTree<'src>, err: &str) -> &'a [TokTree<'src>] {
         if let List(tts) = tt {
-            tts.iter()
-                .map(|tti| match tti {
-                    List(ls) => match &ls[..] {
-                        [Leaf(Token::Ident, var), Leaf(Token::Ident, party)] => {
-                            let var = from_utf8(var).unwrap().to_owned();
-                            let party = from_utf8(party).unwrap().to_owned();
-                            (var, party)
-                        }
-                        _ => panic!("Expected visibility pair, found {}", tti),
-                    },
-                    _ => panic!("Expected visibility pair, found {}", tti),
-                })
-                .collect()
+            tts.as_slice()
         } else {
-            panic!("Expected visibility list, found: {}", tt)
+            panic!("Expected {}, found non-list: {}", err, tt)
         }
+    }
+
+    #[track_caller]
+    fn unwrap_prefix_list<'a>(&self, tt: &'a TokTree<'src>, prefix: &str) -> &'a [TokTree<'src>] {
+        let tts = self.unwrap_list(tt, prefix);
+        assert_eq!(
+            self.ident_str(&tts[0]),
+            prefix,
+            "Expected list head '{}', but found {}",
+            prefix,
+            &tts[0]
+        );
+        &tts[1..]
+    }
+
+    #[track_caller]
+    fn ident(&self, tt: &TokTree<'src>) -> &'src [u8] {
+        if let Leaf(Token::Ident, i) = tt {
+            i
+        } else {
+            panic!("Expected identifier, found {}", tt)
+        }
+    }
+
+    #[track_caller]
+    fn ident_str(&self, tt: &TokTree<'src>) -> &'src str {
+        from_utf8(self.ident(tt)).unwrap()
+    }
+
+    #[track_caller]
+    fn ident_string(&self, tt: &TokTree<'src>) -> String {
+        self.ident_str(tt).to_owned()
+    }
+
+    fn variable_metadata_item(&mut self, tt: &TokTree<'src>) -> VariableMetadataItem {
+        let tts = self.unwrap_list(tt, "variable metadata item");
+        match self.ident(&tts[0]) {
+            b"party" => {
+                let id = self.int(&tts[1]).to_u8().unwrap();
+                VariableMetadataItem::Party(id)
+            }
+            b"round" => {
+                let id = self.int(&tts[1]).to_u8().unwrap();
+                VariableMetadataItem::Round(id)
+            }
+            b"random" => VariableMetadataItem::Random,
+            b"committed" => VariableMetadataItem::Committed,
+            i => {
+                panic!(
+                    "Expected variable metadata item, got {}",
+                    from_utf8(i).unwrap()
+                )
+            }
+        }
+    }
+
+    fn variable_metadata(&mut self, tt: &TokTree<'src>) -> (&'src [u8], VariableMetadata) {
+        let tts = self.unwrap_list(tt, "variable metadata");
+        let mut md = VariableMetadata {
+            name: self.ident_string(&tts[0]),
+            sort: self.sort(&tts[1]),
+            ..Default::default()
+        };
+        let name_bytes = self.ident(&tts[0]);
+        for tti in &tts[2..] {
+            match self.variable_metadata_item(tti) {
+                VariableMetadataItem::Party(p) => {
+                    md.vis = Some(p);
+                }
+                VariableMetadataItem::Round(r) => {
+                    md.round = r;
+                }
+                VariableMetadataItem::Random => {
+                    md.random = true;
+                }
+                VariableMetadataItem::Committed => {
+                    md.committed = true;
+                }
+            }
+        }
+        (name_bytes, md)
+    }
+
+    fn commitment(&mut self, tt: &TokTree<'src>) -> Vec<String> {
+        let tts = self.unwrap_prefix_list(tt, "commitment");
+        tts.iter().map(|tti| self.ident_string(tti)).collect()
+    }
+
+    fn commitments(&mut self, tt: &TokTree<'src>) -> Vec<Vec<String>> {
+        let tts = self.unwrap_prefix_list(tt, "commitments");
+        tts.iter().map(|tti| self.commitment(tti)).collect()
     }
 
     /// Returns a [ComputationMetadata] and a list of sort bindings to un-bind.
     fn metadata(&mut self, tt: &TokTree<'src>) -> (ComputationMetadata, Vec<Vec<u8>>) {
+        let mut md = ComputationMetadata::default();
+        let mut unbind = Vec::new();
         if let List(tts) = tt {
             if tts.is_empty() || tts[0] != Leaf(Token::Ident, b"metadata") {
                 panic!(
@@ -538,22 +694,23 @@ impl<'src> IrInterp<'src> {
                 )
             }
             match &tts[1..] {
-                [parties, inputs, viss] => {
+                [parties, inputs, commitments] => {
                     let parties = self.string_list(parties);
-                    let input_names = self.decl_list(inputs);
-                    let inputs: FxHashMap<String, Term> = input_names
-                        .iter()
-                        .map(|i| (from_utf8(i).unwrap().into(), self.get_binding(i).clone()))
-                        .collect();
-                    let visibilities = self.visibility_list(viss);
-                    (
-                        ComputationMetadata::from_parts(
-                            parties,
-                            inputs,
-                            visibilities.into_iter().collect(),
-                        ),
-                        input_names,
-                    )
+                    for p in parties.into_iter().skip(1) {
+                        md.add_party(p);
+                    }
+                    let tts_inputs = self.unwrap_prefix_list(inputs, "inputs");
+                    for tti_input in tts_inputs {
+                        let (name_bytes, v_md) = self.variable_metadata(tti_input);
+                        self.bind(name_bytes, v_md.term());
+                        unbind.push(name_bytes.to_owned());
+                        md.new_input_from_meta(v_md);
+                    }
+                    let parsed_commitments = self.commitments(commitments);
+                    for c in parsed_commitments {
+                        md.add_commitment(c);
+                    }
+                    (md, unbind)
                 }
                 _ => panic!("Expected meta-data, found {}", tt),
             }
@@ -564,22 +721,112 @@ impl<'src> IrInterp<'src> {
 
     /// Parse a computation.
     pub fn computation(&mut self, tt: &TokTree<'src>) -> Computation {
+        let tts = self.unwrap_prefix_list(tt, "computation");
+        assert!(tts.len() >= 3);
+        let (metadata, input_names) = self.metadata(&tts[0]);
+        let precomputes = self.precompute(&tts[1]);
+        let mut persistent_arrays = Vec::new();
+        let mut skip_one = false;
+        if let List(tts_inner) = &tts[2] {
+            if tts_inner[0] == Leaf(Token::Ident, b"persistent_arrays") {
+                skip_one = true;
+                for tti in tts_inner.iter().skip(1) {
+                    let ttis = self.unwrap_list(tti, "persistent_arrays");
+                    let id = self.ident_string(&ttis[0]);
+                    let _size = self.usize(&ttis[1]);
+                    let term = self.term(&ttis[2]);
+                    persistent_arrays.push((id, term));
+                }
+            }
+        }
+        let mut iter = tts.iter().skip(2);
+        if skip_one {
+            iter.next();
+        }
+        let outputs = iter.map(|tti| self.term(tti)).collect();
+        self.unbind(input_names);
+        Computation {
+            outputs,
+            metadata,
+            precomputes,
+            persistent_arrays,
+        }
+    }
+
+    /// Parse a computation set.
+    pub fn computations(&mut self, tt: &TokTree<'src>) -> Computations {
         if let List(tts) = tt {
-            if tts.is_empty() || tts[0] != Leaf(Token::Ident, b"computation") {
+            if tts.is_empty() || tts[0] != Leaf(Token::Ident, b"computations") {
                 panic!(
-                    "Expected computation, but list did not start with 'computation': {}",
+                    "Expected computation set, but list did not start with 'computations': {}",
                     tt
                 )
             }
-            assert!(tts.len() > 2);
-            let (metadata, input_names) = self.metadata(&tts[1]);
-            let outputs = tts[2..].iter().map(|tti| self.term(tti)).collect();
-            self.unbind(input_names);
-            Computation {
-                outputs,
-                metadata,
-                precomputes: Default::default(),
+            let mut comps: HashMap<String, Computation> = HashMap::default();
+            for tt in &tts[1..] {
+                if let List(ls) = tt {
+                    match &ls[..] {
+                        [Leaf(Token::Ident, var), ctree] => {
+                            let name = from_utf8(var).unwrap().to_owned();
+                            let c = self.computation(ctree);
+                            comps.insert(name, c);
+                        }
+                        _ => panic!("Expected named computation, found {}", tt),
+                    }
+                } else {
+                    panic!("Expected named computation, found {}", tt);
+                }
             }
+            Computations { comps }
+        } else {
+            panic!("Expected computation set, found {}", tt)
+        }
+    }
+
+    fn var_decl_list(&mut self, tt: &TokTree<'src>) -> Vec<(String, Sort)> {
+        let input_names = self.decl_list(tt);
+        input_names
+            .iter()
+            .map(|i| (from_utf8(i).unwrap().into(), check(self.get_binding(i))))
+            .collect()
+    }
+
+    /// Parse a pre-computation.
+    pub fn precompute(&mut self, tt: &TokTree<'src>) -> precomp::PreComp {
+        let mut p = precomp::PreComp::new();
+        if let List(tts) = tt {
+            if tts.is_empty() || tts[0] != Leaf(Token::Ident, b"precompute") {
+                panic!(
+                    "Expected precompute, but list did not start with 'precompute': {}",
+                    tt
+                )
+            }
+            assert!(
+                tts.len() == 4,
+                "precompute should have 4 children, but has {}",
+                tts.len()
+            );
+            let inputs = self.var_decl_list(&tts[1]);
+            let outputs = self.var_decl_list(&tts[2]);
+            let tuple_term = self.term(&tts[3]);
+            assert!(
+                matches!(check(&tuple_term), Sort::Tuple(..)),
+                "precompute output term must be a tuple"
+            );
+            assert!(
+                outputs.len() == tuple_term.cs().len(),
+                "output list has {} items, tuple has {}",
+                outputs.len(),
+                tuple_term.cs().len()
+            );
+            for (n, s) in inputs {
+                p.add_input(n, s);
+            }
+            for ((n, s), t) in outputs.into_iter().zip(tuple_term.cs()) {
+                assert_eq!(s, check(t));
+                p.add_output(n, t.clone());
+            }
+            p
         } else {
             panic!("Expected computation, found {}", tt)
         }
@@ -595,44 +842,10 @@ pub fn parse_term(src: &[u8]) -> Term {
 
 /// Serialize a term as a parseable string
 pub fn serialize_term(t: &Term) -> String {
-    let mut let_ct = 0;
-    let mut bindings = TermMap::new();
-    let mut output = String::new();
-
-    let mut parent_counts = TermMap::<usize>::new();
-    writeln!(&mut output, "(declare").unwrap();
-    writeln!(&mut output, " (").unwrap();
-    for t in PostOrderIter::new(t.clone()) {
-        for c in t.cs.iter().cloned() {
-            *parent_counts.entry(c).or_insert(0) += 1;
-        }
-        if let Op::Var(name, sort) = &t.op {
-            writeln!(&mut output, "  ({} {})", name, sort).unwrap();
-        }
-    }
-    writeln!(&mut output, " )").unwrap();
-    writeln!(&mut output, " (let").unwrap();
-    writeln!(&mut output, "  (").unwrap();
-    for t in PostOrderIter::new(t.clone()) {
-        if parent_counts.get(&t).unwrap_or(&0) > &1 && !t.cs.is_empty() {
-            let name = format!("let_{}", let_ct);
-            let_ct += 1;
-            let var = leaf_term(Op::Var(name.clone(), check(&t)));
-            writeln!(
-                &mut output,
-                "   ({} {})",
-                name,
-                substitute_cache(&t, &mut bindings)
-            )
-            .unwrap();
-            bindings.insert(t, var);
-        }
-    }
-    writeln!(&mut output, "  )").unwrap();
-    writeln!(&mut output, "  {}", substitute_cache(t, &mut bindings)).unwrap();
-    writeln!(&mut output, " )").unwrap();
-    writeln!(&mut output, ")").unwrap();
-    output
+    format!(
+        "{}",
+        super::fmt::IrWrapper::new(t, super::fmt::IrCfg::parseable())
+    )
 }
 
 /// Parse an IR "value map": a map from strings to values.
@@ -650,8 +863,8 @@ pub fn parse_value_map(src: &[u8]) -> HashMap<String, Value> {
     i.bindings
         .iter()
         .map(|(name, term)| {
-            let name = std::str::from_utf8(*name).unwrap().to_string();
-            let val = match &term[0].op {
+            let name = std::str::from_utf8(name).unwrap().to_string();
+            let val = match term[0].op() {
                 Op::Const(v) => v.clone(),
                 _ => panic!("Non-value binding {} associated with {}", term[0], name),
             };
@@ -667,7 +880,7 @@ pub fn serialize_value_map(src: &HashMap<String, Value>) -> String {
     let mut out = String::new();
     writeln!(&mut out, "(let (").unwrap();
     for (var, val) in src {
-        writeln!(&mut out, "  ({} {})", var, val).unwrap();
+        writeln!(&mut out, "  ({var} {val})").unwrap();
     }
     writeln!(&mut out, ") true;ignored \n)").unwrap();
     out
@@ -684,11 +897,62 @@ pub fn parse_computation(src: &[u8]) -> Computation {
 pub fn serialize_computation(c: &Computation) -> String {
     let mut out = String::new();
     writeln!(&mut out, "(computation \n{}", c.metadata).unwrap();
+    writeln!(&mut out, "{}", serialize_precompute(&c.precomputes)).unwrap();
+    if !c.persistent_arrays.is_empty() {
+        writeln!(&mut out, "(persistent_arrays").unwrap();
+        for (name, term) in &c.persistent_arrays {
+            let size = check(term).as_array().2;
+            writeln!(&mut out, "  ({name} {size} {})", serialize_term(term)).unwrap();
+        }
+        writeln!(&mut out, "\n)").unwrap();
+    }
     for o in &c.outputs {
         writeln!(&mut out, "\n  {}", serialize_term(o)).unwrap();
     }
     writeln!(&mut out, "\n)").unwrap();
     out
+}
+
+/// Parse a computation set.
+pub fn parse_computations(src: &[u8]) -> Computations {
+    let tree = parse_tok_tree(src);
+    let mut i = IrInterp::new();
+    i.computations(&tree)
+}
+
+/// Serialize a computations set.
+pub fn serialize_computations(comps: &Computations) -> String {
+    let mut out = String::new();
+    writeln!(&mut out, "(computations ").unwrap();
+    for (n, c) in &comps.comps {
+        writeln!(&mut out, "\n({} {}\n)\n", n, serialize_computation(c)).unwrap();
+    }
+    writeln!(&mut out, "\n)").unwrap();
+    out
+}
+
+/// Serialize a pre-computation.
+pub fn serialize_precompute(p: &precomp::PreComp) -> String {
+    let mut out = String::new();
+    writeln!(&mut out, "(precompute (").unwrap();
+    for (name, sort) in p.inputs() {
+        writeln!(&mut out, " ({name} {sort})").unwrap();
+    }
+    writeln!(&mut out, ")(").unwrap();
+    for (name, sort) in p.sequence() {
+        writeln!(&mut out, " ({name} {sort})").unwrap();
+    }
+    writeln!(&mut out, ")").unwrap();
+    writeln!(&mut out, "\n  {}", serialize_term(&p.tuple())).unwrap();
+    writeln!(&mut out, "\n)").unwrap();
+    out
+}
+
+/// Parse a pre-computation.
+pub fn parse_precompute(src: &[u8]) -> precomp::PreComp {
+    let tree = parse_tok_tree(src);
+    let mut i = IrInterp::new();
+    i.precompute(&tree)
 }
 
 #[cfg(test)]
@@ -752,6 +1016,43 @@ mod test {
     }
 
     #[test]
+    fn arr_cstore_roundtrip() {
+        let t = parse_term(
+            b"
+        (declare (
+         (a bool)
+         (b bool)
+         (c bool)
+         (A (array bool bool 1))
+         )
+         (let (
+                 (B (cstore A a b c))
+         ) (xor (select B a)
+                (select (#a (bv 4) false 4 ((#b0000 true))) #b0000))))",
+        );
+        let s = serialize_term(&t);
+        let t2 = parse_term(s.as_bytes());
+        assert_eq!(t, t2);
+    }
+
+    #[test]
+    fn arr_op_roundtrip() {
+        let t = parse_term(
+            b"
+        (declare (
+         (a bool)
+         (b bool)
+         (A (array bool bool 1))
+         )
+         (= A ((array bool bool) a))
+         )",
+        );
+        let s = serialize_term(&t);
+        let t2 = parse_term(s.as_bytes());
+        assert_eq!(t, t2);
+    }
+
+    #[test]
     fn tup_roundtrip() {
         let t = parse_term(
             b"
@@ -766,7 +1067,6 @@ mod test {
                 ((field 0) (#t false false #b0000 true)))))",
         );
         let s = serialize_term(&t);
-        println!("{}", s);
         let t2 = parse_term(s.as_bytes());
         assert_eq!(t, t2);
     }
@@ -806,9 +1106,19 @@ mod test {
             b"
             (computation
                 (metadata
-                    (P V)
-                    ((a bool) (b bool) (A (tuple bool bool)))
-                    ((a P))
+                    (parties P V)
+                    (inputs
+                        (a bool (party 0) (random) (round 1))
+                        (b bool)
+                        (A (tuple bool bool))
+                        (x bool (party 0) (committed))
+                    )
+                    (commitments)
+                )
+                (precompute
+                    ((c bool) (d bool))
+                    ((a bool))
+                    (tuple (not (and c d)))
                 )
                 (let (
                         (B ((update 1) A b))
@@ -816,7 +1126,7 @@ mod test {
                         ((field 0) (#t false false #b0000 true))))
             )",
         );
-        assert_eq!(c.metadata.input_vis.len(), 3);
+        assert_eq!(c.metadata.vars.len(), 4);
         assert!(!c.metadata.is_input_public("a"));
         assert!(c.metadata.is_input_public("b"));
         assert!(c.metadata.is_input_public("A"));
@@ -825,5 +1135,180 @@ mod test {
         let s = serialize_computation(&c);
         let c2 = parse_computation(s.as_bytes());
         assert_eq!(c, c2);
+    }
+
+    #[test]
+    fn call_roundtrip() {
+        let t = parse_term(
+            b"
+            (declare ((a bool))
+                ((field 0) ((call myxor (bool bool) (tuple bool)) a a))
+            )",
+        );
+        assert_eq!(check(&t), Sort::Bool);
+        let s = serialize_term(&t);
+        let t2 = parse_term(s.as_bytes());
+        assert_eq!(t, t2);
+    }
+
+    #[test]
+    fn computations_roundtrip() {
+        let c = parse_computations(
+            b"
+            (computations
+                (myxor
+                    (computation
+                        (metadata (parties ) (inputs (a bool) (b bool)) (commitments))
+                        (precompute () () (#t ))
+                        (xor a b false false)
+                    )
+                )
+                (main
+                    (computation
+                        (metadata (parties ) (inputs (a bool) (b bool)) (commitments))
+                        (precompute () () (#t ))
+                        (and false ((field 0) ((call myxor (bool bool) (tuple bool)) a b)))
+                    )
+                )
+            )",
+        );
+        assert_eq!(c.comps.len(), 2);
+        assert!(c.comps.contains_key("myxor"));
+        assert!(c.comps.contains_key("main"));
+        let s = serialize_computations(&c);
+        let c2 = parse_computations(s.as_bytes());
+        assert_eq!(c, c2);
+    }
+
+    #[test]
+    fn empty_precompute_roundtrip() {
+        let c = parse_precompute(b"(precompute () () (#t ))");
+        let s = serialize_precompute(&c);
+        let c2 = parse_precompute(s.as_bytes());
+        assert_eq!(c, c2);
+    }
+
+    #[test]
+    fn precompute_roundtrip() {
+        let c = parse_precompute(
+            b"
+                (precompute
+                    ((c bool) (d bool))
+                    ((a bool) (b bool))
+                    (tuple (not (and c d)) (not a))
+            )",
+        );
+        let s = serialize_precompute(&c);
+        let c2 = parse_precompute(s.as_bytes());
+        assert_eq!(c, c2);
+    }
+
+    #[test]
+    fn computation_roundtrip_persistent_arrays() {
+        let c = parse_computation(
+            b"
+            (computation
+                (metadata
+                    (parties P V)
+                    (inputs
+                        (a bool (party 0) (random) (round 1))
+                        (b bool)
+                        (A (tuple bool bool))
+                        (x bool (party 0) (committed))
+                    )
+                    (commitments)
+                )
+                (precompute
+                    ((c bool) (d bool))
+                    ((a bool))
+                    (tuple (not (and c d)))
+                )
+                (persistent_arrays (AA 2 (#a (bv 4) false 4 ((#b0000 true)))))
+                (let (
+                        (B ((update 1) A b))
+                ) (xor ((field 1) B)
+                        ((field 0) (#t false false #b0000 true))))
+            )",
+        );
+        let s = serialize_computation(&c);
+        let c2 = parse_computation(s.as_bytes());
+        assert_eq!(c, c2);
+    }
+
+    #[test]
+    fn challenge_roundtrip() {
+        let t = parse_term(b"(declare ((a bool) (b bool)) ((challenge hithere 17) a b))");
+        let s = serialize_term(&t);
+        let t2 = parse_term(s.as_bytes());
+        assert_eq!(t, t2);
+    }
+
+    #[test]
+    fn persistent_ram_split_roundtrip() {
+        let t = parse_term(
+            b"
+        (declare (
+         (entries (array (mod 17) (tuple (mod 17) (mod 17)) 5))
+         (indices (array (mod 17) (mod 17) 3))
+        )
+         (persistent_ram_split entries indices))",
+        );
+        let s = serialize_term(&t);
+        println!("{s}");
+        let t2 = parse_term(s.as_bytes());
+        assert_eq!(t, t2);
+    }
+
+    #[test]
+    fn list_value_equiv_to_array() {
+        let t_array = parse_term(b"(declare () (#a (bv 4) #x0 3 ((#x0 #x0) (#x1 #x1) (#x2 #x4))))");
+        let t_list = parse_term(b"(declare () (#l (bv 4) (#x0 #x1 #x4)))");
+        assert_eq!(t_array, t_list);
+        let s = serialize_term(&t_array);
+        let t_roundtripped = parse_term(s.as_bytes());
+        assert_eq!(t_array, t_roundtripped);
+    }
+
+    #[test]
+    fn pf2bool_trusted_rountrip() {
+        let t = parse_term(b"(declare ((a bool)) (pf2bool_trusted (ite a #f1m11 #f0m11)))");
+        let t2 = parse_term(serialize_term(&t).as_bytes());
+        assert_eq!(t, t2);
+    }
+
+    #[test]
+    fn op_sort_rountrip() {
+        let t = parse_term(b"(declare () (sort (#l (mod 3) ((#t true true) (#t true false)))))");
+        let t2 = parse_term(serialize_term(&t).as_bytes());
+        assert_eq!(t, t2);
+    }
+
+    #[test]
+    fn fill_roundtrip() {
+        let t = parse_term(b"(declare () ((fill (bv 4) 3) #x00))");
+        let t2 = parse_term(serialize_term(&t).as_bytes());
+        assert_eq!(t, t2);
+    }
+
+    #[test]
+    fn pf_fits_in_bits_rountrip() {
+        let t = parse_term(b"(declare ((a bool)) ((pf_fits_in_bits 4) (ite a #f1m11 #f0m11)))");
+        let t2 = parse_term(serialize_term(&t).as_bytes());
+        assert_eq!(t, t2);
+    }
+
+    #[test]
+    fn uniq_deri_gcd_roundtrip() {
+        let t = parse_term(
+            b"
+        (declare (
+         (pairs (array (mod 17) (tuple (mod 17) bool) 5))
+        )
+         (uniq_deri_gcd pairs))",
+        );
+        let s = serialize_term(&t);
+        println!("{s}");
+        let t2 = parse_term(s.as_bytes());
+        assert_eq!(t, t2);
     }
 }

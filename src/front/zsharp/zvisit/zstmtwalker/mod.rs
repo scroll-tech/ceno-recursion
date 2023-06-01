@@ -132,13 +132,11 @@ impl<'ast, 'ret> ZStatementWalker<'ast, 'ret> {
             .zip(call.arguments.expressions.iter_mut())
             .try_for_each(|(pty, arg)| self.unify_expression(pty, arg))?;
 
-        let ret_ty =
-            fdef.returns
-                .first()
-                .cloned()
-                .unwrap_or(ast::Type::Basic(ast::BasicType::Boolean(
-                    ast::BooleanType { span: call.span },
-                )));
+        let ret_ty = fdef.returns.first().cloned().unwrap_or({
+            ast::Type::Basic(ast::BasicType::Boolean(ast::BooleanType {
+                span: call.span,
+            }))
+        });
         if let Some(ty) = rty {
             self.eq_type(ty, &ret_ty)?;
         }
@@ -214,7 +212,7 @@ impl<'ast, 'ret> ZStatementWalker<'ast, 'ret> {
 
         // XXX(unimpl) does not check array lengths, just unifies ai.count with U32!
         let u32_ty = Basic(ast::BasicType::U32(ast::U32Type { span: ai.span }));
-        self.unify_expression(u32_ty, &mut *ai.count)?;
+        self.unify_expression(u32_ty, &mut ai.count)?;
 
         let arr_ty = if at.dimensions.len() > 1 {
             at.dimensions.remove(0); // perf?
@@ -222,7 +220,7 @@ impl<'ast, 'ret> ZStatementWalker<'ast, 'ret> {
         } else {
             bos_to_type(at.ty)
         };
-        self.unify_expression(arr_ty, &mut *ai.value)
+        self.unify_expression(arr_ty, &mut ai.value)
     }
 
     fn unify_inline_struct(
@@ -627,7 +625,7 @@ impl<'ast, 'ret> ZStatementWalker<'ast, 'ret> {
     fn get_function(&self, id: &str) -> ZResult<&ast::FunctionDefinition<'ast>> {
         self.zgen
             .get_function(id)
-            .ok_or_else(|| ZVisitorError(format!("ZStatementWalker: undeclared function {}", id)))
+            .ok_or_else(|| ZVisitorError(format!("ZStatementWalker: undeclared function {id}")))
     }
 
     fn get_struct_or_type(
@@ -684,13 +682,11 @@ impl<'ast, 'ret> ZStatementWalker<'ast, 'ret> {
     {
         if self.generic_defined(nm) {
             Err(ZVisitorError(format!(
-                "ZStatementWalker: attempted to shadow generic {}",
-                nm,
+                "ZStatementWalker: attempted to shadow generic {nm}"
             )))
         } else if self.const_defined(nm) {
             Err(ZVisitorError(format!(
-                "ZStatementWalker: attempted to shadow const {}",
-                nm,
+                "ZStatementWalker: attempted to shadow const {nm}"
             )))
         } else {
             Ok(f(self, nm))
@@ -759,6 +755,15 @@ impl<'ast, 'ret> ZVisitorMut<'ast> for ZStatementWalker<'ast, 'ret> {
         }));
         self.unify(Some(bool_ty), &mut asrt.expression)?;
         walk_assertion_statement(self, asrt)
+    }
+
+    fn visit_cond_store_statement(
+        &mut self,
+        s: &mut ast::CondStoreStatement<'ast>,
+    ) -> ZVisitorResult {
+        let bool_ty = ast::Type::Basic(ast::BasicType::Boolean(ast::BooleanType { span: s.span }));
+        self.unify(Some(bool_ty), &mut s.condition)?;
+        walk_cond_store_statement(self, s)
     }
 
     fn visit_iteration_statement(
@@ -877,15 +882,17 @@ impl<'ast, 'ret> ZVisitorMut<'ast> for ZStatementWalker<'ast, 'ret> {
         use ast::RangeOrExpression::*;
         match roe {
             Range(r) => self.visit_range(r),
-            Expression(e) => {
-                let mut zty = ZExpressionTyper::new(self);
-                if self.type_expression(e, &mut zty)?.is_none() {
-                    let mut zrw = ZConstLiteralRewriter::new(Some(Ty::Field));
-                    zrw.visit_expression(e)?;
-                }
-                self.visit_expression(e)
-            }
+            Expression(e) => self.visit_array_index_expression(e),
         }
+    }
+
+    fn visit_array_index_expression(&mut self, e: &mut ast::Expression<'ast>) -> ZVisitorResult {
+        let mut zty = ZExpressionTyper::new(self);
+        if self.type_expression(e, &mut zty)?.is_none() {
+            let mut zrw = ZConstLiteralRewriter::new(Some(Ty::Field));
+            zrw.visit_expression(e)?;
+        }
+        self.visit_expression(e)
     }
 
     fn visit_range(&mut self, rng: &mut ast::Range<'ast>) -> ZVisitorResult {

@@ -1,8 +1,11 @@
 //! Optimizations
 pub mod binarize;
 pub mod cfold;
+pub mod chall;
+pub mod cstore;
 pub mod flat;
 pub mod inline;
+pub mod link;
 pub mod mem;
 pub mod scalarize_vars;
 pub mod sha;
@@ -11,7 +14,7 @@ mod visit;
 
 use super::term::*;
 
-use log::debug;
+use log::{debug, trace};
 
 #[derive(Clone, Debug)]
 /// An optimization pass
@@ -25,6 +28,8 @@ pub enum Opt {
     Flatten,
     /// Binarize n-ary operators
     Binarize,
+    /// Find conditional stores.
+    ParseCondStores,
     /// SHA-2 peephole optimizations
     Sha,
     /// Replace oblivious arrays with tuples
@@ -37,25 +42,40 @@ pub enum Opt {
     Inline,
     /// Eliminate tuples
     Tuple,
+    /// Link function calls
+    Link,
+    /// Eliminate persistent RAM
+    PersistentRam,
+    /// Eliminate volatile RAM
+    VolatileRam,
+    /// Replace challenge terms with random variables
+    SkolemizeChallenges,
 }
 
 /// Run optimizations on `cs`, in this order, returning the new constraint system.
 pub fn opt<I: IntoIterator<Item = Opt>>(mut cs: Computations, optimizations: I) -> Computations {
     for i in optimizations {
         debug!("Applying: {:?}", i);
+
+        if let Opt::Link = i {
+            link::link_all_function_calls(&mut cs);
+            continue;
+        }
+
         for (_, c) in cs.comps.iter_mut() {
             match i.clone() {
+                Opt::ParseCondStores => {
+                    cstore::parse(c);
+                }
                 Opt::ScalarizeVars => {
                     scalarize_vars::scalarize_inputs(c);
                 }
                 Opt::ConstantFold(ignore) => {
-                    // lock the collector because fold_cache locks TERMS
-                    let _lock = super::term::COLLECT.read().unwrap();
-                    let mut cache = TermCache::new(TERM_CACHE_LIMIT);
+                    let mut cache = TermCache::with_capacity(TERM_CACHE_LIMIT);
                     for a in &mut c.outputs {
                         // allow unbounded size during a single fold_cache call
                         cache.resize(std::usize::MAX);
-                        *a = cfold::fold_cache(a, &mut cache, &*ignore.clone());
+                        *a = cfold::fold_cache(a, &mut cache, &ignore.clone());
                         // then shrink back down to size between calls
                         cache.resize(TERM_CACHE_LIMIT);
                     }
@@ -74,9 +94,9 @@ pub fn opt<I: IntoIterator<Item = Opt>>(mut cs: Computations, optimizations: I) 
                 Opt::FlattenAssertions => {
                     let mut new_outputs = Vec::new();
                     for a in std::mem::take(&mut c.outputs) {
-                        assert_eq!(check(&a), Sort::Bool, "Non-bool in {:?}", i);
-                        if a.op == Op::BoolNaryOp(BoolNaryOp::And) {
-                            new_outputs.extend(a.cs.iter().cloned());
+                        assert_eq!(check(&a), Sort::Bool, "Non-bool in {i:?}");
+                        if a.op() == &Op::BoolNaryOp(BoolNaryOp::And) {
+                            new_outputs.extend(a.cs().iter().cloned());
                         } else {
                             new_outputs.push(a)
                         }
@@ -96,18 +116,27 @@ pub fn opt<I: IntoIterator<Item = Opt>>(mut cs: Computations, optimizations: I) 
                     }
                 }
                 Opt::Inline => {
-                    let public_inputs = c
-                        .metadata
-                        .public_input_names()
-                        .map(ToOwned::to_owned)
-                        .collect();
+                    let public_inputs = c.metadata.public_input_names_set();
                     inline::inline(&mut c.outputs, &public_inputs);
                 }
                 Opt::Tuple => {
                     tuple::eliminate_tuples(c);
                 }
+                Opt::Link => unreachable!(),
+                Opt::PersistentRam => {
+                    let cfg = mem::ram::AccessCfg::from_cfg();
+                    mem::ram::persistent::apply(c, &cfg);
+                }
+                Opt::VolatileRam => {
+                    let cfg = mem::ram::AccessCfg::from_cfg();
+                    mem::ram::volatile::apply(c, &cfg);
+                }
+                Opt::SkolemizeChallenges => {
+                    chall::skolemize_challenges(c);
+                }
             }
             debug!("After {:?}: {} outputs", i, c.outputs.len());
+            trace!("After {:?}: {}", i, c.outputs[0]);
             //debug!("After {:?}: {}", i, Letified(cs.outputs[0].clone()));
             debug!("After {:?}: {} terms", i, c.terms());
         }

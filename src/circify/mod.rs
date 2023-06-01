@@ -62,8 +62,8 @@ pub type Result<T> = std::result::Result<T, CircError>;
 impl<T: Display> Display for Val<T> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Val::Term(t) => write!(f, "{}", t),
-            Val::Ref(l) => write!(f, "&{}", l),
+            Val::Term(t) => write!(f, "{t}"),
+            Val::Ref(l) => write!(f, "&{l}"),
         }
     }
 }
@@ -169,13 +169,10 @@ impl<Ty: Display> LexScope<Ty> {
     }
     fn declare(&mut self, name: VarName, ty: Ty) -> Result<&SsaName> {
         let p = &self.prefix;
-        let new_le = match self.entries.entry(name.clone()) {
-            Entry::Vacant(_) => LexEntry::new(format!("{}_{}", p, name), ty),
-            Entry::Occupied(_) => LexEntry::new_ver(format!("{}_{}", p, name), ty, self.entries.get(&name).unwrap().ver.clone() + 1)
-            // Entry::Occupied(o) => Err(CircError::Rebind(name, format!("{}", o.get().ty))),
-        };
-        self.entries.insert(name.clone(), new_le);
-        Ok(&self.entries.get(&name).ok_or_else(|| CircError::NoName(name.to_owned()))?.ssa_name)
+        match self.entries.entry(name.clone()) {
+            Entry::Vacant(v) => Ok(&v.insert(LexEntry::new(format!("{p}_{name}"), ty)).ssa_name),
+            Entry::Occupied(o) => Err(CircError::Rebind(name, format!("{}", o.get().ty))),
+        }
     }
     fn get_name(&self, name: &str) -> Result<&SsaName> {
         Ok(&self
@@ -388,6 +385,11 @@ pub trait Embeddable {
     // Because the type alias may change.
     #[allow(clippy::ptr_arg)]
     fn initialize_return(&self, ty: &Self::Ty, ssa_name: &SsaName) -> Self::T;
+
+    /// Wrap an IR field->field array as a language-level persistent array.
+    fn wrap_persistent_array(&self, _t: Term) -> Self::T {
+        unimplemented!("wrap_persistent_array")
+    }
 }
 
 /// Manager for circuit-embedded state.
@@ -606,8 +608,8 @@ impl<E: Embeddable> Circify<E> {
                 let new_ty = new.type_();
                 assert_eq!(
                     ty, new_ty,
-                    "Term {} has type {} but was assigned to {} of type {}",
-                    new, new_ty, loc, ty
+                    "{}",
+                    "Term {new} has type {new_ty} but was assigned to {loc} of type {ty}",
                 );
                 // get condition under which assignment happens
                 let guard = self.condition.clone();
@@ -628,9 +630,9 @@ impl<E: Embeddable> Circify<E> {
                 Ok(v)
             }
             (_, v) => Err(CircError::MisTypedAssign(
-                format!("{}", v),
-                format!("{}", loc),
-                format!("{}", old_val),
+                format!("{v}"),
+                format!("{loc}"),
+                format!("{old_val}"),
             )),
         }
     }
@@ -763,6 +765,31 @@ impl<E: Embeddable> Circify<E> {
         }
     }
 
+    /// Exit a function call.
+    ///
+    /// ## Returns
+    ///
+    /// Returns the return value of the function, if any.
+    pub fn exit_fn_call(&mut self, ret_names: &Vec<String>) -> Option<Vec<Val<E::T>>> {
+        if let Some(fn_) = self.fn_stack.last() {
+            let mut rets: Vec<Val<E::T>> = Vec::new();
+            // Get return value if possible
+            if fn_.has_return {
+                rets.push(self.get_value(Loc::local(RET_NAME.to_owned())).unwrap());
+            }
+
+            // Get references if possible
+            for name in ret_names {
+                rets.push(self.get_value(Loc::local(name.to_string())).unwrap());
+            }
+
+            self.fn_stack.pop().unwrap();
+            Some(rets)
+        } else {
+            panic!("No fn to exit")
+        }
+    }
+
     /// Get the current value of a location
     pub fn get_value(&self, loc: Loc) -> Result<Val<E::T>> {
         let l = self.get_lex_ref(&loc)?;
@@ -824,10 +851,20 @@ impl<E: Embeddable> Circify<E> {
         self.cir_ctx.mem.borrow_mut().load(id, offset)
     }
 
+    /// Conditional store to an AllocId based on an explicit condition
+    pub fn cond_store(&mut self, id: AllocId, offset: Term, val: Term, cond: Term) {
+        self.cir_ctx.mem.borrow_mut().store(id, offset, val, cond);
+    }
+
     /// Conditional store to an AllocId based on current path condition
     pub fn store(&mut self, id: AllocId, offset: Term, val: Term) {
         let cond = self.condition();
         self.cir_ctx.mem.borrow_mut().store(id, offset, val, cond);
+    }
+
+    /// Replace term at AllocId
+    pub fn replace(&mut self, id: AllocId, val: Term) {
+        self.cir_ctx.mem.borrow_mut().replace(id, val);
     }
 
     /// Read from Physical Memory
@@ -849,6 +886,36 @@ impl<E: Embeddable> Circify<E> {
             .mem
             .borrow_mut()
             .zero_allocate(size, addr_width, val_width)
+    }
+
+    /// Create a new persistent array.
+    pub fn start_persistent_array(
+        &mut self,
+        var: &str,
+        size: usize,
+        field: circ_fields::FieldT,
+        party: PartyId,
+    ) -> E::T {
+        let ir = self
+            .cir_ctx
+            .cs
+            .borrow_mut()
+            .start_persistent_array(var, size, field, party);
+        let t = self.e.wrap_persistent_array(ir);
+        let ssa_name = self
+            .declare_env_name(var.into(), &t.type_())
+            .unwrap()
+            .clone();
+        assert!(self.vals.insert(ssa_name, Val::Term(t.clone())).is_none());
+        t
+    }
+
+    /// Record the final state
+    pub fn end_persistent_array(&mut self, var: &str, final_state: Term) {
+        self.cir_ctx
+            .cs
+            .borrow_mut()
+            .end_persistent_array(var, final_state)
     }
 }
 
@@ -873,8 +940,8 @@ mod test {
         impl Display for T {
             fn fmt(&self, f: &mut Formatter) -> fmt::Result {
                 match self {
-                    T::Base(t) => write!(f, "{}", t),
-                    T::Pair(a, b) => write!(f, "({}, {})", a, b),
+                    T::Base(t) => write!(f, "{t}"),
+                    T::Pair(a, b) => write!(f, "({a}, {b})"),
                 }
             }
         }
@@ -889,7 +956,7 @@ mod test {
             fn fmt(&self, f: &mut Formatter) -> fmt::Result {
                 match self {
                     Ty::Bool => write!(f, "bool"),
-                    Ty::Pair(a, b) => write!(f, "({}, {})", a, b),
+                    Ty::Pair(a, b) => write!(f, "({a}, {b})"),
                 }
             }
         }
@@ -919,12 +986,12 @@ mod test {
                 ty.default()
             }
 
-            fn ite(&self, ctx: &mut CirCtx, cond: Term, t: Self::T, f: Self::T) -> Self::T {
+            fn ite(&self, _ctx: &mut CirCtx, cond: Term, t: Self::T, f: Self::T) -> Self::T {
                 match (t, f) {
                     (T::Base(a), T::Base(b)) => T::Base(term![Op::Ite; cond, a, b]),
                     (T::Pair(a0, a1), T::Pair(b0, b1)) => T::Pair(
-                        Box::new(self.ite(ctx, cond.clone(), *a0, *b0)),
-                        Box::new(self.ite(ctx, cond, *a1, *b1)),
+                        Box::new(self.ite(_ctx, cond.clone(), *a0, *b0)),
+                        Box::new(self.ite(_ctx, cond, *a1, *b1)),
                     ),
                     (a, b) => panic!("Cannot ITE {}, {}", a, b),
                 }
@@ -961,15 +1028,15 @@ mod test {
                         T::Pair(
                             Box::new(self.declare_input(
                                 ctx,
-                                &**a,
-                                format!("{}.0", name),
+                                a,
+                                format!("{name}.0"),
                                 visibility,
                                 p_1,
                             )),
                             Box::new(self.declare_input(
                                 ctx,
-                                &**b,
-                                format!("{}.1", name),
+                                b,
+                                format!("{name}.1"),
                                 visibility,
                                 p_2,
                             )),

@@ -114,6 +114,12 @@ impl MemManager {
         alloc.cur_term = ite_store;
     }
 
+    /// Replace the stored term in the allocation `id` with the value `val`.
+    pub fn replace(&mut self, id: AllocId, val: Term) {
+        let alloc = self.allocs.get_mut(&id).expect("Missing allocation");
+        alloc.cur_term = val;
+    }
+
     /// Append a new value to the end of AllocId
     /// Currently there are no array implementations
     pub fn push(&mut self, id: AllocId, val: Term, cond: Term) -> usize {
@@ -148,6 +154,7 @@ impl MemManager {
         alloc.size
     }
 }
+
 #[cfg(all(feature = "smt", feature = "test", feature = "zok"))]
 mod test {
     use super::*;

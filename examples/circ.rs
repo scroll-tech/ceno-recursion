@@ -1,128 +1,126 @@
 #![allow(unused_imports)]
-#[cfg(feature = "r1cs")]
-use bellman::gadgets::test::TestConstraintSystem;
-#[cfg(feature = "r1cs")]
-use bellman::groth16::{
-    create_random_proof, generate_parameters, generate_random_parameters, prepare_verifying_key,
-    verify_proof, Parameters, Proof, VerifyingKey,
+#![allow(clippy::vec_init_then_push)]
+#[cfg(feature = "bellman")]
+use bellman::{
+    gadgets::test::TestConstraintSystem,
+    groth16::{
+        create_random_proof, generate_parameters, generate_random_parameters,
+        prepare_verifying_key, verify_proof, Parameters, Proof, VerifyingKey,
+    },
+    Circuit,
 };
-#[cfg(feature = "r1cs")]
-use bellman::Circuit;
+#[cfg(feature = "bellman")]
 use bls12_381::{Bls12, Scalar};
+use circ::cfg::{
+    cfg,
+    clap::{self, Args, Parser, Subcommand, ValueEnum},
+    CircOpt,
+};
 #[cfg(feature = "c")]
 use circ::front::c::{self, C};
+#[cfg(all(feature = "smt", feature = "datalog"))]
 use circ::front::datalog::{self, Datalog};
 #[cfg(all(feature = "smt", feature = "zok"))]
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
-use circ::ir::term::{Op, BV_LSHR, BV_SHL};
+use circ::ir::term::{Node, Op, BV_LSHR, BV_SHL};
 use circ::ir::{
     opt::{opt, Opt},
     term::{
         check,
-        extras::Letified,
         text::{parse_value_map, serialize_value_map},
     },
 };
+#[cfg(feature = "aby")]
 use circ::target::aby::trans::to_aby;
 #[cfg(feature = "lp")]
 use circ::target::ilp::{assignment_to_values, trans::to_ilp};
+#[cfg(feature = "spartan")]
+use circ::target::r1cs::spartan::write_data;
+#[cfg(feature = "bellman")]
+use circ::target::r1cs::{
+    bellman::Bellman,
+    mirage::Mirage,
+    proof::{CommitProofSystem, ProofSystem},
+};
 #[cfg(feature = "r1cs")]
-use circ::target::r1cs::bellman::{gen_params, prove, verify};
-use circ::target::r1cs::opt::reduce_linearities;
-use circ::target::r1cs::trans::to_r1cs;
+use circ::target::r1cs::{opt::reduce_linearities, trans::to_r1cs};
 #[cfg(feature = "smt")]
 use circ::target::smt::find_model;
-use circ::util::field::DFL_T;
 use circ_fields::FieldT;
 use fxhash::FxHashMap as HashMap;
 #[cfg(feature = "lp")]
 use good_lp::default_solver;
+use log::trace;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use structopt::clap::arg_enum;
-use structopt::StructOpt;
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "circ", about = "CirC: the circuit compiler")]
+#[derive(Debug, Parser)]
+#[command(name = "circ", about = "CirC: the circuit compiler")]
 struct Options {
     /// Input file
-    #[structopt(parse(from_os_str), name = "PATH")]
+    #[arg(name = "PATH")]
     path: PathBuf,
 
-    #[structopt(flatten)]
+    #[command(flatten)]
     frontend: FrontendOptions,
 
+    #[command(flatten)]
+    circ: CircOpt,
+
     /// Number of parties for an MPC.
-    #[structopt(long, default_value = "2", name = "PARTIES")]
+    #[arg(long, default_value = "2", name = "PARTIES")]
     parties: u8,
 
     #[structopt(subcommand)]
     backend: Backend,
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 struct FrontendOptions {
     /// Input language
-    #[structopt(long, default_value = "auto", name = "LANG")]
+    #[arg(long, default_value = "auto", name = "LANG")]
     language: Language,
 
     /// Value threshold
-    #[structopt(long)]
+    #[arg(long)]
     value_threshold: Option<u64>,
-
-    /// How many recursions to allow (datalog)
-    #[structopt(short, long, name = "N", default_value = "5")]
-    rec_limit: usize,
-
-    /// Lint recursions that are allegedly primitive recursive (datalog)
-    #[structopt(long)]
-    lint_prim_rec: bool,
-
-    #[cfg(feature = "zok")]
-    /// In Z#, "isolate" assertions. That is, assertions in if/then/else expressions only take
-    /// effect if that branch is active.
-    ///
-    /// See `--branch-isolation` in
-    /// [ZoKrates](https://zokrates.github.io/language/control_flow.html).
-    #[structopt(long)]
-    z_isolate_asserts: bool,
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Subcommand)]
 enum Backend {
     #[allow(dead_code)]
     R1cs {
-        #[structopt(long, default_value = "P", parse(from_os_str))]
+        #[arg(long, default_value = "P")]
         prover_key: PathBuf,
-        #[structopt(long, default_value = "V", parse(from_os_str))]
+        #[arg(long, default_value = "V")]
         verifier_key: PathBuf,
-        #[structopt(long, default_value = "50")]
+        #[arg(long, default_value = "50")]
         /// linear combination constraints up to this size will be eliminated
         lc_elimination_thresh: usize,
-        #[structopt(long, default_value = "count")]
+        #[arg(long, default_value = "count")]
         action: ProofAction,
+        #[arg(long, default_value = "groth16")]
+        proof_impl: ProofImpl,
     },
     Smt {},
     Ilp {},
     Mpc {
-        #[structopt(long, default_value = "hycc", name = "cost_model")]
+        #[arg(long, default_value = "hycc", name = "cost_model")]
         cost_model: String,
-        #[structopt(long, default_value = "lp", name = "selection_scheme")]
+        #[arg(long, default_value = "lp", name = "selection_scheme")]
         selection_scheme: String,
     },
 }
 
-arg_enum! {
-    #[derive(PartialEq, Eq, Debug)]
-    enum Language {
-        Zsharp,
-        Datalog,
-        C,
-        Auto,
-    }
+#[derive(PartialEq, Eq, Debug, Clone, ValueEnum)]
+enum Language {
+    Zsharp,
+    Datalog,
+    C,
+    Auto,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -138,12 +136,18 @@ pub enum CostModelType {
     Hycc,
 }
 
-arg_enum! {
-    #[derive(PartialEq, Eq, Debug)]
-    enum ProofAction {
-        Count,
-        Setup,
-    }
+#[derive(PartialEq, Eq, Debug, Clone, ValueEnum)]
+enum ProofAction {
+    Count,
+    Setup,
+    CpSetup,
+    SpartanSetup,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, ValueEnum)]
+enum ProofImpl {
+    Groth16,
+    Mirage,
 }
 
 fn determine_language(l: &Language, input_path: &Path) -> DeterminedLanguage {
@@ -160,21 +164,23 @@ fn determine_language(l: &Language, input_path: &Path) -> DeterminedLanguage {
             } else if p.ends_with(".c") || p.ends_with(".cpp") || p.ends_with(".cc") {
                 DeterminedLanguage::C
             } else {
-                println!("Could not deduce the input language from path '{}', please set the language manually", p);
+                println!("Could not deduce the input language from path '{p}', please set the language manually");
                 std::process::exit(2)
             }
         }
     }
 }
 
+#[allow(unused_variables, unreachable_code)]
 fn main() {
     env_logger::Builder::from_default_env()
         .format_level(false)
         .format_timestamp(None)
         .init();
-    let options = Options::from_args();
+    let options = Options::parse();
+    circ::cfg::set(&options.circ);
     let path_buf = options.path.clone();
-    println!("{:?}", options);
+    println!("{options:?}");
     let mode = match options.backend {
         Backend::R1cs { .. } => match options.frontend.value_threshold {
             Some(t) => Mode::ProofOfHighValue(t),
@@ -191,7 +197,6 @@ fn main() {
             let inputs = zsharp::Inputs {
                 file: options.path,
                 mode,
-                isolate_asserts: options.frontend.z_isolate_asserts,
             };
             ZSharpFE::gen(inputs)
         }
@@ -199,19 +204,22 @@ fn main() {
         DeterminedLanguage::Zsharp => {
             panic!("Missing feature: smt,zok");
         }
+        #[cfg(all(feature = "smt", feature = "datalog"))]
         DeterminedLanguage::Datalog => {
-            let inputs = datalog::Inputs {
-                file: options.path,
-                rec_limit: options.frontend.rec_limit,
-                lint_prim_rec: options.frontend.lint_prim_rec,
-            };
+            let inputs = datalog::Inputs { file: options.path };
             Datalog::gen(inputs)
+        }
+        #[cfg(not(all(feature = "smt", feature = "datalog")))]
+        DeterminedLanguage::Datalog => {
+            panic!("Missing feature: smt,datalog");
         }
         #[cfg(feature = "c")]
         DeterminedLanguage::C => {
             let inputs = c::Inputs {
                 file: options.path,
                 mode,
+                sv_functions: options.circ.c.sv_functions,
+                assert_no_ub: options.circ.c.assert_no_ub,
             };
             C::gen(inputs)
         }
@@ -235,6 +243,8 @@ fn main() {
                     Opt::Sha,
                     Opt::ConstantFold(Box::new(ignore.clone())),
                     Opt::Flatten,
+                    // Function calls return tuples
+                    Opt::Tuple,
                     Opt::Obliv,
                     // The obliv elim pass produces more tuples, that must be eliminated
                     Opt::Tuple,
@@ -248,29 +258,33 @@ fn main() {
                 // vec![Opt::Sha, Opt::ConstantFold, Opt::Mem, Opt::ConstantFold],
             )
         }
-        Mode::Proof | Mode::ProofOfHighValue(_) => opt(
-            cs,
-            vec![
-                Opt::ScalarizeVars,
-                Opt::Flatten,
-                Opt::Sha,
-                Opt::ConstantFold(Box::new([])),
-                Opt::Flatten,
-                Opt::Inline,
-                // Tuples must be eliminated before oblivious array elim
-                Opt::Tuple,
-                Opt::ConstantFold(Box::new([])),
-                Opt::Obliv,
-                // The obliv elim pass produces more tuples, that must be eliminated
-                Opt::Tuple,
-                Opt::LinearScan,
-                // The linear scan pass produces more tuples, that must be eliminated
-                Opt::Tuple,
-                Opt::Flatten,
-                Opt::ConstantFold(Box::new([])),
-                Opt::Inline,
-            ],
-        ),
+        Mode::Proof | Mode::ProofOfHighValue(_) => {
+            let mut opts = Vec::new();
+
+            opts.push(Opt::ScalarizeVars);
+            opts.push(Opt::Flatten);
+            opts.push(Opt::Sha);
+            opts.push(Opt::ConstantFold(Box::new([])));
+            opts.push(Opt::ParseCondStores);
+            // Tuples must be eliminated before oblivious array elim
+            opts.push(Opt::Tuple);
+            opts.push(Opt::ConstantFold(Box::new([])));
+            opts.push(Opt::Tuple);
+            opts.push(Opt::Obliv);
+            // The obliv elim pass produces more tuples, that must be eliminated
+            opts.push(Opt::Tuple);
+            if options.circ.ram.enabled {
+                opts.push(Opt::PersistentRam);
+                opts.push(Opt::VolatileRam);
+                opts.push(Opt::SkolemizeChallenges);
+            }
+            opts.push(Opt::LinearScan);
+            // The linear scan pass produces more tuples, that must be eliminated
+            opts.push(Opt::Tuple);
+            opts.push(Opt::Flatten);
+            opts.push(Opt::ConstantFold(Box::new([])));
+            opt(cs, opts)
+        }
     };
     println!("Done with IR optimization");
 
@@ -280,35 +294,73 @@ fn main() {
             action,
             prover_key,
             verifier_key,
-            lc_elimination_thresh,
+            proof_impl,
             ..
         } => {
             println!("Converting to r1cs");
-            let (r1cs, mut prover_data, verifier_data) =
-                to_r1cs(cs.get("main").clone(), FieldT::from(DFL_T.modulus()));
+            let cs = cs.get("main");
+            trace!("IR: {}", circ::ir::term::text::serialize_computation(cs));
+            let mut r1cs = to_r1cs(cs, cfg());
+
             println!("Pre-opt R1cs size: {}", r1cs.constraints().len());
-            let r1cs = reduce_linearities(r1cs, Some(lc_elimination_thresh));
+            r1cs = reduce_linearities(r1cs, cfg());
+
             println!("Final R1cs size: {}", r1cs.constraints().len());
-            // save the optimized r1cs: the prover needs it to synthesize.
-            prover_data.r1cs = r1cs;
+            let (prover_data, verifier_data) = r1cs.finalize(cs);
             match action {
                 ProofAction::Count => (),
+                #[cfg(feature = "bellman")]
                 ProofAction::Setup => {
                     println!("Generating Parameters");
-                    gen_params::<Bls12, _, _>(
-                        prover_key,
-                        verifier_key,
-                        &prover_data,
-                        &verifier_data,
-                    )
-                    .unwrap();
+                    match proof_impl {
+                        ProofImpl::Groth16 => Bellman::<Bls12>::setup_fs(
+                            prover_data,
+                            verifier_data,
+                            prover_key,
+                            verifier_key,
+                        )
+                        .unwrap(),
+                        ProofImpl::Mirage => Mirage::<Bls12>::setup_fs(
+                            prover_data,
+                            verifier_data,
+                            prover_key,
+                            verifier_key,
+                        )
+                        .unwrap(),
+                    };
                 }
+                #[cfg(not(feature = "bellman"))]
+                ProofAction::Setup => panic!("Missing feature: bellman"),
+                #[cfg(feature = "bellman")]
+                ProofAction::CpSetup => {
+                    println!("Generating Parameters");
+                    match proof_impl {
+                        ProofImpl::Groth16 => panic!("Groth16 is not CP"),
+                        ProofImpl::Mirage => Mirage::<Bls12>::cp_setup_fs(
+                            prover_data,
+                            verifier_data,
+                            prover_key,
+                            verifier_key,
+                        )
+                        .unwrap(),
+                    };
+                }
+                #[cfg(not(feature = "bellman"))]
+                ProofAction::CpSetup => panic!("Missing feature: bellman"),
+                #[cfg(feature = "spartan")]
+                ProofAction::SpartanSetup => {
+                    write_data::<_, _>(prover_key, verifier_key, &prover_data, &verifier_data)
+                        .unwrap();
+                }
+                #[cfg(not(feature = "spartan"))]
+                ProofAction::SpartanSetup => panic!("Missing feature: spartan"),
             }
         }
         #[cfg(not(feature = "r1cs"))]
         Backend::R1cs { .. } => {
             panic!("Missing feature: r1cs");
         }
+        #[cfg(feature = "aby")]
         Backend::Mpc {
             cost_model,
             selection_scheme,
@@ -319,15 +371,13 @@ fn main() {
                 DeterminedLanguage::Zsharp => "zok".to_string(),
                 _ => panic!("Language isn't supported by MPC backend: {:#?}", language),
             };
-            println!("Cost model: {}", cost_model);
-            println!("Selection scheme: {}", selection_scheme);
-            to_aby(
-                cs.get("main").clone(),
-                &path_buf,
-                &lang_str,
-                &cost_model,
-                &selection_scheme,
-            );
+            println!("Cost model: {cost_model}");
+            println!("Selection scheme: {selection_scheme}");
+            to_aby(cs, &path_buf, &lang_str, &cost_model, &selection_scheme);
+        }
+        #[cfg(not(feature = "aby"))]
+        Backend::Mpc { .. } => {
+            panic!("Missing feature: aby");
         }
         #[cfg(feature = "lp")]
         Backend::Ilp { .. } => {
@@ -336,9 +386,12 @@ fn main() {
                 .get("main")
                 .clone()
                 .metadata
-                .input_vis
+                .ordered_inputs()
                 .iter()
-                .map(|(name, (sort, _))| (name.clone(), check(sort)))
+                .map(|term| match term.op() {
+                    Op::Var(n, s) => (n.clone(), s.clone()),
+                    _ => unreachable!(),
+                })
                 .collect();
             let ilp = to_ilp(cs.get("main").clone());
             let solver_result = ilp.solve(default_solver);
@@ -358,14 +411,15 @@ fn main() {
         }
         #[cfg(feature = "smt")]
         Backend::Smt { .. } => {
-            if options.frontend.lint_prim_rec {
-                let main_comp = cs.get("main").clone();
-                assert_eq!(main_comp.outputs.len(), 1);
-                match find_model(&main_comp.outputs[0]) {
+            let main_comp = cs.get("main").clone();
+            assert_eq!(main_comp.outputs.len(), 1);
+            let model = find_model(&main_comp.outputs[0]);
+            if options.circ.datalog.lint_prim_rec {
+                match model {
                     Some(m) => {
                         println!("Not primitive recursive!");
                         for (var, val) in m {
-                            println!("{} -> {}", var, val);
+                            println!("{var} -> {val}");
                         }
                         std::process::exit(1)
                     }
@@ -374,7 +428,18 @@ fn main() {
                     }
                 }
             } else {
-                todo!()
+                match model {
+                    Some(m) => {
+                        println!("Property does not hold!\nCounterexample:");
+                        for (var, val) in m {
+                            println!("{var} -> {val}");
+                        }
+                        std::process::exit(1)
+                    }
+                    None => {
+                        println!("Property holds");
+                    }
+                }
             }
         }
         #[cfg(not(feature = "smt"))]

@@ -13,8 +13,8 @@ use circ::ir::opt::{opt, Opt};
 /*
 use circ::target::r1cs::bellman::parse_instance;
 */
-use circ::target::r1cs::opt::reduce_linearities;
-use circ::target::r1cs::trans::to_r1cs;
+// use circ::target::r1cs::opt::reduce_linearities;
+// use circ::target::r1cs::trans::to_r1cs;
 /*
 use std::fs::File;
 use std::io::Read;
@@ -131,12 +131,12 @@ fn main() {
             println!("  Name: {}, ID: {}", n, pid);
         }
         println!("Party Visibility:");
-        for (i, (t, pid)) in &c.metadata.input_vis {
-            println!("  Input: {}, Term: {}, Vis: {:?}", i, t, pid);
-        }
+        // for (i, (t, pid)) in &c.metadata.input_vis {
+            // println!("  Input: {}, Term: {}, Vis: {:?}", i, t, pid);
+        // }
         println!("Output:");
         for t in &c.outputs {
-            println!("  {}", t.get());
+            println!("  {}", t);
         }
     }
 

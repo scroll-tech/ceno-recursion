@@ -27,7 +27,7 @@ use std::collections::HashMap;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use crate::front::zsharp::*;
-use pest::Span;
+use crate::front::PUBLIC_VIS;
 
 fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast>) -> Expression<'ast> {
     let ce = Expression::Binary(BinaryExpression {
@@ -526,6 +526,7 @@ impl<'ast> Block<'ast> {
             }
             Statement::Iteration(_) => { Err(format!("Blocks should not contain iteration statements.")) }
             Statement::Conditional(_) => { Err(format!("Blocks should not contain conditional statements.")) }
+            Statement::CondStore(_) => { Err(format!("Blocks should not contain conditional store statements.")) }
             Statement::Definition(d) => {
                 // XXX(unimpl) multi-assignment unimplemented
                 assert!(d.lhs.len() <= 1);
@@ -1532,6 +1533,7 @@ impl<'ast> ZGen<'ast> {
                 });
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(new_stmt));
             }
+            Statement::CondStore(_) => { panic!("Conditional store statements unsupported.") }
         }
         Ok((blks, blks_len, func_phy_assign, sp_offset, var_scope_info))
     }

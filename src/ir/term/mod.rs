@@ -1785,7 +1785,7 @@ pub struct ComputationMetadata {
     /// A map from variables to their metadata
     vars: FxHashMap<String, VariableMetadata>,
     /// A map from party names to numbers assigned to them.
-    party_ids: FxHashMap<String, PartyId>,
+    pub party_ids: FxHashMap<String, PartyId>,
     /// Committments.
     ///
     /// Each commitment is a vector of variables.

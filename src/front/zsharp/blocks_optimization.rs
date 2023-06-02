@@ -593,6 +593,7 @@ fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
         Statement::Conditional(_) => {
             panic!("Blocks should not contain conditional statements.")
         }
+        Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
     }
 }
 
@@ -1529,10 +1530,10 @@ fn var_to_reg(
                     new_instr.push(BlockContent::Stmt(Statement::Assertion(new_stmt)));
                 }
                 BlockContent::Stmt(Statement::Iteration(_)) => {
-                    panic!("Blocks should not contain iteration statements.");
+                    panic!("Blocks should not contain iteration statements.")
                 }
                 BlockContent::Stmt(Statement::Conditional(_)) => {
-                    panic!("Blocks should not contain if / else statements.");
+                    panic!("Blocks should not contain if / else statements.")
                 }
                 BlockContent::Stmt(Statement::Definition(d)) => {
                     let mut new_lhs: Vec<TypedIdentifierOrAssignee> = Vec::new();
@@ -1584,6 +1585,7 @@ fn var_to_reg(
                     };
                     new_instr.push(BlockContent::Stmt(Statement::Definition(new_stmt)));
                 }
+                BlockContent::Stmt(Statement::CondStore(_)) => { panic!("Blocks should not contain conditional store statements.") }
             }
         }
         bls[i].instructions = new_instr;

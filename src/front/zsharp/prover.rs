@@ -12,6 +12,7 @@ use crate::front::zsharp::blocks::*;
 use log::warn;
 use log::debug;
 use std::cmp::Ordering;
+use crate::ir::term::*;
 
 #[derive(Debug, Clone)]
 pub struct MemOp {
@@ -168,7 +169,7 @@ impl<'ast> ZGen<'ast> {
         let t = const_val(a)?;
         match t.ty {
             Ty::Field => {
-                match &t.term.get().op {
+                match &t.term.op() {
                     Op::Const(val) => {
                         match val {
                             Value::Field(f) => {
@@ -373,6 +374,7 @@ impl<'ast> ZGen<'ast> {
                         warn!("Statement with no LHS!");
                     }
                 }
+                BlockContent::Stmt(Statement::CondStore(_)) => { panic!("Blocks should not contain conditional store statements.") }
             }
         };
 

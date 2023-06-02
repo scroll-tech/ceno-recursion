@@ -10,6 +10,7 @@ pub fn pretty_stmt(indent: usize, s: &Statement) {
         Statement::Assertion(a) => { pretty_ass_stmt(a); }
         Statement::Iteration(i) => { pretty_ite_stmt(indent, i); }
         Statement::Conditional(c) => { pretty_cond_stmt(indent, c); }
+        Statement::CondStore(_) => { panic!("Conditional store statements not supported.") }
     }
 }
 

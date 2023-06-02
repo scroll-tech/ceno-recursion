@@ -167,12 +167,24 @@ impl<Ty: Display> LexScope<Ty> {
             entries: HashMap::default(),
         }
     }
+    /*
     fn declare(&mut self, name: VarName, ty: Ty) -> Result<&SsaName> {
         let p = &self.prefix;
         match self.entries.entry(name.clone()) {
             Entry::Vacant(v) => Ok(&v.insert(LexEntry::new(format!("{p}_{name}"), ty)).ssa_name),
             Entry::Occupied(o) => Err(CircError::Rebind(name, format!("{}", o.get().ty))),
         }
+    }
+    */
+    fn declare(&mut self, name: VarName, ty: Ty) -> Result<&SsaName> {
+        let p = &self.prefix;
+        let new_le = match self.entries.entry(name.clone()) {
+            Entry::Vacant(_) => LexEntry::new(format!("{}_{}", p, name), ty),
+            Entry::Occupied(_) => LexEntry::new_ver(format!("{}_{}", p, name), ty, self.entries.get(&name).unwrap().ver.clone() + 1)
+            // Entry::Occupied(o) => Err(CircError::Rebind(name, format!("{}", o.get().ty))),
+        };
+        self.entries.insert(name.clone(), new_le);
+        Ok(&self.entries.get(&name).ok_or_else(|| CircError::NoName(name.to_owned()))?.ssa_name)
     }
     fn get_name(&self, name: &str) -> Result<&SsaName> {
         Ok(&self
@@ -873,12 +885,14 @@ impl<E: Embeddable> Circify<E> {
         self.cir_ctx.mem.borrow_mut().load(id, offset)
     }
 
+    /*
     /// Push to Physical Memory
     /// Currently a dummy function
     pub fn push(&mut self, id: AllocId, val: Term) {
         let cond = self.condition();
         self.cir_ctx.mem.borrow_mut().push(id, val, cond);
     }
+    */
 
     /// Zero allocate an array
     pub fn zero_allocate(&mut self, size: usize, addr_width: usize, val_width: usize) -> AllocId {

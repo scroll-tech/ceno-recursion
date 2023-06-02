@@ -1,7 +1,5 @@
 //! The stack-allocation memory manager
 
-use hashconsing::UniqueConsign;
-
 use crate::ir::term::*;
 use std::collections::HashMap;
 
@@ -120,6 +118,7 @@ impl MemManager {
         alloc.cur_term = val;
     }
 
+    /*
     /// Append a new value to the end of AllocId
     /// Currently there are no array implementations
     pub fn push(&mut self, id: AllocId, val: Term, cond: Term) -> usize {
@@ -140,6 +139,7 @@ impl MemManager {
         alloc.cur_term = ite_store;
         alloc.sp
     }
+    */
 
     /// Is `offset` in bounds for the allocation `id`?
     pub fn in_bounds(&self, id: AllocId, offset: Term) -> Term {

@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::rc::Rc;
 use thiserror::Error;
+use fxhash::{FxHashMap};
 
 pub mod includer;
 pub mod mem;
@@ -218,7 +219,7 @@ pub struct CirCtx {
     /// Memory manager
     pub mem: Rc<RefCell<mem::MemManager>>,
     /// Underlying constraint system
-    pub cs: Rc<RefCell<Computation>>,
+    pub cs: Rc<RefCell<FxHashMap<String, Computation>>>,
 }
 
 #[derive(Debug)]
@@ -370,6 +371,7 @@ pub trait Embeddable {
     ///    knows the inputs to the precomputation, they can use the precomputation.
     fn declare_input(
         &self,
+        f: &str,
         ctx: &mut CirCtx,
         ty: &Self::Ty,
         name: String,
@@ -454,7 +456,7 @@ impl<E: Embeddable> Drop for Circify<E> {
 impl<E: Embeddable> Circify<E> {
     /// Creates an empty state management module
     pub fn new(e: E) -> Self {
-        let cs = Rc::new(RefCell::new(Computation::new()));
+        let cs = Rc::new(RefCell::new(FxHashMap::default()));
         Self {
             e,
             vals: HashMap::default(),
@@ -495,6 +497,7 @@ impl<E: Embeddable> Circify<E> {
     /// * mangle_name: if true, then creates a unique version of nice_name, and declares that. Otherwise, uses nice_name.
     pub fn declare_input(
         &mut self,
+        f: &str,
         nice_name: VarName,
         ty: &E::Ty,
         visibility: Option<PartyId>,
@@ -509,7 +512,7 @@ impl<E: Embeddable> Circify<E> {
         };
         let t = self
             .e
-            .declare_input(&mut self.cir_ctx, ty, name, visibility, precomputed_value);
+            .declare_input(f, &mut self.cir_ctx, ty, name, visibility, precomputed_value);
         assert!(self.vals.insert(ssa_name, Val::Term(t.clone())).is_none());
         Ok(t)
     }
@@ -753,8 +756,12 @@ impl<E: Embeddable> Circify<E> {
     }
 
     /// Assert something
-    pub fn assert(&mut self, t: Term) {
-        self.cir_ctx.cs.borrow_mut().assert(t);
+    pub fn assert(&mut self, f: &str, t: Term) {
+        if let Some(c) = self.cir_ctx.cs.borrow_mut().get_mut(f) {
+            c.assert(t);
+        } else {
+            panic!("Unknown computation: {}", f)
+        }
     }
 
     #[track_caller]
@@ -846,17 +853,18 @@ impl<E: Embeddable> Circify<E> {
             .unwrap_or_else(|| panic!("No type {}", name))
     }
 
+    /*
     /// Get the constraints from this manager
-    pub fn consume(mut self) -> Rc<RefCell<Computation>> {
-        std::mem::replace(
+    pub fn consume(mut self, f: &str) -> Rc<RefCell<Computation>> {
+        Rc::new(RefCell::new(std::mem::replace(
             &mut self.cir_ctx,
             CirCtx {
                 mem: Rc::new(RefCell::new(mem::MemManager::default())),
-                cs: Rc::new(RefCell::new(Computation::new())),
+                cs: Rc::new(RefCell::new(FxHashMap::default())),
             },
-        )
-        .cs
+        ).cs.get_mut(f).borrow_mut().unwrap().clone()))
     }
+    */
 
     /// Load from an AllocId
     pub fn load(&self, id: AllocId, offset: Term) -> Term {
@@ -905,16 +913,16 @@ impl<E: Embeddable> Circify<E> {
     /// Create a new persistent array.
     pub fn start_persistent_array(
         &mut self,
+        f: &str,
         var: &str,
         size: usize,
         field: circ_fields::FieldT,
         party: PartyId,
     ) -> E::T {
         let ir = self
-            .cir_ctx
-            .cs
-            .borrow_mut()
-            .start_persistent_array(var, size, field, party);
+        .cir_ctx
+        .cs
+        .borrow_mut().get_mut(f).unwrap().start_persistent_array(var, size, field, party);
         let t = self.e.wrap_persistent_array(ir);
         let ssa_name = self
             .declare_env_name(var.into(), &t.type_())
@@ -925,11 +933,14 @@ impl<E: Embeddable> Circify<E> {
     }
 
     /// Record the final state
-    pub fn end_persistent_array(&mut self, var: &str, final_state: Term) {
-        self.cir_ctx
+    pub fn end_persistent_array(&mut self, f: &str, var: &str, final_state: Term) {
+        if let Some(c) = self.cir_ctx
             .cs
-            .borrow_mut()
-            .end_persistent_array(var, final_state)
+            .borrow_mut().get_mut(f) {
+            c.end_persistent_array(var, final_state)
+        } else {
+            panic!("Unknown computation: {}", f)
+        }
     }
 }
 
@@ -1017,6 +1028,7 @@ mod test {
 
             fn declare_input(
                 &self,
+                f: &str,
                 ctx: &mut CirCtx,
                 ty: &Self::Ty,
                 name: String,
@@ -1024,7 +1036,7 @@ mod test {
                 precompute: Option<Self::T>,
             ) -> Self::T {
                 match ty {
-                    Ty::Bool => T::Base(ctx.cs.borrow_mut().new_var(
+                    Ty::Bool => T::Base(ctx.cs.borrow_mut().get_mut(f).unwrap().new_var(
                         &name,
                         Sort::Bool,
                         visibility,
@@ -1041,6 +1053,7 @@ mod test {
                         };
                         T::Pair(
                             Box::new(self.declare_input(
+                                f,
                                 ctx,
                                 a,
                                 format!("{name}.0"),
@@ -1048,6 +1061,7 @@ mod test {
                                 p_1,
                             )),
                             Box::new(self.declare_input(
+                                f,
                                 ctx,
                                 b,
                                 format!("{name}.1"),
@@ -1073,10 +1087,11 @@ mod test {
         fn trial() {
             let e = BoolPair();
             let mut c = Circify::new(e);
-            c.cir_ctx.cs.borrow_mut().metadata.add_prover_and_verifier();
-            c.declare_input("a".to_owned(), &Ty::Bool, Some(PROVER_ID), None, false)
+            c.cir_ctx.cs.borrow_mut().get_mut("main").unwrap().metadata.add_prover_and_verifier();
+            c.declare_input("main", "a".to_owned(), &Ty::Bool, Some(PROVER_ID), None, false)
                 .unwrap();
             c.declare_input(
+                "main",
                 "b".to_owned(),
                 &Ty::Pair(Box::new(Ty::Bool), Box::new(Ty::Bool)),
                 Some(PROVER_ID),

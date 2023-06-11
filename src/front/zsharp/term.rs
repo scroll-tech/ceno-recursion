@@ -932,6 +932,7 @@ impl Embeddable for ZSharp {
     type Ty = Ty;
     fn declare_input(
         &self,
+        f: &str,
         ctx: &mut CirCtx,
         ty: &Self::Ty,
         name: String,
@@ -941,7 +942,7 @@ impl Embeddable for ZSharp {
         match ty {
             Ty::Bool => T::new(
                 Ty::Bool,
-                ctx.cs.borrow_mut().new_var(
+                ctx.cs.borrow_mut().get_mut(f).unwrap().new_var(
                     &name,
                     Sort::Bool,
                     visibility,
@@ -950,7 +951,7 @@ impl Embeddable for ZSharp {
             ),
             Ty::Field => T::new(
                 Ty::Field,
-                ctx.cs.borrow_mut().new_var(
+                ctx.cs.borrow_mut().get_mut(f).unwrap().new_var(
                     &name,
                     default_field_sort(),
                     visibility,
@@ -959,7 +960,7 @@ impl Embeddable for ZSharp {
             ),
             Ty::Uint(w) => T::new(
                 Ty::Uint(*w),
-                ctx.cs.borrow_mut().new_var(
+                ctx.cs.borrow_mut().get_mut(f).unwrap().new_var(
                     &name,
                     Sort::BitVector(*w),
                     visibility,
@@ -975,7 +976,7 @@ impl Embeddable for ZSharp {
                 debug_assert_eq!(*n, ps.len());
                 array(
                     ps.into_iter().enumerate().map(|(i, p)| {
-                        self.declare_input(ctx, ty, idx_name(&name, i), visibility, p)
+                        self.declare_input(f, ctx, ty, idx_name(&name, i), visibility, p)
                     }),
                 )
                 .unwrap()
@@ -989,7 +990,7 @@ impl Embeddable for ZSharp {
                 debug_assert_eq!(*n, ps.len());
                 array(
                     ps.into_iter().enumerate().map(|(i, p)| {
-                        self.declare_input(ctx, &Ty::Field, idx_name(&name, i), visibility, p)
+                        self.declare_input(f, ctx, &Ty::Field, idx_name(&name, i), visibility, p)
                     }),
                 )
                 .unwrap()
@@ -1001,6 +1002,7 @@ impl Embeddable for ZSharp {
                         (
                             f_name.clone(),
                             self.declare_input(
+                                f,
                                 ctx,
                                 f_ty,
                                 field_name(&name, f_name),

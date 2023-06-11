@@ -288,6 +288,27 @@ fn main() {
     };
     println!("Done with IR optimization");
 
+    for (name, c) in &cs.comps {
+        println!("\n--\nName: {}", name);
+        println!("Pre-Comp:");
+        for (inst, t) in c.precomputes.outputs() {
+            println!("  Inst: {}, Term: {}", inst, t);
+        }
+        println!("Party ID:");
+        for (n, pid) in &c.metadata.party_ids {
+            println!("  Name: {}, ID: {}", n, pid);
+        }
+        println!("Party Visibility:");
+        // for (i, (t, pid)) in &c.metadata.input_vis {
+            // println!("  Input: {}, Term: {}, Vis: {:?}", i, t, pid);
+        // }
+        println!("Output:");
+        for t in &c.outputs {
+            println!("  {}", t);
+        }
+    }
+
+    /*
     match options.backend {
         #[cfg(feature = "r1cs")]
         Backend::R1cs {
@@ -446,5 +467,5 @@ fn main() {
         Backend::Smt { .. } => {
             panic!("Missing feature: smt");
         }
-    }
+    }*/
 }

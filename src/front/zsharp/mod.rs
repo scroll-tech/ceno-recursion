@@ -31,7 +31,6 @@ use zvisit::{ZConstLiteralRewriter, ZGenericInf, ZStatementWalker, ZVisitorMut};
 
 // garbage collection increment for adaptive GC threshold
 const GC_INC: usize = 32;
-const USE_BLOCKS: bool = true;
 const VERBOSE: bool = false;
 
 /// Inputs to the Z# compiler
@@ -59,48 +58,37 @@ impl FrontEnd for ZSharpFE {
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
         
-        if USE_BLOCKS {
-            let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
-            println!("Entry block: {entry_bl}");
-            for b in &blks {
-                b.pretty();
-                println!("");
-            }
-            let (blks, _, _) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
-            println!("\n\n--\nCirc IR:");
-            g.bls_to_circ(&blks);
+        let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
+        println!("Entry block: {entry_bl}");
+        for b in &blks {
+            b.pretty();
+            println!("");
+        }
+        let (blks, _, _) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
+        println!("\n\n--\nCirc IR:");
+        g.bls_to_circ(&blks);
 
-            g.generics_stack_pop();
-            g.file_stack_pop();
-            let mut cs = Computations::new();
+        g.generics_stack_pop();
+        g.file_stack_pop();
+        let mut cs = Computations::new();
+        cs.comps = g.into_circify().cir_ctx().cs.borrow_mut().clone();
 
-            for b in blks {
-                let name = b.name.to_string();
-                let blk_comp = std::rc::Rc::try_unwrap(b.get_circify().consume())
-                    .unwrap_or_else(|rc| (*rc).clone())
-                    .into_inner();
-                cs.comps.insert(format!("Block {}", name), blk_comp.clone());
-            }
-
-            /*
-            let main_comp = std::rc::Rc::try_unwrap(g.into_circify().consume())
+        /*
+        for b in blks {
+            let name = b.name.to_string();
+            let blk_comp = std::rc::Rc::try_unwrap(g.into_circify().consume(&name))
                 .unwrap_or_else(|rc| (*rc).clone())
                 .into_inner();
-            cs.comps.insert("main".to_string(), main_comp);*/
-            cs
-        } else {
-            g.entry_fn("main");
+            cs.comps.insert(format!("Block {}", name), blk_comp.clone());
+        }
+        */
 
-            g.generics_stack_pop();
-            g.file_stack_pop();
-            let mut cs = Computations::new();
-
-            let main_comp = std::rc::Rc::try_unwrap(g.into_circify().consume())
-                .unwrap_or_else(|rc| (*rc).clone())
-                .into_inner();
-            cs.comps.insert("main".to_string(), main_comp);
-            cs
-        } 
+        /*
+        let main_comp = std::rc::Rc::try_unwrap(g.into_circify().consume())
+            .unwrap_or_else(|rc| (*rc).clone())
+            .into_inner();
+        cs.comps.insert("main".to_string(), main_comp);*/
+        cs
     }
 }
 
@@ -114,26 +102,22 @@ impl ZSharpFE {
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
         
-        if USE_BLOCKS {
-            let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
-            println!("Entry block: {entry_bl}");
-            for b in &blks {
-                b.pretty();
-                println!("");
-            }
-            let (blks, entry_bl, reg_size) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
-            println!("\n\n--\nInterpretation:");
-            let (ret, bl_exec_count, mut bl_exec_state) = g.bl_eval_const_entry_fn::<true>(entry_bl, &blks, &reg_size)
-            .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-            let padding = blocks::generate_padding(&bl_exec_count);
-            bl_exec_state = blocks::append_dummy_exec_state(blks.len(), &bl_exec_count, &padding, bl_exec_state, &reg_size);
-            prover::print_state_list(&bl_exec_state);
-            let _ = prover::sort_by_block(&bl_exec_state);
-            let _ = prover::sort_by_mem(&bl_exec_state);
-            return ret;
-        } else {
-            g.const_entry_fn("main")
+        let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
+        println!("Entry block: {entry_bl}");
+        for b in &blks {
+            b.pretty();
+            println!("");
         }
+        let (blks, entry_bl, reg_size) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
+        println!("\n\n--\nInterpretation:");
+        let (ret, bl_exec_count, mut bl_exec_state) = g.bl_eval_const_entry_fn::<true>(entry_bl, &blks, &reg_size)
+        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+        let padding = blocks::generate_padding(&bl_exec_count);
+        bl_exec_state = blocks::append_dummy_exec_state(blks.len(), &bl_exec_count, &padding, bl_exec_state, &reg_size);
+        prover::print_state_list(&bl_exec_state);
+        let _ = prover::sort_by_block(&bl_exec_state);
+        let _ = prover::sort_by_mem(&bl_exec_state);
+        return ret;
     }
 }
 
@@ -231,6 +215,7 @@ impl<'ast> ZGen<'ast> {
             assertions: Default::default(),
             isolate_asserts,
         };
+        /*
         this.circ
             .borrow()
             .cir_ctx()
@@ -238,6 +223,7 @@ impl<'ast> ZGen<'ast> {
             .borrow_mut()
             .metadata
             .add_prover_and_verifier();
+        */
         this
     }
 
@@ -702,6 +688,7 @@ impl<'ast> ZGen<'ast> {
         }
     }
 
+    /*
     fn const_entry_fn(&self, n: &str) -> T {
         debug!("Const entry: {}", n);
         let (f_file, f_name) = self.deref_import(n);
@@ -750,7 +737,7 @@ impl<'ast> ZGen<'ast> {
             if let ZVis::Committed = &vis {
                 persistent_arrays.push(p.id.value.clone());
             }
-            let r = self.circ_declare_input(p.id.value.clone(), &ty, vis, None, false);
+            let r = self.circ_declare_input(n, p.id.value.clone(), &ty, vis, None, false);
             self.unwrap(r, &p.span);
         }
         for s in &f.statements {
@@ -763,7 +750,7 @@ impl<'ast> ZGen<'ast> {
                 .unwrap_term()
                 .term;
             trace!("End persistent_array {a}, {}", term);
-            self.circ.borrow_mut().end_persistent_array(&a, term);
+            self.circ.borrow_mut().end_persistent_array(n, &a, term);
         }
         if let Some(r) = self.circ_exit_fn() {
             match self.mode {
@@ -783,7 +770,7 @@ impl<'ast> ZGen<'ast> {
                     let name = "return".to_owned();
                     let ret_val = r.unwrap_term();
                     let ret_var_val = self
-                        .circ_declare_input(name, ty, ZVis::Public, Some(ret_val.clone()), false)
+                        .circ_declare_input(n, name, ty, ZVis::Public, Some(ret_val.clone()), false)
                         .expect("circ_declare return");
                     let ret_eq = eq(ret_val, ret_var_val).unwrap().term;
                     let mut assertions = std::mem::take(&mut *self.assertions.borrow_mut());
@@ -793,7 +780,7 @@ impl<'ast> ZGen<'ast> {
                         assertions.push(ret_eq);
                         term(AND, assertions)
                     };
-                    self.circ.borrow_mut().assert(to_assert);
+                    self.circ.borrow_mut().assert(n, to_assert);
                 }
                 Mode::Opt => {
                     let ret_term = r.unwrap_term();
@@ -832,6 +819,7 @@ impl<'ast> ZGen<'ast> {
             }
         }
     }
+    */
     fn interpret_visibility(&self, visibility: &Option<ast::Visibility<'ast>>) -> ZVis {
         match visibility {
             None | Some(ast::Visibility::Public(_)) => ZVis::Public,
@@ -2000,6 +1988,7 @@ impl<'ast> ZGen<'ast> {
 
     fn circ_declare_input(
         &self,
+        f: &str,
         name: String,
         ty: &Ty,
         vis: ZVis,
@@ -2010,9 +1999,10 @@ impl<'ast> ZGen<'ast> {
             ZVis::Public => {
                 self.circ
                     .borrow_mut()
-                    .declare_input(name, ty, None, precomputed_value, mangle_name)
+                    .declare_input(f, name, ty, None, precomputed_value, mangle_name)
             }
             ZVis::Private(i) => self.circ.borrow_mut().declare_input(
+                f,
                 name,
                 ty,
                 Some(i),
@@ -2025,6 +2015,7 @@ impl<'ast> ZGen<'ast> {
                     _ => panic!(),
                 };
                 Ok(self.circ.borrow_mut().start_persistent_array(
+                    f,
                     &name,
                     size,
                     default_field(),

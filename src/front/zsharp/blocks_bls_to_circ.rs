@@ -6,7 +6,6 @@
 //       Multi-file program not supported
 //       What would happen if we put function calls in loop to / from?
 //       If b@1 is dead, can we avoid pushing-in b@0?
-//       Might be a good idea to avoid using physical memory at all here.
 //       Can try eliminate ternaries with a constant condition
 
 // Note:
@@ -28,12 +27,7 @@ use std::collections::HashMap;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use crate::front::zsharp::*;
-use pest::Span;
-use crate::circify::mem::AllocId;
-
-const MEM_SIZE: usize = 65536;
-const MEM_ADDR_WIDTH: usize = 16;
-const MEM_VALUE_WIDTH: usize = 32;
+use crate::front::PUBLIC_VIS;
 
 fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast>) -> Expression<'ast> {
     let ce = Expression::Binary(BinaryExpression {
@@ -167,9 +161,7 @@ pub struct Block<'ast> {
     pub inputs: Vec<(String, Option<Ty>, InputVisibility)>,
     pub outputs: Vec<(String, Option<Ty>)>,
     pub instructions: Vec<BlockContent<'ast>>,
-    pub terminator: BlockTerminator<'ast>,
-    pub circ: RefCell<Circify<ZSharp>>,
-    pub assertions: RefCell<Vec<Term>>
+    pub terminator: BlockTerminator<'ast>
 }
 
 #[derive(Clone)]
@@ -202,9 +194,7 @@ impl<'ast> Block<'ast> {
             inputs: Vec::new(),
             outputs: Vec::new(),
             instructions: Vec::new(),
-            terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1))),
-            circ: RefCell::new(Circify::new(ZSharp::new())),
-            assertions: Default::default()
+            terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1)))
         };
         input
     }
@@ -215,9 +205,7 @@ impl<'ast> Block<'ast> {
             inputs: old_bl.inputs.clone(),
             outputs: old_bl.outputs.clone(),
             instructions: old_bl.instructions.clone(),
-            terminator: old_bl.terminator.clone(),
-            circ: RefCell::new(Circify::new(ZSharp::new())),
-            assertions: Default::default()
+            terminator: old_bl.terminator.clone()
         };
         input
     }
@@ -281,8 +269,6 @@ impl<'ast> Block<'ast> {
 
     // Convert a block to circ_ir
     pub fn bl_to_circ(&self, mode: &Mode, isolate_asserts: &bool) {
-        // Allocate PHY_MEM
-        let phy_mem_id = self.circ_zero_allocate(MEM_SIZE, MEM_ADDR_WIDTH, MEM_VALUE_WIDTH);
 
         // setup stack frame for entry function
         // returns the next block, so return type is Field
@@ -304,38 +290,110 @@ impl<'ast> Block<'ast> {
 
         for i in &self.instructions {
             match i {
-                BlockContent::MemPush((var, _, _)) => {
-                    /*let val = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
-                        value: format!("{}", var.clone()),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    self.circ_push(phy_mem_id, val.term);*/
-                }
-                BlockContent::MemPop((var, ty, offset)) => {
-                    // Non-deterministically supply the POP value
-                    let r = self.circ_declare_input(
-                        var.clone(),
+                BlockContent::MemPush((var, ty, offset)) => {
+                    // Non-deterministically supply ADDR and VAL in memory
+                    self.circ_declare_input(
+                        "PHY_MEM_VAL".to_string(),
                         ty,
                         Some(0),
                         None,
                         true,
-                    );
-                    r.unwrap();
-                    /*let offset_term = TermData {
-                        op: Op::Const(Value::BitVector(BitVector::new(
-                            rug::Integer::from(*offset),
-                            MEM_ADDR_WIDTH
-                        ))),
-                        cs: Vec::new()
-                    }.unique_make();
-                    // Generate assertion statement
+                    ).unwrap();
+                    self.circ_declare_input(
+                        "PHY_MEM_ADDR".to_string(),
+                        ty,
+                        Some(0),
+                        None,
+                        true,
+                    ).unwrap();
+                    // Assert correctness of value
                     let lhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
-                        value: format!("{}", var.clone()),
+                        value: var.to_string(),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
-                    let rhs_t = self.circ_read(phy_mem_id, offset_term);
-                    let b = bool(eq(lhs_t, T::new(ty.clone(), rhs_t)).unwrap()).unwrap();
-                    self.assert(b, isolate_asserts);  */          
+                    let rhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
+                        value: "PHY_MEM_VAL".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                    self.assert(b, isolate_asserts);
+                    // Assert correctness of address
+                    let lhs_t = self.expr_impl_(&Expression::Binary(BinaryExpression {
+                        op: BinaryOperator::Add,
+                        left: Box::new(Expression::Identifier(IdentifierExpression {
+                            value: "%SP".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                            value: DecimalNumber {
+                                value: offset.to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            span: Span::new("", 0, 0).unwrap()
+                        }))),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let rhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
+                        value: "PHY_MEM_ADDR".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                    self.assert(b, isolate_asserts);
+                }
+                BlockContent::MemPop((var, ty, offset)) => {
+                    // Non-deterministically supply ADDR and VAL in memory
+                    self.circ_declare_input(
+                        "PHY_MEM_VAL".to_string(),
+                        ty,
+                        Some(0),
+                        None,
+                        true,
+                    ).unwrap();
+                    self.circ_declare_input(
+                        "PHY_MEM_ADDR".to_string(),
+                        ty,
+                        Some(0),
+                        None,
+                        true,
+                    ).unwrap();
+                    // Assign POP value to val
+                    let e = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
+                        value: "PHY_MEM_VAL".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    self.declare_init_impl_(
+                        var.clone(),
+                        ty.clone(),
+                        e,
+                    ).unwrap();
+                    // Assert correctness of address
+                    let lhs_t = self.expr_impl_(&Expression::Binary(BinaryExpression {
+                        op: BinaryOperator::Add,
+                        left: Box::new(Expression::Identifier(IdentifierExpression {
+                            value: "%BP".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                            value: DecimalNumber {
+                                value: offset.to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            span: Span::new("", 0, 0).unwrap()
+                        }))),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let rhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
+                        value: "PHY_MEM_ADDR".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                    self.assert(b, isolate_asserts);  
                 }
                 BlockContent::Stmt(stmt) => { self.stmt_impl_(&stmt, isolate_asserts).unwrap(); }
             }
@@ -462,6 +520,7 @@ impl<'ast> Block<'ast> {
             }
             Statement::Iteration(_) => { Err(format!("Blocks should not contain iteration statements.")) }
             Statement::Conditional(_) => { Err(format!("Blocks should not contain conditional statements.")) }
+            Statement::CondStore(_) => { Err(format!("Blocks should not contain conditional store statements.")) }
             Statement::Definition(d) => {
                 // XXX(unimpl) multi-assignment unimplemented
                 assert!(d.lhs.len() <= 1);
@@ -664,12 +723,6 @@ impl<'ast> Block<'ast> {
 
     /*** circify wrapper functions (hides RefCell) ***/
 
-    fn circ_zero_allocate(&self, size: usize, addr_width: usize, val_width: usize) -> AllocId {
-        self.circ
-            .borrow_mut()
-            .zero_allocate(size, addr_width, val_width)
-    }
-
     fn circ_enter_condition(&self, cond: Term) {
         self.circ.borrow_mut().enter_condition(cond).unwrap();
     }
@@ -713,14 +766,6 @@ impl<'ast> Block<'ast> {
 
     fn circ_return_(&self, ret: Option<T>) -> Result<(), CircError> {
         self.circ.borrow_mut().return_(ret)
-    }
-
-    fn circ_read(&self, phy_mem_id: AllocId, idx: Term) -> Term {
-        self.circ.borrow_mut().read(phy_mem_id, idx)
-    }
-
-    fn circ_push(&self, phy_mem_id: AllocId, v: Term) {
-        self.circ.borrow_mut().push(phy_mem_id, v)
     }
 }
 
@@ -1482,6 +1527,7 @@ impl<'ast> ZGen<'ast> {
                 });
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(new_stmt));
             }
+            Statement::CondStore(_) => { panic!("Conditional store statements unsupported.") }
         }
         Ok((blks, blks_len, func_phy_assign, sp_offset, var_scope_info))
     }
@@ -1757,182 +1803,9 @@ impl<'ast> ZGen<'ast> {
 
     // Convert a list of blocks to circ_ir
     pub fn bls_to_circ(&'ast self, blks: &Vec<Block>) {
-        let phy_mem_id = self.circ_zero_allocate(MEM_SIZE, MEM_ADDR_WIDTH, MEM_VALUE_WIDTH);
         for b in blks {
-            self.bl_to_circ(&b, &phy_mem_id);
-            break;
+            b.bl_to_circ(&self.mode, &self.isolate_asserts);
         }
-    }
-
-    // Convert a block to circ_ir
-    pub fn bl_to_circ(&self, b: &Block, phy_mem_id: &AllocId) {
-        // setup stack frame for entry function
-        // returns the next block, so return type is Field
-        let ret_ty = Some(Ty::Field);
-        self.circ_enter_fn(format!("Block_{}", b.name), ret_ty.clone());
-
-        for (name, ty, vis) in &b.inputs {
-            if let Some(x) = ty {
-                let r = self.circ_declare_input(
-                    name.clone(),
-                    x,
-                    if *vis == InputVisibility::Public { None } else { Some(0) },
-                    None,
-                    true,
-                );
-                r.unwrap();
-            }
-        }
-
-        for i in &b.instructions {
-            match i {
-                BlockContent::MemPush((var, _, _)) => {
-                    /*let val = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
-                        value: format!("{}", var.clone()),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    self.circ_push(phy_mem_id, val.term);*/
-                }
-                BlockContent::MemPop((var, ty, offset)) => {
-                    // Non-deterministically supply the POP value
-                    let r = self.circ_declare_input(
-                        var.clone(),
-                        ty,
-                        Some(0),
-                        None,
-                        true,
-                    );
-                    r.unwrap();
-                    /*let offset_term = TermData {
-                        op: Op::Const(Value::BitVector(BitVector::new(
-                            rug::Integer::from(*offset),
-                            MEM_ADDR_WIDTH
-                        ))),
-                        cs: Vec::new()
-                    }.unique_make();
-                    // Generate assertion statement
-                    let lhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
-                        value: format!("{}", var.clone()),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    let rhs_t = self.circ_read(phy_mem_id, offset_term);
-                    let b = bool(eq(lhs_t, T::new(ty.clone(), rhs_t)).unwrap()).unwrap();
-                    self.assert(b, isolate_asserts);  */          
-                }
-                BlockContent::Stmt(stmt) => { self.stmt_impl_::<false>(&stmt).unwrap(); }
-            }
-        }
-
-        // Check the output variables
-        for (name, ty) in &b.outputs {
-            if let Some(x) = ty {
-                let r = self.circ_declare_input(
-                    format!("{}_out", name),
-                    x,
-                    Some(0),
-                    None,
-                    true,
-                );
-                r.unwrap();
-                // Generate assertion statement
-                let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                    value: format!("{}_out", name),
-                    span: Span::new("", 0, 0).unwrap()
-                })).unwrap();
-                let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                    value: name.to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                })).unwrap();
-                let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-                self.assert(b);
-            }
-        }
-
-        // Returns block transition
-        match &b.terminator {
-            BlockTerminator::Transition(e) => {
-                let ret = self.expr_impl_::<false>(e).unwrap();
-                self.circ_return_(Some(ret)).unwrap();
-            }
-            BlockTerminator::FuncCall(_) => { panic!("Blocks pending evaluation should not have FuncCall as terminator.") }
-            BlockTerminator::ProgTerm => {}
-        }
-
-        if let Some(r) = self.circ_exit_fn() {
-            match self.mode {
-                Mode::Mpc(_) => {
-                    let ret_term = r.unwrap_term();
-                    let ret_terms = ret_term.terms();
-                    self.circ
-                        .borrow()
-                        .cir_ctx()
-                        .cs
-                        .borrow_mut()
-                        .outputs
-                        .extend(ret_terms);
-                }
-                Mode::Proof => {
-                    let ty = ret_ty.as_ref().unwrap();
-                    let name = "return".to_owned();
-                    let ret_val = r.unwrap_term();
-                    let ret_var_val = self
-                        .circ_declare_input(name, ty, PUBLIC_VIS, Some(ret_val.clone()), false)
-                        .expect("circ_declare return");
-                    let ret_eq = eq(ret_val, ret_var_val).unwrap().term;
-                    let mut assertions = std::mem::take(&mut *self.assertions.borrow_mut());
-                    let to_assert = if assertions.is_empty() {
-                        ret_eq
-                    } else {
-                        assertions.push(ret_eq);
-                        term(AND, assertions)
-                    };
-                    self.circ.borrow_mut().assert(to_assert);
-                }
-                Mode::Opt => {
-                    let ret_term = r.unwrap_term();
-                    let ret_terms = ret_term.terms();
-                    assert!(
-                        ret_terms.len() == 1,
-                        "When compiling to optimize, there can only be one output"
-                    );
-                    let t = ret_terms.into_iter().next().unwrap();
-                    let t_sort = check(&t);
-                    if !matches!(t_sort, Sort::BitVector(_)) {
-                        panic!("Cannot maximize output of type {}", t_sort);
-                    }
-                    self.circ.borrow().cir_ctx().cs.borrow_mut().outputs.push(t);
-                }
-                /*
-                Mode::ProofOfHighValue(v) => {
-                    let ret_term = r.unwrap_term();
-                    let ret_terms = ret_term.terms();
-                    assert!(
-                        ret_terms.len() == 1,
-                        "When compiling to optimize, there can only be one output"
-                    );
-                    let t = ret_terms.into_iter().next().unwrap();
-                    let cmp = match check(&t) {
-                        Sort::BitVector(w) => term![BV_UGE; t, bv_lit(v, w)],
-                        s => panic!("Cannot maximize output of type {}", s),
-                    };
-                    self.circ
-                        .borrow()
-                        .cir_ctx()
-                        .cs
-                        .borrow_mut()
-                        .outputs
-                        .push(cmp);
-                }
-                */
-                _ => { panic!("Supported Mode!") }
-            }
-        }
-    }
-
-    fn circ_zero_allocate(&self, size: usize, addr_width: usize, val_width: usize) -> AllocId {
-        self.circ
-            .borrow_mut()
-            .zero_allocate(size, addr_width, val_width)
     }
 
 }

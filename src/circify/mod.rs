@@ -893,14 +893,12 @@ impl<E: Embeddable> Circify<E> {
         self.cir_ctx.mem.borrow_mut().load(id, offset)
     }
 
-    /*
     /// Push to Physical Memory
     /// Currently a dummy function
     pub fn push(&mut self, id: AllocId, val: Term) {
         let cond = self.condition();
         self.cir_ctx.mem.borrow_mut().push(id, val, cond);
     }
-    */
 
     /// Zero allocate an array
     pub fn zero_allocate(&mut self, size: usize, addr_width: usize, val_width: usize) -> AllocId {

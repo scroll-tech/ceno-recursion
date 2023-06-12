@@ -94,6 +94,7 @@ fn main() {
         ZSharpFE::gen(inputs)
     };
 
+/*
     print!("Optimizing IR... ");
     let cs = opt(
         cs,
@@ -119,6 +120,7 @@ fn main() {
         ],
     );
     println!("done.");
+*/
 
     for (name, c) in &cs.comps {
         println!("\n--\nName: {}", name);

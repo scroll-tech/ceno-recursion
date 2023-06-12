@@ -1,3 +1,5 @@
+// TODO: how to store field elements as bit-vector?
+
 //! The stack-allocation memory manager
 
 use crate::ir::term::*;
@@ -118,20 +120,19 @@ impl MemManager {
         alloc.cur_term = val;
     }
 
-    /*
     /// Append a new value to the end of AllocId
     /// Currently there are no array implementations
     pub fn push(&mut self, id: AllocId, val: Term, cond: Term) -> usize {
         let alloc = self.allocs.get_mut(&id).expect("Missing allocation");
         // Construct Index based on sp and addr_width
-        let offset = TermData {
-            op: Op::Const(Value::BitVector(BitVector::new(
+        let offset = term(
+            Op::Const(Value::BitVector(BitVector::new(
                 rug::Integer::from(alloc.sp),
                 alloc.addr_width
             ))),
-            cs: Vec::new()
-        }.unique_make();
-        assert_eq!(alloc.val_width, check(&val).as_bv());
+            Vec::new()
+        );
+        // assert_eq!(alloc.val_width, check(&val).as_bv());
         alloc.sp += 1;
         let old = alloc.cur_term.clone();
         let new = term![Op::Store; alloc.var().clone(), offset, val];
@@ -139,7 +140,6 @@ impl MemManager {
         alloc.cur_term = ite_store;
         alloc.sp
     }
-    */
 
     /// Is `offset` in bounds for the allocation `id`?
     pub fn in_bounds(&self, id: AllocId, offset: Term) -> Term {

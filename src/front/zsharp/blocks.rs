@@ -1339,11 +1339,11 @@ impl<'ast> ZGen<'ast> {
         for i in &b.instructions {
             match i {
                 BlockContent::MemPush((var, _, _)) => {
-                    /*let val = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
+                    let val = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
                         value: format!("{}", var.clone()),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
-                    self.circ_push(phy_mem_id, val.term);*/
+                    self.circ_push(phy_mem_id.clone(), val.term);
                 }
                 BlockContent::MemPop((var, ty, offset)) => {
                     // Non-deterministically supply the POP value
@@ -1356,21 +1356,21 @@ impl<'ast> ZGen<'ast> {
                         true,
                     );
                     r.unwrap();
-                    /*let offset_term = TermData {
-                        op: Op::Const(Value::BitVector(BitVector::new(
+                    let offset_term = term(
+                        Op::Const(Value::BitVector(BitVector::new(
                             rug::Integer::from(*offset),
                             MEM_ADDR_WIDTH
                         ))),
-                        cs: Vec::new()
-                    }.unique_make();
+                        Vec::new()
+                    );
                     // Generate assertion statement
-                    let lhs_t = self.expr_impl_(&Expression::Identifier(IdentifierExpression {
+                    let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
                         value: format!("{}", var.clone()),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
-                    let rhs_t = self.circ_read(phy_mem_id, offset_term);
+                    let rhs_t = self.circ_load(phy_mem_id.clone(), offset_term);
                     let b = bool(eq(lhs_t, T::new(ty.clone(), rhs_t)).unwrap()).unwrap();
-                    self.assert(b, isolate_asserts);  */          
+                    self.assert(b);         
                 }
                 BlockContent::Stmt(stmt) => { self.stmt_impl_::<false>(&stmt).unwrap(); }
             }
@@ -1509,6 +1509,13 @@ impl<'ast> ZGen<'ast> {
             .zero_allocate(size, addr_width, val_width)
     }
 
+    fn circ_push(&self, id: AllocId, val: Term) {
+        self.circ.borrow_mut().push(id, val)
+    }
+
+    fn circ_load(&self, id: AllocId, offset: Term) -> Term {
+        self.circ.borrow_mut().load(id, offset)
+    }
 }
 
 // Compute waste as explained below

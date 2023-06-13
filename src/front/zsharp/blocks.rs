@@ -9,12 +9,17 @@
 //       Might be a good idea to avoid using physical memory at all here.
 //       Can try eliminate ternaries with a constant condition
 
-// Note:
-//   Scopes are not unrolled UNTIL we actually write the variables into blocks
-//   As a result, decl_impl_, type_impl_, etc. should not be affected by scope unrolling
-
-// Questions:
-//   Should we use a VAR_in instead of VAR_v0? VAR_v0 could potentially be generated from a memory POP.
+// Next Step:
+//  The logical thing seems to be, for each blocks produce
+//      1. An input for every LOAD / STORE
+//      2. A set of constraints where each LOAD / STORE is replaced with an assertion
+//      3. A sequence of LOAD / STORE in the block
+//  The verifier then asks the prover to provide an execution sequence, and produces
+//      1. A unique identifier for each block in the execution (e.g. blk_X_occ_Y or exec_X)
+//      2. Block transition sequence check (easy if using exec_X, hard if blk_X_occ_Y)
+//      3. Memory consistency check (seems like we need to go through the list anyways)
+//      4. Set up circuit for each block (???)
+//  Q: Wouldn't this make the verifier's cost linear to the execution?
 
 use log::{debug, warn};
 
@@ -1338,14 +1343,122 @@ impl<'ast> ZGen<'ast> {
 
         for i in &b.instructions {
             match i {
-                BlockContent::MemPush((var, _, _)) => {
+                BlockContent::MemPush((var, ty, offset)) => {
+                    /*
                     let val = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
                         value: format!("{}", var.clone()),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     self.circ_push(phy_mem_id.clone(), val.term);
+                    */
+                    // Non-deterministically supply VAL in memory
+                    self.circ_declare_input(
+                        &f,
+                        "PHY_MEM_VAL".to_string(),
+                        ty,
+                        ZVis::Private(0),
+                        None,
+                        true,
+                    ).unwrap();
+                    self.circ_declare_input(
+                        &f,
+                        "PHY_MEM_ADDR".to_string(),
+                        ty,
+                        ZVis::Private(0),
+                        None,
+                        true,
+                    ).unwrap();
+                    // Assert correctness of value
+                    let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: var.to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: "PHY_MEM_VAL".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                    self.assert(b);
+                    // Assert correctness of address
+                    let lhs_t = self.expr_impl_::<false>(&Expression::Binary(BinaryExpression {
+                        op: BinaryOperator::Add,
+                        left: Box::new(Expression::Identifier(IdentifierExpression {
+                            value: "%SP".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                            value: DecimalNumber {
+                                value: offset.to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            span: Span::new("", 0, 0).unwrap()
+                        }))),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: "PHY_MEM_ADDR".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                    self.assert(b);
                 }
                 BlockContent::MemPop((var, ty, offset)) => {
+                    // Non-deterministically supply ADDR and VAL in memory
+                    self.circ_declare_input(
+                        &f,
+                        "PHY_MEM_VAL".to_string(),
+                        ty,
+                        ZVis::Private(0),
+                        None,
+                        true,
+                    ).unwrap();
+                    self.circ_declare_input(
+                        &f,
+                        "PHY_MEM_ADDR".to_string(),
+                        ty,
+                        ZVis::Private(0),
+                        None,
+                        true,
+                    ).unwrap();
+                    // Assign POP value to val
+                    let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: "PHY_MEM_VAL".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    self.declare_init_impl_::<false>(
+                        var.clone(),
+                        ty.clone(),
+                        e,
+                    ).unwrap();
+                    // Assert correctness of address
+                    let lhs_t = self.expr_impl_::<false>(&Expression::Binary(BinaryExpression {
+                        op: BinaryOperator::Add,
+                        left: Box::new(Expression::Identifier(IdentifierExpression {
+                            value: "%BP".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                            value: DecimalNumber {
+                                value: offset.to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            span: Span::new("", 0, 0).unwrap()
+                        }))),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: "PHY_MEM_ADDR".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                    self.assert(b);
+                    /*
                     // Non-deterministically supply the POP value
                     let r = self.circ_declare_input(
                         &f,
@@ -1370,7 +1483,8 @@ impl<'ast> ZGen<'ast> {
                     })).unwrap();
                     let rhs_t = self.circ_load(phy_mem_id.clone(), offset_term);
                     let b = bool(eq(lhs_t, T::new(ty.clone(), rhs_t)).unwrap()).unwrap();
-                    self.assert(b);         
+                    self.assert(b);   
+                    */      
                 }
                 BlockContent::Stmt(stmt) => { self.stmt_impl_::<false>(&stmt).unwrap(); }
             }

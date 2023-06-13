@@ -72,22 +72,6 @@ impl FrontEnd for ZSharpFE {
         g.file_stack_pop();
         let mut cs = Computations::new();
         cs.comps = g.into_circify().cir_ctx().cs.borrow_mut().clone();
-
-        /*
-        for b in blks {
-            let name = b.name.to_string();
-            let blk_comp = std::rc::Rc::try_unwrap(g.into_circify().consume(&name))
-                .unwrap_or_else(|rc| (*rc).clone())
-                .into_inner();
-            cs.comps.insert(format!("Block {}", name), blk_comp.clone());
-        }
-        */
-
-        /*
-        let main_comp = std::rc::Rc::try_unwrap(g.into_circify().consume())
-            .unwrap_or_else(|rc| (*rc).clone())
-            .into_inner();
-        cs.comps.insert("main".to_string(), main_comp);*/
         cs
     }
 }

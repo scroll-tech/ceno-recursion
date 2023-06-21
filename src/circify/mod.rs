@@ -2,6 +2,7 @@
 use crate::circify::mem::AllocId;
 use crate::ir::term::*;
 
+use crate::cfg::cfg;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -602,6 +603,18 @@ impl<E: Embeddable> Circify<E> {
         Ok(val)
     }
 
+    /// Add a new challenge
+    pub fn add_challenge(&mut self, f: &str, name: String, ty: E::Ty) -> Result<()> {
+        let ssa_name = self.declare_env_name(name, &ty)?.clone();
+        let t = self
+            .e
+            .declare_input(f, &mut self.cir_ctx, &ty, ssa_name.to_string(), None, None);
+        assert!(self.vals.insert(ssa_name.to_string(), Val::Term(t.clone())).is_none());
+        let t = term![Op::PfChallenge(ssa_name, cfg().field().clone())];
+        self.push(f, t);
+        Ok(())
+    }
+
     /// Assign `loc` in the current scope to `val`.
     ///
     /// If `public`, then make the new variable version a public (fixed) rather than private
@@ -764,6 +777,15 @@ impl<E: Embeddable> Circify<E> {
         }
     }
 
+    /// Assert something
+    pub fn push(&mut self, f: &str, t: Term) {
+        if let Some(c) = self.cir_ctx.cs.borrow_mut().get_mut(f) {
+            c.push(t);
+        } else {
+            panic!("Unknown computation: {}", f)
+        }
+    }
+
     #[track_caller]
     /// Exit a function call.
     ///
@@ -885,19 +907,6 @@ impl<E: Embeddable> Circify<E> {
     /// Replace term at AllocId
     pub fn replace(&mut self, id: AllocId, val: Term) {
         self.cir_ctx.mem.borrow_mut().replace(id, val);
-    }
-
-    /// Read from Physical Memory
-    /// Currently a dummy function
-    pub fn read(&self, id: AllocId, offset: Term) -> Term {
-        self.cir_ctx.mem.borrow_mut().load(id, offset)
-    }
-
-    /// Push to Physical Memory
-    /// Currently a dummy function
-    pub fn push(&mut self, id: AllocId, val: Term) {
-        let cond = self.condition();
-        self.cir_ctx.mem.borrow_mut().push(id, val, cond);
     }
 
     /// Zero allocate an array

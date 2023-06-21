@@ -1598,7 +1598,8 @@ fn var_to_reg(
     (bls, reg_map, reg_size)
 }
 
-// Fill input of every block with %RP, %SP, %BP, %RET, %4 ~ %(reg_size - 1) if they did not exist
+// Fill input of every block with %RP, %SP, %BP, %RET, %FGP, %4 ~ %(reg_size - 1) if they did not exist
+// (%FGP for memory fingerprinting)
 // Use dummy field type for these values
 fn fill_input_output<'bl>(
     mut bls: Vec<Block<'bl>>,

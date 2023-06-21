@@ -122,6 +122,12 @@ fn main() {
 
     for (name, c) in &cs.comps {
         println!("\n--\nName: {}", name);
+        println!("VariableMetadata:");
+        for v in &c.metadata.ordered_input_names() {
+            let m = &c.metadata.lookup(v);
+            println!("{}: vis: {}, round: {}, random: {}, committed: {}", 
+                v, if m.vis == None {"PUBLIC"} else {if m.vis == Some(0) {"PROVER"} else {"VERIFIER"}}, m.round.to_string(), m.random.to_string(), m.committed.to_string());
+        }
         println!("Output:");
         for t in &c.outputs {
             println!("  {}", t);

@@ -905,6 +905,10 @@ pub fn bit_array_le(a: T, b: T, n: usize) -> Result<T, String> {
     ))
 }
 
+pub fn gen_challenge(challenge_name: &str) -> Result<Term, String> {
+    Ok(term![Op::PfChallenge(challenge_name.to_string(), default_field())])
+}
+
 pub struct ZSharp {}
 
 fn field_name(struct_name: &str, field_name: &str) -> String {

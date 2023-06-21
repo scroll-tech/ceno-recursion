@@ -2214,6 +2214,12 @@ impl Computation {
         self.outputs.push(s);
     }
 
+    /// Push `s` in the system.
+    pub fn push(&mut self, s: Term) {
+        debug!("Push: {}", &s.op());
+        self.outputs.push(s);
+    }
+
     /// Create a new system, which tracks values iff `values`.
     pub fn new() -> Self {
         Self {

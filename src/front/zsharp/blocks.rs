@@ -33,11 +33,7 @@ use std::collections::HashMap;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use crate::front::zsharp::*;
-use crate::circify::mem::AllocId;
 
-const MEM_SIZE: usize = 65536;
-const MEM_ADDR_WIDTH: usize = 16;
-const MEM_VALUE_WIDTH: usize = 32;
 
 fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast>) -> Expression<'ast> {
     let ce = Expression::Binary(BinaryExpression {
@@ -153,6 +149,7 @@ fn bl_gen_update_sp<'ast>(sp_offset: usize) -> Statement<'ast> {
 #[derive(Clone, PartialEq)]
 pub enum InputVisibility {
     Prover,
+    Verifier,
     Public
 }
 
@@ -160,6 +157,7 @@ impl InputVisibility {
     pub fn pretty(&self) {
         match &self {
             InputVisibility::Prover => {println!("Prover")}
+            InputVisibility::Verifier => {println!("Verifier")}
             InputVisibility::Public => {println!("Public")}
         }
     }
@@ -1310,30 +1308,39 @@ impl<'ast> ZGen<'ast> {
         Ok((blks, sp_offset))
     }
 
+    pub fn vis_to_zvis(&self, input: InputVisibility) -> ZVis {
+        match input {
+            InputVisibility::Public => ZVis::Public,
+            InputVisibility::Prover => ZVis::Private(0),
+            InputVisibility::Verifier => ZVis::Private(1)
+        }
+    }
+
     // Convert a list of blocks to circ_ir
     pub fn bls_to_circ(&'ast self, blks: &Vec<Block>) {
-        let phy_mem_id = self.circ_zero_allocate(MEM_SIZE, MEM_ADDR_WIDTH, MEM_VALUE_WIDTH);
+        // let phy_mem_id = self.circ_zero_allocate(MEM_SIZE, MEM_ADDR_WIDTH, MEM_VALUE_WIDTH);
         for b in blks {
             self.circ_init_block(&format!("Block_{}", b.name));
-            self.bl_to_circ(&b, &phy_mem_id);
+            self.bl_to_circ(&b);
         }
     }
 
     // Convert a block to circ_ir
-    pub fn bl_to_circ(&self, b: &Block, phy_mem_id: &AllocId) {
+    pub fn bl_to_circ(&self, b: &Block) {
         let f = format!("Block_{}", b.name);
         // setup stack frame for entry function
         // returns the next block, so return type is Field
         let ret_ty = Some(Ty::Field);
         self.circ_enter_fn(format!("Block_{}", b.name), ret_ty.clone());
 
+        // Inputs of the block
         for (name, ty, vis) in &b.inputs {
             if let Some(x) = ty {
                 let r = self.circ_declare_input(
                     &f,
                     name.clone(),
                     x,
-                    if *vis == InputVisibility::Public { ZVis::Public } else { ZVis::Private(0) },
+                    self.vis_to_zvis(vis.clone()),
                     None,
                     true,
                 );
@@ -1341,30 +1348,25 @@ impl<'ast> ZGen<'ast> {
             }
         }
 
+        // How many memory operations have we encountered?
+        let mut mem_op_count = 0;
         for i in &b.instructions {
             match i {
                 BlockContent::MemPush((var, ty, offset)) => {
-                    /*
-                    let val = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("{}", var.clone()),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    self.circ_push(phy_mem_id.clone(), val.term);
-                    */
                     // Non-deterministically supply VAL in memory
                     self.circ_declare_input(
                         &f,
-                        "PHY_MEM_VAL".to_string(),
+                        format!("PHY_MEM_VAL_{}", mem_op_count),
                         ty,
-                        ZVis::Private(0),
+                        self.vis_to_zvis(InputVisibility::Prover),
                         None,
                         true,
                     ).unwrap();
                     self.circ_declare_input(
                         &f,
-                        "PHY_MEM_ADDR".to_string(),
+                        format!("PHY_MEM_ADDR_{}", mem_op_count),
                         ty,
-                        ZVis::Private(0),
+                        self.vis_to_zvis(InputVisibility::Prover),
                         None,
                         true,
                     ).unwrap();
@@ -1374,7 +1376,7 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: "PHY_MEM_VAL".to_string(),
+                        value: format!("PHY_MEM_VAL_{}", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
@@ -1399,33 +1401,34 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: "PHY_MEM_ADDR".to_string(),
+                        value: format!("PHY_MEM_ADDR_{}", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
                     self.assert(b);
+                    mem_op_count += 1;
                 }
                 BlockContent::MemPop((var, ty, offset)) => {
                     // Non-deterministically supply ADDR and VAL in memory
                     self.circ_declare_input(
                         &f,
-                        "PHY_MEM_VAL".to_string(),
+                        format!("PHY_MEM_VAL_{}", mem_op_count),
                         ty,
-                        ZVis::Private(0),
+                        self.vis_to_zvis(InputVisibility::Prover),
                         None,
                         true,
                     ).unwrap();
                     self.circ_declare_input(
                         &f,
-                        "PHY_MEM_ADDR".to_string(),
+                        format!("PHY_MEM_ADDR_{}", mem_op_count),
                         ty,
-                        ZVis::Private(0),
+                        self.vis_to_zvis(InputVisibility::Prover),
                         None,
                         true,
                     ).unwrap();
                     // Assign POP value to val
                     let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: "PHY_MEM_VAL".to_string(),
+                        value: format!("PHY_MEM_VAL_{}", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     self.declare_init_impl_::<false>(
@@ -1453,38 +1456,12 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: "PHY_MEM_ADDR".to_string(),
+                        value: format!("PHY_MEM_ADDR_{}", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-                    self.assert(b);
-                    /*
-                    // Non-deterministically supply the POP value
-                    let r = self.circ_declare_input(
-                        &f,
-                        var.clone(),
-                        ty,
-                        ZVis::Private(0),
-                        None,
-                        true,
-                    );
-                    r.unwrap();
-                    let offset_term = term(
-                        Op::Const(Value::BitVector(BitVector::new(
-                            rug::Integer::from(*offset),
-                            MEM_ADDR_WIDTH
-                        ))),
-                        Vec::new()
-                    );
-                    // Generate assertion statement
-                    let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("{}", var.clone()),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    let rhs_t = self.circ_load(phy_mem_id.clone(), offset_term);
-                    let b = bool(eq(lhs_t, T::new(ty.clone(), rhs_t)).unwrap()).unwrap();
-                    self.assert(b);   
-                    */      
+                    self.assert(b);  
+                    mem_op_count += 1;  
                 }
                 BlockContent::Stmt(stmt) => { self.stmt_impl_::<false>(&stmt).unwrap(); }
             }
@@ -1497,7 +1474,7 @@ impl<'ast> ZGen<'ast> {
                     &f,
                     format!("{}_out", name),
                     x,
-                    ZVis::Private(0),
+                    self.vis_to_zvis(InputVisibility::Prover),
                     None,
                     true,
                 );
@@ -1525,6 +1502,102 @@ impl<'ast> ZGen<'ast> {
             BlockTerminator::FuncCall(_) => { panic!("Blocks pending evaluation should not have FuncCall as terminator.") }
             BlockTerminator::ProgTerm => {}
         }
+
+        // For memory consistency: Initial Fingerprint and Challenges
+        let r = self.circ_declare_input(
+            &f,
+            "%FGP".to_string(),
+            &Ty::Field,
+            self.vis_to_zvis(InputVisibility::Prover),
+            None,
+            true,
+        );
+        r.unwrap();
+        self.circ_add_challenge(&f, "%C0".to_string());
+        self.circ_add_challenge(&f, "%C1".to_string());
+        // Fingerprinting check for each memory instruction
+        // We only need to check (addr, val) pair are permutated correctly, no need to specify load or store
+        for i in 0..mem_op_count {
+            // %FGP = %FGP * (%C1 - (PHY_MEM_ADDR_i - %C0 * PHY_MEM_VAL_i))
+            // %C0 * PHY_MEM_VAL_i
+            let expr1 = Expression::Binary(BinaryExpression {
+                op: BinaryOperator::Mul,
+                left: Box::new(Expression::Identifier(IdentifierExpression {
+                    value: "%C0".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                right: Box::new(Expression::Identifier(IdentifierExpression {
+                    value: format!("PHY_MEM_VAL_{}", i),
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            });
+            // PHY_MEM_ADDR_i - expr1
+            let expr2 = Expression::Binary(BinaryExpression {
+                op: BinaryOperator::Sub,
+                left: Box::new(Expression::Identifier(IdentifierExpression {
+                    value: format!("PHY_MEM_ADDR_{}", i),
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                right: Box::new(expr1),
+                span: Span::new("", 0, 0).unwrap()
+            });            
+            // %C1 - expr2
+            let expr3 = Expression::Binary(BinaryExpression {
+                op: BinaryOperator::Sub,
+                left: Box::new(Expression::Identifier(IdentifierExpression {
+                    value: "%C1".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                right: Box::new(expr2),
+                span: Span::new("", 0, 0).unwrap()
+            });   
+            // %FGP * expr3
+            let expr4 = Expression::Binary(BinaryExpression {
+                op: BinaryOperator::Mul,
+                left: Box::new(Expression::Identifier(IdentifierExpression {
+                    value: "%FGP".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                right: Box::new(expr3),
+                span: Span::new("", 0, 0).unwrap()
+            });
+            // %%FGP = expr4
+            self.stmt_impl_::<false>(&Statement::Definition(DefinitionStatement {
+                lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                    ty: Type::Basic(BasicType::Field(FieldType {
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    identifier: IdentifierExpression {
+                        value: "%FGP".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    span: Span::new("", 0, 0).unwrap()
+                })],
+                expression: expr4,
+                span: Span::new("", 0, 0).unwrap()
+            })).unwrap();
+        }
+        // Assert Final Fingerprint
+        let r = self.circ_declare_input(
+            &f,
+            "%FGP_out".to_string(),
+            &Ty::Field,
+            self.vis_to_zvis(InputVisibility::Prover),
+            None,
+            true,
+        );
+        r.unwrap();
+        let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+            value: "%FGP".to_string(),
+            span: Span::new("", 0, 0).unwrap()
+        })).unwrap();
+        let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+            value: "%FGP_out".to_string(),
+            span: Span::new("", 0, 0).unwrap()
+        })).unwrap();
+        let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+        self.assert(b);  
 
         if let Some(r) = self.circ_exit_fn() {
             match self.mode {
@@ -1617,18 +1690,8 @@ impl<'ast> ZGen<'ast> {
             .add_prover_and_verifier();
     }
 
-    fn circ_zero_allocate(&self, size: usize, addr_width: usize, val_width: usize) -> AllocId {
-        self.circ
-            .borrow_mut()
-            .zero_allocate(size, addr_width, val_width)
-    }
-
-    fn circ_push(&self, id: AllocId, val: Term) {
-        self.circ.borrow_mut().push(id, val)
-    }
-
-    fn circ_load(&self, id: AllocId, offset: Term) -> Term {
-        self.circ.borrow_mut().load(id, offset)
+    fn circ_add_challenge(&self, f: &str, name: String) {
+        self.circ.borrow_mut().add_challenge(f, name, Ty::Field).unwrap()
     }
 }
 

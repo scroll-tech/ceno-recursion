@@ -1515,6 +1515,7 @@ impl<'ast> ZGen<'ast> {
         r.unwrap();
         self.circ_add_challenge(&f, "%C0".to_string());
         self.circ_add_challenge(&f, "%C1".to_string());
+
         // Fingerprinting check for each memory instruction
         // We only need to check (addr, val) pair are permutated correctly, no need to specify load or store
         for i in 0..mem_op_count {

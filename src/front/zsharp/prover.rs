@@ -195,8 +195,10 @@ impl<'ast> ZGen<'ast> {
     // ret[0]: the return value of the function
     // ret[1][i]: how many times have block i been executed?
     // ret[2][i]: execution state of each block-execution
-    pub fn bl_eval_const_entry_fn<const VERBOSE: bool>(
-        &self, entry_bl: usize, 
+    pub fn bl_eval_entry_fn<const VERBOSE: bool>(
+        &self,
+        entry_bl: usize,
+        entry_regs: &Vec<LiteralExpression<'ast>>, // Entry regs should match the input of the entry block
         bls: &Vec<Block<'ast>>,
         reg_size: &usize
     ) -> Result<(T, Vec<usize>, Vec<ExecState>), String> {
@@ -219,6 +221,23 @@ impl<'ast> ZGen<'ast> {
         let mut phy_mem: Vec<T> = Vec::new();
         let mut terminated = false;
         let mut mem_op: Vec<MemOp>;
+        
+        // Process input variables
+        let mut i = 0;
+        for (name, ty, _) in &bls[entry_bl].inputs {
+            if let Some(x) = ty {
+                assert!(i < entry_regs.len());
+                let e = &entry_regs[i];
+                let val = self.literal_(e)?;
+                self.declare_init_impl_::<true>(
+                    name.to_string(),
+                    x.clone(),
+                    val,
+                )?;
+                i += 1;
+            }
+        }
+        // Execute program
         while !terminated {
             bl_exec_count[nb] += 1;
 
@@ -321,7 +340,7 @@ impl<'ast> ZGen<'ast> {
                             span_to_string(a.expression.span()),
                         )),
                         Err(err) => return Err(format!(
-                            "Const assert expression eval failed {} at\n{}",
+                            "Const assert expression eval failed: {} at\n{}",
                             err,
                             span_to_string(a.expression.span()),
                         ))

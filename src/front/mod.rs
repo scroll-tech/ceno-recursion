@@ -20,10 +20,10 @@ pub const PUBLIC_VIS: Option<PartyId> = None;
 /// A front-end
 pub trait FrontEnd {
     /// Representation of an input program for this language
-    type Inputs;
+    type Inputs<'ast>;
 
     /// Compile the program to constraints
-    fn gen(i: Self::Inputs) -> Computations;
+    fn gen<'ast>(i: Self::Inputs<'ast>) -> Computations;
 }
 
 #[derive(Clone, Copy, Debug)]

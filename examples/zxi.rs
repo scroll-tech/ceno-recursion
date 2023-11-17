@@ -7,6 +7,8 @@ use circ::cfg::{
 use circ::front::Mode;
 use std::path::PathBuf;
 
+use zokrates_pest_ast::*;
+
 #[derive(Debug, Parser)]
 #[command(name = "zxi", about = "The Z# interpreter")]
 struct Options {
@@ -30,6 +32,18 @@ fn main() {
     let inputs = Inputs {
         file: options.zsharp_path,
         mode: Mode::Proof,
+        entry_regs: vec![LiteralExpression::DecimalLiteral(
+            DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: "5".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            }
+        )]
     };
     let cs = ZSharpFE::interpret(inputs);
     print!("\n\nReturn value: ");

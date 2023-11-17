@@ -94,7 +94,7 @@ fn main() {
         ZSharpFE::gen(inputs)
     };
 
-    print!("Optimizing IR... ");
+    println!("Optimizing IR... ");
     let cs = opt(
         cs,
         vec![
@@ -116,6 +116,7 @@ fn main() {
             Opt::Flatten,
             Opt::ConstantFold(Box::new([])),
             Opt::Inline,
+            Opt::SkolemizeChallenges
         ],
     );
     println!("done.");

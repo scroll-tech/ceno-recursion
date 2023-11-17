@@ -34,18 +34,20 @@ const GC_INC: usize = 32;
 const VERBOSE: bool = false;
 
 /// Inputs to the Z# compiler
-pub struct Inputs {
+pub struct Inputs<'ast> {
     /// The file to look for `main` in.
     pub file: PathBuf,
     /// The mode to generate for (MPC or proof). Effects visibility.
     pub mode: Mode,
+    /// Values of the input registers
+    pub entry_regs: Vec<ast::LiteralExpression<'ast>>
 }
 
 /// The Z# front-end. Implements [FrontEnd].
 pub struct ZSharpFE;
 
 impl FrontEnd for ZSharpFE {
-    type Inputs = Inputs;
+    type Inputs<'ast> = Inputs<'ast>;
     fn gen(i: Inputs) -> Computations {
         debug!(
             "Starting Z# front-end, field: {}",
@@ -59,11 +61,11 @@ impl FrontEnd for ZSharpFE {
         g.generics_stack_push(HashMap::new());
         
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
-        println!("Entry block: {entry_bl}");
-        for b in &blks {
-            b.pretty();
-            println!("");
-        }
+        // println!("Entry block: {entry_bl}");
+        // for b in &blks {
+            // b.pretty();
+            // println!("");
+        // }
         let (blks, _, _) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
         println!("\n\n--\nCirc IR:");
         g.bls_to_circ(&blks);
@@ -87,14 +89,14 @@ impl ZSharpFE {
         g.generics_stack_push(HashMap::new());
         
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
-        println!("Entry block: {entry_bl}");
-        for b in &blks {
-            b.pretty();
-            println!("");
-        }
+        // println!("Entry block: {entry_bl}");
+        // for b in &blks {
+            // b.pretty();
+            // println!("");
+        // }
         let (blks, entry_bl, reg_size) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
         println!("\n\n--\nInterpretation:");
-        let (ret, bl_exec_count, mut bl_exec_state) = g.bl_eval_const_entry_fn::<true>(entry_bl, &blks, &reg_size)
+        let (ret, bl_exec_count, mut bl_exec_state) = g.bl_eval_entry_fn::<true>(entry_bl, &i.entry_regs, &blks, &reg_size)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
         let padding = blocks::generate_padding(&bl_exec_count);
         bl_exec_state = blocks::append_dummy_exec_state(blks.len(), &bl_exec_count, &padding, bl_exec_state, &reg_size);

@@ -31,7 +31,7 @@ use zvisit::{ZConstLiteralRewriter, ZGenericInf, ZStatementWalker, ZVisitorMut};
 
 // garbage collection increment for adaptive GC threshold
 const GC_INC: usize = 32;
-const VERBOSE: bool = false;
+const VERBOSE: bool = true;
 
 /// Inputs to the Z# compiler
 pub struct Inputs<'ast> {

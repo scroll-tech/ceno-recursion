@@ -92,6 +92,7 @@ fn print_bls(bls: &Vec<Block>, entry_bl: &usize) {
 }
 
 // Returns: Blocks, entry block, # of registers
+// Inputs are (variable, type) pairs
 pub fn optimize_block<const VERBOSE: bool>(
     mut bls: Vec<Block>,
     mut entry_bl: usize,
@@ -150,7 +151,9 @@ pub fn optimize_block<const VERBOSE: bool>(
     // Fill remaining inputs with dummy fields
     bls = fill_input_output(bls, &reg_size);
 
-    print_bls(&bls, &entry_bl);
+    if VERBOSE {
+        print_bls(&bls, &entry_bl);
+    }
 
     (bls, entry_bl, reg_size)
 } 
@@ -1620,3 +1623,54 @@ fn fill_input_output<'bl>(
 
     return bls;
 }
+
+// Returns: Blocks, entry block, # of registers
+// Add block number check and "if valid"
+pub fn process_block(
+    mut bls: Vec<Block>,
+    entry_bl: usize,
+    reg_size: usize
+) -> (Vec<Block>, usize) {
+    
+    for i in 0..bls.len() {
+        // Add valid check
+        // Add an input variable "%V"
+        bls[i].inputs.insert(0, ("%V".to_string(), Some(Ty::Field)));
+        // We defer the remaining checks to "bl_to_circ" in blocks.rs
+
+        // Add block number check
+        assert_eq!(i, bls[i].name);
+        // Add an input variable "%BN"
+        bls[i].inputs.insert(0, ("%BN".to_string(), Some(Ty::Field)));
+        let bn_id = IdentifierExpression {
+            value: "%BN".to_string(),
+            span: Span::new("", 0, 0).unwrap()
+        };
+        let block_num_check_expr = Expression::Binary(BinaryExpression {
+            op: BinaryOperator::Eq,
+            left: Box::new(Expression::Identifier(bn_id.clone())),
+            right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: i.to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            }))),
+            span: Span::new("", 0, 0).unwrap()
+        });
+        let block_num_check_stmt = Statement::Assertion(AssertionStatement {
+            expression: block_num_check_expr,
+            message: None,
+            span: Span::new("", 0, 0).unwrap()
+        });
+        bls[i].instructions.insert(0, BlockContent::Stmt(block_num_check_stmt));
+
+    }
+
+    print_bls(&bls, &entry_bl);
+
+    (bls, reg_size)
+} 

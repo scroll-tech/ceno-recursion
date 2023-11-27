@@ -66,7 +66,8 @@ impl FrontEnd for ZSharpFE {
             // b.pretty();
             // println!("");
         // }
-        let (blks, _, _) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
+        let (blks, entry_bl, reg_size) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
+        let (blks, _) = blocks_optimization::process_block(blks, entry_bl, reg_size);
         println!("\n\n--\nCirc IR:");
         g.bls_to_circ(&blks);
 
@@ -79,7 +80,7 @@ impl FrontEnd for ZSharpFE {
 }
 
 impl ZSharpFE {
-    // Execute the Z# front-end interpreter on the supplied file with the supplied inputs
+    /// Execute the Z# front-end interpreter on the supplied file with the supplied inputs
     pub fn interpret(i: Inputs) -> T {
         let loader = parser::ZLoad::new();
         let asts = loader.load(&i.file);

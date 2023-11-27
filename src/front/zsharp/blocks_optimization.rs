@@ -148,7 +148,7 @@ pub fn optimize_block<const VERBOSE: bool>(
     }
 
     // Fill remaining inputs with dummy fields
-    bls = fill_input_output(bls, &entry_bl, &reg_size);
+    bls = fill_input_output(bls, &reg_size);
 
     print_bls(&bls, &entry_bl);
 
@@ -1330,13 +1330,10 @@ fn set_input_output<'bl>(
     // Update input of all blocks
     for i in 0..bls.len() {
         // For this primitive implementation, take every register up to reg_size as input
-        // For entry block, these inputs are public
-        // For all other blocks, the inputs are only visible to the prover
-        let vis = if i == *entry_bl {InputVisibility::Public} else {InputVisibility::Prover};
         // Something fishy is going on if inputs or outputs have been defined
         assert!(bls[i].inputs.len() == 0);
         for name in &input_lst[i] {
-            bls[i].inputs.push((name.to_string(), Some(ty_map_in[i].get(name).unwrap().clone()), vis.clone()));
+            bls[i].inputs.push((name.to_string(), Some(ty_map_in[i].get(name).unwrap().clone())));
         }
         assert!(bls[i].outputs.len() == 0);
         for name in &output_lst[i] {
@@ -1488,10 +1485,10 @@ fn var_to_reg(
     for i in 0..bls.len() {
         // Map the inputs
         let mut new_inputs = Vec::new();
-        for (name, ty, vis) in &bls[i].inputs {
+        for (name, ty) in &bls[i].inputs {
             let new_name: String;
             (new_name, reg_map, reg_size) = var_name_to_reg_id_expr(name.to_string(), reg_map, reg_size);
-            new_inputs.push((new_name, ty.clone(), vis.clone()));
+            new_inputs.push((new_name, ty.clone()));
         }
         bls[i].inputs = new_inputs;
         // Map the outputs
@@ -1603,7 +1600,6 @@ fn var_to_reg(
 // Use dummy field type for these values
 fn fill_input_output<'bl>(
     mut bls: Vec<Block<'bl>>,
-    entry_bl: &usize,
     reg_size: &usize
 ) -> Vec<Block<'bl>> {
     let mut reg_list = vec!["%RP".to_string(), "%SP".to_string(), "%BP".to_string(), "%RET".to_string()];
@@ -1612,10 +1608,9 @@ fn fill_input_output<'bl>(
     }
 
     for i in 0..bls.len() {
-        let vis = if i == *entry_bl {InputVisibility::Public} else {InputVisibility::Prover};
         for reg in &reg_list {
             if !bls[i].contains_input(reg) {
-                bls[i].inputs.push((reg.to_string(), None, vis.clone()));
+                bls[i].inputs.push((reg.to_string(), None));
             }
             if !bls[i].contains_output(reg) {
                 bls[i].outputs.push((reg.to_string(), None));

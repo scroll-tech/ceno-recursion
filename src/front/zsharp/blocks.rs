@@ -145,28 +145,10 @@ fn bl_gen_update_sp<'ast>(sp_offset: usize) -> Statement<'ast> {
     sp_update_stmt   
 }
 
-// Which party can see the input?
-#[derive(Clone, PartialEq)]
-pub enum InputVisibility {
-    Prover,
-    Verifier,
-    Public
-}
-
-impl InputVisibility {
-    pub fn pretty(&self) {
-        match &self {
-            InputVisibility::Prover => {println!("Prover")}
-            InputVisibility::Verifier => {println!("Verifier")}
-            InputVisibility::Public => {println!("Public")}
-        }
-    }
-}
-
 // #[derive(Clone)]
 pub struct Block<'ast> {
     pub name: usize,
-    pub inputs: Vec<(String, Option<Ty>, InputVisibility)>,
+    pub inputs: Vec<(String, Option<Ty>)>,
     pub outputs: Vec<(String, Option<Ty>)>,
     pub instructions: Vec<BlockContent<'ast>>,
     pub terminator: BlockTerminator<'ast>
@@ -222,17 +204,16 @@ impl<'ast> Block<'ast> {
         println!("\nBlock {}:", self.name);
         println!("Inputs:");
         for i in &self.inputs {
-            let (name, ty, vis) = i;
+            let (name, ty) = i;
             if let Some(x) = ty {
-                print!("    {}: {}, ", name, x);
-                vis.pretty();
+                print!("    {}: {}", name, x);
             }
         }
         println!("Outputs:");
         for i in &self.outputs {
             let (name, ty) = i;
             if let Some(x) = ty {
-                println!("    {}: {}, ", name, x);
+                println!("    {}: {}", name, x);
             }
         }
         println!("Instructions:");
@@ -1308,14 +1289,6 @@ impl<'ast> ZGen<'ast> {
         Ok((blks, sp_offset))
     }
 
-    pub fn vis_to_zvis(&self, input: InputVisibility) -> ZVis {
-        match input {
-            InputVisibility::Public => ZVis::Public,
-            InputVisibility::Prover => ZVis::Private(0),
-            InputVisibility::Verifier => ZVis::Private(1)
-        }
-    }
-
     // Convert a list of blocks to circ_ir
     pub fn bls_to_circ(&'ast self, blks: &Vec<Block>) {
         // let phy_mem_id = self.circ_zero_allocate(MEM_SIZE, MEM_ADDR_WIDTH, MEM_VALUE_WIDTH);
@@ -1334,13 +1307,13 @@ impl<'ast> ZGen<'ast> {
         self.circ_enter_fn(format!("Block_{}", b.name), ret_ty.clone());
 
         // Inputs of the block
-        for (name, ty, vis) in &b.inputs {
+        for (name, ty) in &b.inputs {
             if let Some(x) = ty {
                 let r = self.circ_declare_input(
                     &f,
                     name.clone(),
                     x,
-                    self.vis_to_zvis(vis.clone()),
+                    ZVis::Public,
                     None,
                     true,
                 );
@@ -1358,7 +1331,7 @@ impl<'ast> ZGen<'ast> {
                         &f,
                         format!("PHY_MEM_VAL_{}", mem_op_count),
                         ty,
-                        self.vis_to_zvis(InputVisibility::Prover),
+                        ZVis::Public,
                         None,
                         true,
                     ).unwrap();
@@ -1366,7 +1339,7 @@ impl<'ast> ZGen<'ast> {
                         &f,
                         format!("PHY_MEM_ADDR_{}", mem_op_count),
                         ty,
-                        self.vis_to_zvis(InputVisibility::Prover),
+                        ZVis::Public,
                         None,
                         true,
                     ).unwrap();
@@ -1414,7 +1387,7 @@ impl<'ast> ZGen<'ast> {
                         &f,
                         format!("PHY_MEM_VAL_{}", mem_op_count),
                         ty,
-                        self.vis_to_zvis(InputVisibility::Prover),
+                        ZVis::Public,
                         None,
                         true,
                     ).unwrap();
@@ -1422,7 +1395,7 @@ impl<'ast> ZGen<'ast> {
                         &f,
                         format!("PHY_MEM_ADDR_{}", mem_op_count),
                         ty,
-                        self.vis_to_zvis(InputVisibility::Prover),
+                        ZVis::Public,
                         None,
                         true,
                     ).unwrap();
@@ -1474,7 +1447,7 @@ impl<'ast> ZGen<'ast> {
                     &f,
                     format!("{}_out", name),
                     x,
-                    self.vis_to_zvis(InputVisibility::Prover),
+                    ZVis::Public,
                     None,
                     true,
                 );
@@ -1502,103 +1475,6 @@ impl<'ast> ZGen<'ast> {
             BlockTerminator::FuncCall(_) => { panic!("Blocks pending evaluation should not have FuncCall as terminator.") }
             BlockTerminator::ProgTerm => {}
         }
-
-        // For memory consistency: Initial Fingerprint and Challenges
-        let r = self.circ_declare_input(
-            &f,
-            "%FGP".to_string(),
-            &Ty::Field,
-            self.vis_to_zvis(InputVisibility::Prover),
-            None,
-            true,
-        );
-        r.unwrap();
-        self.circ_add_challenge(&f, "%C0".to_string());
-        self.circ_add_challenge(&f, "%C1".to_string());
-
-        // Fingerprinting check for each memory instruction
-        // We only need to check (addr, val) pair are permutated correctly, no need to specify load or store
-        for i in 0..mem_op_count {
-            // %FGP = %FGP * (%C1 - (PHY_MEM_ADDR_i - %C0 * PHY_MEM_VAL_i))
-            // %C0 * PHY_MEM_VAL_i
-            let expr1 = Expression::Binary(BinaryExpression {
-                op: BinaryOperator::Mul,
-                left: Box::new(Expression::Identifier(IdentifierExpression {
-                    value: "%C0".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                right: Box::new(Expression::Identifier(IdentifierExpression {
-                    value: format!("PHY_MEM_VAL_{}", i),
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            });
-            // PHY_MEM_ADDR_i - expr1
-            let expr2 = Expression::Binary(BinaryExpression {
-                op: BinaryOperator::Sub,
-                left: Box::new(Expression::Identifier(IdentifierExpression {
-                    value: format!("PHY_MEM_ADDR_{}", i),
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                right: Box::new(expr1),
-                span: Span::new("", 0, 0).unwrap()
-            });            
-            // %C1 - expr2
-            let expr3 = Expression::Binary(BinaryExpression {
-                op: BinaryOperator::Sub,
-                left: Box::new(Expression::Identifier(IdentifierExpression {
-                    value: "%C1".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                right: Box::new(expr2),
-                span: Span::new("", 0, 0).unwrap()
-            });   
-            // %FGP * expr3
-            let expr4 = Expression::Binary(BinaryExpression {
-                op: BinaryOperator::Mul,
-                left: Box::new(Expression::Identifier(IdentifierExpression {
-                    value: "%FGP".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                right: Box::new(expr3),
-                span: Span::new("", 0, 0).unwrap()
-            });
-            // %%FGP = expr4
-            self.stmt_impl_::<false>(&Statement::Definition(DefinitionStatement {
-                lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                    ty: Type::Basic(BasicType::Field(FieldType {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    identifier: IdentifierExpression {
-                        value: "%FGP".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    span: Span::new("", 0, 0).unwrap()
-                })],
-                expression: expr4,
-                span: Span::new("", 0, 0).unwrap()
-            })).unwrap();
-        }
-        // Assert Final Fingerprint
-        let r = self.circ_declare_input(
-            &f,
-            "%FGP_out".to_string(),
-            &Ty::Field,
-            self.vis_to_zvis(InputVisibility::Prover),
-            None,
-            true,
-        );
-        r.unwrap();
-        let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-            value: "%FGP".to_string(),
-            span: Span::new("", 0, 0).unwrap()
-        })).unwrap();
-        let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-            value: "%FGP_out".to_string(),
-            span: Span::new("", 0, 0).unwrap()
-        })).unwrap();
-        let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-        self.assert(b);  
 
         if let Some(r) = self.circ_exit_fn() {
             match self.mode {

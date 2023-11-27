@@ -224,7 +224,7 @@ impl<'ast> ZGen<'ast> {
         
         // Process input variables
         let mut i = 0;
-        for (name, ty, _) in &bls[entry_bl].inputs {
+        for (name, ty) in &bls[entry_bl].inputs {
             if let Some(x) = ty {
                 assert!(i < entry_regs.len());
                 let e = &entry_regs[i];

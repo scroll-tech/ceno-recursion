@@ -13,8 +13,8 @@ use circ::ir::opt::{opt, Opt};
 /*
 use circ::target::r1cs::bellman::parse_instance;
 */
-// use circ::target::r1cs::opt::reduce_linearities;
-// use circ::target::r1cs::trans::to_r1cs;
+use circ::target::r1cs::opt::reduce_linearities;
+use circ::target::r1cs::trans::to_r1cs;
 /*
 use std::fs::File;
 use std::io::Read;
@@ -26,6 +26,7 @@ use circ::cfg::{
     CircOpt,
 };
 use std::path::PathBuf;
+use zokrates_pest_ast::*;
 
 #[derive(Debug, Parser)]
 #[command(name = "zxc", about = "CirC: the circuit compiler")]
@@ -90,10 +91,23 @@ fn main() {
         let inputs = zsharp::Inputs {
             file: options.path,
             mode: Mode::Proof,
+            entry_regs: vec![LiteralExpression::DecimalLiteral(
+                DecimalLiteralExpression {
+                    value: DecimalNumber {
+                        value: "5".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    span: Span::new("", 0, 0).unwrap()
+                }
+            )]
         };
         ZSharpFE::gen(inputs)
     };
 
+    /*
     println!("Optimizing IR... ");
     let cs = opt(
         cs,
@@ -120,6 +134,7 @@ fn main() {
         ],
     );
     println!("done.");
+    */
 
     for (name, c) in &cs.comps {
         println!("\n--\nName: {}", name);
@@ -135,7 +150,6 @@ fn main() {
         }
     }
 
-    /*
     let action = options.action;
     /*
     let proof = options.proof;
@@ -146,10 +160,11 @@ fn main() {
 
     println!("Converting to r1cs");
     let mut block_num = 0;
-    let mut block_name = format!("Block {}", block_num);
-    while cs.contains(&block_name) {
+    let mut block_name = format!("Block_{}", block_num);
+    while let Some(c) = cs.comps.get(&block_name) {
         println!("{}:", block_name);
-        let r1cs = to_r1cs(cs.get(&block_name).clone(), cfg());
+        let r1cs = to_r1cs(c, cfg());
+        /*
         let r1cs = if options.skip_linred {
             println!("Skipping linearity reduction, as requested.");
             r1cs
@@ -160,11 +175,20 @@ fn main() {
             );
             reduce_linearities(r1cs, cfg())
         };
+        */
         println!("Final R1cs size: {}", r1cs.constraints().len());
         match action {
             ProofAction::Count => {
                 if !options.quiet {
-                    eprintln!("{:#?}", r1cs.constraints());
+                    let max_lines = 10;
+                    for i in 0..max_lines {
+                        if i < r1cs.constraints().len() {
+                            eprintln!("i: {}, {:#?}", i, r1cs.constraints()[i]);
+                        }
+                    }
+                    if r1cs.constraints().len() > max_lines {
+                        eprintln!("...");
+                    }
                 }
             }
             ProofAction::Prove => {
@@ -208,7 +232,6 @@ fn main() {
         };
 
         block_num += 1;
-        block_name = format!("Block {}", block_num);
+        block_name = format!("Block_{}", block_num);
     }
-    */
 }

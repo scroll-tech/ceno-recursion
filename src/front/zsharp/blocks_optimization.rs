@@ -1524,12 +1524,11 @@ fn var_to_reg(
     });
     for i in 0..bls.len() {
         assert_eq!(i, bls[i].name);
-        // Add valid variable and block number check
-        // We defer the validity check until after R1CS is constructed
+        // Add block number check
+        // We defer validity check until after R1CS is constructed
         // This is because when the execution is invalid, every WITNESS needs to be 0
         // Which cannot be easily captured by an if / else statement
         let mut new_inputs = Vec::new();
-        new_inputs.push(("%i0".to_string(), Some(Ty::Field)));
         new_inputs.push(("%i1".to_string(), Some(Ty::Field)));
         let mut new_outputs = Vec::new();
 
@@ -1677,22 +1676,23 @@ fn var_to_reg(
             let new_witness_name: String;
             (new_witness_name, witness_map, witness_size) = var_name_to_reg_id_expr::<0>(name.to_string(), witness_map, witness_size);
             // For each input, assign a witness to its value
-            let witness_assign_stmt = DefinitionStatement {
-                lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                    ty: ty_to_type(&ty.clone().unwrap()).unwrap(),
-                    identifier: IdentifierExpression {
+            let witness_check_stmt = AssertionStatement {
+                expression: Expression::Binary(BinaryExpression {
+                    op: BinaryOperator::Eq,
+                    left: Box::new(Expression::Identifier(IdentifierExpression {
                         value: new_output_name,
                         span: Span::new("", 0, 0).unwrap()
-                    },
-                    span: Span::new("", 0, 0).unwrap()
-                })],
-                expression: Expression::Identifier(IdentifierExpression {
-                    value: new_witness_name,
+                    })),
+                    right: Box::new(Expression::Identifier(IdentifierExpression {
+                        value: new_witness_name,
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
                     span: Span::new("", 0, 0).unwrap()
                 }),
+                message: None,
                 span: Span::new("", 0, 0).unwrap()
             };
-            new_instr.push(BlockContent::Stmt(Statement::Definition(witness_assign_stmt)));
+            new_instr.push(BlockContent::Stmt(Statement::Assertion(witness_check_stmt)));
         }
         bls[i].outputs = new_outputs;
 

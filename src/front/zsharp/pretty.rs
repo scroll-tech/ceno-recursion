@@ -152,6 +152,19 @@ fn pretty_ident_expr(i: &IdentifierExpression) {
     print!("{}", match i.value.as_str() {
         "%i0" => "%V",
         "%i1" => "%iBN",
+        "%i2" => "%iRP",
+        "%i3" => "%iSP",
+        "%i4" => "%iBP",
+        "%i5" => "%iRET",
+        "%o1" => "%oBN",
+        "%o2" => "%oRP",
+        "%o3" => "%osP",
+        "%o4" => "%oBP",
+        "%o5" => "%oRET",
+        "%w0" => "%wRP",
+        "%w1" => "%wSP",
+        "%w2" => "%wBP",
+        "%w3" => "%wRET",
         _ => &i.value
     });
 }

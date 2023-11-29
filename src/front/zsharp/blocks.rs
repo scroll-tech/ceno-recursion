@@ -57,7 +57,7 @@ fn ty_to_dec_suffix<'ast>(ty: &Type<'ast>) -> DecimalSuffix<'ast> {
     }
 }
 
-fn ty_to_type<'ast>(ty: &Ty) -> Result<Type<'ast>, String> {
+pub fn ty_to_type<'ast>(ty: &Ty) -> Result<Type<'ast>, String> {
     match ty {
         Ty::Uint(8) => Ok(Type::Basic(BasicType::U8(U8Type {
             span: Span::new("", 0, 0).unwrap()
@@ -1321,58 +1321,9 @@ impl<'ast> ZGen<'ast> {
             }
         }
 
-        // Construct a statement:
-        // if %V == 1 { instructions } else { assert %V == 0 }
-        // Then translate the statement into Circ IR
-        let v_id = IdentifierExpression {
-            value: "%V".to_string(),
-            span: Span::new("", 0, 0).unwrap()
-        };
-        let valid_check_expr = Expression::Binary(BinaryExpression {
-            op: BinaryOperator::Eq,
-            left: Box::new(Expression::Identifier(v_id.clone())),
-            right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: "1".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            }))),
-            span: Span::new("", 0, 0).unwrap()
-        });
-        let invalid_check_expr = Expression::Binary(BinaryExpression {
-            op: BinaryOperator::Eq,
-            left: Box::new(Expression::Identifier(v_id.clone())),
-            right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: "0".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            }))),
-            span: Span::new("", 0, 0).unwrap()
-        });
-        let invalid_check_stmt = Statement::Assertion(AssertionStatement {
-            expression: invalid_check_expr,
-            message: None,
-            span: Span::new("", 0, 0).unwrap()
-        });
-        let mut valid_check_stmt = ConditionalStatement {
-            condition: valid_check_expr,
-            ifbranch: Vec::new(),
-            dummy: Vec::new(),
-            elsebranch: vec![invalid_check_stmt],
-            span: Span::new("", 0, 0).unwrap()
-        };
-
         // How many memory operations have we encountered?
         let mut mem_op_count = 0;
+        // Iterate over instructions, convert memory accesses into statements and then IR
         for i in &b.instructions {
             match i {
                 BlockContent::MemPush((var, ty, offset)) => {
@@ -1394,58 +1345,41 @@ impl<'ast> ZGen<'ast> {
                         true,
                     ).unwrap();
                     // Assert correctness of value
-                    let val_correctness_expr = Expression::Binary(BinaryExpression {
-                        op: BinaryOperator::Eq,
-                        left: Box::new(Expression::Identifier(IdentifierExpression {
-                            value: var.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        right: Box::new(Expression::Identifier(IdentifierExpression {
-                            value: format!("PHY_MEM_VAL_{}", mem_op_count),
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
+                    let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: var.to_string(),
                         span: Span::new("", 0, 0).unwrap()
-                    });
-                    let val_correctness_stmt = Statement::Assertion(AssertionStatement {
-                        expression: val_correctness_expr,
-                        message: None,
+                    })).unwrap();
+                    let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: format!("PHY_MEM_VAL_{}", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
-                    });
-                    valid_check_stmt.ifbranch.push(val_correctness_stmt);
+                    })).unwrap();
+                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                    self.assert(b);
                     // Assert correctness of address
-                    let addr_correctness_expr = Expression::Binary(BinaryExpression {
-                        op: BinaryOperator::Eq,
-                        left: Box::new(Expression::Binary(BinaryExpression {
-                            op: BinaryOperator::Add,
-                            left: Box::new(Expression::Identifier(IdentifierExpression {
-                                value: "%SP".to_string(),
+                    let lhs_t = self.expr_impl_::<false>(&Expression::Binary(BinaryExpression {
+                        op: BinaryOperator::Add,
+                        left: Box::new(Expression::Identifier(IdentifierExpression {
+                            value: "%w1".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                            value: DecimalNumber {
+                                value: offset.to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
                                 span: Span::new("", 0, 0).unwrap()
                             })),
-                            right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                                value: DecimalNumber {
-                                    value: offset.to_string(),
-                                    span: Span::new("", 0, 0).unwrap()
-                                },
-                                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                                    span: Span::new("", 0, 0).unwrap()
-                                })),
-                                span: Span::new("", 0, 0).unwrap()
-                            }))),
                             span: Span::new("", 0, 0).unwrap()
-                        })),
-                        right: Box::new(Expression::Identifier(IdentifierExpression {
-                            value: format!("PHY_MEM_ADDR_{}", mem_op_count),
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
+                        }))),
                         span: Span::new("", 0, 0).unwrap()
-                    });
-                    let addr_correctness_stmt = Statement::Assertion(AssertionStatement {
-                        expression: addr_correctness_expr,
-                        message: None,
+                    })).unwrap();
+                    let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: format!("PHY_MEM_ADDR_{}", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
-                    });
-                    valid_check_stmt.ifbranch.push(addr_correctness_stmt);
-                    // Increment Mem Count
+                    })).unwrap();
+                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                    self.assert(b);
                     mem_op_count += 1;
                 }
                 BlockContent::MemPop((var, ty, offset)) => {
@@ -1467,64 +1401,45 @@ impl<'ast> ZGen<'ast> {
                         true,
                     ).unwrap();
                     // Assign POP value to val
-                    let val_id = IdentifierExpression {
-                        value: var.to_string(),
+                    let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: format!("PHY_MEM_VAL_{}", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
-                    };
-                    let val_assg_stmt = Statement::Definition(DefinitionStatement {
-                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                            ty: ty_to_type(ty).unwrap(),
-                            identifier: val_id,
-                            span: Span::new("", 0, 0).unwrap()
-                        })],
-                        expression: Expression::Identifier(IdentifierExpression {
-                            value: format!("PHY_MEM_VAL_{}", mem_op_count),
-                            span: Span::new("", 0, 0).unwrap()
-                        }),
-                        span: Span::new("", 0, 0).unwrap()
-                    });
-                    valid_check_stmt.ifbranch.push(val_assg_stmt);
+                    })).unwrap();
+                    self.declare_init_impl_::<false>(
+                        var.clone(),
+                        ty.clone(),
+                        e,
+                    ).unwrap();
                     // Assert correctness of address
-                    // Assert correctness of address
-                    let addr_correctness_expr = Expression::Binary(BinaryExpression {
-                        op: BinaryOperator::Eq,
-                        left: Box::new(Expression::Binary(BinaryExpression {
-                            op: BinaryOperator::Add,
-                            left: Box::new(Expression::Identifier(IdentifierExpression {
-                                value: "%BP".to_string(),
+                    let lhs_t = self.expr_impl_::<false>(&Expression::Binary(BinaryExpression {
+                        op: BinaryOperator::Add,
+                        left: Box::new(Expression::Identifier(IdentifierExpression {
+                            value: "%w2".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                            value: DecimalNumber {
+                                value: offset.to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
                                 span: Span::new("", 0, 0).unwrap()
                             })),
-                            right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                                value: DecimalNumber {
-                                    value: offset.to_string(),
-                                    span: Span::new("", 0, 0).unwrap()
-                                },
-                                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                                    span: Span::new("", 0, 0).unwrap()
-                                })),
-                                span: Span::new("", 0, 0).unwrap()
-                            }))),
                             span: Span::new("", 0, 0).unwrap()
-                        })),
-                        right: Box::new(Expression::Identifier(IdentifierExpression {
-                            value: format!("PHY_MEM_ADDR_{}", mem_op_count),
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
+                        }))),
                         span: Span::new("", 0, 0).unwrap()
-                    });
-                    let addr_correctness_stmt = Statement::Assertion(AssertionStatement {
-                        expression: addr_correctness_expr,
-                        message: None,
+                    })).unwrap();
+                    let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: format!("PHY_MEM_ADDR_{}", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
-                    });
-                    valid_check_stmt.ifbranch.push(addr_correctness_stmt);
-                    // Increment Mem Count
+                    })).unwrap();
+                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                    self.assert(b);  
                     mem_op_count += 1;  
                 }
-                BlockContent::Stmt(stmt) => { valid_check_stmt.ifbranch.push(stmt.clone()); }
+                BlockContent::Stmt(stmt) => { self.stmt_impl_::<false>(&stmt).unwrap(); }
             }
         }
-        self.stmt_impl_::<false>(&Statement::Conditional(valid_check_stmt)).unwrap();
 
         // Check the output variables
         for (name, ty) in &b.outputs {

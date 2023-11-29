@@ -149,7 +149,11 @@ pub fn pretty_expr<const IS_BLK: bool>(e: &Expression) {
 }
 
 fn pretty_ident_expr(i: &IdentifierExpression) {
-    print!("{}", i.value);
+    print!("{}", match i.value.as_str() {
+        "%i0" => "%V",
+        "%i1" => "%iBN",
+        _ => &i.value
+    });
 }
 
 fn get_un_op(_op: &UnaryOperator) -> String {

@@ -31,7 +31,7 @@ use zvisit::{ZConstLiteralRewriter, ZGenericInf, ZStatementWalker, ZVisitorMut};
 
 // garbage collection increment for adaptive GC threshold
 const GC_INC: usize = 32;
-const VERBOSE: bool = false;
+const VERBOSE: bool = true;
 
 /// Inputs to the Z# compiler
 pub struct Inputs<'ast> {
@@ -61,13 +61,12 @@ impl FrontEnd for ZSharpFE {
         g.generics_stack_push(HashMap::new());
         
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
-        // println!("Entry block: {entry_bl}");
-        // for b in &blks {
-            // b.pretty();
-            // println!("");
-        // }
-        let (blks, entry_bl, reg_size) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
-        let (blks, _) = blocks_optimization::process_block(blks, entry_bl, reg_size);
+        println!("Entry block: {entry_bl}");
+        for b in &blks {
+            b.pretty();
+            println!("");
+        }
+        let (blks, _, _, _) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
         println!("\n\n--\nCirc IR:");
         g.bls_to_circ(&blks);
 
@@ -95,7 +94,7 @@ impl ZSharpFE {
             // b.pretty();
             // println!("");
         // }
-        let (blks, entry_bl, reg_size) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
+        let (blks, entry_bl, reg_size, _) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
         println!("\n\n--\nInterpretation:");
         let (ret, bl_exec_count, mut bl_exec_state) = g.bl_eval_entry_fn::<true>(entry_bl, &i.entry_regs, &blks, &reg_size)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
@@ -1253,18 +1252,7 @@ impl<'ast> ZGen<'ast> {
                     },
                     None if IS_CNST => { return Err("if / else statement condition not const bool".to_string()); },
                     _ => {
-                        let ce = self.expr_impl_::<false>(&c.condition)?;
-                        let cbool = bool(ce.clone())?;
-                        self.circ_enter_condition(cbool.clone());
-                        for s in &c.ifbranch {
-                            self.stmt_impl_::<IS_CNST>(s)?;
-                        }
-                        self.circ_exit_condition();
-                        self.circ_enter_condition(term![NOT; cbool]);
-                        for s in &c.elsebranch {
-                            self.stmt_impl_::<IS_CNST>(s)?;
-                        }
-                        self.circ_exit_condition();
+                        panic!("Conversion of conditional statement to IR not implemented!")
                     }
                 }
                 Ok(())

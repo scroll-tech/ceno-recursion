@@ -136,6 +136,7 @@ fn main() {
     println!("done.");
     */
 
+    /*
     for (name, c) in &cs.comps {
         println!("\n--\nName: {}", name);
         println!("VariableMetadata:");
@@ -234,4 +235,5 @@ fn main() {
         block_num += 1;
         block_name = format!("Block_{}", block_num);
     }
+    */
 }

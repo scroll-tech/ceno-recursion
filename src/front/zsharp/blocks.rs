@@ -1346,7 +1346,7 @@ impl<'ast> ZGen<'ast> {
                         &f,
                         format!("%mv{}", mem_op_count),
                         ty,
-                        ZVis::Public,
+                        ZVis::Private(0),
                         None,
                         true,
                     ).unwrap();
@@ -1354,7 +1354,7 @@ impl<'ast> ZGen<'ast> {
                         &f,
                         format!("%ma{}", mem_op_count),
                         ty,
-                        ZVis::Public,
+                        ZVis::Private(0),
                         None,
                         true,
                     ).unwrap();
@@ -1402,7 +1402,7 @@ impl<'ast> ZGen<'ast> {
                         &f,
                         format!("%mv{}", mem_op_count),
                         ty,
-                        ZVis::Public,
+                        ZVis::Private(0),
                         None,
                         true,
                     ).unwrap();
@@ -1410,7 +1410,7 @@ impl<'ast> ZGen<'ast> {
                         &f,
                         format!("%ma{}", mem_op_count),
                         ty,
-                        ZVis::Public,
+                        ZVis::Private(0),
                         None,
                         true,
                     ).unwrap();
@@ -1455,15 +1455,8 @@ impl<'ast> ZGen<'ast> {
             }
         }
         
-        // Returns block transition
-        match &b.terminator {
-            BlockTerminator::Transition(e) => {
-                let ret = self.expr_impl_::<false>(e).unwrap();
-                self.circ_return_(Some(ret)).unwrap();
-            }
-            BlockTerminator::FuncCall(_) => { panic!("Blocks pending evaluation should not have FuncCall as terminator.") }
-            BlockTerminator::ProgTerm => {}
-        }
+        // Block transition should have been converted to a statement in block_optimization
+        // DO NOT PROCESS IT!!!
 
         if let Some(r) = self.circ_exit_fn() {
             match self.mode {

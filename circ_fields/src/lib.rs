@@ -167,7 +167,7 @@ impl FieldT {
 /// * 11: invalid (for now)
 #[derive(Serialize, Deserialize)]
 #[serde(into = "FullFieldV", from = "FullFieldV")]
-pub struct FieldV(i64);
+pub struct FieldV(pub i64);
 
 /// Number of bits in [FieldV] used for the tag.
 const N_TAG_BITS: u8 = 2;

@@ -129,7 +129,7 @@ pub struct R1cs {
     challenge_names: Vec<String>,
 
     /// The contraints themselves
-    constraints: Vec<(Lc, Lc, Lc)>,
+    pub constraints: Vec<(Lc, Lc, Lc)>,
 
     /// Terms for computing them.
     #[serde(with = "crate::ir::term::serde_mods::map")]
@@ -167,7 +167,8 @@ impl Var {
         };
         Var(ty_repr << Self::NUMBER_BITS | number)
     }
-    fn ty(&self) -> VarType {
+    /// Get the type of the variable
+    pub fn ty(&self) -> VarType {
         match self.0 >> Self::NUMBER_BITS {
             0b000 => VarType::Inst,
             0b001 => VarType::CWit,
@@ -177,7 +178,8 @@ impl Var {
             c => panic!("Bad type code {}", c),
         }
     }
-    fn number(&self) -> usize {
+    /// Get the coefficient of the variable
+    pub fn number(&self) -> usize {
         self.0 & Self::NUMBER_MASK
     }
 }
@@ -568,12 +570,20 @@ pub enum SigTy {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// A linear combination
 pub struct Lc {
-    modulus: FieldT,
-    constant: FieldV,
-    monomials: HashMap<Var, FieldV>,
+    /// Modulus of the LC
+    pub modulus: FieldT,
+    /// Constant terms of the LC
+    pub constant: FieldV,
+    /// Monomial terms of the LC
+    pub monomials: HashMap<Var, FieldV>,
 }
 
 impl Lc {
+    /// Is the constant zero?
+    pub fn constant_is_zero(&self) -> bool {
+        self.constant.is_zero()
+    }
+
     /// Is this the zero combination?
     pub fn is_zero(&self) -> bool {
         self.monomials.is_empty() && self.constant.is_zero()

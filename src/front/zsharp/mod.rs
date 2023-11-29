@@ -48,7 +48,7 @@ pub struct ZSharpFE;
 
 impl FrontEnd for ZSharpFE {
     type Inputs<'ast> = Inputs<'ast>;
-    fn gen(i: Inputs) -> Computations {
+    fn gen(i: Inputs) -> (Computations, usize, Vec<(Vec<usize>, Vec<usize>)>) {
         debug!(
             "Starting Z# front-end, field: {}",
             Sort::Field(cfg().field().clone())
@@ -66,7 +66,7 @@ impl FrontEnd for ZSharpFE {
             b.pretty();
             println!("");
         }
-        let (blks, _, _, _) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
+        let (blks, _, io_size, _, live_io_list) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
         println!("\n\n--\nCirc IR:");
         g.bls_to_circ(&blks);
 
@@ -74,7 +74,7 @@ impl FrontEnd for ZSharpFE {
         g.file_stack_pop();
         let mut cs = Computations::new();
         cs.comps = g.into_circify().cir_ctx().cs.borrow_mut().clone();
-        cs
+        (cs, io_size, live_io_list)
     }
 }
 
@@ -94,7 +94,8 @@ impl ZSharpFE {
             // b.pretty();
             // println!("");
         // }
-        let (blks, entry_bl, reg_size, _) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
+        panic!("reg_size not implemented!");
+        let (blks, entry_bl, reg_size, _, _) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
         println!("\n\n--\nInterpretation:");
         let (ret, bl_exec_count, mut bl_exec_state) = g.bl_eval_entry_fn::<true>(entry_bl, &i.entry_regs, &blks, &reg_size)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));

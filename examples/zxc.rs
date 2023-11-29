@@ -7,12 +7,16 @@ use bellman::groth16::{
 use bellman::Circuit;
 use bls12_381::{Bls12, Scalar};
 */
+use core::cmp::min;
+use rug::Integer;
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
 use circ::ir::opt::{opt, Opt};
+use circ_fields::FieldV;
 /*
 use circ::target::r1cs::bellman::parse_instance;
 */
+use circ::target::r1cs::{R1cs, VarType};
 use circ::target::r1cs::opt::reduce_linearities;
 use circ::target::r1cs::trans::to_r1cs;
 /*
@@ -78,6 +82,21 @@ enum ProofOption {
     Prove,
 }
 
+struct BlockConstraint {
+    // Instance entry -> (input?, entry)
+    io_map: Vec<(bool, usize)>,
+    r1cs: R1cs
+}
+
+struct SparseMatEntry {
+    row: usize,
+    // Which column is the constant (valid) value?
+    v_cnst: usize,
+    args_a: Vec<(usize, FieldV)>,
+    args_b: Vec<(usize, FieldV)>,
+    args_c: Vec<(usize, FieldV)>
+}
+
 fn main() {
     env_logger::Builder::from_default_env()
         .format_level(false)
@@ -87,7 +106,7 @@ fn main() {
     circ::cfg::set(&options.circ);
     println!("{options:?}");
 
-    let cs = {
+    let (cs, io_size, live_io_list) = {
         let inputs = zsharp::Inputs {
             file: options.path,
             mode: Mode::Proof,
@@ -150,8 +169,8 @@ fn main() {
         }
     }
 
-    let action = options.action;
     /*
+    let action = options.action;
     let proof = options.proof;
     let prover_key = options.prover_key;
     let verifier_key = options.verifier_key;
@@ -161,9 +180,22 @@ fn main() {
     println!("Converting to r1cs");
     let mut block_num = 0;
     let mut block_name = format!("Block_{}", block_num);
+    // Obtain a list of (r1cs, io_map) for all blocks
+    // As we generate R1Cs for each block:
+    // 1. Add validity check to every constraint: if a constraint cannot be satisfied by setting all variables to 0, need to multiply by %V
+    //    If the constraint is already of form A * B = C, need to divide into Z = V * A, Z * B = c
+    // 2. Compute the maximum number of witnesses within any constraint to obtain final io width
+    let mut r1cs_list = Vec::new();
+    // Add %V to io_size
+    let io_size = io_size + 1;
+    let mut max_num_witnesses = 2 * io_size;
+    let mut max_num_cons = 0;
     while let Some(c) = cs.comps.get(&block_name) {
-        println!("{}:", block_name);
-        let r1cs = to_r1cs(c, cfg());
+        // println!("{}:", block_name);
+        let mut r1cs = to_r1cs(c, cfg());
+        // Remove the last constraint because it is about the return value
+        r1cs.constraints.pop();
+
         /*
         let r1cs = if options.skip_linred {
             println!("Skipping linearity reduction, as requested.");
@@ -176,7 +208,24 @@ fn main() {
             reduce_linearities(r1cs, cfg())
         };
         */
-        println!("Final R1cs size: {}", r1cs.constraints().len());
+        let mut num_vars = r1cs.num_vars();
+        // Include the V * V = V constraint
+        let mut num_cons = r1cs.constraints().len() + 1;
+        // Add witnesses that will be used by validity check
+        // Note: there is no need to modify the r1cs, simply modify the sparse format
+        for c in r1cs.constraints() {
+            // If a constraint involves constant value, then we need to multiply it by %V
+            // And if both A and B are non-empty, we need an additional witness
+            if !c.0.constant_is_zero() || !c.1.constant_is_zero() || !c.2.constant_is_zero() {
+                if !c.0.is_zero() && !c.1.is_zero() { num_vars += 1; num_cons += 1; }
+            }
+        }
+        // println!("Num vars: {}", num_vars);
+        // println!("Num cons: {}", num_cons);
+        if num_vars > max_num_witnesses { max_num_witnesses = num_vars };
+        if num_cons > max_num_cons { max_num_cons = num_cons };
+        r1cs_list.push(r1cs);
+        /*
         match action {
             ProofAction::Count => {
                 if !options.quiet {
@@ -230,8 +279,100 @@ fn main() {
                 */
             }
         };
-
+        */
         block_num += 1;
         block_name = format!("Block_{}", block_num);
+    }
+    
+    max_num_witnesses = max_num_witnesses.next_power_of_two();
+    let max_num_io = max_num_witnesses / 2;
+    let max_num_cons = max_num_cons.next_power_of_two();
+
+    // Convert R1CS into Spartan sparse format
+    // According to the final io width, re-label all inputs and witnesses to the form (witness, input, output)
+    let io_relabel = |b: usize, i: usize| -> usize {
+        if i < live_io_list[b].0.len() { 
+            live_io_list[b].0[i]
+        } else {
+            live_io_list[b].1[i - live_io_list[b].0.len()] + max_num_io
+        }
+    };
+    // 0th entry is constant
+    let v_cnst = 0;
+    let mut sparse_mat_entry: Vec<Vec<SparseMatEntry>> = Vec::new();
+    for b in 0..r1cs_list.len() {
+        let r1cs = &r1cs_list[b];
+        sparse_mat_entry.push(Vec::new());
+        let mut row_count = 0;
+        // Start assigning validity check witnesses from max_num_witnesses - 1 to the front
+        let mut next_valid_check_witness = max_num_witnesses - 1;
+        // First constraint is V * V = V
+        let args_a = vec![(v_cnst, FieldV(1))];
+        let args_b = vec![(v_cnst, FieldV(1))];
+        let args_c = vec![(v_cnst, FieldV(1))];
+        sparse_mat_entry[b].push(SparseMatEntry { row: row_count, v_cnst, args_a, args_b, args_c });
+        row_count += 1;
+        // Iterate
+        for c in r1cs.constraints() {
+            // Extract all entries from A, B, C
+            let mut args_a = Vec::new();
+            let mut args_b = Vec::new();
+            let mut args_c = Vec::new();
+            if !c.0.constant_is_zero() {
+                args_a.push((v_cnst, c.0.constant.clone()));
+            }
+            for (var, coeff) in c.0.monomials.iter() {
+                match var.ty() {
+                    VarType::Inst => args_a.push((io_relabel(b, var.number()), coeff.clone())),
+                    VarType::FinalWit => args_a.push((var.number(), coeff.clone())),
+                    _ => panic!("Unsupported variable type!")
+                }
+            }
+            if !c.1.constant_is_zero() {
+                args_b.push((v_cnst, c.1.constant.clone()));
+            }
+            for (var, coeff) in c.1.monomials.iter() {
+                match var.ty() {
+                    VarType::Inst => args_b.push((io_relabel(b, var.number()), coeff.clone())),
+                    VarType::FinalWit => args_b.push((var.number(), coeff.clone())),
+                    _ => panic!("Unsupported variable type!")
+                }
+            }
+            if !c.2.constant_is_zero() {
+                args_c.push((v_cnst, c.2.constant.clone()));
+            }
+            for (var, coeff) in c.2.monomials.iter() {
+                match var.ty() {
+                    VarType::Inst => args_c.push((io_relabel(b, var.number()), coeff.clone())),
+                    VarType::FinalWit => args_c.push((var.number(), coeff.clone())),
+                    _ => panic!("Unsupported variable type!")
+                }
+            }
+
+            // If a constraint involves constant value, then we need to multiply it by %V
+            // And if both A and B are non-empty, we need an additional witness
+            if !c.0.constant_is_zero() || !c.1.constant_is_zero() || !c.2.constant_is_zero() {
+                if !c.0.is_zero() && !c.1.is_zero() {
+
+                }
+            }
+            sparse_mat_entry[b].push(SparseMatEntry { row: row_count, v_cnst, args_a, args_b, args_c });
+            row_count += 1;
+        }
+    }
+
+    // Print out the sparse matrix
+    println!("NUM_VARS: {}", max_num_witnesses);
+    println!("NUM_CONS: {}", max_num_cons);
+    for b in 0..sparse_mat_entry.len() {
+        println!("\nBLOCK {}", b);
+        for i in 0..min(10, sparse_mat_entry[b].len()) {
+            println!("  ROW {}", i);
+            let e = &sparse_mat_entry[b][i];
+            println!("    A: {:?}\n    B: {:?}\n    C: {:?}", e.args_a, e.args_b, e.args_c);
+        }
+        if sparse_mat_entry[b].len() > 10 {
+            println!("...");
+        }
     }
 }

@@ -92,9 +92,9 @@ struct SparseMatEntry {
     row: usize,
     // Which column is the constant (valid) value?
     v_cnst: usize,
-    args_a: Vec<(usize, FieldV)>,
-    args_b: Vec<(usize, FieldV)>,
-    args_c: Vec<(usize, FieldV)>
+    args_a: Vec<(usize, i32)>,
+    args_b: Vec<(usize, i32)>,
+    args_c: Vec<(usize, i32)>
 }
 
 // When adding the validity check, how many constraints will it become?
@@ -137,41 +137,41 @@ fn get_sparse_cons_with_v_check(
         let mut args_b = Vec::new();
         let mut args_c = Vec::new();
         if !c.0.constant_is_zero() {
-            args_a.push((v_cnst, c.0.constant.clone()));
+            args_a.push((v_cnst, c.0.constant.signed_int().to_i32().unwrap()));
         }
         for (var, coeff) in c.0.monomials.iter() {
             match var.ty() {
-                VarType::Inst => args_a.push((io_relabel(var.number()), coeff.clone())),
-                VarType::FinalWit => args_a.push((witness_relabel(var.number()), coeff.clone())),
+                VarType::Inst => args_a.push((io_relabel(var.number()), coeff.signed_int().to_i32().unwrap())),
+                VarType::FinalWit => args_a.push((witness_relabel(var.number()), coeff.signed_int().to_i32().unwrap())),
                 _ => panic!("Unsupported variable type!")
             }
         }
         if !c.1.constant_is_zero() {
-            args_b.push((v_cnst, c.1.constant.clone()));
+            args_b.push((v_cnst, c.1.constant.signed_int().to_i32().unwrap()));
         }
         for (var, coeff) in c.1.monomials.iter() {
             match var.ty() {
-                VarType::Inst => args_b.push((io_relabel(var.number()), coeff.clone())),
-                VarType::FinalWit => args_b.push((witness_relabel(var.number()), coeff.clone())),
+                VarType::Inst => args_b.push((io_relabel(var.number()), coeff.signed_int().to_i32().unwrap())),
+                VarType::FinalWit => args_b.push((witness_relabel(var.number()), coeff.signed_int().to_i32().unwrap())),
                 _ => panic!("Unsupported variable type!")
             }
         }
         if !c.2.constant_is_zero() {
-            args_c.push((v_cnst, c.2.constant.clone()));
+            args_c.push((v_cnst, c.2.constant.signed_int().to_i32().unwrap()));
         }
         for (var, coeff) in c.2.monomials.iter() {
             match var.ty() {
-                VarType::Inst => args_c.push((io_relabel(var.number()), coeff.clone())),
-                VarType::FinalWit => args_c.push((witness_relabel(var.number()), coeff.clone())),
+                VarType::Inst => args_c.push((io_relabel(var.number()), coeff.signed_int().to_i32().unwrap())),
+                VarType::FinalWit => args_c.push((witness_relabel(var.number()), coeff.signed_int().to_i32().unwrap())),
                 _ => panic!("Unsupported variable type!")
             }
         }
         (args_a, args_b, args_c)
     };
 
-    let args_v = vec![(v_cnst, FieldV(1))];
-    let args_z0 = vec![(next_valid_check_witness, FieldV(1))];
-    let args_z1 = vec![(next_valid_check_witness - 1, FieldV(1))];
+    let args_v = vec![(v_cnst, 1)];
+    let args_z0 = vec![(next_valid_check_witness, 1)];
+    let args_z1 = vec![(next_valid_check_witness - 1, 1)];
     // Original Constraint: A * B = C
     // If C contains no constant, and A and B do not both contain constants, we don't need V
     if (c.0.constant_is_zero() || c.1.constant_is_zero()) && c.2.constant_is_zero() {
@@ -348,11 +348,11 @@ fn main() {
         let r1cs = &r1cs_list[b];
         sparse_mat_entry.push(Vec::new());
         // Start assigning validity check witnesses from max_num_witnesses - 1 to the front
-        let next_valid_check_witness = max_num_witnesses - 1;
+        let next_valid_check_witness = 2 * max_num_witnesses - 1;
         // First constraint is V * V = V
-        let args_a = vec![(v_cnst, FieldV::from(1))];
-        let args_b = vec![(v_cnst, FieldV(1))];
-        let args_c = vec![(v_cnst, FieldV(1))];
+        let args_a = vec![(v_cnst, 1)];
+        let args_b = vec![(v_cnst, 1)];
+        let args_c = vec![(v_cnst, 1)];
         sparse_mat_entry[b].push(SparseMatEntry { row: 0, v_cnst, args_a, args_b, args_c });
         let row_count = 1;
         // Iterate

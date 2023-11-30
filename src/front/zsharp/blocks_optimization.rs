@@ -1686,7 +1686,7 @@ fn var_to_reg(
             live_io[i].1.push(live_output_label);
             let new_witness_name: String;
             (new_witness_name, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>(name.to_string(), witness_map, witness_size);
-            // For each input, assign a witness to its value
+            // For each input, assert that it is equal to the corresponding witness
             let witness_check_stmt = AssertionStatement {
                 expression: Expression::Binary(BinaryExpression {
                     op: BinaryOperator::Eq,
@@ -1707,7 +1707,7 @@ fn var_to_reg(
         }
         bls[i].outputs = new_outputs;
 
-        // Update terminator and convert it into an instruction
+        // Update terminator and convert it into an assertion statement
         if let BlockTerminator::Transition(e) = &bls[i].terminator {
             let new_expr: Expression;
             (new_expr, witness_map, witness_size) = var_to_reg_expr(&e, witness_map, witness_size);

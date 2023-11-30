@@ -203,24 +203,46 @@ impl<'ast> Block<'ast> {
     pub fn pretty(&self) {
         println!("\nBlock {}:", self.name);
         println!("Inputs:");
+
+        let pretty_name = |name: String| -> String {
+            match name.as_str() {
+                "%i0" => "%V".to_string(),
+                "%i1" => "%iBN".to_string(),
+                "%i2" => "%iRP".to_string(),
+                "%i3" => "%iSP".to_string(),
+                "%i4" => "%iBP".to_string(),
+                "%i5" => "%iRET".to_string(),
+                "%o1" => "%oBN".to_string(),
+                "%o2" => "%oRP".to_string(),
+                "%o3" => "%osP".to_string(),
+                "%o4" => "%oBP".to_string(),
+                "%o5" => "%oRET".to_string(),
+                "%w0" => "%wRP".to_string(),
+                "%w1" => "%wSP".to_string(),
+                "%w2" => "%wBP".to_string(),
+                "%w3" => "%wRET".to_string(),
+                _ => name
+            }
+        };
+
         for i in &self.inputs {
             let (name, ty) = i;
             if let Some(x) = ty {
-                println!("    {}: {}", name, x);
+                println!("    {}: {}", pretty_name(name.to_string()), x);
             }
         }
         println!("Outputs:");
         for i in &self.outputs {
             let (name, ty) = i;
             if let Some(x) = ty {
-                println!("    {}: {}", name, x);
+                println!("    {}: {}", pretty_name(name.to_string()), x);
             }
         }
         println!("Instructions:");
         for c in &self.instructions {
             match c {
-                BlockContent::MemPush((id, ty, offset)) => { println!("    %PHY[%SP + {offset}] = {id} <{ty}>") }
-                BlockContent::MemPop((id, ty, offset)) => { println!("    {ty} {id} = %PHY[%BP + {offset}]") }
+                BlockContent::MemPush((id, ty, offset)) => { println!("    %PHY[%SP + {offset}] = {} <{ty}>", pretty_name(id.to_string())) }
+                BlockContent::MemPop((id, ty, offset)) => { println!("    {ty} {} = %PHY[%BP + {offset}]", pretty_name(id.to_string())) }
                 BlockContent::Stmt(s) => { pretty::pretty_stmt(1, &s); }
             }
         }
@@ -1306,7 +1328,7 @@ impl<'ast> ZGen<'ast> {
         let ret_ty = Some(Ty::Field);
         self.circ_enter_fn(format!("Block_{}", b.name), ret_ty.clone());
 
-        // Inputs of the block
+        // Declare all inputs of the block
         for (name, ty) in &b.inputs {
             if let Some(x) = ty {
                 let r = self.circ_declare_input(
@@ -1320,7 +1342,7 @@ impl<'ast> ZGen<'ast> {
                 r.unwrap();
             }
         }
-        // Outputs of the block
+        // Declare all outputs of the block
         for (name, ty) in &b.outputs {
             if let Some(x) = ty {
                 let r = self.circ_declare_input(
@@ -1341,7 +1363,7 @@ impl<'ast> ZGen<'ast> {
         for i in &b.instructions {
             match i {
                 BlockContent::MemPush((var, ty, offset)) => {
-                    // Non-deterministically supply VAL in memory
+                    // Non-deterministically supply VAL
                     self.circ_declare_input(
                         &f,
                         format!("%mv{}", mem_op_count),
@@ -1350,6 +1372,7 @@ impl<'ast> ZGen<'ast> {
                         None,
                         true,
                     ).unwrap();
+                    // Non-deterministically supply ADDR
                     self.circ_declare_input(
                         &f,
                         format!("%ma{}", mem_op_count),
@@ -1373,6 +1396,7 @@ impl<'ast> ZGen<'ast> {
                     let lhs_t = self.expr_impl_::<false>(&Expression::Binary(BinaryExpression {
                         op: BinaryOperator::Add,
                         left: Box::new(Expression::Identifier(IdentifierExpression {
+                            // %SP
                             value: "%w1".to_string(),
                             span: Span::new("", 0, 0).unwrap()
                         })),
@@ -1428,6 +1452,7 @@ impl<'ast> ZGen<'ast> {
                     let lhs_t = self.expr_impl_::<false>(&Expression::Binary(BinaryExpression {
                         op: BinaryOperator::Add,
                         left: Box::new(Expression::Identifier(IdentifierExpression {
+                            // %BP
                             value: "%w2".to_string(),
                             span: Span::new("", 0, 0).unwrap()
                         })),

@@ -70,24 +70,12 @@ pub struct ExecState {
 }
 
 impl ExecState {
-    pub fn new(blk_id: usize, reg_size: usize) -> Self {
+    pub fn new(blk_id: usize, io_size: usize) -> Self {
         let input = Self {
             blk_id,
             active: true,
-            reg_in: vec![None; reg_size],
-            reg_out: vec![None; reg_size],
-            succ_id: 0,
-            mem_op: Vec::new()
-        };
-        input
-    }
-
-    pub fn new_dummy(blk_id: usize, reg_size: usize) -> Self {
-        let input = Self {
-            blk_id,
-            active: false,
-            reg_in: vec![None; reg_size],
-            reg_out: vec![None; reg_size],
+            reg_in: vec![None; io_size],
+            reg_out: vec![None; io_size],
             succ_id: 0,
             mem_op: Vec::new()
         };
@@ -98,12 +86,12 @@ impl ExecState {
         println!("Block ID: {}", self.blk_id);
         println!("Active: {}", self.active);
         if self.active {
-            print!("Reg\t%RP\t%SP\t%BP\t%RET");
+            print!("Reg\t%BN\t%RP\t%SP\t%BP\t%RET");
             for i in 4..self.reg_in.len() {
                 print!("\t%{}", i);
             }
             print!("\nIn:");
-            for i in &self.reg_in {
+            for i in &self.reg_in[1..] {
                 print!("\t");
                 if let Some(t) = i {
                     t.pretty(&mut std::io::stdout().lock())
@@ -111,7 +99,7 @@ impl ExecState {
                 }
             }
             print!("\nOut:");
-            for i in &self.reg_out {
+            for i in &self.reg_out[1..] {
                 print!("\t");
                 if let Some(t) = i {
                     t.pretty(&mut std::io::stdout().lock())
@@ -200,7 +188,7 @@ impl<'ast> ZGen<'ast> {
         entry_bl: usize,
         entry_regs: &Vec<LiteralExpression<'ast>>, // Entry regs should match the input of the entry block
         bls: &Vec<Block<'ast>>,
-        reg_size: &usize
+        io_size: usize
     ) -> Result<(T, Vec<usize>, Vec<ExecState>), String> {
         if bls.len() < entry_bl {
             return Err(format!("Invalid entry_bl: entry_bl exceeds block size."));
@@ -242,10 +230,12 @@ impl<'ast> ZGen<'ast> {
             bl_exec_count[nb] += 1;
 
             // Push-in new block state
-            bl_exec_state.push(ExecState::new(nb, *reg_size));
+            bl_exec_state.push(ExecState::new(nb, io_size));
             // Match reg_in with reg_out of last block
             if tr_size > 0 {
-                bl_exec_state[tr_size].reg_in = bl_exec_state[tr_size - 1].reg_out.clone();
+                for i in 1..io_size {
+                    bl_exec_state[tr_size].reg_in[i] = self.cvar_lookup(&format!("%i{}", i));
+                }
             }
 
             if VERBOSE {
@@ -262,12 +252,8 @@ impl<'ast> ZGen<'ast> {
             (nb, phy_mem, terminated, mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem)?;
             
             // Update reg_out
-            bl_exec_state[tr_size].reg_out[0] = self.cvar_lookup("%RP");
-            bl_exec_state[tr_size].reg_out[1] = self.cvar_lookup("%SP");
-            bl_exec_state[tr_size].reg_out[2] = self.cvar_lookup("%BP");
-            bl_exec_state[tr_size].reg_out[3] = self.cvar_lookup("%RET");
-            for i in 4..*reg_size {
-                bl_exec_state[tr_size].reg_out[i] = self.cvar_lookup(&format!("%{}", i));
+            for i in 1..io_size {
+                bl_exec_state[tr_size].reg_out[i] = self.cvar_lookup(&format!("%o{}", i));
             }
             // Update successor block ID
             bl_exec_state[tr_size].succ_id = nb;

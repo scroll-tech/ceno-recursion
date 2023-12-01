@@ -35,6 +35,30 @@ fn main() {
         entry_regs: vec![LiteralExpression::DecimalLiteral(
             DecimalLiteralExpression {
                 value: DecimalNumber {
+                    value: "0".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            }
+        ), 
+        LiteralExpression::DecimalLiteral(
+            DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: "5".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            }
+        ), 
+        LiteralExpression::DecimalLiteral(
+            DecimalLiteralExpression {
+                value: DecimalNumber {
                     value: "5".to_string(),
                     span: Span::new("", 0, 0).unwrap()
                 },

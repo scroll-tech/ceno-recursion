@@ -94,13 +94,10 @@ impl ZSharpFE {
             // b.pretty();
             // println!("");
         // }
-        panic!("reg_size not implemented!");
-        let (blks, entry_bl, reg_size, _, _) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
+        let (blks, entry_bl, io_size, _, _) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
         println!("\n\n--\nInterpretation:");
-        let (ret, bl_exec_count, mut bl_exec_state) = g.bl_eval_entry_fn::<true>(entry_bl, &i.entry_regs, &blks, &reg_size)
+        let (ret, _, bl_exec_state) = g.bl_eval_entry_fn::<true>(entry_bl, &i.entry_regs, &blks, io_size)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-        let padding = blocks::generate_padding(&bl_exec_count);
-        bl_exec_state = blocks::append_dummy_exec_state(blks.len(), &bl_exec_count, &padding, bl_exec_state, &reg_size);
         prover::print_state_list(&bl_exec_state);
         let _ = prover::sort_by_block(&bl_exec_state);
         let _ = prover::sort_by_mem(&bl_exec_state);

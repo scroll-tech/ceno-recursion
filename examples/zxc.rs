@@ -82,55 +82,19 @@ enum ProofOption {
     Prove,
 }
 
-struct BlockConstraint {
-    // Instance entry -> (input?, entry)
-    io_map: Vec<(bool, usize)>,
-    r1cs: R1cs
-}
-
 struct SparseMatEntry {
-    row: usize,
-    // Which column is the constant (valid) value?
-    v_cnst: usize,
     args_a: Vec<(usize, i32)>,
     args_b: Vec<(usize, i32)>,
     args_c: Vec<(usize, i32)>
 }
 
-// When adding the validity check, how many constraints will it become?
-fn get_num_cons_with_v_check(c: &(Lc, Lc, Lc)) -> usize {
-    // Original Constraint: A * B = C
-    // If C contains no constant, and A and B do not both contain constants, we don't need V
-    if (c.0.constant_is_zero() || c.1.constant_is_zero()) && c.2.constant_is_zero() {
-        return 1;
-    }
-    // If C contains no constant, then we only need two constraints: V * A = Z0; Z0 * B = C
-    else if c.2.constant_is_zero() {
-        return 2;
-    }
-    // If C contains constant and either A or B is zero, then we only need to switch around: C = 0 -> V * B = 0, so still one
-    else if !c.2.constant_is_zero() && (c.0.is_zero() || c.1.is_zero()) {
-        return 1;
-    }
-    // If C contains constant and neither A nor B contains constant, then we need two: V * C = Z0; A * B = Z0
-    else if !c.2.constant_is_zero() && c.0.constant_is_zero() && c.1.constant_is_zero() {
-        return 2;
-    }
-    // Otherwise (C contains zero, at least one of A and B contains constant), need three: V * A = Z0, V * C = Z1, Z0 * B = Z1
-    else {
-        return 3;
-    }
-}
-
 // When adding the validity check, what does the sparse format look like?
 fn get_sparse_cons_with_v_check(
     c: &(Lc, Lc, Lc), 
-    row: usize, 
     v_cnst: usize,
     io_relabel: impl FnOnce(usize) -> usize + std::marker::Copy,
     witness_relabel: impl FnOnce(usize) -> usize + std::marker::Copy,
-    next_valid_check_witness: usize,
-) -> (Vec<SparseMatEntry>, usize, usize) {
+) -> SparseMatEntry {
     // Extract all entries from A, B, C
     let (args_a, args_b, args_c) = {
         let mut args_a = Vec::new();
@@ -168,43 +132,7 @@ fn get_sparse_cons_with_v_check(
         }
         (args_a, args_b, args_c)
     };
-
-    let args_v = vec![(v_cnst, 1)];
-    let args_z0 = vec![(next_valid_check_witness, 1)];
-    let args_z1 = vec![(next_valid_check_witness - 1, 1)];
-    // Original Constraint: A * B = C
-    // If C contains no constant, and A and B do not both contain constants, we don't need V
-    if (c.0.constant_is_zero() || c.1.constant_is_zero()) && c.2.constant_is_zero() {
-        return (vec![SparseMatEntry { row, v_cnst, args_a, args_b, args_c }], row + 1, next_valid_check_witness);
-    }
-    // If C contains no constant, then we only need two constraints: V * A = Z0; Z0 * B = C
-    else if c.2.constant_is_zero() {
-        return (vec![
-            SparseMatEntry { row, v_cnst, args_a: args_v, args_b: args_a, args_c: args_z0.clone() },
-            SparseMatEntry { row, v_cnst, args_a: args_z0, args_b, args_c }
-        ], row + 2, next_valid_check_witness - 1);
-    }
-    // If C contains constant and either A or B is zero, then we only need to switch around: 0 = C -> V * C = 0, so still one
-    else if !c.2.constant_is_zero() && (c.0.is_zero() || c.1.is_zero()) {
-        return (vec![
-            SparseMatEntry { row, v_cnst, args_a: args_v, args_b: args_c, args_c: Vec::new() }
-        ], row + 1, next_valid_check_witness);
-    }
-    // If C contains constant and neither A nor B contains constant, then we need two: V * C = Z0; A * B = Z0
-    else if !c.2.constant_is_zero() && c.0.constant_is_zero() && c.1.constant_is_zero() {
-        return (vec![
-            SparseMatEntry { row, v_cnst, args_a: args_v, args_b: args_c, args_c: args_z0.clone() },
-            SparseMatEntry { row, v_cnst, args_a, args_b, args_c: args_z0 }
-        ], row + 2, next_valid_check_witness - 1);
-    }
-    // Otherwise (C contains zero, at least one of A and B contains constant), need three: V * A = Z0, V * C = Z1, Z0 * B = Z1
-    else {
-        return (vec![
-            SparseMatEntry { row, v_cnst, args_a: args_v.clone(), args_b: args_a, args_c: args_z0.clone() },
-            SparseMatEntry { row, v_cnst, args_a: args_v, args_b: args_c, args_c: args_z1.clone() },
-            SparseMatEntry { row, v_cnst, args_a: args_z0, args_b, args_c: args_z1 },
-        ], row + 3, next_valid_check_witness - 2);
-    }
+    return SparseMatEntry { args_a, args_b, args_c };
 }
 
 fn main() {
@@ -284,8 +212,7 @@ fn main() {
     let mut block_name = format!("Block_{}", block_num);
     // Obtain a list of (r1cs, io_map) for all blocks
     // As we generate R1Cs for each block:
-    // 1. Add validity check to every constraint: if a constraint cannot be satisfied by setting all variables to 0, need to multiply by %V
-    //    If the constraint is already of form A * B = C, need to divide into Z = V * A, Z * B = c
+    // 1. Add checks on validity: V * V = V and 0 = W - V, where W is the validity bit in the witnesses used by the backend
     // 2. Compute the maximum number of witnesses within any constraint to obtain final io width
     let mut r1cs_list = Vec::new();
     let mut max_num_witnesses = 2 * io_size;
@@ -308,18 +235,10 @@ fn main() {
             reduce_linearities(r1cs, cfg())
         };
         */
-        let mut num_witnesses = r1cs.num_vars();
-        // Include the V * V = V constraint
-        let mut num_cons = r1cs.constraints().len() + 1;
-        // Add witnesses that will be used by validity check
-        // Note: we don't modify the r1cs, only modify the sparse format
-        for c in r1cs.constraints() {
-            let num_cons_with_v_check = get_num_cons_with_v_check(&c);
-            num_cons += num_cons_with_v_check;
-            num_witnesses += num_cons_with_v_check - 1;
-        }
-        // println!("Num wits: {}", num_witnesses);
-        // println!("Num cons: {}", num_cons);
+        // Add W to witness
+        let num_witnesses = r1cs.num_vars() + 1;
+        // Include V * V = V and 0 = W - V
+        let num_cons = r1cs.constraints().len() + 2;
         if num_witnesses > max_num_witnesses { max_num_witnesses = num_witnesses };
         if num_cons > max_num_cons { max_num_cons = num_cons };
         r1cs_list.push(r1cs);
@@ -332,6 +251,15 @@ fn main() {
     let max_num_cons = max_num_cons.next_power_of_two();
 
     // Convert R1CS into Spartan sparse format
+    // The final version will be of form: (v, i, _, o, wv, ma, mv, w), where
+    //   v is the valid bit
+    //   i are the inputs
+    //   _ is a dummy
+    //   o are the outputs
+    //  wv is the valid bit, but in witnesses
+    //  ma are addresses of all memory accesses
+    //  mv are values of all memory accesses
+    //   w are witnesses
     // According to the final io width, re-label all inputs and witnesses to the form (witness, input, output)
     let io_relabel = |b: usize, i: usize| -> usize {
         if i < live_io_list[b].0.len() { 
@@ -340,27 +268,25 @@ fn main() {
             live_io_list[b].1[i - live_io_list[b].0.len()] + max_num_io
         }
     };
-    let witness_relabel = |i: usize| i + max_num_witnesses;
+    // Add all IOs and WV in front
+    let witness_relabel = |i: usize| max_num_witnesses + 1 + i;
     // 0th entry is constant
     let v_cnst = 0;
     let mut sparse_mat_entry: Vec<Vec<SparseMatEntry>> = Vec::new();
     for b in 0..r1cs_list.len() {
         let r1cs = &r1cs_list[b];
         sparse_mat_entry.push(Vec::new());
-        // Start assigning validity check witnesses from max_num_witnesses - 1 to the front
-        let next_valid_check_witness = 2 * max_num_witnesses - 1;
         // First constraint is V * V = V
-        let args_a = vec![(v_cnst, 1)];
-        let args_b = vec![(v_cnst, 1)];
-        let args_c = vec![(v_cnst, 1)];
-        sparse_mat_entry[b].push(SparseMatEntry { row: 0, v_cnst, args_a, args_b, args_c });
-        let row_count = 1;
+        let (args_a, args_b, args_c) =
+            (vec![(v_cnst, 1)], vec![(v_cnst, 1)], vec![(v_cnst, 1)]);
+        sparse_mat_entry[b].push(SparseMatEntry { args_a, args_b, args_c });
+        // Second constraint is 0 = W - V
+        let (args_a, args_b, args_c) =
+            (vec![], vec![], vec![(max_num_witnesses, 1), (v_cnst, -1)]);
+        sparse_mat_entry[b].push(SparseMatEntry { args_a, args_b, args_c });
         // Iterate
         for c in r1cs.constraints() {
-            let (next_sparse_cons, row_count, next_valid_check_witness) = get_sparse_cons_with_v_check(c, row_count, v_cnst, |i| io_relabel(b, i), witness_relabel, next_valid_check_witness);
-            for nsc in next_sparse_cons {
-                sparse_mat_entry[b].push(nsc);
-            }
+            sparse_mat_entry[b].push(get_sparse_cons_with_v_check(c, v_cnst, |i| io_relabel(b, i), witness_relabel));
         }
     }
 

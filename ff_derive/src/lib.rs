@@ -568,6 +568,30 @@ fn prime_field_constants_and_sqrt(
                     (x * &x).ct_eq(self), // Only return Some if it's the square root.
                 )
             }
+        } else if (modulus % BigUint::from_str("8").unwrap()) == BigUint::from_str("5").unwrap() {
+            // Additional chain for (q + 3) // 8  
+            let mod_plus_3_over_8 = pow_fixed::generate(
+                &quote! {self},
+                (modulus + BigUint::from_str("3").unwrap()) >> 3,
+            );
+            let field_name = name;
+            // sqrt(-1)
+            let sqrt_minus_1 = (modulus - BigUint::from_str("1").unwrap()).sqrt().to_string();
+            quote! {
+                use ::ff::derive::subtle::{ConditionallySelectable, ConstantTimeEq};
+                let c1 = #field_name::from_str_vartime(#sqrt_minus_1).unwrap();
+                let tv1 = {
+                    #mod_plus_3_over_8
+                };
+                let tv2 = tv1 * c1;
+                let tv1_sq_is_self = tv1.square().ct_eq(self);
+                let z = #name::conditional_select(&tv2, &tv1, tv1_sq_is_self);
+
+                ::ff::derive::subtle::CtOption::new(
+                    z,
+                    (z * &z).ct_eq(self), // Only return Some if it's the square root.
+                )
+            }
         } else {
             syn::Error::new_spanned(
                 &name,

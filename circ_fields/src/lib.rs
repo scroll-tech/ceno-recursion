@@ -9,12 +9,12 @@ pub mod size;
 
 /// Exports for moduli defined in this crate, as ARCs
 pub mod moduli {
-    pub use super::ff_field::{F_BLS12381_FMOD_ARC, F_BN254_FMOD_ARC};
+    pub use super::ff_field::{F_BLS12381_FMOD_ARC, F_BN254_FMOD_ARC, F_CURVE25519_FMOD_ARC};
 }
 
-use ff_field::{FBls12381, FBn254};
-use ff_field::{F_BLS12381_FMOD, F_BN254_FMOD};
-use ff_field::{F_BLS12381_FMOD_ARC, F_BN254_FMOD_ARC};
+use ff_field::{FBls12381, FBn254, FCurve25519};
+use ff_field::{F_BLS12381_FMOD, F_BN254_FMOD, F_CURVE25519_FMOD};
+use ff_field::{F_BLS12381_FMOD_ARC, F_BN254_FMOD_ARC, F_CURVE25519_FMOD_ARC};
 use int_field::IntField;
 
 use datasize::DataSize;
@@ -35,6 +35,8 @@ pub enum FieldT {
     FBls12381,
     /// BN-254 scalar field as `ff`
     FBn254,
+    /// Curve-25519 scalar field as `ff`
+    FCurve25519,
     /// Generic field element based on `rug::Integer`
     IntField(Arc<Integer>),
 }
@@ -44,6 +46,7 @@ impl Display for FieldT {
         match self {
             Self::FBls12381 => write!(f, "FieldT::FBls12381"),
             Self::FBn254 => write!(f, "FieldT::FBn254"),
+            Self::FCurve25519 => write!(f, "FieldT::FCurve25519"),
             Self::IntField(m) => write!(f, "FieldT::(mod {})", m),
         }
     }
@@ -79,6 +82,7 @@ impl FieldT {
         match m {
             m if m == &*F_BLS12381_FMOD => Some(Self::FBls12381),
             m if m == &*F_BN254_FMOD => Some(Self::FBn254),
+            m if m == &*F_CURVE25519_FMOD => Some(Self::FCurve25519),
             _ => None,
         }
     }
@@ -88,6 +92,7 @@ impl FieldT {
         match self {
             FieldT::FBls12381 => Some(InlineFieldTag::Bls12381),
             FieldT::FBn254 => Some(InlineFieldTag::Bn254),
+            FieldT::FCurve25519 => Some(InlineFieldTag::FCurve25519),
             FieldT::IntField(_) => None,
         }
     }
@@ -98,6 +103,7 @@ impl FieldT {
         match self {
             Self::FBls12381 => &F_BLS12381_FMOD,
             Self::FBn254 => &F_BN254_FMOD,
+            Self::FCurve25519 => &F_CURVE25519_FMOD,
             Self::IntField(m) => m.as_ref(),
         }
     }
@@ -108,6 +114,7 @@ impl FieldT {
         match self {
             Self::FBls12381 => F_BLS12381_FMOD_ARC.clone(),
             Self::FBn254 => F_BN254_FMOD_ARC.clone(),
+            Self::FCurve25519 => F_CURVE25519_FMOD_ARC.clone(),
             Self::IntField(m) => m.clone(),
         }
     }
@@ -118,6 +125,7 @@ impl FieldT {
         match self {
             Self::FBls12381 => FieldV::from(InlineFieldV(0, InlineFieldTag::Bls12381)),
             Self::FBn254 => FieldV::from(InlineFieldV(0, InlineFieldTag::Bn254)),
+            Self::FCurve25519 => FieldV::from(InlineFieldV(0, InlineFieldTag::FCurve25519)),
             Self::IntField(_) => self.new_v(0),
         }
     }
@@ -181,12 +189,14 @@ enum FieldTag {
     FullField,
     InlineBls12381,
     InlineBn254,
+    InlineFCurve25519,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum InlineFieldTag {
     Bls12381,
     Bn254,
+    FCurve25519,
 }
 
 impl From<u8> for FieldTag {
@@ -195,6 +205,7 @@ impl From<u8> for FieldTag {
             0 => FieldTag::FullField,
             1 => FieldTag::InlineBls12381,
             2 => FieldTag::InlineBn254,
+            3 => FieldTag::InlineFCurve25519,
             _ => panic!("Invalid field tag {}", value),
         }
     }
@@ -205,6 +216,7 @@ impl From<InlineFieldTag> for FieldTag {
         match value {
             InlineFieldTag::Bls12381 => FieldTag::InlineBls12381,
             InlineFieldTag::Bn254 => FieldTag::InlineBn254,
+            InlineFieldTag::FCurve25519 => FieldTag::InlineFCurve25519,
         }
     }
 }
@@ -214,6 +226,7 @@ impl From<FieldTag> for InlineFieldTag {
         match value {
             FieldTag::InlineBls12381 => InlineFieldTag::Bls12381,
             FieldTag::InlineBn254 => InlineFieldTag::Bn254,
+            FieldTag::InlineFCurve25519 => InlineFieldTag::FCurve25519,
             FieldTag::FullField => panic!("Tag {:?} is not inline", value),
         }
     }
@@ -225,6 +238,7 @@ impl FieldTag {
             FieldTag::FullField => 0,
             FieldTag::InlineBls12381 => 1,
             FieldTag::InlineBn254 => 2,
+            FieldTag::InlineFCurve25519 => 3,
         }
     }
 }
@@ -234,18 +248,21 @@ impl InlineFieldTag {
         match self {
             InlineFieldTag::Bls12381 => FieldT::FBls12381,
             InlineFieldTag::Bn254 => FieldT::FBn254,
+            InlineFieldTag::FCurve25519 => FieldT::FCurve25519,
         }
     }
     fn modulus(&self) -> &'static Integer {
         match self {
             InlineFieldTag::Bls12381 => &F_BLS12381_FMOD,
             InlineFieldTag::Bn254 => &F_BN254_FMOD,
+            InlineFieldTag::FCurve25519 => &F_CURVE25519_FMOD,
         }
     }
     fn matches(&self, v: &FullFieldV) -> bool {
         match (self, v) {
             (InlineFieldTag::Bls12381, FullFieldV::FBls12381(_)) => true,
             (InlineFieldTag::Bn254, FullFieldV::FBn254(_)) => true,
+            (InlineFieldTag::FCurve25519, FullFieldV::FCurve25519(_)) => true,
             _ => false,
         }
     }
@@ -405,6 +422,8 @@ pub enum FullFieldV {
     FBls12381(FBls12381),
     /// BN-254 scalar field element as `ff`
     FBn254(FBn254),
+    /// Curve-25519 scalar field element as `ff`
+    FCurve25519(FCurve25519),
     /// Generic field element based on `rug::Integer`
     IntField(IntField),
 }
@@ -414,6 +433,7 @@ impl From<InlineFieldV> for FullFieldV {
         match value.1 {
             InlineFieldTag::Bls12381 => FullFieldV::FBls12381(value.0.into()),
             InlineFieldTag::Bn254 => FullFieldV::FBn254(value.0.into()),
+            InlineFieldTag::FCurve25519 => FullFieldV::FCurve25519(value.0.into()),
         }
     }
 }
@@ -425,6 +445,7 @@ impl FullFieldV {
         match self {
             FullFieldV::FBls12381(_) => FieldT::FBls12381,
             FullFieldV::FBn254(_) => FieldT::FBn254,
+            FullFieldV::FCurve25519(_) => FieldT::FCurve25519,
             FullFieldV::IntField(i) => FieldT::IntField(i.modulus_arc()),
         }
     }
@@ -435,6 +456,7 @@ impl FullFieldV {
         match self {
             FullFieldV::FBls12381(f) => FullFieldV::FBls12381(f.pow_vartime(&[u])),
             FullFieldV::FBn254(f) => FullFieldV::FBn254(f.pow_vartime(&[u])),
+            FullFieldV::FCurve25519(f) => FullFieldV::FCurve25519(f.pow_vartime(&[u])),
             FullFieldV::IntField(i) => FullFieldV::IntField(IntField::new(
                 i.i.clone().pow_mod(&Integer::from(u), i.modulus()).unwrap(),
                 i.modulus_arc(),
@@ -492,6 +514,7 @@ impl FieldV {
             Ok(InlineFieldV(_, t)) => t.modulus(),
             Err(FullFieldV::FBls12381(_)) => &F_BLS12381_FMOD,
             Err(FullFieldV::FBn254(_)) => &F_BN254_FMOD,
+            Err(FullFieldV::FCurve25519(_)) => &F_CURVE25519_FMOD,
             Err(FullFieldV::IntField(i)) => i.modulus(),
         }
     }
@@ -503,6 +526,7 @@ impl FieldV {
         match &*self.full_cow() {
             FullFieldV::FBls12381(pf) => Self::from(FullFieldV::FBls12381(pf.invert().unwrap())),
             FullFieldV::FBn254(pf) => Self::from(FullFieldV::FBn254(pf.invert().unwrap())),
+            FullFieldV::FCurve25519(pf) => Self::from(FullFieldV::FCurve25519(pf.invert().unwrap())),
             FullFieldV::IntField(i) => Self::from(FullFieldV::IntField(i.clone().recip())),
         }
     }
@@ -514,6 +538,7 @@ impl FieldV {
         match &*self.full_cow() {
             FullFieldV::FBls12381(pf) => Self::from(FullFieldV::FBls12381(pf.invert().unwrap())),
             FullFieldV::FBn254(pf) => Self::from(FullFieldV::FBn254(pf.invert().unwrap())),
+            FullFieldV::FCurve25519(pf) => Self::from(FullFieldV::FCurve25519(pf.invert().unwrap())),
             FullFieldV::IntField(i) => Self::from(FullFieldV::IntField(i.clone().recip())),
         }
     }
@@ -531,6 +556,7 @@ impl FieldV {
             Ok(InlineFieldV(i, _)) => i == 0,
             Err(FullFieldV::FBls12381(pf)) => bool::from(pf.is_zero()),
             Err(FullFieldV::FBn254(pf)) => bool::from(pf.is_zero()),
+            Err(FullFieldV::FCurve25519(pf)) => bool::from(pf.is_zero()),
             Err(FullFieldV::IntField(i)) => i.is_zero(),
         }
     }
@@ -543,6 +569,7 @@ impl FieldV {
             Ok(InlineFieldV(i, _)) => i == 1,
             Err(FullFieldV::FBls12381(pf)) => bool::from(pf.is_one()),
             Err(FullFieldV::FBn254(pf)) => bool::from(pf.is_one()),
+            Err(FullFieldV::FCurve25519(pf)) => bool::from(pf.is_one()),
             Err(FullFieldV::IntField(i)) => i.i == 1,
         }
     }
@@ -562,6 +589,7 @@ impl FieldV {
         Self::from(match ty {
             FieldT::FBls12381 => FullFieldV::FBls12381(FBls12381::from(i)),
             FieldT::FBn254 => FullFieldV::FBn254(FBn254::from(i)),
+            FieldT::FCurve25519 => FullFieldV::FCurve25519(FCurve25519::from(i)),
             FieldT::IntField(m) => FullFieldV::IntField(IntField::new(i, m)),
         })
     }
@@ -585,6 +613,7 @@ impl FieldV {
         Self::from(match ty {
             FieldT::FBls12381 => FullFieldV::FBls12381(FBls12381::from(i)),
             FieldT::FBn254 => FullFieldV::FBn254(FBn254::from(i)),
+            FieldT::FCurve25519 => FullFieldV::FCurve25519(FCurve25519::from(i)),
             FieldT::IntField(m) => FullFieldV::IntField(IntField::new(Integer::from(i), m)),
         })
     }
@@ -593,6 +622,7 @@ impl FieldV {
         Self::from(match ty {
             FieldT::FBls12381 => FullFieldV::FBls12381(FBls12381::random(rng)),
             FieldT::FBn254 => FullFieldV::FBn254(FBn254::random(rng)),
+            FieldT::FCurve25519 => FullFieldV::FCurve25519(FCurve25519::random(rng)),
             FieldT::IntField(m) => {
                 let mut rug_rng = rug::rand::RandState::new_mersenne_twister();
                 rug_rng.seed(&Integer::from(rng.next_u64()));
@@ -714,6 +744,7 @@ macro_rules! arith_impl {
                     match (self, other) {
                         (Self::FBls12381(f1), Self::FBls12381(f2)) => f1.[<$fn _assign>](f2),
                         (Self::FBn254(f1), Self::FBn254(f2)) => f1.[<$fn _assign>](f2),
+                        (Self::FCurve25519(f1), Self::FCurve25519(f2)) => f1.[<$fn _assign>](f2),
                         (Self::IntField(i1), Self::IntField(i2)) => i1.[<$fn _assign>](i2),
                         (s, o) => panic!("Operation [<$Trait Assign>] on {} and {}", s.ty(), o.ty()),
                     }
@@ -725,6 +756,7 @@ macro_rules! arith_impl {
                     match self {
                         Self::FBls12381(f1) => f1.[<$fn _assign>](other),
                         Self::FBn254(f1) => f1.[<$fn _assign>](other),
+                        Self::FCurve25519(f1) => f1.[<$fn _assign>](other),
                         Self::IntField(f1) => f1.[<$fn _assign>](other),
                     }
                 }
@@ -811,6 +843,7 @@ impl Neg for FieldV {
             match self.full_mut() {
                 FullFieldV::FBls12381(pf) => Self::from(FullFieldV::FBls12381(pf.clone().neg())),
                 FullFieldV::FBn254(pf) => Self::from(FullFieldV::FBn254(pf.clone().neg())),
+                FullFieldV::FCurve25519(pf) => Self::from(FullFieldV::FCurve25519(pf.clone().neg())),
                 FullFieldV::IntField(i) => Self::from(FullFieldV::IntField(i.clone().neg())),
             }
         } else {
@@ -841,6 +874,13 @@ impl Into<FullFieldV> for FBn254 {
 }
 
 #[allow(clippy::from_over_into)]
+impl Into<FullFieldV> for FCurve25519 {
+    fn into(self) -> FullFieldV {
+        FullFieldV::FCurve25519(self)
+    }
+}
+
+#[allow(clippy::from_over_into)]
 impl Into<FullFieldV> for IntField {
     fn into(self) -> FullFieldV {
         FullFieldV::IntField(self)
@@ -853,6 +893,7 @@ impl Into<Integer> for FullFieldV {
         match self {
             FullFieldV::FBls12381(f) => Integer::from(&f),
             FullFieldV::FBn254(f) => Integer::from(&f),
+            FullFieldV::FCurve25519(f) => Integer::from(&f),
             FullFieldV::IntField(i) => i.i,
         }
     }
@@ -864,6 +905,7 @@ impl Into<Integer> for &FullFieldV {
         match self {
             FullFieldV::FBls12381(f) => Integer::from(f),
             FullFieldV::FBn254(f) => Integer::from(f),
+            FullFieldV::FCurve25519(f) => Integer::from(f),
             FullFieldV::IntField(i) => i.i.clone(),
         }
     }

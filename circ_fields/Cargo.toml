@@ -5,8 +5,8 @@ authors = ["kwantam <kwantam@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-ff = { version = "0.12", features = ["derive"] }
-ff_derive = "0.12"
+ff = { version = "0.13", features = ["derive"] }
+ff_derive = "0.13"
 ff-derive-num = "0.2"
 lazy_static = "1.4"
 num-traits = "0.2"
@@ -15,6 +15,10 @@ rand = "0.8"
 rug = { version = "1.11", features = ["serde"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 datasize = { version = "0.2", features = ["detailed"] }
+
+[patch.crates-io]
+ff = { path = "../../ff" }
+ff_derive = { path = "../../ff/ff_derive" }
 
 [dev-dependencies]
 rand = "0.8"

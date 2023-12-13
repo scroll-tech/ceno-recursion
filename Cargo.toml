@@ -24,8 +24,7 @@ log = "0.4"
 thiserror = "1.0"
 bellman = { git = "https://github.com/alex-ozdemir/bellman.git", branch = "mirage", optional = true }
 rug-polynomial = { version = "0.2.5", optional = true }
-ff = "0.13"
-ff_derive = "0.13"
+ff = { version = "0.12", optional = true }
 fxhash = "0.2"
 good_lp = { version = "1.1", features = ["lp-solvers", "coin_cbc"], default-features = false, optional = true }
 group = { version = "0.12", optional = true }
@@ -53,16 +52,15 @@ im = "15"
 once_cell = "1"
 regex = "1"
 
-[patch.crates-io]
-ff = { path = "../ff" }
-ff_derive = { path = "../ff/ff_derive" }
-
 [dev-dependencies]
 quickcheck = "1"
 quickcheck_macros = "1"
 env_logger = "0.8"
 bls12_381 = "0.7"
 approx = "0.5.0"
+
+[patch.crates-io]
+ff = { path = "../ff" }
 
 [features]
 default = []
@@ -79,7 +77,7 @@ kahypar = ["aby"]
 r1cs = ["bincode"]
 poly = ["rug-polynomial"]
 spartan = ["r1cs", "dep:spartan", "merlin", "curve25519-dalek", "bincode", "gmp-mpfr-sys"]
-bellman = ["r1cs", "dep:bellman", "group", "pairing", "serde_bytes", "bincode", "gmp-mpfr-sys", "byteorder"]
+bellman = ["r1cs", "dep:bellman", "ff", "group", "pairing", "serde_bytes", "bincode", "gmp-mpfr-sys", "byteorder"]
 
 [[example]]
 name = "circ"

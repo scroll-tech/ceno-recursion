@@ -88,9 +88,7 @@ dependencies = [
 
 [[package]]
 name = "ff"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d013fc25338cc558c5c2cfbad646908fb23591e2404481826742b651c9af7160"
+version = "0.12.2"
 dependencies = [
  "bitvec",
  "byteorder",
@@ -113,9 +111,7 @@ dependencies = [
 
 [[package]]
 name = "ff_derive"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17db6fa0748f1f66e9dbafba1881009b50614948c0e900f59083afff2f8d784b"
+version = "0.12.2"
 dependencies = [
  "addchain",
  "cfg-if",

@@ -122,6 +122,10 @@ pub fn optimize_block<const VERBOSE: bool>(
     // Set Input
     // Putting this here because EBE and DBE destroys CFG
     bls = set_input_output(bls, &successor, &predecessor, &entry_bl, &exit_bls, inputs.clone());
+    if VERBOSE {
+        println!("\n\n--\nSet Input Output:");
+        print_bls(&bls, &entry_bl);
+    }
 
     // EBE
     (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
@@ -1208,6 +1212,10 @@ fn set_input_output<'bl>(
 
         // State is the union of all successors and exit condition
         let mut state: HashSet<String> = HashSet::new();
+        // Add %oRET to output of every exit blocks
+        if exit_bls.contains(&cur_bl) {
+            state.insert("%RET".to_string());
+        }
         for s in &successor[cur_bl] {
             state.extend(bl_in[*s].clone());
         }
@@ -1480,7 +1488,7 @@ fn var_name_to_reg_id_expr<const MODE: usize>(
 // hence need to record inputs, outputs, and witnesses separately
 // Structure for input / output
 // reg  0   1   2   3   4   5   6   7  ...
-//      V  BN  RP  SP  BP  RET i1  i2
+//      V  BN  RP  SP  BP  RET i6  i7
 // Structure for witness
 // reg  0   1   2   3   4   5   6   7  ...
 //     w0  w1  w2  w3  w4  w5  w6  w7

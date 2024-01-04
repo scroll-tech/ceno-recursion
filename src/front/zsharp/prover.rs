@@ -54,11 +54,9 @@ impl PartialEq for MemOp {
 }
 impl Eq for MemOp {}
 
-// We reserve index 0 - 3 for reg_in and reg_out to:
-// reg_in[0]: %RP
-// reg_in[1]: %SP
-// reg_in[2]: %BP
-// reg_in[3]: %RET
+// We reserve indices for reg_in and reg_out to:
+// reg  0   1   2   3   4   5   6   7  ...
+//      V  BN  RP  SP  BP  RET i6  i7
 #[derive(Debug, Clone)]
 pub struct ExecState {
     pub blk_id: usize,      // ID of the block
@@ -259,9 +257,11 @@ impl<'ast> ZGen<'ast> {
                 }
                 println!("]");
                 let _ = &bls[nb].pretty();
+                println!();
             }
             (nb, phy_mem, terminated, mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem)?;
-            
+            println!("NB: {}", nb);
+
             // Update reg_out
             for i in 1..io_size {
                 bl_exec_state[tr_size].reg_out[i] = self.cvar_lookup(&format!("%o{}", i));
@@ -273,9 +273,9 @@ impl<'ast> ZGen<'ast> {
             tr_size += 1;
         }
 
-        // Return value is just the value of the variable called "%RET"
+        // Return value is just the value of the variable called "%RET", which is "%o5"
         // Type of return value is checked during assignment
-        let ret = self.cvar_lookup("%RET").ok_or(format!(
+        let ret = self.cvar_lookup("%o5").ok_or(format!(
             "Missing return value for one or more functions."
         ));
 

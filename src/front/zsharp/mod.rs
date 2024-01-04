@@ -66,7 +66,8 @@ impl FrontEnd for ZSharpFE {
             b.pretty();
             println!("");
         }
-        let (blks, _, io_size, _, live_io_list) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
+        let (blks, entry_bl) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs.clone());
+        let (blks, _, io_size, _, live_io_list) = blocks_optimization::process_block::<VERBOSE, 0>(blks, entry_bl, inputs);
         println!("\n\n--\nCirc IR:");
         g.bls_to_circ(&blks);
 
@@ -94,7 +95,8 @@ impl ZSharpFE {
             // b.pretty();
             // println!("");
         // }
-        let (blks, entry_bl, io_size, _, _) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs);
+        let (blks, entry_bl) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs.clone());
+        let (blks, entry_bl, io_size, _, _) = blocks_optimization::process_block::<VERBOSE, 1>(blks, entry_bl, inputs);
         println!("\n\n--\nInterpretation:");
         let (ret, _, bl_exec_state) = g.bl_eval_entry_fn::<true>(entry_bl, &i.entry_regs, &blks, io_size)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));

@@ -90,14 +90,13 @@ fn print_bls(bls: &Vec<Block>, entry_bl: &usize) {
     }    
 }
 
-// Returns: Blocks, entry block, # of registers
+// Returns: Blocks
 // Inputs are (variable, type) pairs
 pub fn optimize_block<const VERBOSE: bool>(
     mut bls: Vec<Block>,
     mut entry_bl: usize,
     inputs: Vec<(String, Ty)>
-) -> (Vec<Block>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>) {
-    
+) -> (Vec<Block>, usize) {
     // Construct CFG
     let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
         construct_flow_graph(&bls, entry_bl);
@@ -137,9 +136,18 @@ pub fn optimize_block<const VERBOSE: bool>(
         println!("\n\n--\nDBE:");
         print_bls(&bls, &entry_bl);
     }
+    (bls, entry_bl)
+}
 
+// Returns: Blocks, entry block, # of registers
+// Inputs are (variable, type) pairs
+pub fn process_block<const VERBOSE: bool, const MODE: usize>(
+    bls: Vec<Block>,
+    entry_bl: usize,
+    inputs: Vec<(String, Ty)>
+) -> (Vec<Block>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>) {
     // VtR
-    let (bls, io_map, io_size, witness_map, witness_size, live_io) = var_to_reg(bls, inputs);
+    let (bls, io_map, io_size, witness_map, witness_size, live_io) = var_to_reg::<MODE>(bls, inputs);
     if VERBOSE {
         println!("\n\n--\nVar -> Reg:");
         println!("Var -> IO map: {:?}", io_map);
@@ -149,13 +157,9 @@ pub fn optimize_block<const VERBOSE: bool>(
             println!("  BLOCK {}: {:?}", i, live_io[i])
         }
     }
-
-    // Fill remaining inputs with dummy fields
-    // bls = fill_input_output(bls, &reg_size);
     print_bls(&bls, &entry_bl);
-
     (bls, entry_bl, io_size, witness_size, live_io)
-} 
+}
 
 // If bc is a statement of form field %RP = val,
 // return val
@@ -1490,7 +1494,11 @@ fn var_name_to_reg_id_expr<const MODE: usize>(
 // Finally, write down labels of all live inputs and outputs, 
 // No control flow, iterate over blocks directly
 // Returns the new blocks, register map, and # of registers used
-fn var_to_reg(
+//
+// var_to_reg takes in two modes:
+//  MODE = 0 - Verification Mode, output registers are witnesses and checked using assertion
+//  MODE = 1 - Compute Mode, output registers are assigned and not checked
+fn var_to_reg<const MODE: usize>(
     mut bls: Vec<Block>,
     inputs: Vec<(String, Ty)>
 ) -> (Vec<Block>, HashMap<String, usize>, usize, HashMap<String, usize>, usize, Vec<(Vec<usize>, Vec<usize>)>) {
@@ -1676,6 +1684,8 @@ fn var_to_reg(
         }
 
         // Map the outputs
+        // If in MODE 0, assert the %o variables
+        // Otherwise, assign the %o variables
         let mut new_outputs = Vec::new();
         new_outputs.push(("%o1".to_string(), Some(Ty::Field)));
         for (name, ty) in &bls[i].outputs {
@@ -1686,32 +1696,69 @@ fn var_to_reg(
             live_io[i].1.push(live_output_label);
             let new_witness_name: String;
             (new_witness_name, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>(name.to_string(), witness_map, witness_size);
-            // For each input, assert that it is equal to the corresponding witness
-            let witness_check_stmt = AssertionStatement {
-                expression: Expression::Binary(BinaryExpression {
-                    op: BinaryOperator::Eq,
-                    left: Box::new(Expression::Identifier(IdentifierExpression {
-                        value: new_output_name,
+
+            if MODE == 0 {
+                // For each output, assert that it is equal to the corresponding witness
+                let output_check_stmt = AssertionStatement {
+                    expression: Expression::Binary(BinaryExpression {
+                        op: BinaryOperator::Eq,
+                        left: Box::new(Expression::Identifier(IdentifierExpression {
+                            value: new_output_name,
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        right: Box::new(Expression::Identifier(IdentifierExpression {
+                            value: new_witness_name,
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
                         span: Span::new("", 0, 0).unwrap()
-                    })),
-                    right: Box::new(Expression::Identifier(IdentifierExpression {
+                    }),
+                    message: None,
+                    span: Span::new("", 0, 0).unwrap()
+                };
+                new_instr.push(BlockContent::Stmt(Statement::Assertion(output_check_stmt)));
+            } else {
+                // For each output, assign it to the value of the corresponding witness
+                let output_assign_stmt = DefinitionStatement {
+                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        ty: ty_to_type(&ty.clone().unwrap()).unwrap(),
+                        identifier: IdentifierExpression {
+                            value: new_output_name,
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        span: Span::new("", 0, 0).unwrap()
+                    })],
+                    expression: Expression::Identifier(IdentifierExpression {
                         value: new_witness_name,
                         span: Span::new("", 0, 0).unwrap()
-                    })),
+                    }),
                     span: Span::new("", 0, 0).unwrap()
-                }),
-                message: None,
-                span: Span::new("", 0, 0).unwrap()
-            };
-            new_instr.push(BlockContent::Stmt(Statement::Assertion(witness_check_stmt)));
+                };
+                new_instr.push(BlockContent::Stmt(Statement::Definition(output_assign_stmt)));
+            }
         }
         bls[i].outputs = new_outputs;
 
         // Update terminator and convert it into an assertion statement
-        if let BlockTerminator::Transition(e) = &bls[i].terminator {
+        let new_expr = {
             let new_expr: Expression;
-            (new_expr, witness_map, witness_size) = var_to_reg_expr(&e, witness_map, witness_size);
-
+            if let BlockTerminator::Transition(e) = &bls[i].terminator {
+                (new_expr, witness_map, witness_size) = var_to_reg_expr(&e, witness_map, witness_size);
+                bls[i].terminator = BlockTerminator::Transition(new_expr.clone());
+            } else {
+                new_expr = Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                    value: DecimalNumber {
+                        value: "0".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    span: Span::new("", 0, 0).unwrap()
+                }));
+            };
+            new_expr
+        };
+        if MODE == 0 {
             let output_block_check_stmt = AssertionStatement {
                 expression: Expression::Binary(BinaryExpression {
                     op: BinaryOperator::Eq,
@@ -1726,34 +1773,23 @@ fn var_to_reg(
                 span: Span::new("", 0, 0).unwrap()
             };
             new_instr.push(BlockContent::Stmt(Statement::Assertion(output_block_check_stmt)));
-
-            bls[i].terminator = BlockTerminator::Transition(new_expr);
         } else {
-            let output_block_check_stmt = AssertionStatement {
-                expression: Expression::Binary(BinaryExpression {
-                    op: BinaryOperator::Eq,
-                    left: Box::new(Expression::Identifier(IdentifierExpression {
-                        value: "%o1".to_string(),
+            let output_block_assign_stmt = DefinitionStatement {
+                lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                    ty: Type::Basic(BasicType::Field(FieldType {
                         span: Span::new("", 0, 0).unwrap()
                     })),
-                    right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: "0".to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
+                    identifier: IdentifierExpression {
+                        value: "%o1".to_string(),
                         span: Span::new("", 0, 0).unwrap()
-                    }))),
+                    },
                     span: Span::new("", 0, 0).unwrap()
-                }),
-                message: None,
+                })],
+                expression: new_expr.clone(),
                 span: Span::new("", 0, 0).unwrap()
             };
-            new_instr.push(BlockContent::Stmt(Statement::Assertion(output_block_check_stmt)));
+            new_instr.push(BlockContent::Stmt(Statement::Definition(output_block_assign_stmt)));
         }
-
         bls[i].instructions = new_instr;
 
         // Return is %oBN

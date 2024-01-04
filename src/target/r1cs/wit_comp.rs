@@ -170,6 +170,10 @@ impl<'a> StagedWitCompEvaluator<'a> {
         }
         out
     }
+    /// Return the variable values
+    pub fn get_variable_values(&self) -> HashMap<String, Value> {
+        self.variable_values.clone()
+    }
 }
 
 #[cfg(test)]

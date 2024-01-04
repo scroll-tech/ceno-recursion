@@ -19,6 +19,7 @@ use circ::target::r1cs::bellman::parse_instance;
 use circ::target::r1cs::{R1cs, VarType, Lc};
 use circ::target::r1cs::opt::reduce_linearities;
 use circ::target::r1cs::trans::to_r1cs;
+use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
 /*
 use std::fs::File;
 use std::io::Read;
@@ -144,22 +145,24 @@ fn main() {
     circ::cfg::set(&options.circ);
     println!("{options:?}");
 
+    let entry_regs = vec![LiteralExpression::DecimalLiteral(
+        DecimalLiteralExpression {
+            value: DecimalNumber {
+                value: "5".to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            },
+            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            span: Span::new("", 0, 0).unwrap()
+        }
+    )];
+
     let (cs, io_size, live_io_list) = {
         let inputs = zsharp::Inputs {
             file: options.path,
             mode: Mode::Proof,
-            entry_regs: vec![LiteralExpression::DecimalLiteral(
-                DecimalLiteralExpression {
-                    value: DecimalNumber {
-                        value: "5".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    span: Span::new("", 0, 0).unwrap()
-                }
-            )]
+            entry_regs
         };
         ZSharpFE::gen(inputs)
     };
@@ -217,11 +220,18 @@ fn main() {
     let mut r1cs_list = Vec::new();
     let mut max_num_witnesses = 2 * io_size;
     let mut max_num_cons = 1;
+    // Obtain a list of prover data by block
+    let mut prover_data_list = Vec::new();
     while let Some(c) = cs.comps.get(&block_name) {
         // println!("{}:", block_name);
         let mut r1cs = to_r1cs(c, cfg());
+
         // Remove the last constraint because it is about the return value
         r1cs.constraints.pop();
+
+        // Add prover data
+        let (prover_data, _) = r1cs.clone().finalize(c);
+        prover_data_list.push(prover_data);
 
         /*
         let r1cs = if options.skip_linred {
@@ -290,6 +300,7 @@ fn main() {
         }
     }
 
+    /*
     // Print out the sparse matrix
     println!("NUM_VARS: {}", max_num_witnesses);
     println!("NUM_CONS: {}", max_num_cons);
@@ -303,5 +314,14 @@ fn main() {
         if sparse_mat_entry[b].len() > 10 {
             println!("...");
         }
+    }
+    */
+
+    // Start from entry block, compute value of witnesses
+    let mut next_block = 0;
+    while next_block < prover_data_list.len() {
+        let eval = StagedWitCompEvaluator::new(&prover_data_list[0].precompute);
+        println!("{:?}", eval);
+        next_block = 100;
     }
 }

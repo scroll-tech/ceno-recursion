@@ -178,7 +178,7 @@ impl<'ast> ZGen<'ast> {
 
     // I am hacking cvars_stack to do the interpretation. Ideally we want a separate var_table to do so.
     // We only need BTreeMap<String, T> to finish evaluation, so the 2 Vecs of cvars_stack should always have
-    // size 1.
+    // size 1, i.e. we use only one function and one scope.
     // Return values:
     // ret[0]: the return value of the function
     // ret[1][i]: how many times have block i been executed?
@@ -233,6 +233,17 @@ impl<'ast> ZGen<'ast> {
             bl_exec_state.push(ExecState::new(nb, io_size));
             // Match reg_in with reg_out of last block
             if tr_size > 0 {
+                for (name, ty) in &bls[nb].inputs {
+                    if let Some(x) = ty {
+                        let output_name = str::replace(name, "i", "o");
+                        let val = self.cvar_lookup(&output_name).unwrap();
+                        self.declare_init_impl_::<true>(
+                            name.to_string(),
+                            x.clone(),
+                            val,
+                        )?;
+                    }
+                }
                 for i in 1..io_size {
                     bl_exec_state[tr_size].reg_in[i] = self.cvar_lookup(&format!("%i{}", i));
                 }

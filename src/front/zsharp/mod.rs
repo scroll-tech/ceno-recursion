@@ -24,6 +24,7 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::hash::BuildHasherDefault;
 use zokrates_pest_ast as ast;
 
 use term::*;
@@ -34,20 +35,18 @@ const GC_INC: usize = 32;
 const VERBOSE: bool = false;
 
 /// Inputs to the Z# compiler
-pub struct Inputs<'ast> {
+pub struct Inputs {
     /// The file to look for `main` in.
     pub file: PathBuf,
     /// The mode to generate for (MPC or proof). Effects visibility.
     pub mode: Mode,
-    /// Values of the input registers
-    pub entry_regs: Vec<ast::LiteralExpression<'ast>>
 }
 
 /// The Z# front-end. Implements [FrontEnd].
 pub struct ZSharpFE;
 
 impl FrontEnd for ZSharpFE {
-    type Inputs<'ast> = Inputs<'ast>;
+    type Inputs<'ast> = Inputs;
     fn gen(i: Inputs) -> (Computations, usize, Vec<(Vec<usize>, Vec<usize>)>) {
         debug!(
             "Starting Z# front-end, field: {}",
@@ -81,7 +80,8 @@ impl FrontEnd for ZSharpFE {
 
 impl ZSharpFE {
     /// Execute the Z# front-end interpreter on the supplied file with the supplied inputs
-    pub fn interpret(i: Inputs) -> T {
+    pub fn interpret(i: Inputs, entry_regs: &Vec<ast::LiteralExpression>)
+        -> (T, Vec<usize>, Vec<HashMap<String, Value, BuildHasherDefault<fxhash::FxHasher>>>) {
         let loader = parser::ZLoad::new();
         let asts = loader.load(&i.file);
         let mut g = ZGen::new(asts, i.mode, loader.stdlib(), cfg().zsharp.isolate_asserts);
@@ -98,12 +98,45 @@ impl ZSharpFE {
         let (blks, entry_bl) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs.clone());
         let (blks, entry_bl, io_size, _, _) = blocks_optimization::process_block::<VERBOSE, 1>(blks, entry_bl, inputs);
         println!("\n\n--\nInterpretation:");
-        let (ret, _, bl_exec_state) = g.bl_eval_entry_fn::<true>(entry_bl, &i.entry_regs, &blks, io_size)
+        let (ret, _, bl_exec_state) = g.bl_eval_entry_fn::<VERBOSE>(entry_bl, entry_regs, &blks, io_size)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-        prover::print_state_list(&bl_exec_state);
-        let _ = prover::sort_by_block(&bl_exec_state);
-        let _ = prover::sort_by_mem(&bl_exec_state);
-        return ret;
+        // prover::print_state_list(&bl_exec_state);
+        // let _ = prover::sort_by_block(&bl_exec_state);
+        // let _ = prover::sort_by_mem(&bl_exec_state);
+
+        // A vector of all the blocks executed
+        let mut block_id_list = Vec::new();
+        // Convert bl_exec_state to list of String -> Value hashmaps
+        // Variables should be named Block_X_fX_lex0_%XX_v0
+        let mut block_inputs_list = Vec::new();
+        let suffix = format!("_v0");
+        for state in bl_exec_state {
+            let prefix = format!("Block_{}_f{}_lex0_", state.blk_id, state.blk_id);
+            block_id_list.push(state.blk_id);
+            let mut inputs = HashMap::<String, Value, BuildHasherDefault<fxhash::FxHasher>>::default();
+            // Process reg_ins
+            for i in 0..state.reg_in.len() {
+                // Only insert if state.reg_in[i] != None
+                // Convert T to Value
+                if !state.reg_in[i].is_none() {
+                    let value = to_const_value(state.reg_in[i].clone().unwrap())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                    inputs.insert(format!("{}%i{}{}", prefix, i, suffix), value);
+                }
+            }
+            // Process reg_outs
+            for i in 0..state.reg_out.len() {
+                // Only insert if state.reg_out[i] != None
+                // Convert T to Value
+                if !state.reg_out[i].is_none() {
+                    let value = to_const_value(state.reg_out[i].clone().unwrap())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                    inputs.insert(format!("{}%o{}{}", prefix, i, suffix), value);
+                }
+            }
+            block_inputs_list.push(inputs);
+        }
+        return (ret, block_id_list, block_inputs_list);
     }
 }
 

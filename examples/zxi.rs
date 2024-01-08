@@ -5,6 +5,7 @@ use circ::cfg::{
     CircOpt,
 };
 use circ::front::Mode;
+use rand_chacha::rand_core::block;
 use std::path::PathBuf;
 
 use zokrates_pest_ast::*;
@@ -31,8 +32,10 @@ fn main() {
     circ::cfg::set(&options.circ);
     let inputs = Inputs {
         file: options.zsharp_path,
-        mode: Mode::Proof,
-        entry_regs: vec![LiteralExpression::DecimalLiteral(
+        mode: Mode::Proof
+    };
+    let entry_regs = vec![
+        LiteralExpression::DecimalLiteral(
             DecimalLiteralExpression {
                 value: DecimalNumber {
                     value: "0".to_string(),
@@ -67,11 +70,17 @@ fn main() {
                 })),
                 span: Span::new("", 0, 0).unwrap()
             }
-        )]
-    };
-    let cs = ZSharpFE::interpret(inputs);
+        )
+    ];
+    let (cs, block_id_list, block_inputs_list) = ZSharpFE::interpret(inputs, &entry_regs);
     print!("\n\nReturn value: ");
     cs.pretty(&mut std::io::stdout().lock())
         .expect("error pretty-printing value");
     println!();
+    for i in 0..block_id_list.len() {
+        println!("BLOCK ID: {}", block_id_list[i]);
+        for (name, val) in &block_inputs_list[i] {
+            println!("{}: {:?}", name, val);
+        }
+    }
 }

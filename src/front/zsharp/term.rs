@@ -601,6 +601,13 @@ pub fn const_val(a: T) -> Result<T, String> {
     }
 }
 
+pub fn to_const_value(a: T) -> Result<Value, String> {
+    match const_value(&a.term) {
+        Some(v) => Ok(v),
+        _ => Err(format!("{} is not a constant value", &a)),
+    }
+}
+
 fn const_value(t: &Term) -> Option<Value> {
     let folded = constant_fold(t, &[]);
     match &folded.op() {

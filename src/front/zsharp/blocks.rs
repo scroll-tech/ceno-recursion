@@ -27,12 +27,11 @@ use zokrates_pest_ast::*;
 use crate::front::zsharp::ZGen;
 use crate::front::zsharp::Ty;
 use crate::front::zsharp::PathBuf;
-use crate::front::zsharp::pretty;
+use crate::front::zsharp::pretty::*;
 use std::collections::HashMap;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use crate::front::zsharp::*;
-
 
 fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast>) -> Expression<'ast> {
     let ce = Expression::Binary(BinaryExpression {
@@ -203,52 +202,31 @@ impl<'ast> Block<'ast> {
         println!("\nBlock {}:", self.name);
         println!("Inputs:");
 
-        let pretty_name = |name: String| -> String {
-            match name.as_str() {
-                "%i0" => "%V".to_string(),
-                "%i1" => "%iBN".to_string(),
-                "%i2" => "%iRP".to_string(),
-                "%i3" => "%iSP".to_string(),
-                "%i4" => "%iBP".to_string(),
-                "%i5" => "%iRET".to_string(),
-                "%o1" => "%oBN".to_string(),
-                "%o2" => "%oRP".to_string(),
-                "%o3" => "%osP".to_string(),
-                "%o4" => "%oBP".to_string(),
-                "%o5" => "%oRET".to_string(),
-                "%w0" => "%wRP".to_string(),
-                "%w1" => "%wSP".to_string(),
-                "%w2" => "%wBP".to_string(),
-                "%w3" => "%wRET".to_string(),
-                _ => name
-            }
-        };
-
         for i in &self.inputs {
             let (name, ty) = i;
             if let Some(x) = ty {
-                println!("    {}: {}", pretty_name(name.to_string()), x);
+                println!("    {}: {}", pretty_name(name), x);
             }
         }
         println!("Outputs:");
         for i in &self.outputs {
             let (name, ty) = i;
             if let Some(x) = ty {
-                println!("    {}: {}", pretty_name(name.to_string()), x);
+                println!("    {}: {}", pretty_name(name), x);
             }
         }
         println!("Instructions:");
         for c in &self.instructions {
             match c {
-                BlockContent::MemPush((id, ty, offset)) => { println!("    %PHY[%SP + {offset}] = {} <{ty}>", pretty_name(id.to_string())) }
-                BlockContent::MemPop((id, ty, offset)) => { println!("    {ty} {} = %PHY[%BP + {offset}]", pretty_name(id.to_string())) }
-                BlockContent::Stmt(s) => { pretty::pretty_stmt(1, &s); }
+                BlockContent::MemPush((id, ty, offset)) => { println!("    %PHY[%SP + {offset}] = {} <{ty}>", pretty_name(id)) }
+                BlockContent::MemPop((id, ty, offset)) => { println!("    {ty} {} = %PHY[%BP + {offset}]", pretty_name(id)) }
+                BlockContent::Stmt(s) => { pretty_stmt(1, &s); }
             }
         }
         match &self.terminator {
             BlockTerminator::Transition(e) => {
                 print!("Transition: ");
-                pretty::pretty_expr::<true>(e);
+                pretty_expr::<true>(e);
             }
             BlockTerminator::FuncCall(fc) => {
                 print!("Transition: -> function call on {}.", fc);
@@ -310,7 +288,6 @@ fn bl_gen_unroll_scope<const IS_DECL: bool>(
 }
 
 impl<'ast> ZGen<'ast> {
-
     fn cvar_lookup_type(&self, name: &str) -> Option<Ty> {
         match name {
             "%BP" => Some(Ty::Field),

@@ -149,24 +149,28 @@ pub fn pretty_expr<const IS_BLK: bool>(e: &Expression) {
 }
 
 fn pretty_ident_expr(i: &IdentifierExpression) {
-    print!("{}", match i.value.as_str() {
-        "%i0" => "%V",
-        "%i1" => "%iBN",
-        "%i2" => "%iRP",
-        "%i3" => "%iSP",
-        "%i4" => "%iBP",
-        "%i5" => "%iRET",
-        "%o1" => "%oBN",
-        "%o2" => "%oRP",
-        "%o3" => "%osP",
-        "%o4" => "%oBP",
-        "%o5" => "%oRET",
-        "%w0" => "%wRP",
-        "%w1" => "%wSP",
-        "%w2" => "%wBP",
-        "%w3" => "%wRET",
-        _ => &i.value
-    });
+    print!("{}", pretty_name(&i.value));
+}
+
+pub fn pretty_name(name: &str) -> String {
+    match name {
+        "%i0" => "%0(V)",
+        "%i1" => "%i1(BN)",
+        "%i2" => "%i2(RP)",
+        "%i3" => "%i3(SP)",
+        "%i4" => "%i4(BP)",
+        "%i5" => "%i5(RET)",
+        "%o1" => "%o1(BN)",
+        "%o2" => "%o2(RP)",
+        "%o3" => "%o3(SP)",
+        "%o4" => "%o4(BP)",
+        "%o5" => "%o5(RET)",
+        "%w0" => "%w0(RP)",
+        "%w1" => "%w1(SP)",
+        "%w2" => "%w2(BP)",
+        "%w3" => "%w3(RET)",
+        _ => name
+    }.to_string()
 }
 
 fn get_un_op(_op: &UnaryOperator) -> String {

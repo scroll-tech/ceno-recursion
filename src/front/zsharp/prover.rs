@@ -85,7 +85,7 @@ impl ExecState {
         println!("Active: {}", self.active);
         if self.active {
             print!("Reg\t%BN\t%RP\t%SP\t%BP\t%RET");
-            for i in 4..self.reg_in.len() {
+            for i in 6..self.reg_in.len() {
                 print!("\t%{}", i);
             }
             print!("\nIn:");
@@ -229,8 +229,14 @@ impl<'ast> ZGen<'ast> {
 
             // Push-in new block state
             bl_exec_state.push(ExecState::new(nb, io_size));
-            // Match reg_in with reg_out of last block
-            if tr_size > 0 {
+            // If it is the first block, add input to reg_in
+            if tr_size == 0 {
+                for i in 1..io_size {
+                    bl_exec_state[tr_size].reg_in[i] = self.cvar_lookup(&format!("%i{}", i));
+                }
+            }
+            // If not the first block, match reg_in with reg_out of last block
+            else {
                 for (name, ty) in &bls[nb].inputs {
                     if let Some(x) = ty {
                         let output_name = str::replace(name, "i", "o");
@@ -260,7 +266,6 @@ impl<'ast> ZGen<'ast> {
                 println!();
             }
             (nb, phy_mem, terminated, mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem)?;
-            println!("NB: {}", nb);
 
             // Update reg_out
             for i in 1..io_size {

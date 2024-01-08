@@ -145,24 +145,13 @@ fn main() {
     circ::cfg::set(&options.circ);
     println!("{options:?}");
 
-    let entry_regs = vec![LiteralExpression::DecimalLiteral(
-        DecimalLiteralExpression {
-            value: DecimalNumber {
-                value: "5".to_string(),
-                span: Span::new("", 0, 0).unwrap()
-            },
-            suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                span: Span::new("", 0, 0).unwrap()
-            })),
-            span: Span::new("", 0, 0).unwrap()
-        }
-    )];
-
+    // --
+    // Generate Constraints
+    // --
     let (cs, io_size, live_io_list) = {
         let inputs = zsharp::Inputs {
-            file: options.path,
-            mode: Mode::Proof,
-            entry_regs
+            file: options.path.clone(),
+            mode: Mode::Proof
         };
         ZSharpFE::gen(inputs)
     };
@@ -210,7 +199,7 @@ fn main() {
         }
     }
 
-    println!("Converting to r1cs");
+    println!("Converting to r1cs:");
     let mut block_num = 0;
     let mut block_name = format!("Block_{}", block_num);
     // Obtain a list of (r1cs, io_map) for all blocks
@@ -300,7 +289,6 @@ fn main() {
         }
     }
 
-    /*
     // Print out the sparse matrix
     println!("NUM_VARS: {}", max_num_witnesses);
     println!("NUM_CONS: {}", max_num_cons);
@@ -315,13 +303,68 @@ fn main() {
             println!("...");
         }
     }
-    */
 
+    // --
+    // Generate Witnesses
+    // --
     // Start from entry block, compute value of witnesses
-    let mut next_block = 0;
-    while next_block < prover_data_list.len() {
-        let eval = StagedWitCompEvaluator::new(&prover_data_list[0].precompute);
-        println!("{:?}", eval);
-        next_block = 100;
+    let (_, block_id_list, block_inputs_list) = {
+        let inputs = zsharp::Inputs {
+            file: options.path,
+            mode: Mode::Proof
+        };
+        let entry_regs = vec![
+            LiteralExpression::DecimalLiteral(
+                DecimalLiteralExpression {
+                    value: DecimalNumber {
+                        value: "0".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    span: Span::new("", 0, 0).unwrap()
+                }
+            ), 
+            LiteralExpression::DecimalLiteral(
+                DecimalLiteralExpression {
+                    value: DecimalNumber {
+                        value: "5".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    span: Span::new("", 0, 0).unwrap()
+                }
+            ), 
+            LiteralExpression::DecimalLiteral(
+                DecimalLiteralExpression {
+                    value: DecimalNumber {
+                        value: "5".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    span: Span::new("", 0, 0).unwrap()
+                }
+            )
+        ];
+        ZSharpFE::interpret(inputs, &entry_regs)
+    };
+
+    for i in 0..block_id_list.len() {
+        let id = block_id_list[i];
+        let input = block_inputs_list[i].clone();
+        println!("ID: {}", id);
+        let mut wit_comp_evaluator = StagedWitCompEvaluator::new(&prover_data_list[id].precompute);
+        let eval = wit_comp_evaluator.eval_stage(input);
+        // Inputs are described in a length-(2 x io_size) array, consisted of input / output / witnesses
+        let mut inputs = vec![Value::Field(FieldV::new()); 2 * io_size];
+        println!("Witnesses:");
+        for i in 0..eval.len() {
+            println!("{}, {:?}", i, eval[i]);   
+        }
     }
 }

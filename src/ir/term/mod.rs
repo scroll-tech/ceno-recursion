@@ -1257,6 +1257,17 @@ impl Value {
             _ => None,
         }
     }
+
+    /// Convert this value into an integer
+    pub fn as_integer(&self) -> Option<Integer> {
+        match &self {
+            Value::Bool(b) => Some(Integer::from(*b as usize)),
+            Value::Field(f) => Some(f.i()),
+            Value::Int(i) => Some(i.clone()),
+            Value::BitVector(b) => Some(Integer::from(b.uint())),
+            _ => None,
+        }
+    }
 }
 
 /// Recursively the term `t`, using variable values in `h` and storing intermediate evaluations in

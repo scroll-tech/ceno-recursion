@@ -89,6 +89,24 @@ struct SparseMatEntry {
     args_c: Vec<(usize, i32)>
 }
 
+impl SparseMatEntry {
+    fn verify(&self, vars: &Vec<usize>) {
+        let mut a = 0;
+        let mut b = 0;
+        let mut c = 0;
+        for (i, m) in &self.args_a {
+            a += vars[*i] as i32 * m;
+        }
+        for (i, m) in &self.args_b {
+            b += vars[*i] as i32 * m;
+        }
+        for (i, m) in &self.args_c {
+            c += vars[*i] as i32 * m;
+        }
+        assert_eq!(a * b, c);
+    }
+}
+
 // When adding the validity check, what does the sparse format look like?
 fn get_sparse_cons_with_v_check(
     c: &(Lc, Lc, Lc), 
@@ -134,6 +152,22 @@ fn get_sparse_cons_with_v_check(
         (args_a, args_b, args_c)
     };
     return SparseMatEntry { args_a, args_b, args_c };
+}
+
+// Convert an integer into a little-endian byte array
+fn integer_to_bytes(mut raw: Integer) -> [u8; 32] {
+    let mut res = [0; 32];
+    let width = Integer::from(256);
+    let mut i = 0;
+    while raw != 0 {
+        if i >= 32 {
+            panic!("Failed to convert integer to byte array: integer is too large! Remainder is: {:?}", raw)
+        }
+        res[i] = (raw.clone() % width.clone()).to_u8().unwrap();
+        raw /= width.clone();
+        i += 1;
+    }
+    res
 }
 
 fn main() {
@@ -199,6 +233,7 @@ fn main() {
         }
     }
 
+    let max_num_io: usize;
     println!("Converting to r1cs:");
     let mut block_num = 0;
     let mut block_name = format!("Block_{}", block_num);
@@ -246,7 +281,7 @@ fn main() {
     }
     
     max_num_witnesses = max_num_witnesses.next_power_of_two();
-    let max_num_io = max_num_witnesses / 2;
+    max_num_io = max_num_witnesses / 2;
     let max_num_cons = max_num_cons.next_power_of_two();
 
     // Convert R1CS into Spartan sparse format
@@ -354,17 +389,56 @@ fn main() {
         ZSharpFE::interpret(inputs, &entry_regs)
     };
 
+    let mut inputs_list: Vec<Vec<[u8; 32]>> = Vec::new();
     for i in 0..block_id_list.len() {
         let id = block_id_list[i];
         let input = block_inputs_list[i].clone();
         println!("ID: {}", id);
-        let mut wit_comp_evaluator = StagedWitCompEvaluator::new(&prover_data_list[id].precompute);
-        let eval = wit_comp_evaluator.eval_stage(input);
-        // Inputs are described in a length-(2 x io_size) array, consisted of input / output / witnesses
-        let mut inputs = vec![Value::Field(FieldV::new()); 2 * io_size];
-        println!("Witnesses:");
+        let mut evaluator = StagedWitCompEvaluator::new(&prover_data_list[id].precompute);
+        let mut eval = Vec::new();
+        eval.extend(evaluator.eval_stage(input).into_iter().cloned());
+        eval.extend(evaluator.eval_stage(Default::default()).into_iter().cloned());
+
+        // Inputs are described in a length-(4 x max_num_io) array, consisted of input / output / witnesses
+        let mut inputs: Vec<Integer> = vec![Integer::from(0); 4 * max_num_io];
+        // Valid bit should be 1
+        inputs[0] = Integer::from(1);
+        inputs[2 * max_num_io] = Integer::from(1);
         for i in 0..eval.len() {
-            println!("{}, {:?}", i, eval[i]);   
+            if i < live_io_list[id].0.len() {
+                // inputs
+                inputs[live_io_list[id].0[i]] = eval[i].as_integer().unwrap();
+            } else if i - live_io_list[id].0.len() < live_io_list[id].1.len() {
+                // outputs
+                let j = i - live_io_list[id].0.len();
+                inputs[max_num_io + live_io_list[id].1[j]] = eval[i].as_integer().unwrap();
+            } else {
+                // witnesses, skip the 0th entry for the valid bit
+                let j = i - live_io_list[id].0.len() - live_io_list[id].1.len();
+                inputs[2 * max_num_io + j + 1] = eval[i].as_integer().unwrap();
+            }
         }
+        print!("{:3} ", " ");
+        for i in 0..max_num_io {
+            print!("{:3} ", i);
+        }
+        println!();
+        print!("{:3} ", "I");
+        for i in 0..max_num_io {
+            print!("{:3} ", inputs[i]);
+        }
+        println!();
+        print!("{:3} ", "O");
+        for i in max_num_io..2 * max_num_io {
+            print!("{:3} ", inputs[i]);
+        }
+        println!();
+        print!("{:3} ", "W");
+        for i in 2 * max_num_io..4 * max_num_io {
+            print!("{:3} ", inputs[i]);
+        }
+        println!();
+
+        inputs_list.push(inputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
     }
 }

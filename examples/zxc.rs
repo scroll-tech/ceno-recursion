@@ -20,6 +20,7 @@ use circ::target::r1cs::{R1cs, VarType, Lc};
 use circ::target::r1cs::opt::reduce_linearities;
 use circ::target::r1cs::trans::to_r1cs;
 use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
+use circ::target::r1cs::ProverData;
 /*
 use std::fs::File;
 use std::io::Read;
@@ -84,9 +85,9 @@ enum ProofOption {
 }
 
 struct SparseMatEntry {
-    args_a: Vec<(usize, i32)>,
-    args_b: Vec<(usize, i32)>,
-    args_c: Vec<(usize, i32)>
+    args_a: Vec<(usize, isize)>,
+    args_b: Vec<(usize, isize)>,
+    args_c: Vec<(usize, isize)>
 }
 
 impl SparseMatEntry {
@@ -95,13 +96,13 @@ impl SparseMatEntry {
         let mut b = 0;
         let mut c = 0;
         for (i, m) in &self.args_a {
-            a += vars[*i] as i32 * m;
+            a += vars[*i] as isize * m;
         }
         for (i, m) in &self.args_b {
-            b += vars[*i] as i32 * m;
+            b += vars[*i] as isize * m;
         }
         for (i, m) in &self.args_c {
-            c += vars[*i] as i32 * m;
+            c += vars[*i] as isize * m;
         }
         assert_eq!(a * b, c);
     }
@@ -120,32 +121,32 @@ fn get_sparse_cons_with_v_check(
         let mut args_b = Vec::new();
         let mut args_c = Vec::new();
         if !c.0.constant_is_zero() {
-            args_a.push((v_cnst, c.0.constant.signed_int().to_i32().unwrap()));
+            args_a.push((v_cnst, c.0.constant.signed_int().to_isize().unwrap()));
         }
         for (var, coeff) in c.0.monomials.iter() {
             match var.ty() {
-                VarType::Inst => args_a.push((io_relabel(var.number()), coeff.signed_int().to_i32().unwrap())),
-                VarType::FinalWit => args_a.push((witness_relabel(var.number()), coeff.signed_int().to_i32().unwrap())),
+                VarType::Inst => args_a.push((io_relabel(var.number()), coeff.signed_int().to_isize().unwrap())),
+                VarType::FinalWit => args_a.push((witness_relabel(var.number()), coeff.signed_int().to_isize().unwrap())),
                 _ => panic!("Unsupported variable type!")
             }
         }
         if !c.1.constant_is_zero() {
-            args_b.push((v_cnst, c.1.constant.signed_int().to_i32().unwrap()));
+            args_b.push((v_cnst, c.1.constant.signed_int().to_isize().unwrap()));
         }
         for (var, coeff) in c.1.monomials.iter() {
             match var.ty() {
-                VarType::Inst => args_b.push((io_relabel(var.number()), coeff.signed_int().to_i32().unwrap())),
-                VarType::FinalWit => args_b.push((witness_relabel(var.number()), coeff.signed_int().to_i32().unwrap())),
+                VarType::Inst => args_b.push((io_relabel(var.number()), coeff.signed_int().to_isize().unwrap())),
+                VarType::FinalWit => args_b.push((witness_relabel(var.number()), coeff.signed_int().to_isize().unwrap())),
                 _ => panic!("Unsupported variable type!")
             }
         }
         if !c.2.constant_is_zero() {
-            args_c.push((v_cnst, c.2.constant.signed_int().to_i32().unwrap()));
+            args_c.push((v_cnst, c.2.constant.signed_int().to_isize().unwrap()));
         }
         for (var, coeff) in c.2.monomials.iter() {
             match var.ty() {
-                VarType::Inst => args_c.push((io_relabel(var.number()), coeff.signed_int().to_i32().unwrap())),
-                VarType::FinalWit => args_c.push((witness_relabel(var.number()), coeff.signed_int().to_i32().unwrap())),
+                VarType::Inst => args_c.push((io_relabel(var.number()), coeff.signed_int().to_isize().unwrap())),
+                VarType::FinalWit => args_c.push((witness_relabel(var.number()), coeff.signed_int().to_isize().unwrap())),
                 _ => panic!("Unsupported variable type!")
             }
         }
@@ -170,21 +171,65 @@ fn integer_to_bytes(mut raw: Integer) -> [u8; 32] {
     res
 }
 
-fn main() {
-    env_logger::Builder::from_default_env()
-        .format_level(false)
-        .format_timestamp(None)
-        .init();
-    let options = Options::parse();
-    circ::cfg::set(&options.circ);
-    println!("{options:?}");
+// --
+// Structures to match Spartan
+// --
+struct CompileTimeKnowledge {
+    block_num_instances: usize,
+    num_vars: usize,
+    total_num_proofs_bound: usize,
+    block_num_mem_accesses: Vec<usize>,
+    total_num_mem_accesses_bound: usize,
+  
+    args: Vec<Vec<(Vec<(usize, isize)>, Vec<(usize, isize)>, Vec<(usize, isize)>)>>,
+  
+    input_block_num: usize,
+    output_block_num: usize
+}
 
-    // --
-    // Generate Constraints
-    // --
+#[derive(Clone)]
+pub struct Assignment {
+    assignment: Vec<[u8; 32]>,
+}
+impl Assignment {
+    fn new(list: Vec<[u8; 32]>) -> Assignment {
+        Assignment {
+            assignment: list
+        }
+    }
+}
+
+pub type VarsAssignment = Assignment;
+pub type InputsAssignment = Assignment;
+pub type MemsAssignment = Assignment;
+
+struct RunTimeKnowledge {
+    block_max_num_proofs: usize,
+    block_num_proofs: Vec<usize>,
+    consis_num_proofs: usize,
+    total_num_mem_accesses: usize,
+  
+    block_vars_matrix: Vec<Vec<VarsAssignment>>,
+    block_inputs_matrix: Vec<Vec<InputsAssignment>>,
+    exec_inputs: Vec<InputsAssignment>,
+    addr_mems_list: Vec<MemsAssignment>,
+  
+    input: Vec<[u8; 32]>,
+    output: Vec<[u8; 32]>,
+    output_exec_num: usize
+}
+
+// --
+// Generate constraints and others
+// --
+fn get_compile_time_knowledge<const VERBOSE: bool>(
+    path: PathBuf
+) -> (CompileTimeKnowledge, Vec<(Vec<usize>, Vec<usize>)>, Vec<ProverData>) {
+    println!("Generating Compiler Time Data...");
+
     let (cs, io_size, live_io_list) = {
         let inputs = zsharp::Inputs {
-            file: options.path.clone(),
+            file: path.clone(),
             mode: Mode::Proof
         };
         ZSharpFE::gen(inputs)
@@ -219,22 +264,24 @@ fn main() {
     println!("done.");
     */
 
-    for (name, c) in &cs.comps {
-        println!("\n--\nName: {}", name);
-        println!("VariableMetadata:");
-        for v in &c.metadata.ordered_input_names() {
-            let m = &c.metadata.lookup(v);
-            println!("{}: vis: {}, round: {}, random: {}, committed: {}", 
-                v, if m.vis == None {"PUBLIC"} else {if m.vis == Some(0) {"PROVER"} else {"VERIFIER"}}, m.round.to_string(), m.random.to_string(), m.committed.to_string());
-        }
-        println!("Output:");
-        for t in &c.outputs {
-            println!("  {}", t);
+    if VERBOSE {
+        for (name, c) in &cs.comps {
+            println!("\n--\nName: {}", name);
+            println!("VariableMetadata:");
+            for v in &c.metadata.ordered_input_names() {
+                let m = &c.metadata.lookup(v);
+                println!("{}: vis: {}, round: {}, random: {}, committed: {}", 
+                    v, if m.vis == None {"PUBLIC"} else {if m.vis == Some(0) {"PROVER"} else {"VERIFIER"}}, m.round.to_string(), m.random.to_string(), m.committed.to_string());
+            }
+            println!("Output:");
+            for t in &c.outputs {
+                println!("  {}", t);
+            }
         }
     }
 
     let max_num_io: usize;
-    println!("Converting to r1cs:");
+    if VERBOSE { println!("Converting to r1cs:"); }
     let mut block_num = 0;
     let mut block_name = format!("Block_{}", block_num);
     // Obtain a list of (r1cs, io_map) for all blocks
@@ -325,120 +372,260 @@ fn main() {
     }
 
     // Print out the sparse matrix
-    println!("NUM_VARS: {}", max_num_witnesses);
-    println!("NUM_CONS: {}", max_num_cons);
-    for b in 0..sparse_mat_entry.len() {
-        println!("\nBLOCK {}", b);
-        for i in 0..min(10, sparse_mat_entry[b].len()) {
-            println!("  ROW {}", i);
-            let e = &sparse_mat_entry[b][i];
-            println!("    A: {:?}\n    B: {:?}\n    C: {:?}", e.args_a, e.args_b, e.args_c);
-        }
-        if sparse_mat_entry[b].len() > 10 {
-            println!("...");
+    if VERBOSE {
+        println!("NUM_VARS: {}", max_num_witnesses);
+        println!("NUM_CONS: {}", max_num_cons);
+        for b in 0..sparse_mat_entry.len() {
+            println!("\nBLOCK {}", b);
+            for i in 0..min(10, sparse_mat_entry[b].len()) {
+                println!("  ROW {}", i);
+                let e = &sparse_mat_entry[b][i];
+                println!("    A: {:?}\n    B: {:?}\n    C: {:?}", e.args_a, e.args_b, e.args_c);
+            }
+            if sparse_mat_entry[b].len() > 10 {
+                println!("...");
+            }
         }
     }
 
-    // --
-    // Generate Witnesses
-    // --
-    // Start from entry block, compute value of witnesses
+    // Collect all necessary info
+    let block_num_instances = r1cs_list.len();
+    let num_vars = max_num_io;
+    let total_num_proofs_bound = r1cs_list.len();
+    let block_num_mem_accesses = vec![0];
+    let total_num_mem_accesses_bound = 0;
+    let args: Vec<Vec<(Vec<(usize, isize)>, Vec<(usize, isize)>, Vec<(usize, isize)>)>> = 
+        sparse_mat_entry.iter().map(|v| v.iter().map(|i| (i.args_a.clone(), i.args_b.clone(), i.args_c.clone())).collect()).collect();
+    let input_block_num = 0;
+    let output_block_num = 0;
+    
+    (CompileTimeKnowledge {
+        block_num_instances,
+        num_vars,
+        total_num_proofs_bound,
+        block_num_mem_accesses,
+        total_num_mem_accesses_bound,
+        args,
+        input_block_num,
+        output_block_num
+      },
+      live_io_list,
+      prover_data_list
+    )
+}
+
+// --
+// Generate witnesses and others
+// --
+fn get_run_time_knowledge<const VERBOSE: bool>(
+    path: PathBuf,
+    entry_regs: Vec<LiteralExpression>,
+    ctk: CompileTimeKnowledge,
+    live_io_list: Vec<(Vec<usize>, Vec<usize>)>,
+    prover_data_list: Vec<ProverData>
+) -> RunTimeKnowledge {
+    let num_blocks = ctk.block_num_instances;
+    let num_vars = ctk.num_vars;
+
     let (_, block_id_list, block_inputs_list) = {
         let inputs = zsharp::Inputs {
-            file: options.path,
+            file: path,
             mode: Mode::Proof
         };
-        let entry_regs = vec![
-            LiteralExpression::DecimalLiteral(
-                DecimalLiteralExpression {
-                    value: DecimalNumber {
-                        value: "0".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    span: Span::new("", 0, 0).unwrap()
-                }
-            ), 
-            LiteralExpression::DecimalLiteral(
-                DecimalLiteralExpression {
-                    value: DecimalNumber {
-                        value: "5".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    span: Span::new("", 0, 0).unwrap()
-                }
-            ), 
-            LiteralExpression::DecimalLiteral(
-                DecimalLiteralExpression {
-                    value: DecimalNumber {
-                        value: "5".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    span: Span::new("", 0, 0).unwrap()
-                }
-            )
-        ];
+
         ZSharpFE::interpret(inputs, &entry_regs)
     };
 
-    let mut inputs_list: Vec<Vec<[u8; 32]>> = Vec::new();
+    // Meta info
+    // The most time any block is executed
+    let mut block_max_num_proofs = 0;
+    // Number of times each block is executed
+    let mut block_num_proofs = vec![0; num_blocks];
+    // Total number of blocks executed
+    let mut consis_num_proofs = 0;
+    for i in &block_id_list {
+        block_num_proofs[*i] += 1;
+        if block_num_proofs[*i] > block_max_num_proofs {
+            block_max_num_proofs = block_num_proofs[*i];
+        }
+        consis_num_proofs += 1;
+    }
+    let total_num_mem_accesses = 0;
+    let output_exec_num = block_id_list.len() - 1;
+
+    // Block-specific info
+    let zero = Integer::from(0);
+    let one = Integer::from(1);
+    // Start from entry block, compute value of witnesses
+    let mut block_vars_matrix = vec![Vec::new(); num_blocks];
+    let mut block_inputs_matrix = vec![Vec::new(); num_blocks];
+    let mut exec_inputs = Vec::new();
+    let addr_mems_list = Vec::new();
+
+    let mut func_inputs = vec![zero.clone(); num_vars];
+    let mut func_outputs = vec![zero.clone(); num_vars];
     for i in 0..block_id_list.len() {
         let id = block_id_list[i];
         let input = block_inputs_list[i].clone();
-        println!("ID: {}", id);
+        if VERBOSE { println!("ID: {}", id); }
         let mut evaluator = StagedWitCompEvaluator::new(&prover_data_list[id].precompute);
         let mut eval = Vec::new();
         eval.extend(evaluator.eval_stage(input).into_iter().cloned());
         eval.extend(evaluator.eval_stage(Default::default()).into_iter().cloned());
 
-        // Inputs are described in a length-(4 x max_num_io) array, consisted of input / output / witnesses
-        let mut inputs: Vec<Integer> = vec![Integer::from(0); 4 * max_num_io];
+        // Inputs are described in a length-(2 x num_vars) array, consisted of input + output
+        // Vars are described in a length-(2 x num_vars) array, consisted of witnesses
+        let mut inputs: Vec<Integer> = vec![zero.clone(); 2 * num_vars];
+        let mut vars: Vec<Integer> = vec![zero.clone(); 2 * num_vars];
         // Valid bit should be 1
-        inputs[0] = Integer::from(1);
-        inputs[2 * max_num_io] = Integer::from(1);
-        for i in 0..eval.len() {
-            if i < live_io_list[id].0.len() {
+        inputs[0] = one.clone();
+        vars[0] = one.clone();
+        for j in 0..eval.len() {
+            if j < live_io_list[id].0.len() {
                 // inputs
-                inputs[live_io_list[id].0[i]] = eval[i].as_integer().unwrap();
-            } else if i - live_io_list[id].0.len() < live_io_list[id].1.len() {
+                inputs[live_io_list[id].0[j]] = eval[j].as_integer().unwrap();
+                if i == 0 {
+                    func_inputs[live_io_list[id].0[j]] = inputs[live_io_list[id].0[j]].clone();
+                }
+            } else if j - live_io_list[id].0.len() < live_io_list[id].1.len() {
                 // outputs
-                let j = i - live_io_list[id].0.len();
-                inputs[max_num_io + live_io_list[id].1[j]] = eval[i].as_integer().unwrap();
+                let k = j - live_io_list[id].0.len();
+                inputs[num_vars + live_io_list[id].1[k]] = eval[j].as_integer().unwrap();
+                if i == block_id_list.len() - 1 {
+                    func_outputs[live_io_list[id].1[k]] = inputs[num_vars + live_io_list[id].1[k]].clone();
+                }
             } else {
                 // witnesses, skip the 0th entry for the valid bit
-                let j = i - live_io_list[id].0.len() - live_io_list[id].1.len();
-                inputs[2 * max_num_io + j + 1] = eval[i].as_integer().unwrap();
+                let k = j - live_io_list[id].0.len() - live_io_list[id].1.len();
+                vars[k + 1] = eval[j].as_integer().unwrap();
             }
         }
-        print!("{:3} ", " ");
-        for i in 0..max_num_io {
-            print!("{:3} ", i);
+        if VERBOSE {
+            print!("{:3} ", " ");
+            for i in 0..num_vars {
+                print!("{:3} ", i);
+            }
+            println!();
+            print!("{:3} ", "I");
+            for i in 0..num_vars {
+                print!("{:3} ", inputs[i]);
+            }
+            println!();
+            print!("{:3} ", "O");
+            for i in num_vars..2 * num_vars {
+                print!("{:3} ", inputs[i]);
+            }
+            println!();
+            print!("{:3} ", "W");
+            for i in num_vars..2 * num_vars {
+                print!("{:3} ", vars[i]);
+            }
+            println!();
         }
-        println!();
-        print!("{:3} ", "I");
-        for i in 0..max_num_io {
-            print!("{:3} ", inputs[i]);
-        }
-        println!();
-        print!("{:3} ", "O");
-        for i in max_num_io..2 * max_num_io {
-            print!("{:3} ", inputs[i]);
-        }
-        println!();
-        print!("{:3} ", "W");
-        for i in 2 * max_num_io..4 * max_num_io {
-            print!("{:3} ", inputs[i]);
-        }
-        println!();
 
-        inputs_list.push(inputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
+        let inputs_assignment = Assignment::new(inputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
+        let vars_assignment = Assignment::new(vars.iter().map(|i| integer_to_bytes(i.clone())).collect());
+
+        if VERBOSE {
+            println!("\n--\nFUNC");
+            print!("{:3} ", " ");
+            for i in 0..num_vars {
+                print!("{:3} ", i);
+            }
+            println!();
+            print!("{:3} ", "I");
+            for i in 0..num_vars {
+                print!("{:3} ", func_inputs[i]);
+            }
+            println!();
+            print!("{:3} ", "O");
+            for i in 0..num_vars {
+                print!("{:3} ", func_outputs[i]);
+            }
+            println!();
+        }
+
+
+        exec_inputs.push(inputs_assignment.clone());
+        block_vars_matrix[id].push(vars_assignment);
+        block_inputs_matrix[id].push(inputs_assignment);
     }
+    let func_inputs = func_inputs.iter().map(|i| integer_to_bytes(i.clone())).collect();
+    let func_outputs = func_outputs.iter().map(|i| integer_to_bytes(i.clone())).collect();
+
+    RunTimeKnowledge {
+        block_max_num_proofs,
+        block_num_proofs,
+        consis_num_proofs,
+        total_num_mem_accesses,
+      
+        block_vars_matrix,
+        block_inputs_matrix,
+        exec_inputs,
+        addr_mems_list,
+      
+        input: func_inputs,
+        output: func_outputs,
+        output_exec_num
+    }
+}
+
+fn main() {
+    env_logger::Builder::from_default_env()
+        .format_level(false)
+        .format_timestamp(None)
+        .init();
+    let options = Options::parse();
+    circ::cfg::set(&options.circ);
+    println!("{options:?}");
+
+    // --
+    // Generate Constraints
+    // --
+    let (ctk, live_io_list, prover_data_list) = 
+        get_compile_time_knowledge::<false>(options.path.clone());
+
+    // --
+    // Generate Witnesses
+    // --
+    let entry_regs = vec![
+        LiteralExpression::DecimalLiteral(
+            DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: "0".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            }
+        ), 
+        LiteralExpression::DecimalLiteral(
+            DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: "5".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            }
+        ), 
+        LiteralExpression::DecimalLiteral(
+            DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: "5".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            }
+        )
+    ];
+    let rtk = get_run_time_knowledge::<true>(options.path.clone(), entry_regs, ctk, live_io_list, prover_data_list);
+
 }

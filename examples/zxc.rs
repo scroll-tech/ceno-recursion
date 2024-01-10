@@ -292,7 +292,7 @@ impl RunTimeKnowledge {
             writeln!(&mut f, "BLOCK {}", block_counter)?;
             let mut exec_counter = 0;
             for exec in block {
-                writeln!(&mut f, "EXEC {}", block_counter)?;
+                writeln!(&mut f, "EXEC {}", exec_counter)?;
                 exec.write(&mut f)?;
                 exec_counter += 1;
             }
@@ -304,7 +304,7 @@ impl RunTimeKnowledge {
             writeln!(&mut f, "BLOCK {}", block_counter)?;
             let mut exec_counter = 0;
             for exec in block {
-                writeln!(&mut f, "EXEC {}", block_counter)?;
+                writeln!(&mut f, "EXEC {}", exec_counter)?;
                 exec.write(&mut f)?;
                 exec_counter += 1;
             }
@@ -632,7 +632,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             }
             println!();
             print!("{:3} ", "W");
-            for i in num_vars..2 * num_vars {
+            for i in 0..2 * num_vars {
                 print!("{:3} ", vars[i]);
             }
             println!();
@@ -641,30 +641,30 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         let inputs_assignment = Assignment::new(inputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
         let vars_assignment = Assignment::new(vars.iter().map(|i| integer_to_bytes(i.clone())).collect());
 
-        if VERBOSE {
-            println!("\n--\nFUNC");
-            print!("{:3} ", " ");
-            for i in 0..num_vars {
-                print!("{:3} ", i);
-            }
-            println!();
-            print!("{:3} ", "I");
-            for i in 0..num_vars {
-                print!("{:3} ", func_inputs[i]);
-            }
-            println!();
-            print!("{:3} ", "O");
-            for i in 0..num_vars {
-                print!("{:3} ", func_outputs[i]);
-            }
-            println!();
-        }
-
-
         exec_inputs.push(inputs_assignment.clone());
         block_vars_matrix[id].push(vars_assignment);
         block_inputs_matrix[id].push(inputs_assignment);
     }
+    if VERBOSE {
+        println!("\n--\nFUNC");
+        print!("{:3} ", " ");
+        for i in 0..num_vars {
+            print!("{:3} ", i);
+        }
+        println!();
+        print!("{:3} ", "I");
+        for i in 0..num_vars {
+            print!("{:3} ", func_inputs[i]);
+        }
+        println!();
+        print!("{:3} ", "O");
+        for i in 0..num_vars {
+            print!("{:3} ", func_outputs[i]);
+        }
+        println!();
+    }
+
+
     let func_inputs = Assignment::new(func_inputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
     let func_outputs = Assignment::new(func_outputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
 

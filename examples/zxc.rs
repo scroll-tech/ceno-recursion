@@ -339,7 +339,7 @@ impl RunTimeKnowledge {
 // --
 fn get_compile_time_knowledge<const VERBOSE: bool>(
     path: PathBuf
-) -> (CompileTimeKnowledge, Vec<(Vec<usize>, Vec<usize>)>, Vec<ProverData>) {
+) -> (CompileTimeKnowledge, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<ProverData>) {
     println!("Generating Compiler Time Data...");
 
     let (cs, io_size, live_io_list) = {
@@ -505,7 +505,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 
     // Collect all necessary info
     let block_num_instances = r1cs_list.len();
-    let num_vars = max_num_io;
+    let num_vars = 2 * max_num_io;
     let total_num_proofs_bound = r1cs_list.len();
     let block_num_mem_accesses = vec![0];
     let total_num_mem_accesses_bound = 0;
@@ -524,6 +524,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         input_block_num,
         output_block_num
       },
+      max_num_io,
       live_io_list,
       prover_data_list
     )
@@ -536,6 +537,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     path: PathBuf,
     entry_regs: Vec<LiteralExpression>,
     ctk: &CompileTimeKnowledge,
+    max_num_io: usize,
     live_io_list: Vec<(Vec<usize>, Vec<usize>)>,
     prover_data_list: Vec<ProverData>
 ) -> RunTimeKnowledge {
@@ -577,8 +579,8 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     let mut exec_inputs = Vec::new();
     let addr_mems_list = Vec::new();
 
-    let mut func_inputs = vec![zero.clone(); num_vars];
-    let mut func_outputs = vec![zero.clone(); num_vars];
+    let mut func_inputs = vec![zero.clone(); max_num_io];
+    let mut func_outputs = vec![zero.clone(); max_num_io];
     for i in 0..block_id_list.len() {
         let id = block_id_list[i];
         let input = block_inputs_list[i].clone();
@@ -588,10 +590,10 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         eval.extend(evaluator.eval_stage(input).into_iter().cloned());
         eval.extend(evaluator.eval_stage(Default::default()).into_iter().cloned());
 
-        // Inputs are described in a length-(2 x num_vars) array, consisted of input + output
-        // Vars are described in a length-(2 x num_vars) array, consisted of witnesses
-        let mut inputs: Vec<Integer> = vec![zero.clone(); 2 * num_vars];
-        let mut vars: Vec<Integer> = vec![zero.clone(); 2 * num_vars];
+        // Inputs are described in a length-(num_vars) array, consisted of input + output
+        // Vars are described in a length-(num_vars) array, consisted of witnesses
+        let mut inputs: Vec<Integer> = vec![zero.clone(); num_vars];
+        let mut vars: Vec<Integer> = vec![zero.clone(); num_vars];
         // Valid bit should be 1
         inputs[0] = one.clone();
         vars[0] = one.clone();
@@ -605,9 +607,9 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             } else if j - live_io_list[id].0.len() < live_io_list[id].1.len() {
                 // outputs
                 let k = j - live_io_list[id].0.len();
-                inputs[num_vars + live_io_list[id].1[k]] = eval[j].as_integer().unwrap();
+                inputs[max_num_io + live_io_list[id].1[k]] = eval[j].as_integer().unwrap();
                 if i == block_id_list.len() - 1 {
-                    func_outputs[live_io_list[id].1[k]] = inputs[num_vars + live_io_list[id].1[k]].clone();
+                    func_outputs[live_io_list[id].1[k]] = inputs[max_num_io + live_io_list[id].1[k]].clone();
                 }
             } else {
                 // witnesses, skip the 0th entry for the valid bit
@@ -617,22 +619,22 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         }
         if VERBOSE {
             print!("{:3} ", " ");
-            for i in 0..num_vars {
+            for i in 0..max_num_io {
                 print!("{:3} ", i);
             }
             println!();
             print!("{:3} ", "I");
-            for i in 0..num_vars {
+            for i in 0..max_num_io {
                 print!("{:3} ", inputs[i]);
             }
             println!();
             print!("{:3} ", "O");
-            for i in num_vars..2 * num_vars {
+            for i in max_num_io..num_vars {
                 print!("{:3} ", inputs[i]);
             }
             println!();
             print!("{:3} ", "W");
-            for i in 0..2 * num_vars {
+            for i in 0..num_vars {
                 print!("{:3} ", vars[i]);
             }
             println!();
@@ -648,17 +650,17 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     if VERBOSE {
         println!("\n--\nFUNC");
         print!("{:3} ", " ");
-        for i in 0..num_vars {
+        for i in 0..max_num_io {
             print!("{:3} ", i);
         }
         println!();
         print!("{:3} ", "I");
-        for i in 0..num_vars {
+        for i in 0..max_num_io {
             print!("{:3} ", func_inputs[i]);
         }
         println!();
         print!("{:3} ", "O");
-        for i in 0..num_vars {
+        for i in 0..max_num_io {
             print!("{:3} ", func_outputs[i]);
         }
         println!();
@@ -697,7 +699,7 @@ fn main() {
     // --
     // Generate Constraints
     // --
-    let (ctk, live_io_list, prover_data_list) = 
+    let (ctk, max_num_io, live_io_list, prover_data_list) = 
         get_compile_time_knowledge::<false>(options.path.clone());
 
     // --
@@ -741,7 +743,7 @@ fn main() {
             }
         )
     ];
-    let rtk = get_run_time_knowledge::<true>(options.path.clone(), entry_regs, &ctk, live_io_list, prover_data_list);
+    let rtk = get_run_time_knowledge::<true>(options.path.clone(), entry_regs, &ctk, max_num_io, live_io_list, prover_data_list);
 
     // --
     // Write CTK, RTK to file

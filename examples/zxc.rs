@@ -21,11 +21,11 @@ use circ::target::r1cs::opt::reduce_linearities;
 use circ::target::r1cs::trans::to_r1cs;
 use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
 use circ::target::r1cs::ProverData;
-/*
+
 use std::fs::File;
-use std::io::Read;
+// use std::io::Read;
 use std::io::Write;
-*/
+
 use circ::cfg::{
     cfg,
     clap::{self, Parser, ValueEnum},
@@ -91,6 +91,7 @@ struct SparseMatEntry {
 }
 
 impl SparseMatEntry {
+    // Note: Only works if value does not wrap around the field
     fn verify(&self, vars: &Vec<usize>) {
         let mut a = 0;
         let mut b = 0;
@@ -187,6 +188,50 @@ struct CompileTimeKnowledge {
     output_block_num: usize
 }
 
+impl CompileTimeKnowledge {
+    fn write_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
+        let file_name = format!("../zok_tests/constraints/{}.ctk", benchmark_name);
+        let mut f = File::create(file_name)?;
+        writeln!(&mut f, "{}", self.block_num_instances)?;
+        writeln!(&mut f, "{}", self.num_vars)?;
+        writeln!(&mut f, "{}", self.total_num_proofs_bound)?;
+        for i in &self.block_num_mem_accesses {
+            write!(&mut f, "{} ", i)?;
+        }
+        writeln!(&mut f, "")?;
+        writeln!(&mut f, "{}", self.total_num_mem_accesses_bound)?;
+
+        // Instances
+        let mut counter = 0;
+        for inst in &self.args {
+            writeln!(&mut f, "INST {}", counter)?;
+            for cons in inst {
+                write!(&mut f, "A ")?;
+                for (var, val) in &cons.0 {
+                    write!(&mut f, "{} {} ", var, val)?;
+                }
+                writeln!(&mut f, "")?;
+                write!(&mut f, "B ")?;
+                for (var, val) in &cons.1 {
+                    write!(&mut f, "{} {} ", var, val)?;
+                }
+                writeln!(&mut f, "")?;
+                write!(&mut f, "C ")?;
+                for (var, val) in &cons.2 {
+                    write!(&mut f, "{} {} ", var, val)?;
+                }
+                writeln!(&mut f, "")?;
+            }
+            counter += 1;
+        }
+        writeln!(&mut f, "INST_END")?;
+
+        writeln!(&mut f, "{}", self.input_block_num)?;
+        writeln!(&mut f, "{}", self.output_block_num)?;
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 pub struct Assignment {
     assignment: Vec<[u8; 32]>,
@@ -196,6 +241,16 @@ impl Assignment {
         Assignment {
             assignment: list
         }
+    }
+
+    fn write(&self, mut f: &File) -> std::io::Result<()> {
+        for assg in &self.assignment {
+            for i in assg {
+                write!(&mut f, "{} ", i)?;
+            }
+            writeln!(&mut f, "")?;
+        }
+        Ok(())
     }
 }
 
@@ -214,9 +269,69 @@ struct RunTimeKnowledge {
     exec_inputs: Vec<InputsAssignment>,
     addr_mems_list: Vec<MemsAssignment>,
   
-    input: Vec<[u8; 32]>,
-    output: Vec<[u8; 32]>,
+    input: InputsAssignment,
+    output: InputsAssignment,
     output_exec_num: usize
+}
+
+impl RunTimeKnowledge {
+    fn write_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
+        let file_name = format!("../zok_tests/inputs/{}.rtk", benchmark_name);
+        let mut f = File::create(file_name)?;
+        writeln!(&mut f, "{}", self.block_max_num_proofs)?;
+        for i in &self.block_num_proofs {
+            write!(&mut f, "{} ", i)?;
+        }
+        writeln!(&mut f, "")?;
+        writeln!(&mut f, "{}", self.consis_num_proofs)?;
+        writeln!(&mut f, "{}", self.total_num_mem_accesses)?;
+
+        writeln!(&mut f, "BLOCK_VARS")?;
+        let mut block_counter = 0;
+        for block in &self.block_vars_matrix {
+            writeln!(&mut f, "BLOCK {}", block_counter)?;
+            let mut exec_counter = 0;
+            for exec in block {
+                writeln!(&mut f, "EXEC {}", block_counter)?;
+                exec.write(&mut f)?;
+                exec_counter += 1;
+            }
+            block_counter += 1;
+        }
+        writeln!(&mut f, "BLOCK_INPUTS")?;
+        let mut block_counter = 0;
+        for block in &self.block_inputs_matrix {
+            writeln!(&mut f, "BLOCK {}", block_counter)?;
+            let mut exec_counter = 0;
+            for exec in block {
+                writeln!(&mut f, "EXEC {}", block_counter)?;
+                exec.write(&mut f)?;
+                exec_counter += 1;
+            }
+            block_counter += 1;
+        }
+        writeln!(&mut f, "EXEC_INPUTS")?;
+        let mut exec_counter = 0;
+        for exec in &self.exec_inputs {
+            writeln!(&mut f, "EXEC {}", exec_counter)?;
+            exec.write(&mut f)?;
+            exec_counter += 1;
+        }
+        writeln!(&mut f, "ADDR_MEMS")?;
+        let mut addr_counter = 0;
+        for addr in &self.addr_mems_list {
+            writeln!(&mut f, "EXEC {}", addr_counter)?;
+            addr.write(&mut f)?;
+            addr_counter += 1;
+        }
+        writeln!(&mut f, "INPUTS")?;
+        self.input.write(&mut f)?;
+        writeln!(&mut f, "OUTPUTS")?;
+        self.output.write(&mut f)?;
+        writeln!(&mut f, "OUTPUTS_END")?;
+        writeln!(&mut f, "{}", self.output_exec_num)?;
+        Ok(())
+    }
 }
 
 // --
@@ -420,7 +535,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 fn get_run_time_knowledge<const VERBOSE: bool>(
     path: PathBuf,
     entry_regs: Vec<LiteralExpression>,
-    ctk: CompileTimeKnowledge,
+    ctk: &CompileTimeKnowledge,
     live_io_list: Vec<(Vec<usize>, Vec<usize>)>,
     prover_data_list: Vec<ProverData>
 ) -> RunTimeKnowledge {
@@ -550,8 +665,8 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         block_vars_matrix[id].push(vars_assignment);
         block_inputs_matrix[id].push(inputs_assignment);
     }
-    let func_inputs = func_inputs.iter().map(|i| integer_to_bytes(i.clone())).collect();
-    let func_outputs = func_outputs.iter().map(|i| integer_to_bytes(i.clone())).collect();
+    let func_inputs = Assignment::new(func_inputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
+    let func_outputs = Assignment::new(func_outputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
 
     RunTimeKnowledge {
         block_max_num_proofs,
@@ -626,6 +741,11 @@ fn main() {
             }
         )
     ];
-    let rtk = get_run_time_knowledge::<true>(options.path.clone(), entry_regs, ctk, live_io_list, prover_data_list);
+    let rtk = get_run_time_knowledge::<true>(options.path.clone(), entry_regs, &ctk, live_io_list, prover_data_list);
 
+    // --
+    // Write CTK, RTK to file
+    // --
+    let _ = ctk.write_to_file("2pc_demo".to_string());
+    let _ = rtk.write_to_file("2pc_demo".to_string());
 }

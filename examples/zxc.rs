@@ -320,7 +320,7 @@ impl RunTimeKnowledge {
         writeln!(&mut f, "ADDR_MEMS")?;
         let mut addr_counter = 0;
         for addr in &self.addr_mems_list {
-            writeln!(&mut f, "EXEC {}", addr_counter)?;
+            writeln!(&mut f, "ACCESS {}", addr_counter)?;
             addr.write(&mut f)?;
             addr_counter += 1;
         }
@@ -507,8 +507,9 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     let block_num_instances = r1cs_list.len();
     let num_vars = 2 * max_num_io;
     let total_num_proofs_bound = r1cs_list.len();
-    let block_num_mem_accesses = vec![0];
-    let total_num_mem_accesses_bound = 0;
+    let block_num_mem_accesses = vec![0; block_num_instances];
+    // Note: total_num_mem_accesses_bound needs to be at least 1!
+    let total_num_mem_accesses_bound = 1;
     let args: Vec<Vec<(Vec<(usize, isize)>, Vec<(usize, isize)>, Vec<(usize, isize)>)>> = 
         sparse_mat_entry.iter().map(|v| v.iter().map(|i| (i.args_a.clone(), i.args_b.clone(), i.args_c.clone())).collect()).collect();
     let input_block_num = 0;
@@ -567,7 +568,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         }
         consis_num_proofs += 1;
     }
-    let total_num_mem_accesses = 0;
+    let mut total_num_mem_accesses = 0;
     let output_exec_num = block_id_list.len() - 1;
 
     // Block-specific info
@@ -577,7 +578,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     let mut block_vars_matrix = vec![Vec::new(); num_blocks];
     let mut block_inputs_matrix = vec![Vec::new(); num_blocks];
     let mut exec_inputs = Vec::new();
-    let addr_mems_list = Vec::new();
+    let mut addr_mems_list = Vec::new();
 
     let mut func_inputs = vec![zero.clone(); max_num_io];
     let mut func_outputs = vec![zero.clone(); max_num_io];
@@ -647,6 +648,28 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         block_vars_matrix[id].push(vars_assignment);
         block_inputs_matrix[id].push(inputs_assignment);
     }
+    // If a block is never executed, insert a dummy
+    for id in 0..num_blocks {
+        if block_num_proofs[id] == 0 {
+            block_num_proofs[id] = 1;
+            consis_num_proofs += 1;
+            let inputs: Vec<Integer> = vec![zero.clone(); num_vars];
+            let vars: Vec<Integer> = vec![zero.clone(); num_vars];
+            let inputs_assignment = Assignment::new(inputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
+            let vars_assignment = Assignment::new(vars.iter().map(|i| integer_to_bytes(i.clone())).collect());
+
+            exec_inputs.push(inputs_assignment.clone());
+            block_vars_matrix[id].push(vars_assignment);
+            block_inputs_matrix[id].push(inputs_assignment);
+        }
+    }
+
+    // If there are no memory executions at all, insert a dummy
+    if total_num_mem_accesses == 0 {
+        total_num_mem_accesses = 1;
+        addr_mems_list.push(Assignment::new(vec![zero.clone(); 4].iter().map(|i| integer_to_bytes(i.clone())).collect()));
+    }
+
     if VERBOSE {
         println!("\n--\nFUNC");
         print!("{:3} ", " ");
@@ -665,8 +688,6 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         }
         println!();
     }
-
-
     let func_inputs = Assignment::new(func_inputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
     let func_outputs = Assignment::new(func_outputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
 

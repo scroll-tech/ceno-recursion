@@ -1,3 +1,5 @@
+// TODO: Register order seems unstable: sometimes %i6 is before %i7, sometimes it's the opposite
+
 /*
 use bellman::gadgets::test::TestConstraintSystem;
 use bellman::groth16::{
@@ -589,6 +591,8 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         let mut evaluator = StagedWitCompEvaluator::new(&prover_data_list[id].precompute);
         let mut eval = Vec::new();
         eval.extend(evaluator.eval_stage(input).into_iter().cloned());
+        // Drop the last entry of io, which is the dummy return 0
+        eval.pop();
         eval.extend(evaluator.eval_stage(Default::default()).into_iter().cloned());
 
         // Inputs are described in a length-(num_vars) array, consisted of input + output
@@ -598,23 +602,25 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         // Valid bit should be 1
         inputs[0] = one.clone();
         vars[0] = one.clone();
+        let input_len = live_io_list[id].0.len();
+        let output_len = live_io_list[id].1.len();
         for j in 0..eval.len() {
-            if j < live_io_list[id].0.len() {
+            if j < input_len {
                 // inputs
                 inputs[live_io_list[id].0[j]] = eval[j].as_integer().unwrap();
                 if i == 0 {
                     func_inputs[live_io_list[id].0[j]] = inputs[live_io_list[id].0[j]].clone();
                 }
-            } else if j - live_io_list[id].0.len() < live_io_list[id].1.len() {
+            } else if j < input_len + output_len {
                 // outputs
-                let k = j - live_io_list[id].0.len();
+                let k = j - input_len;
                 inputs[max_num_io + live_io_list[id].1[k]] = eval[j].as_integer().unwrap();
                 if i == block_id_list.len() - 1 {
                     func_outputs[live_io_list[id].1[k]] = inputs[max_num_io + live_io_list[id].1[k]].clone();
                 }
             } else {
                 // witnesses, skip the 0th entry for the valid bit
-                let k = j - live_io_list[id].0.len() - live_io_list[id].1.len();
+                let k = j - input_len - output_len;
                 vars[k + 1] = eval[j].as_integer().unwrap();
             }
         }

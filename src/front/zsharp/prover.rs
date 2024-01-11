@@ -302,7 +302,7 @@ impl<'ast> ZGen<'ast> {
         for s in &bl.instructions {
             match s {
                 BlockContent::MemPush((var, _, offset)) => {
-                    let sp_t = self.cvar_lookup("%SP").ok_or(format!("Push to %PHY failed: %SP is uninitialized."))?;
+                    let sp_t = self.cvar_lookup("%w1").ok_or(format!("Push to %PHY failed: %SP is uninitialized."))?;
                     let sp = self.t_to_usize(sp_t)?;
                     if sp + offset != phy_mem.len() {
                         return Err(format!("Error processing %PHY push: index {sp} + {offset} does not match with stack size."));
@@ -313,7 +313,7 @@ impl<'ast> ZGen<'ast> {
                     mem_op.push(MemOp::new(sp + offset, self.cvar_lookup(&var).unwrap()));
                 }
                 BlockContent::MemPop((var, _, offset)) => {
-                    let bp_t = self.cvar_lookup("%BP").ok_or(format!("Pop from %PHY failed: %BP is uninitialized."))?;
+                    let bp_t = self.cvar_lookup("%w2").ok_or(format!("Pop from %PHY failed: %BP is uninitialized."))?;
                     let bp = self.t_to_usize(bp_t)?;
                     if bp + offset >= phy_mem.len() {
                         return Err(format!("Error processing %PHY pop: index out of bound."));

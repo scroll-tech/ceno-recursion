@@ -36,6 +36,9 @@ use circ::cfg::{
 use std::path::PathBuf;
 use zokrates_pest_ast::*;
 
+const INPUT_OFFSET: usize = 6;
+const OUTPUT_OFFSET: usize = 5;
+
 #[derive(Debug, Parser)]
 #[command(name = "zxc", about = "CirC: the circuit compiler")]
 struct Options {
@@ -187,7 +190,9 @@ struct CompileTimeKnowledge {
     args: Vec<Vec<(Vec<(usize, isize)>, Vec<(usize, isize)>, Vec<(usize, isize)>)>>,
   
     func_input_width: usize,
+    input_offset: usize,
     input_block_num: usize,
+    output_offset: usize,
     output_block_num: usize
 }
 
@@ -230,7 +235,9 @@ impl CompileTimeKnowledge {
         writeln!(&mut f, "INST_END")?;
 
         writeln!(&mut f, "{}", self.func_input_width)?;
+        writeln!(&mut f, "{}", self.input_offset)?;
         writeln!(&mut f, "{}", self.input_block_num)?;
+        writeln!(&mut f, "{}", self.output_offset)?;
         writeln!(&mut f, "{}", self.output_block_num)?;
         Ok(())
     }
@@ -527,7 +534,9 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         total_num_mem_accesses_bound,
         args,
         func_input_width,
+        input_offset: INPUT_OFFSET,
         input_block_num,
+        output_offset: OUTPUT_OFFSET,
         output_block_num
       },
       max_num_io,

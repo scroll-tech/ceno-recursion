@@ -47,7 +47,7 @@ pub struct ZSharpFE;
 
 impl FrontEnd for ZSharpFE {
     type Inputs<'ast> = Inputs;
-    fn gen(i: Inputs) -> (Computations, usize, Vec<(Vec<usize>, Vec<usize>)>) {
+    fn gen(i: Inputs) -> (Computations, usize, usize, Vec<(Vec<usize>, Vec<usize>)>) {
         debug!(
             "Starting Z# front-end, field: {}",
             Sort::Field(cfg().field().clone())
@@ -67,6 +67,8 @@ impl FrontEnd for ZSharpFE {
         }
         let (blks, entry_bl) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs.clone());
         let (blks, _, io_size, _, live_io_list) = blocks_optimization::process_block::<VERBOSE, 0>(blks, entry_bl, inputs);
+        // NOTE: The input of block 0 includes %BN, which should be removed when reasoning about function input
+        let func_input_width = blks[0].get_num_inputs() - 1;
         println!("\n\n--\nCirc IR:");
         g.bls_to_circ(&blks);
 
@@ -74,13 +76,13 @@ impl FrontEnd for ZSharpFE {
         g.file_stack_pop();
         let mut cs = Computations::new();
         cs.comps = g.into_circify().cir_ctx().cs.borrow_mut().clone();
-        (cs, io_size, live_io_list)
+        (cs, func_input_width, io_size, live_io_list)
     }
 }
 
 impl ZSharpFE {
     /// Execute the Z# front-end interpreter on the supplied file with the supplied inputs
-    pub fn interpret(i: Inputs, entry_regs: &Vec<ast::LiteralExpression>)
+    pub fn interpret(i: Inputs, entry_regs: &Vec<Integer>)
         -> (T, Vec<usize>, Vec<HashMap<String, Value, BuildHasherDefault<fxhash::FxHasher>>>) {
         let loader = parser::ZLoad::new();
         let asts = loader.load(&i.file);

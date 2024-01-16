@@ -9,6 +9,7 @@ use rand_chacha::rand_core::block;
 use std::path::PathBuf;
 
 use zokrates_pest_ast::*;
+use rug::Integer;
 
 #[derive(Debug, Parser)]
 #[command(name = "zxi", about = "The Z# interpreter")]
@@ -34,44 +35,7 @@ fn main() {
         file: options.zsharp_path,
         mode: Mode::Proof
     };
-    let entry_regs = vec![
-        LiteralExpression::DecimalLiteral(
-            DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: "0".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            }
-        ), 
-        LiteralExpression::DecimalLiteral(
-            DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: "5".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            }
-        ), 
-        LiteralExpression::DecimalLiteral(
-            DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: "5".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            }
-        )
-    ];
+    let entry_regs = vec![Integer::from(5), Integer::from(5)];
     let (cs, block_id_list, block_inputs_list) = ZSharpFE::interpret(inputs, &entry_regs);
     print!("\n\nReturn value: ");
     cs.pretty(&mut std::io::stdout().lock())

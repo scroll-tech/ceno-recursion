@@ -14,6 +14,8 @@ use log::debug;
 use std::cmp::Ordering;
 use crate::ir::term::*;
 
+use rug::Integer;
+
 #[derive(Debug, Clone)]
 pub struct MemOp {
     pub addr: usize,
@@ -184,7 +186,7 @@ impl<'ast> ZGen<'ast> {
     pub fn bl_eval_entry_fn<const VERBOSE: bool>(
         &self,
         entry_bl: usize,
-        entry_regs: &Vec<LiteralExpression<'ast>>, // Entry regs should match the input of the entry block
+        entry_regs: &Vec<Integer>, // Entry regs should match the input of the entry block
         bls: &Vec<Block<'ast>>,
         io_size: usize
     ) -> Result<(T, Vec<usize>, Vec<ExecState>), String> {
@@ -209,11 +211,29 @@ impl<'ast> ZGen<'ast> {
         let mut mem_op: Vec<MemOp>;
         
         // Process input variables
+        // Insert a 0 in front of the input variables for BN
+        let entry_regs = &[vec![Integer::from(0)], entry_regs.clone()].concat();
         let mut i = 0;
         for (name, ty) in &bls[entry_bl].inputs {
             if let Some(x) = ty {
                 assert!(i < entry_regs.len());
-                let e = &entry_regs[i];
+
+                let e = &(LiteralExpression::DecimalLiteral(
+                    DecimalLiteralExpression {
+                        value: DecimalNumber {
+                            value: entry_regs[i].to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        suffix: Some(match x {
+                            Ty::Field => DecimalSuffix::Field(FieldSuffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            }),
+                            _ => panic!("Unsupported input type: {:?}!", x)
+                        }),
+                        span: Span::new("", 0, 0).unwrap()
+                    }
+                ));
+
                 let val = self.literal_(e)?;
                 self.declare_init_impl_::<true>(
                     name.to_string(),

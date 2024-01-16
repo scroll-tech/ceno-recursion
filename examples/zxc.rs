@@ -186,6 +186,7 @@ struct CompileTimeKnowledge {
   
     args: Vec<Vec<(Vec<(usize, isize)>, Vec<(usize, isize)>, Vec<(usize, isize)>)>>,
   
+    func_input_width: usize,
     input_block_num: usize,
     output_block_num: usize
 }
@@ -228,6 +229,7 @@ impl CompileTimeKnowledge {
         }
         writeln!(&mut f, "INST_END")?;
 
+        writeln!(&mut f, "{}", self.func_input_width)?;
         writeln!(&mut f, "{}", self.input_block_num)?;
         writeln!(&mut f, "{}", self.output_block_num)?;
         Ok(())
@@ -271,8 +273,9 @@ struct RunTimeKnowledge {
     exec_inputs: Vec<InputsAssignment>,
     addr_mems_list: Vec<MemsAssignment>,
   
-    input: InputsAssignment,
-    output: InputsAssignment,
+    input: Assignment,
+    // Output can only have one entry
+    output: Assignment,
     output_exec_num: usize
 }
 
@@ -344,7 +347,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 ) -> (CompileTimeKnowledge, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<ProverData>) {
     println!("Generating Compiler Time Data...");
 
-    let (cs, io_size, live_io_list) = {
+    let (cs, func_input_width, io_size, live_io_list) = {
         let inputs = zsharp::Inputs {
             file: path.clone(),
             mode: Mode::Proof
@@ -510,8 +513,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     let num_vars = 2 * max_num_io;
     let total_num_proofs_bound = r1cs_list.len();
     let block_num_mem_accesses = vec![0; block_num_instances];
-    // Note: total_num_mem_accesses_bound needs to be at least 1!
-    let total_num_mem_accesses_bound = 1;
+    let total_num_mem_accesses_bound = 0;
     let args: Vec<Vec<(Vec<(usize, isize)>, Vec<(usize, isize)>, Vec<(usize, isize)>)>> = 
         sparse_mat_entry.iter().map(|v| v.iter().map(|i| (i.args_a.clone(), i.args_b.clone(), i.args_c.clone())).collect()).collect();
     let input_block_num = 0;
@@ -524,6 +526,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         block_num_mem_accesses,
         total_num_mem_accesses_bound,
         args,
+        func_input_width,
         input_block_num,
         output_block_num
       },
@@ -538,7 +541,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 // --
 fn get_run_time_knowledge<const VERBOSE: bool>(
     path: PathBuf,
-    entry_regs: Vec<LiteralExpression>,
+    entry_regs: Vec<Integer>,
     ctk: &CompileTimeKnowledge,
     max_num_io: usize,
     live_io_list: Vec<(Vec<usize>, Vec<usize>)>,
@@ -582,8 +585,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     let mut exec_inputs = Vec::new();
     let mut addr_mems_list = Vec::new();
 
-    let mut func_inputs = vec![zero.clone(); max_num_io];
-    let mut func_outputs = vec![zero.clone(); max_num_io];
+    let mut func_outputs = Integer::from(0);
     for i in 0..block_id_list.len() {
         let id = block_id_list[i];
         let input = block_inputs_list[i].clone();
@@ -608,21 +610,18 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             if j < input_len {
                 // inputs
                 inputs[live_io_list[id].0[j]] = eval[j].as_integer().unwrap();
-                if i == 0 {
-                    func_inputs[live_io_list[id].0[j]] = inputs[live_io_list[id].0[j]].clone();
-                }
             } else if j < input_len + output_len {
                 // outputs
                 let k = j - input_len;
                 inputs[max_num_io + live_io_list[id].1[k]] = eval[j].as_integer().unwrap();
-                if i == block_id_list.len() - 1 {
-                    func_outputs[live_io_list[id].1[k]] = inputs[max_num_io + live_io_list[id].1[k]].clone();
-                }
             } else {
                 // witnesses, skip the 0th entry for the valid bit
                 let k = j - input_len - output_len;
                 vars[k + 1] = eval[j].as_integer().unwrap();
             }
+        }
+        if i == block_id_list.len() - 1 {
+            func_outputs = inputs[max_num_io + 5].clone();
         }
         if VERBOSE {
             print!("{:3} ", " ");
@@ -654,27 +653,6 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         block_vars_matrix[id].push(vars_assignment);
         block_inputs_matrix[id].push(inputs_assignment);
     }
-    // If a block is never executed, insert a dummy
-    for id in 0..num_blocks {
-        if block_num_proofs[id] == 0 {
-            block_num_proofs[id] = 1;
-            consis_num_proofs += 1;
-            let inputs: Vec<Integer> = vec![zero.clone(); num_vars];
-            let vars: Vec<Integer> = vec![zero.clone(); num_vars];
-            let inputs_assignment = Assignment::new(inputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
-            let vars_assignment = Assignment::new(vars.iter().map(|i| integer_to_bytes(i.clone())).collect());
-
-            exec_inputs.push(inputs_assignment.clone());
-            block_vars_matrix[id].push(vars_assignment);
-            block_inputs_matrix[id].push(inputs_assignment);
-        }
-    }
-
-    // If there are no memory executions at all, insert a dummy
-    if total_num_mem_accesses == 0 {
-        total_num_mem_accesses = 1;
-        addr_mems_list.push(Assignment::new(vec![zero.clone(); 4].iter().map(|i| integer_to_bytes(i.clone())).collect()));
-    }
 
     if VERBOSE {
         println!("\n--\nFUNC");
@@ -684,18 +662,15 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         }
         println!();
         print!("{:3} ", "I");
-        for i in 0..max_num_io {
-            print!("{:3} ", func_inputs[i]);
+        for i in 0..entry_regs.len() {
+            print!("{:3} ", entry_regs[i]);
         }
         println!();
         print!("{:3} ", "O");
-        for i in 0..max_num_io {
-            print!("{:3} ", func_outputs[i]);
-        }
-        println!();
+        println!("{:3} ", func_outputs);
     }
-    let func_inputs = Assignment::new(func_inputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
-    let func_outputs = Assignment::new(func_outputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
+    let func_inputs = Assignment::new(entry_regs.iter().map(|i| integer_to_bytes(i.clone())).collect());
+    let func_outputs = Assignment::new(vec![integer_to_bytes(func_outputs)]);
 
     RunTimeKnowledge {
         block_max_num_proofs,
@@ -732,44 +707,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let entry_regs = vec![
-        LiteralExpression::DecimalLiteral(
-            DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: "0".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            }
-        ), 
-        LiteralExpression::DecimalLiteral(
-            DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: "5".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            }
-        ), 
-        LiteralExpression::DecimalLiteral(
-            DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: "5".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            }
-        )
-    ];
+    let entry_regs = vec![Integer::from(5), Integer::from(5)];
     let rtk = get_run_time_knowledge::<true>(options.path.clone(), entry_regs, &ctk, max_num_io, live_io_list, prover_data_list);
 
     // --

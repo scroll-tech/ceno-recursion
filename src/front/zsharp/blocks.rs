@@ -198,6 +198,17 @@ impl<'ast> Block<'ast> {
         input
     }
 
+    pub fn get_num_inputs(&self) -> usize {
+        let mut count = 0;
+        for i in &self.inputs {
+            let (_, ty) = i;
+            if let Some(_) = ty {
+                count += 1;
+            }
+        }
+        return count;
+    }
+
     pub fn pretty(&self) {
         println!("\nBlock {}:", self.name);
         println!("Inputs:");

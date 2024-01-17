@@ -1295,7 +1295,7 @@ fn set_input_output<'bl>(
                 }
             }
         }
-        // If we are at entry block, state also includes program parameters
+        // If we are at entry block, state also includes *live* program parameters
         if cur_bl == *entry_bl {
             for (var, ty) in &inputs {
                 state.insert(var.clone(), ty.clone());
@@ -1342,17 +1342,24 @@ fn set_input_output<'bl>(
     let ty_map_out = bl_out;
 
     // Update input of all blocks
+    // Note: block 0 takes function input and %BN as input
     for i in 0..bls.len() {
         // For this primitive implementation, take every register up to reg_size as input
         // Something fishy is going on if inputs or outputs have been defined
         assert!(bls[i].inputs.len() == 0);
-        for name in &input_lst[i] {
-            bls[i].inputs.push((name.to_string(), Some(ty_map_in[i].get(name).unwrap().clone())));
+        if i != 0 {
+            for name in &input_lst[i] {
+                bls[i].inputs.push((name.to_string(), Some(ty_map_in[i].get(name).unwrap().clone())));
+            }
         }
         assert!(bls[i].outputs.len() == 0);
         for name in &output_lst[i] {
+            println!("Name: {}", name);
             bls[i].outputs.push((name.to_string(), Some(ty_map_out[i].get(name).unwrap().clone())));
         }
+    }
+    for (name, ty) in &inputs {
+        bls[0].inputs.push((name.to_string(), Some(ty.clone())));
     }
 
     return bls;

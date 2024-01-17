@@ -24,6 +24,8 @@ struct Options {
 }
 
 fn main() {
+    let func_inputs: Vec<usize> = vec![2, 5];
+
     env_logger::Builder::from_default_env()
         .format_level(false)
         .format_timestamp(None)
@@ -35,7 +37,7 @@ fn main() {
         file: options.zsharp_path,
         mode: Mode::Proof
     };
-    let entry_regs = vec![Integer::from(5), Integer::from(5)];
+    let entry_regs: Vec<Integer> = func_inputs.iter().map(|i| Integer::from(*i)).collect();
     let (cs, block_id_list, block_inputs_list) = ZSharpFE::interpret(inputs, &entry_regs);
     print!("\n\nReturn value: ");
     cs.pretty(&mut std::io::stdout().lock())

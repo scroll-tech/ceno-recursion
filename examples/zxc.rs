@@ -1,4 +1,4 @@
-// TODO: Register order seems unstable: sometimes %i6 is before %i7, sometimes it's the opposite
+// TODO: Program broke down when there is a dead program parameter
 
 /*
 use bellman::gadgets::test::TestConstraintSystem;
@@ -520,7 +520,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     let num_vars = 2 * max_num_io;
     let total_num_proofs_bound = r1cs_list.len();
     let block_num_mem_accesses = vec![0; block_num_instances];
-    let total_num_mem_accesses_bound = 0;
+    let total_num_mem_accesses_bound = 1;
     let args: Vec<Vec<(Vec<(usize, isize)>, Vec<(usize, isize)>, Vec<(usize, isize)>)>> = 
         sparse_mat_entry.iter().map(|v| v.iter().map(|i| (i.args_a.clone(), i.args_b.clone(), i.args_c.clone())).collect()).collect();
     let input_block_num = 0;
@@ -699,6 +699,8 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
 }
 
 fn main() {
+    let func_inputs: Vec<usize> = vec![2, 5];
+
     env_logger::Builder::from_default_env()
         .format_level(false)
         .format_timestamp(None)
@@ -716,7 +718,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let entry_regs = vec![Integer::from(5), Integer::from(5)];
+    let entry_regs: Vec<Integer> = func_inputs.iter().map(|i| Integer::from(*i)).collect();
     let rtk = get_run_time_knowledge::<true>(options.path.clone(), entry_regs, &ctk, max_num_io, live_io_list, prover_data_list);
 
     // --

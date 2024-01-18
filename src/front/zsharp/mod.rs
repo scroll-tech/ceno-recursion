@@ -32,7 +32,7 @@ use zvisit::{ZConstLiteralRewriter, ZGenericInf, ZStatementWalker, ZVisitorMut};
 
 // garbage collection increment for adaptive GC threshold
 const GC_INC: usize = 32;
-const VERBOSE: bool = true;
+const VERBOSE: bool = false;
 
 /// Inputs to the Z# compiler
 pub struct Inputs {
@@ -47,7 +47,7 @@ pub struct ZSharpFE;
 
 impl FrontEnd for ZSharpFE {
     type Inputs<'ast> = Inputs;
-    fn gen(i: Inputs) -> (Computations, usize, usize, Vec<(Vec<usize>, Vec<usize>)>) {
+    fn gen(i: Inputs) -> (Computations, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<usize>) {
         debug!(
             "Starting Z# front-end, field: {}",
             Sort::Field(cfg().field().clone())
@@ -70,20 +70,20 @@ impl FrontEnd for ZSharpFE {
         // NOTE: The input of block 0 includes %BN, which should be removed when reasoning about function input
         let func_input_width = blks[0].get_num_inputs() - 1;
         println!("\n\n--\nCirc IR:");
-        g.bls_to_circ(&blks);
+        let num_mem_accesses = g.bls_to_circ(&blks);
 
         g.generics_stack_pop();
         g.file_stack_pop();
         let mut cs = Computations::new();
         cs.comps = g.into_circify().cir_ctx().cs.borrow_mut().clone();
-        (cs, func_input_width, io_size, live_io_list)
+        (cs, func_input_width, io_size, live_io_list, num_mem_accesses)
     }
 }
 
 impl ZSharpFE {
     /// Execute the Z# front-end interpreter on the supplied file with the supplied inputs
     pub fn interpret(i: Inputs, entry_regs: &Vec<Integer>)
-        -> (T, Vec<usize>, Vec<HashMap<String, Value, BuildHasherDefault<fxhash::FxHasher>>>) {
+        -> (T, Vec<usize>, Vec<HashMap<String, Value, BuildHasherDefault<fxhash::FxHasher>>>, Vec<(Value, Value)>) {
         let loader = parser::ZLoad::new();
         let asts = loader.load(&i.file);
         let mut g = ZGen::new(asts, i.mode, loader.stdlib(), cfg().zsharp.isolate_asserts);
@@ -100,7 +100,7 @@ impl ZSharpFE {
         let (blks, entry_bl) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs.clone());
         let (blks, entry_bl, io_size, _, _) = blocks_optimization::process_block::<VERBOSE, 1>(blks, entry_bl, inputs);
         println!("\n\n--\nInterpretation:");
-        let (ret, _, bl_exec_state) = g.bl_eval_entry_fn::<VERBOSE>(entry_bl, entry_regs, &blks, io_size)
+        let (ret, _, bl_exec_state, mem_list) = g.bl_eval_entry_fn::<VERBOSE>(entry_bl, entry_regs, &blks, io_size)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
         // prover::print_state_list(&bl_exec_state);
         // let _ = prover::sort_by_block(&bl_exec_state);
@@ -110,6 +110,7 @@ impl ZSharpFE {
         let mut block_id_list = Vec::new();
         // Convert bl_exec_state to list of String -> Value hashmaps
         // Variables should be named Block_X_fX_lex0_%XX_v0
+        // Memory accesses should be named Block_X_fX_lex0_%mvX / %maX
         let mut block_inputs_list = Vec::new();
         let suffix = format!("_v0");
         for state in bl_exec_state {
@@ -136,9 +137,26 @@ impl ZSharpFE {
                     inputs.insert(format!("{}%o{}{}", prefix, i, suffix), value);
                 }
             }
+            // Process mems
+            for i in 0..state.mem_op.len() {
+                let addr = to_const_value(state.mem_op[i].addr_t.clone())
+                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                inputs.insert(format!("{}%ma{}{}", prefix, i, suffix), addr);
+                let data = to_const_value(state.mem_op[i].data_t.clone())
+                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                inputs.insert(format!("{}%mv{}{}", prefix, i, suffix), data);
+            }
             block_inputs_list.push(inputs);
         }
-        return (ret, block_id_list, block_inputs_list);
+        let mem_list = mem_list.iter().map(|i|
+            (
+                to_const_value(i.addr_t.clone())
+                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                to_const_value(i.data_t.clone())
+                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+            )
+        ).collect();
+        return (ret, block_id_list, block_inputs_list, mem_list);
     }
 }
 

@@ -1,4 +1,6 @@
 // TODO: Program broke down when there is a dead program parameter
+// TODO: Need to reorder the blocks by number of execution
+// TODO: Not all dead LOAD and STOREs are cleaned
 
 /*
 use bellman::gadgets::test::TestConstraintSystem;
@@ -354,7 +356,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 ) -> (CompileTimeKnowledge, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<ProverData>) {
     println!("Generating Compiler Time Data...");
 
-    let (cs, func_input_width, io_size, live_io_list) = {
+    let (cs, func_input_width, io_size, live_io_list, block_num_mem_accesses) = {
         let inputs = zsharp::Inputs {
             file: path.clone(),
             mode: Mode::Proof
@@ -421,7 +423,6 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     // Obtain a list of prover data by block
     let mut prover_data_list = Vec::new();
     while let Some(c) = cs.comps.get(&block_name) {
-        // println!("{}:", block_name);
         let mut r1cs = to_r1cs(c, cfg());
 
         // Remove the last constraint because it is about the return value
@@ -519,8 +520,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     let block_num_instances = r1cs_list.len();
     let num_vars = 2 * max_num_io;
     let total_num_proofs_bound = r1cs_list.len();
-    let block_num_mem_accesses = vec![0; block_num_instances];
-    let total_num_mem_accesses_bound = 1;
+    let total_num_mem_accesses_bound = 10;
     let args: Vec<Vec<(Vec<(usize, isize)>, Vec<(usize, isize)>, Vec<(usize, isize)>)>> = 
         sparse_mat_entry.iter().map(|v| v.iter().map(|i| (i.args_a.clone(), i.args_b.clone(), i.args_c.clone())).collect()).collect();
     let input_block_num = 0;
@@ -559,7 +559,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     let num_blocks = ctk.block_num_instances;
     let num_vars = ctk.num_vars;
 
-    let (_, block_id_list, block_inputs_list) = {
+    let (_, block_id_list, block_inputs_list, mem_list) = {
         let inputs = zsharp::Inputs {
             file: path,
             mode: Mode::Proof
@@ -582,7 +582,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         }
         consis_num_proofs += 1;
     }
-    let mut total_num_mem_accesses = 0;
+    let total_num_mem_accesses = mem_list.len();
     let output_exec_num = block_id_list.len() - 1;
 
     // Block-specific info
@@ -592,7 +592,6 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     let mut block_vars_matrix = vec![Vec::new(); num_blocks];
     let mut block_inputs_matrix = vec![Vec::new(); num_blocks];
     let mut exec_inputs = Vec::new();
-    let mut addr_mems_list = Vec::new();
 
     let mut func_outputs = Integer::from(0);
     for i in 0..block_id_list.len() {
@@ -661,6 +660,25 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         exec_inputs.push(inputs_assignment.clone());
         block_vars_matrix[id].push(vars_assignment);
         block_inputs_matrix[id].push(inputs_assignment);
+    }
+
+    let mut addr_mems_list = Vec::new();
+    let mut mem_last = vec![one.clone(); 4];
+    for i in 0..mem_list.len() {
+        let m = &mem_list[i];
+        let mut mem: Vec<Integer> = vec![one.clone(); 4];
+        mem[1] = m.0.as_integer().unwrap();
+        mem[2] = m.1.as_integer().unwrap();
+        // backend requires the 3rd entry to be v[k + 1] * (1 - addr[k + 1] + addr[k])
+        if i != 0 {
+            mem_last[3] = mem[0].clone() * (one.clone() - mem[1].clone() + mem_last[1].clone());
+            addr_mems_list.push(Assignment::new(mem_last.iter().map(|i| integer_to_bytes(i.clone())).collect()));
+        }
+        if i == mem_list.len() - 1 {
+            addr_mems_list.push(Assignment::new(mem.iter().map(|i| integer_to_bytes(i.clone())).collect()));
+        } else {
+            mem_last = mem;
+        }
     }
 
     if VERBOSE {

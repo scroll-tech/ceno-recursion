@@ -1298,17 +1298,18 @@ impl<'ast> ZGen<'ast> {
         Ok((blks, sp_offset))
     }
 
-    // Convert a list of blocks to circ_ir
-    pub fn bls_to_circ(&'ast self, blks: &Vec<Block>) {
-        // let phy_mem_id = self.circ_zero_allocate(MEM_SIZE, MEM_ADDR_WIDTH, MEM_VALUE_WIDTH);
+    // Convert a list of blocks to circ_ir, return the number of memory accesses of each block
+    pub fn bls_to_circ(&'ast self, blks: &Vec<Block>) -> Vec<usize> {
+        let mut num_mem_accesses = Vec::new();
         for b in blks {
             self.circ_init_block(&format!("Block_{}", b.name));
-            self.bl_to_circ(&b);
+            num_mem_accesses.push(self.bl_to_circ(&b));
         }
+        num_mem_accesses
     }
 
-    // Convert a block to circ_ir
-    pub fn bl_to_circ(&self, b: &Block) {
+    // Convert a block to circ_ir, return the number of memory accesses
+    pub fn bl_to_circ(&self, b: &Block) -> usize {
         let f = format!("Block_{}", b.name);
         // setup stack frame for entry function
         // returns the next block, so return type is Field
@@ -1368,17 +1369,6 @@ impl<'ast> ZGen<'ast> {
                         None,
                         true,
                     ).unwrap();
-                    // Assert correctness of value
-                    let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: var.to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%mv{}", mem_op_count),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-                    self.assert(b);
                     // Assert correctness of address
                     let lhs_t = self.expr_impl_::<false>(&Expression::Binary(BinaryExpression {
                         op: BinaryOperator::Add,
@@ -1405,6 +1395,17 @@ impl<'ast> ZGen<'ast> {
                     })).unwrap();
                     let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
                     self.assert(b);
+                    // Assert correctness of value
+                    let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: var.to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: format!("%mv{}", mem_op_count),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                    self.assert(b);
                     mem_op_count += 1;
                 }
                 BlockContent::MemPop((var, ty, offset)) => {
@@ -1424,16 +1425,6 @@ impl<'ast> ZGen<'ast> {
                         ZVis::Private(0),
                         None,
                         true,
-                    ).unwrap();
-                    // Assign POP value to val
-                    let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%mv{}", mem_op_count),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    self.declare_init_impl_::<false>(
-                        var.clone(),
-                        ty.clone(),
-                        e,
                     ).unwrap();
                     // Assert correctness of address
                     let lhs_t = self.expr_impl_::<false>(&Expression::Binary(BinaryExpression {
@@ -1460,7 +1451,17 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-                    self.assert(b);  
+                    self.assert(b);
+                    // Assign POP value to val
+                    let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: format!("%mv{}", mem_op_count),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    self.declare_init_impl_::<false>(
+                        var.clone(),
+                        ty.clone(),
+                        e,
+                    ).unwrap();
                     mem_op_count += 1;  
                 }
                 BlockContent::Stmt(stmt) => { self.stmt_impl_::<false>(&stmt).unwrap(); }
@@ -1469,7 +1470,6 @@ impl<'ast> ZGen<'ast> {
         
         // Block transition should have been converted to a statement in block_optimization
         // DO NOT PROCESS IT!!!
-
         if let Some(r) = self.circ_exit_fn() {
             match self.mode {
                 Mode::Mpc(_) => {
@@ -1541,6 +1541,8 @@ impl<'ast> ZGen<'ast> {
                 _ => { panic!("Supported Mode!") }
             }
         }
+        
+        mem_op_count
     }
 
     fn circ_init_block(&self, f: &str) {

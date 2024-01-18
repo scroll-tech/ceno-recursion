@@ -38,15 +38,25 @@ fn main() {
         mode: Mode::Proof
     };
     let entry_regs: Vec<Integer> = func_inputs.iter().map(|i| Integer::from(*i)).collect();
-    let (cs, block_id_list, block_inputs_list) = ZSharpFE::interpret(inputs, &entry_regs);
+    let (cs, block_id_list, block_inputs_list, mem_list) = ZSharpFE::interpret(inputs, &entry_regs);
     print!("\n\nReturn value: ");
     cs.pretty(&mut std::io::stdout().lock())
         .expect("error pretty-printing value");
     println!();
     for i in 0..block_id_list.len() {
         println!("BLOCK ID: {}", block_id_list[i]);
+        let mut str_list = Vec::new();
         for (name, val) in &block_inputs_list[i] {
-            println!("{}: {:?}", name, val);
+            str_list.push(format!("{}: {:?}", name, val));
         }
+        str_list.sort();
+        for s in str_list {
+            println!("{}", s);
+        }
+    }
+    println!("MEM");
+    for (addr, data) in mem_list {
+        println!("ADDR: {:?}", addr);
+        println!("DATA: {:?}", data);
     }
 }

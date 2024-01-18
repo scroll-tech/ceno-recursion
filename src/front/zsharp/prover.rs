@@ -18,22 +18,26 @@ use rug::Integer;
 
 #[derive(Debug, Clone)]
 pub struct MemOp {
+    // Address in usize for sorting
     pub addr: usize,
-    pub data: T
+    // Address in T for witness generation
+    pub addr_t: T,
+    pub data_t: T
 }
 
 impl MemOp {
-    fn new(addr: usize, data: T) -> Self {
+    fn new(addr: usize, addr_t: T, data_t: T) -> Self {
         let input = Self {
             addr,
-            data
+            addr_t,
+            data_t
         };
         input
     }
 
     fn pretty(&self) {
         print!("Addr: {:02}\tData: ", self.addr);
-        self.data.pretty(&mut std::io::stdout().lock())
+        self.data_t.pretty(&mut std::io::stdout().lock())
             .expect("error pretty-printing value");
         println!();
     }
@@ -189,7 +193,7 @@ impl<'ast> ZGen<'ast> {
         entry_regs: &Vec<Integer>, // Entry regs should match the input of the entry block
         bls: &Vec<Block<'ast>>,
         io_size: usize
-    ) -> Result<(T, Vec<usize>, Vec<ExecState>), String> {
+    ) -> Result<(T, Vec<usize>, Vec<ExecState>, Vec<MemOp>), String> {
         if bls.len() < entry_bl {
             return Err(format!("Invalid entry_bl: entry_bl exceeds block size."));
         }
@@ -304,7 +308,26 @@ impl<'ast> ZGen<'ast> {
             "Missing return value for one or more functions."
         ));
 
-        Ok((ret?, bl_exec_count, bl_exec_state))
+        let mem_list = sort_by_mem(&bl_exec_state);
+        Ok((ret?, bl_exec_count, bl_exec_state, mem_list))
+    }
+
+    // Convert a usize into a Field value
+    fn usize_to_field(&self, val: usize) -> Result<T, String> {
+        let e = &(LiteralExpression::DecimalLiteral(
+            DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: val.to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                span: Span::new("", 0, 0).unwrap()
+            }
+        ));
+
+        self.literal_(&e)
     }
 
     // Return type:
@@ -330,7 +353,7 @@ impl<'ast> ZGen<'ast> {
                         let e = self.cvar_lookup(&var).ok_or(format!("Push to %PHY failed: pushing an out-of-scope variable: {}.", var))?;
                         phy_mem.push(e);
                     }
-                    mem_op.push(MemOp::new(sp + offset, self.cvar_lookup(&var).unwrap()));
+                    mem_op.push(MemOp::new(sp + offset, self.usize_to_field(sp + offset)?, self.cvar_lookup(&var).unwrap()));
                 }
                 BlockContent::MemPop((var, _, offset)) => {
                     let bp_t = self.cvar_lookup("%w2").ok_or(format!("Pop from %PHY failed: %BP is uninitialized."))?;
@@ -341,7 +364,7 @@ impl<'ast> ZGen<'ast> {
                         let t = phy_mem[bp + offset].clone();
                         self.cvar_assign(&var, t)?;
                     }
-                    mem_op.push(MemOp::new(bp + offset, self.cvar_lookup(&var).unwrap()));         
+                    mem_op.push(MemOp::new(bp + offset, self.usize_to_field(bp + offset)?, self.cvar_lookup(&var).unwrap()));         
                 }
                 BlockContent::Stmt(Statement::Return(_)) => {
                     return Err(format!("Blocks should not contain return statements."));
@@ -454,9 +477,9 @@ pub fn sort_by_mem(bl_exec_state: &Vec<ExecState>) -> Vec<MemOp> {
         sorted_memop_list.append(&mut b.mem_op.clone());
     }
     sorted_memop_list.sort();
-    println!("\n==========\nSorting by Memory Address:");
-    for i in 0..sorted_memop_list.len() {
-        sorted_memop_list[i].pretty();
-    }
+    // println!("\n==========\nSorting by Memory Address:");
+    // for i in 0..sorted_memop_list.len() {
+        // sorted_memop_list[i].pretty();
+    // }
     sorted_memop_list   
 }

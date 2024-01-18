@@ -106,18 +106,20 @@ pub fn optimize_block<const VERBOSE: bool>(
     println!("\n\n--\nOptimization:");
     
     // Liveness
-    bls = liveness_analysis(bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
+    bls = liveness_analysis(bls, &successor, &predecessor, &exit_bls);
     if VERBOSE {
         println!("\n\n--\nLiveness:");   
         print_bls(&bls, &entry_bl);
     }
 
+    /* PMR is broken
     // PMR
-    bls = phy_mem_rearrange(bls, &predecessor_fn, &successor_fn, &entry_bls_fn);
+    bls = phy_mem_rearrange(bls, &predecessor_fn, &successor_fn, &entry_bls_fn, &exit_bls_fn);
     if VERBOSE {
         println!("\n\n--\nPMR:");
         print_bls(&bls, &entry_bl);
     }
+    */
 
     // Set Input
     // Putting this here because EBE and DBE destroys CFG
@@ -663,9 +665,9 @@ fn is_alive(
 // Liveness analysis should not affect CFG
 fn liveness_analysis<'ast>(
     mut bls: Vec<Block<'ast>>,
-    successor_fn: &Vec<HashSet<usize>>,
-    predecessor_fn: &Vec<HashSet<usize>>,
-    exit_bls_fn: &HashSet<usize>
+    successor: &Vec<HashSet<usize>>,
+    predecessor: &Vec<HashSet<usize>>,
+    exit_bls: &HashSet<usize>
 ) -> Vec<Block<'ast>> {
 
     let mut visited: Vec<bool> = vec![false; bls.len()];
@@ -674,67 +676,64 @@ fn liveness_analysis<'ast>(
     let mut bl_out: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
     
     // Can this ever happen?
-    if exit_bls_fn.is_empty() { 
+    if exit_bls.is_empty() { 
         panic!("The program has no exit block!");
     }
     
     // Start from exit block
     let mut next_bls: VecDeque<usize> = VecDeque::new();
-    for eb in exit_bls_fn {
+    for eb in exit_bls {
         next_bls.push_back(*eb);
     }
     // Backward analysis!
     while !next_bls.is_empty() {
         let cur_bl = next_bls.pop_front().unwrap();
 
-        // State is the Union of all successors AND the exit condition
+        // State is the Union of all successors
         let mut state: HashSet<String> = HashSet::new();
-        for s in &successor_fn[cur_bl] {
+        for s in &successor[cur_bl] {
             state = la_meet(&state, &bl_in[*s]);
         }
-        match &bls[cur_bl].terminator {
-            BlockTerminator::Transition(e) => { state = la_gen(state, &expr_find_val(e)); }
-            BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-            BlockTerminator::ProgTerm => {}            
+        if exit_bls.contains(&cur_bl) {
+            state.insert("%RET".to_string());
         }
-
         // Only analyze if never visited before or OUT changes
         if !visited[cur_bl] || state != bl_out[cur_bl] {
             
             bl_out[cur_bl] = state.clone();
             visited[cur_bl] = true;
 
+            // KILL and GEN within the terminator
+            match &bls[cur_bl].terminator {
+                BlockTerminator::Transition(e) => { state.extend(expr_find_val(&e)); }
+                BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
+                BlockTerminator::ProgTerm => {}            
+            }
+
             // KILL and GEN within the block
             for i in bls[cur_bl].instructions.iter().rev() {
                 match i {
-                    // PUSH and POP do not affect liveness
-                    BlockContent::MemPush(_) => {}
-                    BlockContent::MemPop(_) => {}
+                    // If there is a PUSH, then var is alive and %SP is alive
+                    BlockContent::MemPush((var, _, _)) => {
+                        state.insert(var.to_string());
+                        state.insert("%SP".to_string());
+                    }
+                    // If there is a POP, then var is dead and %BP is alive
+                    BlockContent::MemPop((var, _, _)) => {
+                        state.remove(var);
+                        state.insert("%BP".to_string());
+                    }
                     BlockContent::Stmt(s) => {
                         let (kill, gen) = stmt_find_val(s);
-                        // If it's not a definition or the defined variable is alive,
-                        // or if it involves register value (%RP, %BP, %SP, %RET, %ARG)
-                        // mark the variable dead and append gen to state
-                        // Otherwise remove the statement
-                        let mut contains_reg = kill.iter().fold(false, |c, x| c || x.chars().next().unwrap() == '%');
-                        contains_reg = gen.iter().fold(contains_reg, |c, x| c || x.chars().next().unwrap() == '%');
-                        
-                        if kill.is_empty() || kill.iter().fold(false, |c, x| c || is_alive(&state, x)) || contains_reg {
-                            // Remove kill from state if the operation does not involve registers
-                            if !contains_reg {
-                                state = la_kill(state, &kill);
-                            }
-
-                            // Add all gens to state
-                            state = la_gen(state, &gen);
-                        }
+                        state = la_kill(state, &kill);
+                        state = la_gen(state, &gen);
                     }
                 }
             }
             bl_in[cur_bl] = state;
 
             // Block Transition
-            for tmp_bl in predecessor_fn[cur_bl].clone() {
+            for tmp_bl in predecessor[cur_bl].clone() {
                 next_bls.push_back(tmp_bl);
             }
         }    
@@ -745,7 +744,7 @@ fn liveness_analysis<'ast>(
         visited[i] = false;
     }
     let mut next_bls: VecDeque<usize> = VecDeque::new();
-    for eb in exit_bls_fn {
+    for eb in exit_bls {
         next_bls.push_back(*eb);
     }
     while !next_bls.is_empty() {
@@ -756,7 +755,7 @@ fn liveness_analysis<'ast>(
 
         // Only visit each block once
         if !visited[cur_bl] {
-            
+
             visited[cur_bl] = true;
             let mut new_instructions = Vec::new();
 
@@ -765,37 +764,26 @@ fn liveness_analysis<'ast>(
             for i in bls[cur_bl].instructions.iter().rev() {
                 match i {
                     BlockContent::MemPush((var, _, _)) => {
-                        if is_alive(&state, var) || var.chars().next().unwrap() == '%' {
-                            new_instructions.insert(0, i.clone());
-                        }
+                        // Keep all push statements, remove them in PMR
+                        new_instructions.insert(0, i.clone());
+                        state.insert(var.to_string());
+                        state.insert("%SP".to_string());
                     }
                     BlockContent::MemPop((var, _, _)) => {
-                        if is_alive(&state, var) || var.chars().next().unwrap() == '%' {
+                        // Don't remove %BP
+                        if is_alive(&state, var) || var == "%BP" {
                             new_instructions.insert(0, i.clone());
                         }
+                        state.remove(var);
+                        state.insert("%BP".to_string());
                     }
                     BlockContent::Stmt(s) => {
                         let (kill, gen) = stmt_find_val(s);
-                        if kill.len() > 1 {
-                            panic!("Assignment to multiple variables not supported");
-                        }
-                        if kill.len() > 1 {
-                            panic!("Assignment to multiple variables not supported");
-                        }
                         // If it's not a definition or the defined variable is alive,
-                        // or if it involves register value (%RP, %BP, %SP, %RET, %ARG)
                         // mark the variable dead and append gen to state
                         // Otherwise remove the statement
-                        let mut contains_reg = kill.iter().fold(false, |c, x| c || x.chars().next().unwrap() == '%');
-                        contains_reg = gen.iter().fold(contains_reg, |c, x| c || x.chars().next().unwrap() == '%');
-                        
-                        if kill.is_empty() || kill.iter().fold(false, |c, x| c || is_alive(&state, x)) || contains_reg {
-                            // Remove kill from state if the operation does not involve registers
-                            if !contains_reg {
-                                state = la_kill(state, &kill);
-                            }
-
-                            // Add all gens to state
+                        if kill.is_empty() || kill.iter().fold(false, |c, x| c || is_alive(&state, x)) {
+                            state = la_kill(state, &kill);
                             state = la_gen(state, &gen);
                             new_instructions.insert(0, i.clone());
                         }
@@ -806,7 +794,7 @@ fn liveness_analysis<'ast>(
             bls[cur_bl].instructions = new_instructions;
 
             // Block Transition
-            for tmp_bl in predecessor_fn[cur_bl].clone() {
+            for tmp_bl in predecessor[cur_bl].clone() {
                 next_bls.push_back(tmp_bl);
             }
         }    
@@ -815,20 +803,32 @@ fn liveness_analysis<'ast>(
     return bls;
 }
 
-
-// Close the "gap" between PUSHes and POPpes to physical memory created by previous optimizations
+/*
+// PMR is consisted of a liveness analysis and dead stack operation removal
+// Liveness analysis on the stack (LAS)
+// DIRECTION: Backward
+// LATTICE:
+//   TOP: An empty list
+//   Otherwise, a list of list that records whether each stack frame of every scope is alive.
+//     The last list indicates the current stack frame. Note that a stack frame might have size 0.
+//   BOTTOM: None
+// TRANSFER:
+//    GEN: If a variable is popped from the stack:
+//         - If it is %BP, initialize a new scope
+//         - Mark the stack frame at the offset to be alive
+//   KILL: None
+//
+// Remove dead PUSHes and POPs based on the liveness analysis
 // DIRECTION: Forward
 // LATTICE:
 //   TOP: An empty list
-//   Otherwise, a list that records the size of each stack frame after previous optimizations.
-//     The last entry indicates the size of current stack frame. Note that a stack frame might have size 0.
-//   BOTTOM: None
+//   Otherwise, a list that records the size of each stack frame of every scope
 // TRANSFER:
-//    GEN: If a variable is pushed onto stack,
-//         - If it is %BP, delete the statement.
-//         - If it is not %BP and current stack frame size is 0, push %BP with offset 0 and 
+//    GEN: If a variable is pushed into the stack:
+//         - If it is %BP, remove the PUSH statement
+//         - If it is a live variable and not %BP and current stack frame size is 0, push %BP with offset 0 and 
 //           this variable with offset 1. Update current stack frame size to 2.
-//         - Otherwise, push variable to offset = current stack frame size, increment current stack frame size.
+//         - Otherwise if the variable is alive, push variable to offset = current stack frame size, increment current stack frame size.
 //   KILL: If a variable is popped out from the stack,
 //         - if the current stack frame size is 0, delete the last entry in stack frame size
 //         - If it is %BP and current stack frame size is 0, remove the statement
@@ -839,9 +839,6 @@ fn liveness_analysis<'ast>(
 //   PUSH: If we encounter an statement incrementing %SP:
 //         - If current stack frame size is 0, remove the statement and append 0 to stack frame size list
 //         - Otherwise, increment %SP by cur stack frame size instead and append 0 to stack frame size list
-// MEET:
-//    TOP meets anything else is always the other things
-//    Otherwise, MEET is defined only when all operands are identical
 
 // Given a statement, decide if it is of form %SP = %SP + x
 fn pmr_is_push(s: &Statement) -> bool {
@@ -895,26 +892,100 @@ fn pmr_is_bp_update(s: &Statement) -> bool {
     return false;
 }
 
+fn pmr_join(
+    first: Vec<Vec<bool>>,
+    second: Vec<Vec<bool>>
+) -> Vec<Vec<bool>> {
+    // If any of them is TOP, return the other one
+    if first.len() == 0 {
+        return second;
+    }
+    if second.len() == 0 {
+        return first;
+    }
+    // Reject the join if they do not have the same scope
+    if first.len() != second.len() {
+        panic!("PMR join fail: cannot join two states with different scopes!")
+    }
+    let mut third = first;
+    for i in 0..third.len() {
+        for j in 0..second[i].len() {
+            if j > third[i].len() {
+                third[i].push(second[i][j]);
+            } else {
+                third[i][j] = third[i][j] || second[i][j];
+            }
+        }
+    }
+    third
+}
+
 fn phy_mem_rearrange<'ast>(
     mut bls: Vec<Block<'ast>>,
     predecessor_fn: &Vec<HashSet<usize>>,
     successor_fn: &Vec<HashSet<usize>>,
-    entry_bls_fn: &HashSet<usize>
+    exit_bls_fn: &HashSet<usize>
 ) -> Vec<Block<'ast>> {
     let mut visited: Vec<bool> = Vec::new();
-    // Since we are iterating each block at most once, there's no reason to keep track of in state
-    let mut bl_out: Vec<Vec<usize>> = Vec::new();
+    let mut bl_in: Vec<Vec<Vec<bool>>> = Vec::new();
+    let mut bl_out: Vec<Vec<Vec<bool>>> = Vec::new();
     for _ in 0..bls.len() {
         visited.push(false);
+        bl_in.push(Vec::new());
         bl_out.push(Vec::new());
     }
 
+    // LIVENESS ANALYSIS
     // This shouldn't happen
-    if entry_bls_fn.is_empty() { 
-        panic!("The program has no entry block!");
+    if exit_bls_fn.is_empty() { 
+        panic!("The program has no exit block!");
     }
-    
     // Start from exit block
+    let mut next_bls: VecDeque<usize> = VecDeque::new();
+    for eb in exit_bls_fn {
+        next_bls.push_back(*eb);
+    }
+    // Backward analysis!
+    while !next_bls.is_empty() {
+        let cur_bl = next_bls.pop_front().unwrap();
+
+        // State is the Union of all successors
+        let mut state = Vec::new();
+        for s in &successor[cur_bl] {
+            state = pmr_join(&state, &bl_in[*s]);
+        }
+
+        // Only analyze if never visited before or OUT changes
+        if !visited[cur_bl] || state != bl_out[cur_bl] {
+            bl_out[cur_bl] = state.clone();
+            visited[cur_bl] = true;
+
+            // GEN within the block
+            for i in bls[cur_bl].instructions.iter().rev() {
+                match i {
+                    BlockContent::MemPop((var, _, offset)) => {
+                        // If we encounter a %BP, 
+                    }
+                    _ => {}
+                }
+            }
+            bl_in[cur_bl] = state;
+
+            // Block Transition
+            for tmp_bl in predecessor[cur_bl].clone() {
+                next_bls.push_back(tmp_bl);
+            }
+        }
+    }
+
+    
+
+
+
+    for _ in 0..bls.len() {
+        visited.push(false);
+    }
+    // Start from entry block
     let mut next_bls: VecDeque<usize> = VecDeque::new();
     for eb in entry_bls_fn {
         next_bls.push_back(*eb);
@@ -1060,6 +1131,7 @@ fn phy_mem_rearrange<'ast>(
 
     return bls;
 }
+*/
 
 // EBE: Backward analysis
 // If a block is empty and its terminator is a coda (to another block or %RP)
@@ -1188,7 +1260,6 @@ fn set_input_output<'bl>(
     exit_bls: &HashSet<usize>,
     inputs: Vec<(String, Ty)>
 ) -> Vec<Block<'bl>> {
-
     // Liveness
     let mut visited: Vec<bool> = vec![false; bls.len()];
     // MEET is union, so IN and OUT are Empty Set
@@ -1210,7 +1281,7 @@ fn set_input_output<'bl>(
 
         let cur_bl = next_bls.pop_front().unwrap();   
 
-        // State is the union of all successors and exit condition
+        // State is the union of all successors
         let mut state: HashSet<String> = HashSet::new();
         // Add %oRET to output of every exit blocks
         if exit_bls.contains(&cur_bl) {
@@ -1219,17 +1290,19 @@ fn set_input_output<'bl>(
         for s in &successor[cur_bl] {
             state.extend(bl_in[*s].clone());
         }
-        match &bls[cur_bl].terminator {
-            BlockTerminator::Transition(e) => { state.extend(expr_find_val(&e)); }
-            BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-            BlockTerminator::ProgTerm => {}            
-        }
 
         // Only analyze if never visited before or OUT changes
         if !visited[cur_bl] || state != bl_out[cur_bl] {
             
             bl_out[cur_bl] = state.clone();
             visited[cur_bl] = true;
+            
+            // KILL and GEN within the terminator
+            match &bls[cur_bl].terminator {
+                BlockTerminator::Transition(e) => { state.extend(expr_find_val(&e)); }
+                BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
+                BlockTerminator::ProgTerm => {}            
+            }
 
             // KILL and GEN within the block
             // We assume that liveness analysis has been performed, don't reason about usefulness of variables
@@ -1354,7 +1427,6 @@ fn set_input_output<'bl>(
         }
         assert!(bls[i].outputs.len() == 0);
         for name in &output_lst[i] {
-            println!("Name: {}", name);
             bls[i].outputs.push((name.to_string(), Some(ty_map_out[i].get(name).unwrap().clone())));
         }
     }

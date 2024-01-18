@@ -1,6 +1,6 @@
 // TODO: Program broke down when there is a dead program parameter
 // TODO: Need to reorder the blocks by number of execution
-// TODO: Not all dead LOAD and STOREs are cleaned
+// TODO: PMR needs rework
 
 /*
 use bellman::gadgets::test::TestConstraintSystem;
@@ -666,7 +666,8 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     let mut mem_last = vec![one.clone(); 4];
     for i in 0..mem_list.len() {
         let m = &mem_list[i];
-        let mut mem: Vec<Integer> = vec![one.clone(); 4];
+        let mut mem: Vec<Integer> = vec![zero.clone(); 4];
+        mem[0] = one.clone();
         mem[1] = m.0.as_integer().unwrap();
         mem[2] = m.1.as_integer().unwrap();
         // backend requires the 3rd entry to be v[k + 1] * (1 - addr[k + 1] + addr[k])

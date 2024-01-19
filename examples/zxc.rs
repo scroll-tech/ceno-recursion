@@ -1,6 +1,5 @@
 // TODO: Program broke down when there is a dead program parameter
 // TODO: Need to reorder the blocks by number of execution
-// TODO: PMR needs rework
 
 /*
 use bellman::gadgets::test::TestConstraintSystem;

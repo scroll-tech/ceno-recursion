@@ -112,14 +112,12 @@ pub fn optimize_block<const VERBOSE: bool>(
         print_bls(&bls, &entry_bl);
     }
 
-    /* PMR is broken
     // PMR
-    bls = phy_mem_rearrange(bls, &predecessor_fn, &successor_fn, &entry_bls_fn, &exit_bls_fn);
+    bls = phy_mem_rearrange(bls, &predecessor_fn, &successor_fn, &exit_bls_fn);
     if VERBOSE {
         println!("\n\n--\nPMR:");
         print_bls(&bls, &entry_bl);
     }
-    */
 
     // Set Input
     // Putting this here because EBE and DBE destroys CFG
@@ -770,7 +768,7 @@ fn liveness_analysis<'ast>(
                         state.insert("%SP".to_string());
                     }
                     BlockContent::MemPop((var, _, _)) => {
-                        // Don't remove %BP
+                        // Don't remove %BP, remove them in PMR
                         if is_alive(&state, var) || var == "%BP" {
                             new_instructions.insert(0, i.clone());
                         }
@@ -803,8 +801,7 @@ fn liveness_analysis<'ast>(
     return bls;
 }
 
-/*
-// PMR is consisted of a liveness analysis and dead stack operation removal
+// PMR is consisted of a liveness analysis on memory stack entries
 // Liveness analysis on the stack (LAS)
 // DIRECTION: Backward
 // LATTICE:
@@ -816,29 +813,8 @@ fn liveness_analysis<'ast>(
 //    GEN: If a variable is popped from the stack:
 //         - If it is %BP, initialize a new scope
 //         - Mark the stack frame at the offset to be alive
-//   KILL: None
-//
-// Remove dead PUSHes and POPs based on the liveness analysis
-// DIRECTION: Forward
-// LATTICE:
-//   TOP: An empty list
-//   Otherwise, a list that records the size of each stack frame of every scope
-// TRANSFER:
-//    GEN: If a variable is pushed into the stack:
-//         - If it is %BP, remove the PUSH statement
-//         - If it is a live variable and not %BP and current stack frame size is 0, push %BP with offset 0 and 
-//           this variable with offset 1. Update current stack frame size to 2.
-//         - Otherwise if the variable is alive, push variable to offset = current stack frame size, increment current stack frame size.
-//   KILL: If a variable is popped out from the stack,
-//         - if the current stack frame size is 0, delete the last entry in stack frame size
-//         - If it is %BP and current stack frame size is 0, remove the statement
-//         - If it is %BP and current stack frame size is 1, keep the statement and
-//           set current stack frame size to 0
-//         - If it is %BP and current stack frame is not 0 or 1, panic.
-//         - Otherwise, decrement current stack frame size, pop variable with offset = current stack frame size.
-//   PUSH: If we encounter an statement incrementing %SP:
-//         - If current stack frame size is 0, remove the statement and append 0 to stack frame size list
-//         - Otherwise, increment %SP by cur stack frame size instead and append 0 to stack frame size list
+//   KILL: If a variable is pushed onto the stack:
+//         - If it is %BP, pop out the current scope
 
 // Given a statement, decide if it is of form %SP = %SP + x
 fn pmr_is_push(s: &Statement) -> bool {
@@ -894,11 +870,11 @@ fn pmr_is_bp_update(s: &Statement) -> bool {
 
 fn pmr_join(
     first: Vec<Vec<bool>>,
-    second: Vec<Vec<bool>>
+    second: &Vec<Vec<bool>>
 ) -> Vec<Vec<bool>> {
     // If any of them is TOP, return the other one
     if first.len() == 0 {
-        return second;
+        return second.clone();
     }
     if second.len() == 0 {
         return first;
@@ -907,7 +883,7 @@ fn pmr_join(
     if first.len() != second.len() {
         panic!("PMR join fail: cannot join two states with different scopes!")
     }
-    let mut third = first;
+    let mut third = first.clone();
     for i in 0..third.len() {
         for j in 0..second[i].len() {
             if j > third[i].len() {
@@ -918,6 +894,12 @@ fn pmr_join(
         }
     }
     third
+}
+
+// Given all stack frames of a scope, how many live entries are in the stack?
+fn pmr_stack_frame_count(frame_list: &Vec<bool>) -> usize {
+    let count = frame_list.iter().fold(0, |a, b| if *b {a + 1} else {a});
+    if count == 1 {0} else {count}
 }
 
 fn phy_mem_rearrange<'ast>(
@@ -951,8 +933,8 @@ fn phy_mem_rearrange<'ast>(
 
         // State is the Union of all successors
         let mut state = Vec::new();
-        for s in &successor[cur_bl] {
-            state = pmr_join(&state, &bl_in[*s]);
+        for s in &successor_fn[cur_bl] {
+            state = pmr_join(state, &bl_in[*s]);
         }
 
         // Only analyze if never visited before or OUT changes
@@ -964,7 +946,24 @@ fn phy_mem_rearrange<'ast>(
             for i in bls[cur_bl].instructions.iter().rev() {
                 match i {
                     BlockContent::MemPop((var, _, offset)) => {
-                        // If we encounter a %BP, 
+                        // If we encounter a %BP, push in a new scope
+                        if var == "%BP" {
+                            state.push(vec![true]);
+                        }
+                        // Otherwise, set entry OFFSET of the last scope to be TRUE, pad state with FALSE if necessary
+                        else {
+                            let sp = state.len() - 1;
+                            for _ in sp..offset - 1 {
+                                state[sp].push(false);
+                            }
+                            state[sp].push(true);
+                        }
+                    }
+                    BlockContent::MemPush((var, _, _)) => {
+                        // If we encounter a %BP, pop out the last scope
+                        if var == "%BP" {
+                            state.pop();
+                        }
                     }
                     _ => {}
                 }
@@ -972,60 +971,70 @@ fn phy_mem_rearrange<'ast>(
             bl_in[cur_bl] = state;
 
             // Block Transition
-            for tmp_bl in predecessor[cur_bl].clone() {
+            for tmp_bl in predecessor_fn[cur_bl].clone() {
                 next_bls.push_back(tmp_bl);
             }
         }
     }
 
-    
-
-
-
-    for _ in 0..bls.len() {
-        visited.push(false);
+    // Use bl_out to derive bl_out_size, which records the number of live stack frames within each scope
+    let bl_out_size: Vec<Vec<usize>> = bl_out.iter().map(
+        |i| i.iter().map(
+            |j| pmr_stack_frame_count(j)
+        ).collect()
+    ).collect();
+    for i in 0..bls.len() {
+        visited[i] = false;
     }
-    // Start from entry block
+    // Start from exit block
     let mut next_bls: VecDeque<usize> = VecDeque::new();
-    for eb in entry_bls_fn {
+    for eb in exit_bls_fn {
         next_bls.push_back(*eb);
     }
-    // Forward analysis!
+        // One final backward analysis, visit every block once
     while !next_bls.is_empty() {
         let cur_bl = next_bls.pop_front().unwrap();
 
-        // No reason to ever visit the same block twice since there are no transition or meet
+        // Only analyze if never visited before
         if !visited[cur_bl] {
-
-            let mut state: Vec<usize> = Vec::new();
-            // MEET with all predecessor
-            for p in &predecessor_fn[cur_bl] {
-                if state.len() == 0 {
-                    state = bl_out[*p].clone();
-                } else if bl_out[*p].len() != 0 && state != bl_out[*p] {
-                    panic!("Physical Memory Rearrangement failed: Stack frame size of blocks do not match.");
-                }
-            }
-
-            // Only possible if we are at entry states
-            if state.len() == 0 {
-                state = vec![0];
-            }
-
             visited[cur_bl] = true;
+            // State is bl_out
+            // State_size is bl_out_size
+            let mut state = bl_out[cur_bl].clone();
+            let mut state_size = bl_out_size[cur_bl].clone();
+            // Push in new instructions
             let mut new_instructions = Vec::new();
 
-            // iterate through statements, keep track of the size of each stack frame
-            for i in bls[cur_bl].instructions.iter() {
-                let mut state_len = state.len() - 1;
+            // GEN within the block
+            for i in bls[cur_bl].instructions.iter().rev() {
+                let sp = state.len() - 1;
                 match i {
-                    BlockContent::MemPush((var, ty, _)) => {
-                        // Delay pushing %BP until we see the first non-BP push
-                        if var.to_string() != "%BP".to_string() {
-                            // Push %BP if this is the first push of the stack frame
-                            if state[state_len] == 0 {
-                                // %PHY[%SP + 0] = %BP
-                                new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, 0)));
+                    BlockContent::MemPop((var, ty, offset)) => {
+                        if var == "%BP" {
+                            state.push(vec![true]);
+                            state_size.push(0);
+                            // Delay popping %BP until we see the first non-BP pop
+                        }
+                        else {
+                            for _ in sp..offset - 1 {
+                                state[sp].push(false);
+                            }
+                            state[sp].push(true);
+                            // If this is the first pop of the scope pop out %BP first
+                            if state_size[sp] == 0 {
+                                new_instructions.insert(0, BlockContent::MemPop(("%BP".to_string(), Ty::Field, 0)));
+                                state_size[sp] += 1;
+                            }
+                            new_instructions.insert(0, BlockContent::MemPop((var.to_string(), ty.clone(), state_size[sp])));
+                            state_size[sp] += 1;
+                        }
+                    }
+                    BlockContent::MemPush((var, ty, offset)) => {
+                        if var == "%BP" {
+                            // Only include the push %BP statement if anything else is pushed onto the stack
+                            // In that case, state_size[sp] should be 1
+                            assert!(state_size[sp] <= 1);
+                            if state_size[sp] == 1 {
                                 // %BP = %SP
                                 let bp_update_stmt = Statement::Definition(DefinitionStatement {
                                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
@@ -1044,38 +1053,24 @@ fn phy_mem_rearrange<'ast>(
                                     }),
                                     span: Span::new("", 0, 0).unwrap()
                                 });
-                                new_instructions.push(BlockContent::Stmt(bp_update_stmt));
-                                // %PHY[%SP + 1] = var
-                                new_instructions.push(BlockContent::MemPush((var.to_string(), ty.clone(), 1)));
-                                state[state_len] = 2;
-                            } else {
-                                new_instructions.push(BlockContent::MemPush((var.to_string(), ty.clone(), state[state_len])));
-                                state[state_len] += 1;
-                            }
-                        }
-                    }
-                    BlockContent::MemPop((var, ty, _)) => {
-                        // This is only possible if nothing was ever pushed to the current stack frame
-                        if state[state_len] == 0 {
-                            if state_len == 0 {
-                                panic!("Physical Memory Rearrangement failed: stack is empty but encountered a POP request. Error at block {}.", cur_bl);
+                                new_instructions.insert(0, BlockContent::Stmt(bp_update_stmt));
+                                // %PHY[%SP + 0] = %BP
+                                new_instructions.insert(0, BlockContent::MemPush(("%BP".to_string(), Ty::Field, 0)));
                             }
                             state.pop();
-                            state_len -= 1;
-                        }
-                        // If we encounter a pop of %BP and the stack frame exists, remove the entire stack frame
-                        if var.to_string() == "%BP".to_string() && state[state_len] >= 1 {
-                            state[state_len] = 0;
-                            new_instructions.push(BlockContent::MemPop(("%BP".to_string(), Ty::Field, 0)));
-                        // If we encounter some other variable, pop it out
-                        } else if var.to_string() != "%BP".to_string() {
-                            state[state_len] -= 1;
-                            new_instructions.push(BlockContent::MemPop((var.to_string(), ty.clone(), state[state_len])));                         
+                            state_size.pop();
+                        } else {
+                            // Use state to determine whether stack entry is alive
+                            if *offset < state[sp].len() && state[sp][*offset] {
+                                state_size[sp] -= 1;
+                                new_instructions.insert(0, BlockContent::MemPush((var.to_string(), ty.clone(), state_size[sp])));
+                            }
                         }
                     }
                     BlockContent::Stmt(s) => {
+                        // %SP = %SP + X
                         if pmr_is_push(&s) {
-                            if state[state_len] != 0 {
+                            if state_size[sp] != 0 {
                                 let sp_update_stmt = Statement::Definition(DefinitionStatement {
                                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                                         ty: Type::Basic(BasicType::Field(FieldType {
@@ -1095,7 +1090,7 @@ fn phy_mem_rearrange<'ast>(
                                         })),
                                         right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
                                             value: DecimalNumber {
-                                                value: state[state.len() - 1].to_string(),
+                                                value: state_size[sp].to_string(),
                                                 span: Span::new("", 0, 0).unwrap()
                                             },
                                             suffix: Some(DecimalSuffix::Field(FieldSuffix {
@@ -1107,31 +1102,27 @@ fn phy_mem_rearrange<'ast>(
                                     }),
                                     span: Span::new("", 0, 0).unwrap()
                                 }); 
-                                new_instructions.push(BlockContent::Stmt(sp_update_stmt));                                 
+                                new_instructions.insert(0, BlockContent::Stmt(sp_update_stmt));                                 
                             }
-                            state.push(0);
                         } else {
                             if !pmr_is_bp_update(&s) {
-                                new_instructions.push(i.clone());
+                                new_instructions.insert(0, i.clone());
                             }
                         }
                     }
                 }
             }
-
             bls[cur_bl].instructions = new_instructions;
-            bl_out[cur_bl] = state;
 
             // Block Transition
-            for tmp_bl in successor_fn[cur_bl].clone() {
+            for tmp_bl in predecessor_fn[cur_bl].clone() {
                 next_bls.push_back(tmp_bl);
             }
-        }  
+        }
     }
-
+    
     return bls;
 }
-*/
 
 // EBE: Backward analysis
 // If a block is empty and its terminator is a coda (to another block or %RP)

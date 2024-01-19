@@ -15,7 +15,6 @@ use rug::Integer;
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
 use circ::ir::opt::{opt, Opt};
-use circ_fields::FieldV;
 /*
 use circ::target::r1cs::bellman::parse_instance;
 */
@@ -35,7 +34,6 @@ use circ::cfg::{
     CircOpt,
 };
 use std::path::PathBuf;
-use zokrates_pest_ast::*;
 
 const INPUT_OFFSET: usize = 6;
 const OUTPUT_OFFSET: usize = 5;
@@ -91,28 +89,9 @@ enum ProofOption {
 }
 
 struct SparseMatEntry {
-    args_a: Vec<(usize, isize)>,
-    args_b: Vec<(usize, isize)>,
-    args_c: Vec<(usize, isize)>
-}
-
-impl SparseMatEntry {
-    // Note: Only works if value does not wrap around the field
-    fn verify(&self, vars: &Vec<usize>) {
-        let mut a = 0;
-        let mut b = 0;
-        let mut c = 0;
-        for (i, m) in &self.args_a {
-            a += vars[*i] as isize * m;
-        }
-        for (i, m) in &self.args_b {
-            b += vars[*i] as isize * m;
-        }
-        for (i, m) in &self.args_c {
-            c += vars[*i] as isize * m;
-        }
-        assert_eq!(a * b, c);
-    }
+    args_a: Vec<(usize, Integer)>,
+    args_b: Vec<(usize, Integer)>,
+    args_c: Vec<(usize, Integer)>
 }
 
 // When adding the validity check, what does the sparse format look like?
@@ -128,32 +107,32 @@ fn get_sparse_cons_with_v_check(
         let mut args_b = Vec::new();
         let mut args_c = Vec::new();
         if !c.0.constant_is_zero() {
-            args_a.push((v_cnst, c.0.constant.signed_int().to_isize().unwrap()));
+            args_a.push((v_cnst, c.0.constant.i()));
         }
         for (var, coeff) in c.0.monomials.iter() {
             match var.ty() {
-                VarType::Inst => args_a.push((io_relabel(var.number()), coeff.signed_int().to_isize().unwrap())),
-                VarType::FinalWit => args_a.push((witness_relabel(var.number()), coeff.signed_int().to_isize().unwrap())),
+                VarType::Inst => args_a.push((io_relabel(var.number()), coeff.i())),
+                VarType::FinalWit => args_a.push((witness_relabel(var.number()), coeff.i())),
                 _ => panic!("Unsupported variable type!")
             }
         }
         if !c.1.constant_is_zero() {
-            args_b.push((v_cnst, c.1.constant.signed_int().to_isize().unwrap()));
+            args_b.push((v_cnst, c.1.constant.i()));
         }
         for (var, coeff) in c.1.monomials.iter() {
             match var.ty() {
-                VarType::Inst => args_b.push((io_relabel(var.number()), coeff.signed_int().to_isize().unwrap())),
-                VarType::FinalWit => args_b.push((witness_relabel(var.number()), coeff.signed_int().to_isize().unwrap())),
+                VarType::Inst => args_b.push((io_relabel(var.number()), coeff.i())),
+                VarType::FinalWit => args_b.push((witness_relabel(var.number()), coeff.i())),
                 _ => panic!("Unsupported variable type!")
             }
         }
         if !c.2.constant_is_zero() {
-            args_c.push((v_cnst, c.2.constant.signed_int().to_isize().unwrap()));
+            args_c.push((v_cnst, c.2.constant.i()));
         }
         for (var, coeff) in c.2.monomials.iter() {
             match var.ty() {
-                VarType::Inst => args_c.push((io_relabel(var.number()), coeff.signed_int().to_isize().unwrap())),
-                VarType::FinalWit => args_c.push((witness_relabel(var.number()), coeff.signed_int().to_isize().unwrap())),
+                VarType::Inst => args_c.push((io_relabel(var.number()), coeff.i())),
+                VarType::FinalWit => args_c.push((witness_relabel(var.number()), coeff.i())),
                 _ => panic!("Unsupported variable type!")
             }
         }
@@ -166,6 +145,11 @@ fn get_sparse_cons_with_v_check(
 fn integer_to_bytes(mut raw: Integer) -> [u8; 32] {
     let mut res = [0; 32];
     let width = Integer::from(256);
+    let field = Integer::from_str_radix("7237005577332262213973186563042994240857116359379907606001950938285454250989", 10).unwrap();
+    // Cast negative number to the other side of the field
+    if raw < 0 {
+        raw += field;
+    }
     let mut i = 0;
     while raw != 0 {
         if i >= 32 {
@@ -188,7 +172,7 @@ struct CompileTimeKnowledge {
     block_num_mem_accesses: Vec<usize>,
     total_num_mem_accesses_bound: usize,
   
-    args: Vec<Vec<(Vec<(usize, isize)>, Vec<(usize, isize)>, Vec<(usize, isize)>)>>,
+    args: Vec<Vec<(Vec<(usize, Integer)>, Vec<(usize, Integer)>, Vec<(usize, Integer)>)>>,
   
     func_input_width: usize,
     input_offset: usize,
@@ -215,21 +199,30 @@ impl CompileTimeKnowledge {
         for inst in &self.args {
             writeln!(&mut f, "INST {}", counter)?;
             for cons in inst {
-                write!(&mut f, "A ")?;
+                writeln!(&mut f, "A")?;
                 for (var, val) in &cons.0 {
-                    write!(&mut f, "{} {} ", var, val)?;
+                    writeln!(&mut f, "{}", var)?;
+                    for i in integer_to_bytes(val.clone()) {
+                        write!(&mut f, "{} ", i)?;
+                    }
+                    writeln!(&mut f, "")?;
                 }
-                writeln!(&mut f, "")?;
-                write!(&mut f, "B ")?;
+                writeln!(&mut f, "B")?;
                 for (var, val) in &cons.1 {
-                    write!(&mut f, "{} {} ", var, val)?;
+                    writeln!(&mut f, "{}", var)?;
+                    for i in integer_to_bytes(val.clone()) {
+                        write!(&mut f, "{} ", i)?;
+                    }
+                    writeln!(&mut f, "")?;
                 }
-                writeln!(&mut f, "")?;
-                write!(&mut f, "C ")?;
+                writeln!(&mut f, "C")?;
                 for (var, val) in &cons.2 {
-                    write!(&mut f, "{} {} ", var, val)?;
+                    writeln!(&mut f, "{}", var)?;
+                    for i in integer_to_bytes(val.clone()) {
+                        write!(&mut f, "{} ", i)?;
+                    }
+                    writeln!(&mut f, "")?;
                 }
-                writeln!(&mut f, "")?;
             }
             counter += 1;
         }
@@ -486,11 +479,11 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         sparse_mat_entry.push(Vec::new());
         // First constraint is V * V = V
         let (args_a, args_b, args_c) =
-            (vec![(v_cnst, 1)], vec![(v_cnst, 1)], vec![(v_cnst, 1)]);
+            (vec![(v_cnst, Integer::from(1))], vec![(v_cnst, Integer::from(1))], vec![(v_cnst, Integer::from(1))]);
         sparse_mat_entry[b].push(SparseMatEntry { args_a, args_b, args_c });
         // Second constraint is 0 = W - V
         let (args_a, args_b, args_c) =
-            (vec![], vec![], vec![(max_num_witnesses, 1), (v_cnst, -1)]);
+            (vec![], vec![], vec![(max_num_witnesses, Integer::from(1)), (v_cnst, Integer::from(-1))]);
         sparse_mat_entry[b].push(SparseMatEntry { args_a, args_b, args_c });
         // Iterate
         for c in r1cs.constraints() {
@@ -520,7 +513,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     let num_vars = 2 * max_num_io;
     let total_num_proofs_bound = r1cs_list.len();
     let total_num_mem_accesses_bound = 10;
-    let args: Vec<Vec<(Vec<(usize, isize)>, Vec<(usize, isize)>, Vec<(usize, isize)>)>> = 
+    let args: Vec<Vec<(Vec<(usize, Integer)>, Vec<(usize, Integer)>, Vec<(usize, Integer)>)>> = 
         sparse_mat_entry.iter().map(|v| v.iter().map(|i| (i.args_a.clone(), i.args_b.clone(), i.args_c.clone())).collect()).collect();
     let input_block_num = 0;
     let output_block_num = 0;
@@ -742,6 +735,6 @@ fn main() {
     // --
     // Write CTK, RTK to file
     // --
-    let _ = ctk.write_to_file("2pc_demo".to_string());
-    let _ = rtk.write_to_file("2pc_demo".to_string());
+    let _ = ctk.write_to_file("2pc_loop_addition".to_string());
+    let _ = rtk.write_to_file("2pc_loop_addition".to_string());
 }

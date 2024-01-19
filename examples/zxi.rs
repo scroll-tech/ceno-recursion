@@ -24,7 +24,7 @@ struct Options {
 }
 
 fn main() {
-    let func_inputs: Vec<usize> = vec![2, 5];
+    let func_inputs: Vec<usize> = vec![];
 
     env_logger::Builder::from_default_env()
         .format_level(false)

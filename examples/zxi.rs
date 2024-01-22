@@ -38,7 +38,7 @@ fn main() {
         mode: Mode::Proof
     };
     let entry_regs: Vec<Integer> = func_inputs.iter().map(|i| Integer::from(*i)).collect();
-    let (cs, block_id_list, _, _, block_inputs_list, mem_list) = ZSharpFE::interpret(inputs, &entry_regs);
+    let (cs, block_id_list, _, block_inputs_list, mem_list) = ZSharpFE::interpret(inputs, &entry_regs);
     print!("\n\nReturn value: ");
     cs.pretty(&mut std::io::stdout().lock())
         .expect("error pretty-printing value");

@@ -85,8 +85,7 @@ impl ZSharpFE {
     pub fn interpret(i: Inputs, entry_regs: &Vec<Integer>) -> (
         T, // Return Value
         Vec<usize>, // Block IDs
-        Vec<Vec<Option<Value>>>, // Block Inputs
-        Vec<Vec<Option<Value>>>, // Block Outputs
+        Vec<Vec<Option<Value>>>, // Prog Input + Block Outputs
         Vec<HashMap<String, Value, BuildHasherDefault<fxhash::FxHasher>>>, // Map of IO name -> IO value, for witness generation
         Vec<(Value, Value)> // Memory accesses, sorted by address
     ) {
@@ -101,7 +100,7 @@ impl ZSharpFE {
         let (blks, entry_bl) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs.clone());
         let (blks, entry_bl, io_size, _, _) = blocks_optimization::process_block::<VERBOSE, 1>(blks, entry_bl, inputs);
         println!("\n\n--\nInterpretation:");
-        let (ret, _, bl_exec_state, mem_list) = g.bl_eval_entry_fn::<VERBOSE>(entry_bl, entry_regs, &blks, io_size)
+        let (ret, _, prog_reg_in, bl_exec_state, mem_list) = g.bl_eval_entry_fn::<VERBOSE>(entry_bl, entry_regs, &blks, io_size)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
         // prover::print_state_list(&bl_exec_state);
         // let _ = prover::sort_by_block(&bl_exec_state);
@@ -114,18 +113,32 @@ impl ZSharpFE {
         // Memory accesses should be named Block_X_fX_lex0_%mvX / %maX
         let mut block_io_map_list = Vec::new();
         let suffix = format!("_v0");
-        for state in &bl_exec_state {
+        for i in 0..bl_exec_state.len() {
+            let state = &bl_exec_state[i];
             let prefix = format!("Block_{}_f{}_lex0_", state.blk_id, state.blk_id);
             block_id_list.push(state.blk_id);
             let mut inputs = HashMap::<String, Value, BuildHasherDefault<fxhash::FxHasher>>::default();
             // Process reg_ins
-            for i in 0..state.reg_in.len() {
-                // Only insert if state.reg_in[i] != None
-                // Convert T to Value
-                if !state.reg_in[i].is_none() {
-                    let value = to_const_value(state.reg_in[i].clone().unwrap())
-                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                    inputs.insert(format!("{}%i{}{}", prefix, i, suffix), value);
+            if i == 0 {
+                for i in 0..prog_reg_in.len() {
+                    // Only insert if state.reg_in[i] != None
+                    // Convert T to Value
+                    if !prog_reg_in[i].is_none() {
+                        let value = to_const_value(prog_reg_in[i].clone().unwrap())
+                            .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                        inputs.insert(format!("{}%i{}{}", prefix, i, suffix), value);
+                    }
+                }
+            } else {
+                let last_state = &bl_exec_state[i - 1];
+                for i in 0..last_state.reg_out.len() {
+                    // Only insert if state.reg_in[i] != None
+                    // Convert T to Value
+                    if !last_state.reg_out[i].is_none() {
+                        let value = to_const_value(last_state.reg_out[i].clone().unwrap())
+                            .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                        inputs.insert(format!("{}%i{}{}", prefix, i, suffix), value);
+                    }
                 }
             }
             // Process reg_outs
@@ -157,19 +170,21 @@ impl ZSharpFE {
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
             )
         ).collect();
-        let block_inputs_list = bl_exec_state.iter().map(|i| i.reg_in.iter().map(|j|
-            if let Some(k) = j {
-                Some(to_const_value(k.clone())
-                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)))
-            } else { None }
-        ).collect()).collect();
-        let block_outputs_list = bl_exec_state.iter().map(|i| i.reg_out.iter().map(|j|
-            if let Some(k) = j {
-                Some(to_const_value(k.clone())
-                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)))
-            } else { None }
-        ).collect()).collect();
-        return (ret, block_id_list, block_inputs_list, block_outputs_list, block_io_map_list, mem_list);
+        let block_outputs_list = [
+            vec![prog_reg_in.iter().map(|j|
+                if let Some(k) = j {
+                    Some(to_const_value(k.clone())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)))
+                } else { None }
+            ).collect()],
+            bl_exec_state.iter().map(|i| i.reg_out.iter().map(|j|
+                if let Some(k) = j {
+                    Some(to_const_value(k.clone())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)))
+                } else { None }
+            ).collect()).collect()
+        ].concat();
+        return (ret, block_id_list, block_outputs_list, block_io_map_list, mem_list);
     }
 }
 

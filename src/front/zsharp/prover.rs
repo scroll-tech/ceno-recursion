@@ -66,8 +66,6 @@ impl Eq for MemOp {}
 #[derive(Debug, Clone)]
 pub struct ExecState {
     pub blk_id: usize,      // ID of the block
-    pub active: bool,       // Is this block active (not a dummy)?
-    pub reg_in: Vec<Option<T>>,     // Input register State
     pub reg_out: Vec<Option<T>>,    // Output register State
     pub succ_id: usize,     // ID of the successor block
     pub mem_op: Vec<MemOp>  // List of memory operations within the block
@@ -77,8 +75,6 @@ impl ExecState {
     pub fn new(blk_id: usize, io_size: usize) -> Self {
         let input = Self {
             blk_id,
-            active: true,
-            reg_in: vec![None; io_size],
             reg_out: vec![None; io_size],
             succ_id: 0,
             mem_op: Vec::new()
@@ -88,53 +84,22 @@ impl ExecState {
 
     fn pretty(&self) {
         println!("Block ID: {}", self.blk_id);
-        println!("Active: {}", self.active);
-        if self.active {
-            print!("Reg\t%BN\t%RP\t%SP\t%BP\t%RET");
-            for i in 6..self.reg_in.len() {
-                print!("\t%{}", i);
+        print!("Reg\t%BN\t%RP\t%SP\t%BP\t%RET");
+        print!("\nOut:");
+        for i in &self.reg_out[1..] {
+            print!("\t");
+            if let Some(t) = i {
+                t.pretty(&mut std::io::stdout().lock())
+                    .expect("error pretty-printing value");
             }
-            print!("\nIn:");
-            for i in &self.reg_in[1..] {
-                print!("\t");
-                if let Some(t) = i {
-                    t.pretty(&mut std::io::stdout().lock())
-                        .expect("error pretty-printing value");
-                }
-            }
-            print!("\nOut:");
-            for i in &self.reg_out[1..] {
-                print!("\t");
-                if let Some(t) = i {
-                    t.pretty(&mut std::io::stdout().lock())
-                        .expect("error pretty-printing value");
-                }
-            }
-            println!("\nSuccessor ID: {}", self.succ_id);
-            println!("Memory Operations:");
-            for m in &self.mem_op {
-                m.pretty();
-            }
+        }
+        println!("\nSuccessor ID: {}", self.succ_id);
+        println!("Memory Operations:");
+        for m in &self.mem_op {
+            m.pretty();
         }
     }
 }
-// Ordering of ExecState solely by block ID and then active (true > false)
-impl Ord for ExecState {
-    fn cmp(&self, other: &Self) -> Ordering {
-        (self.blk_id, !self.active).cmp(&(other.blk_id, !other.active))
-    }
-}
-impl PartialOrd for ExecState {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl PartialEq for ExecState {
-    fn eq(&self, other: &Self) -> bool {
-        self.blk_id == other.blk_id && self.active == other.active
-    }
-}
-impl Eq for ExecState {}
 
 impl<'ast> ZGen<'ast> {
     fn print_all_vars_in_scope(&self) {
@@ -183,17 +148,19 @@ impl<'ast> ZGen<'ast> {
     // I am hacking cvars_stack to do the interpretation. Ideally we want a separate var_table to do so.
     // We only need BTreeMap<String, T> to finish evaluation, so the 2 Vecs of cvars_stack should always have
     // size 1, i.e. we use only one function and one scope.
-    // Return values:
-    // ret[0]: the return value of the function
-    // ret[1][i]: how many times have block i been executed?
-    // ret[2][i]: execution state of each block-execution
     pub fn bl_eval_entry_fn<const VERBOSE: bool>(
         &self,
         entry_bl: usize,
         entry_regs: &Vec<Integer>, // Entry regs should match the input of the entry block
         bls: &Vec<Block<'ast>>,
         io_size: usize
-    ) -> Result<(T, Vec<usize>, Vec<ExecState>, Vec<MemOp>), String> {
+    ) -> Result<(
+        T, // Return value
+        Vec<usize>, // Block ID
+        Vec<Option<T>>, // Program input state
+        Vec<ExecState>, // Block output states
+        Vec<MemOp> // Memory operations
+    ), String> {
         if bls.len() < entry_bl {
             return Err(format!("Invalid entry_bl: entry_bl exceeds block size."));
         }
@@ -217,6 +184,7 @@ impl<'ast> ZGen<'ast> {
         // Process input variables
         // Insert a 0 in front of the input variables for BN
         let entry_regs = &[vec![Integer::from(0)], entry_regs.clone()].concat();
+        let mut prog_reg_in = vec![None; io_size];
         let mut i = 0;
         for (name, ty) in &bls[entry_bl].inputs {
             if let Some(x) = ty {
@@ -253,13 +221,13 @@ impl<'ast> ZGen<'ast> {
 
             // Push-in new block state
             bl_exec_state.push(ExecState::new(nb, io_size));
-            // If it is the first block, add input to reg_in
+            // If it is the first block, add input to prog_reg_in
             if tr_size == 0 {
                 for i in 1..io_size {
-                    bl_exec_state[tr_size].reg_in[i] = self.cvar_lookup(&format!("%i{}", i));
+                    prog_reg_in[i] = self.cvar_lookup(&format!("%i{}", i));
                 }
             }
-            // If not the first block, match reg_in with reg_out of last block
+            // If not the first block, redefine output of the last block as input to this block
             else {
                 for (name, ty) in &bls[nb].inputs {
                     if let Some(x) = ty {
@@ -271,11 +239,6 @@ impl<'ast> ZGen<'ast> {
                             val,
                         )?;
                     }
-                }
-                for i in 1..io_size {
-                    // NOTE: Do not use cvar_lookup here!
-                    // This is because the register might be dead in the current block, but still needs to be assigned for consistency check
-                    bl_exec_state[tr_size].reg_in[i] = bl_exec_state[tr_size - 1].reg_out[i].clone();
                 }
             }
 
@@ -311,7 +274,7 @@ impl<'ast> ZGen<'ast> {
         ));
 
         let mem_list = sort_by_mem(&bl_exec_state);
-        Ok((ret?, bl_exec_count, bl_exec_state, mem_list))
+        Ok((ret?, bl_exec_count, prog_reg_in, bl_exec_state, mem_list))
     }
 
     // Convert a usize into a Field value

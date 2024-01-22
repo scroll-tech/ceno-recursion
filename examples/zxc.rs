@@ -1,8 +1,5 @@
 // TODO: Program broke down when there is a dead program parameter
 // TODO: Need to reorder the blocks by number of execution
-// TODO: Simplify Prover data by removing bl_in
-// TODO: Hex encoding for the file
-// TODO: Better command line prompt
 
 /*
 use bellman::gadgets::test::TestConstraintSystem;
@@ -38,9 +35,9 @@ use circ::cfg::{
 };
 use std::path::PathBuf;
 
+// How many reserved variables are in front of the actual input / output?
 const INPUT_OFFSET: usize = 6;
 const OUTPUT_OFFSET: usize = 5;
-const BENCHMARK_NAME: &str = "2pc_loop_addition";
 
 #[derive(Debug, Parser)]
 #[command(name = "zxc", about = "CirC: the circuit compiler")]
@@ -166,6 +163,20 @@ fn integer_to_bytes(mut raw: Integer) -> [u8; 32] {
     res
 }
 
+fn write_bytes(mut f: &File, bytes: &[u8; 32]) -> std::io::Result<()> {
+    // Disregard the trailing zeros
+    let mut size = 32;
+    while size > 0 && bytes[size - 1] == 0 {
+        size -= 1;
+    }
+    for i in 0..size {
+        write!(&mut f, "{} ", bytes[i])?;
+    }
+    writeln!(&mut f, "")?;
+
+    Ok(())
+}
+
 // --
 // Structures to match Spartan
 // --
@@ -206,26 +217,17 @@ impl CompileTimeKnowledge {
                 writeln!(&mut f, "A")?;
                 for (var, val) in &cons.0 {
                     writeln!(&mut f, "{}", var)?;
-                    for i in integer_to_bytes(val.clone()) {
-                        write!(&mut f, "{} ", i)?;
-                    }
-                    writeln!(&mut f, "")?;
+                    write_bytes(&mut f, &integer_to_bytes(val.clone()))?;
                 }
                 writeln!(&mut f, "B")?;
                 for (var, val) in &cons.1 {
                     writeln!(&mut f, "{}", var)?;
-                    for i in integer_to_bytes(val.clone()) {
-                        write!(&mut f, "{} ", i)?;
-                    }
-                    writeln!(&mut f, "")?;
+                    write_bytes(&mut f, &integer_to_bytes(val.clone()))?;
                 }
                 writeln!(&mut f, "C")?;
                 for (var, val) in &cons.2 {
                     writeln!(&mut f, "{}", var)?;
-                    for i in integer_to_bytes(val.clone()) {
-                        write!(&mut f, "{} ", i)?;
-                    }
-                    writeln!(&mut f, "")?;
+                    write_bytes(&mut f, &integer_to_bytes(val.clone()))?;
                 }
             }
             counter += 1;
@@ -254,10 +256,7 @@ impl Assignment {
 
     fn write(&self, mut f: &File) -> std::io::Result<()> {
         for assg in &self.assignment {
-            for i in assg {
-                write!(&mut f, "{} ", i)?;
-            }
-            writeln!(&mut f, "")?;
+            write_bytes(&mut f, assg)?;
         }
         Ok(())
     }
@@ -554,11 +553,11 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
 ) -> RunTimeKnowledge {
     let num_blocks = ctk.block_num_instances;
     let num_vars = ctk.num_vars;
-    // bl_inputs & bl_outputs records ios of blocks as lists
+    // bl_outputs records ios of blocks as lists
     // bl_io_map maps name of io variables to their values
-    // bl_inputs & bl_outputs are used to fill in io part of vars
+    // bl_outputs are used to fill in io part of vars
     // bl_io_map is used to compute witness part of vars
-    let (_, block_id_list, bl_inputs_list, bl_outputs_list, bl_io_map_list, mem_list) = {
+    let (_, block_id_list, bl_outputs_list, bl_io_map_list, mem_list) = {
         let inputs = zsharp::Inputs {
             file: path,
             mode: Mode::Proof
@@ -611,11 +610,11 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         // Valid bit should be 1
         inputs[0] = one.clone();
         vars[0] = one.clone();
-        // Use bl_inputs_list to assign input
+        // Use bl_outputs_list to assign input
         // Note that we do not use eval because eval automatically deletes dead registers
         // (that need to stay for consistency check)
-        let reg_in = &bl_inputs_list[i];
-        let reg_out = &bl_outputs_list[i];
+        let reg_in = &bl_outputs_list[i];
+        let reg_out = &bl_outputs_list[i + 1];
         for j in 0..reg_in.len() {
             if let Some(ri) = &reg_in[j] {
                 inputs[j] = ri.as_integer().unwrap();
@@ -748,18 +747,20 @@ fn main() {
     // --
     // Generate Constraints
     // --
+    let benchmark_name = options.path.as_os_str().to_str().unwrap();
+    let path = PathBuf::from(format!("../zok_tests/benchmarks/{}.zok", benchmark_name));
     let (ctk, max_num_io, live_io_list, prover_data_list) = 
-        get_compile_time_knowledge::<false>(options.path.clone());
+        get_compile_time_knowledge::<false>(path.clone());
 
     // --
     // Generate Witnesses
     // --
     let entry_regs: Vec<Integer> = func_inputs.iter().map(|i| Integer::from(*i)).collect();
-    let rtk = get_run_time_knowledge::<true>(options.path.clone(), entry_regs, &ctk, max_num_io, live_io_list, prover_data_list);
+    let rtk = get_run_time_knowledge::<true>(path.clone(), entry_regs, &ctk, max_num_io, live_io_list, prover_data_list);
 
     // --
     // Write CTK, RTK to file
     // --
-    let _ = ctk.write_to_file(BENCHMARK_NAME.to_string());
-    let _ = rtk.write_to_file(BENCHMARK_NAME.to_string());
+    let _ = ctk.write_to_file(benchmark_name.to_string());
+    let _ = rtk.write_to_file(benchmark_name.to_string());
 }

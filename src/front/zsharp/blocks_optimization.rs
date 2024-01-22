@@ -9,6 +9,7 @@ use crate::front::zsharp::blocks::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use crate::front::zsharp::Ty;
+use itertools::Itertools;
 
 fn type_to_ty(t: Type) -> Result<Ty, String> {
     /*
@@ -1412,12 +1413,12 @@ fn set_input_output<'bl>(
         // Something fishy is going on if inputs or outputs have been defined
         assert!(bls[i].inputs.len() == 0);
         if i != 0 {
-            for name in &input_lst[i] {
+            for name in input_lst[i].iter().sorted() {
                 bls[i].inputs.push((name.to_string(), Some(ty_map_in[i].get(name).unwrap().clone())));
             }
         }
         assert!(bls[i].outputs.len() == 0);
-        for name in &output_lst[i] {
+        for name in output_lst[i].iter().sorted() {
             bls[i].outputs.push((name.to_string(), Some(ty_map_out[i].get(name).unwrap().clone())));
         }
     }
@@ -1823,9 +1824,10 @@ fn var_to_reg<const MODE: usize>(
                 (new_expr, witness_map, witness_size) = var_to_reg_expr(&e, witness_map, witness_size);
                 bls[i].terminator = BlockTerminator::Transition(new_expr.clone());
             } else {
+                // If it is the end of the program, assign %BN to be bls.len()
                 new_expr = Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
                     value: DecimalNumber {
-                        value: "0".to_string(),
+                        value: bls.len().to_string(),
                         span: Span::new("", 0, 0).unwrap()
                     },
                     suffix: Some(DecimalSuffix::Field(FieldSuffix {

@@ -273,7 +273,9 @@ impl<'ast> ZGen<'ast> {
                     }
                 }
                 for i in 1..io_size {
-                    bl_exec_state[tr_size].reg_in[i] = self.cvar_lookup(&format!("%i{}", i));
+                    // NOTE: Do not use cvar_lookup here!
+                    // This is because the register might be dead in the current block, but still needs to be assigned for consistency check
+                    bl_exec_state[tr_size].reg_in[i] = bl_exec_state[tr_size - 1].reg_out[i].clone();
                 }
             }
 
@@ -452,34 +454,11 @@ impl<'ast> ZGen<'ast> {
     }
 }
 
-pub fn print_state_list(bl_exec_state: &Vec<ExecState>) {
-    println!("\nExecution Trace:");
-    for i in 0..bl_exec_state.len() {
-        println!("--\nSTATE {}", i);
-        bl_exec_state[i].pretty();
-    }
-}
-
-pub fn sort_by_block(bl_exec_state: &Vec<ExecState>) -> Vec<ExecState> {
-    let mut bl_sorted_state = bl_exec_state.clone();
-    bl_sorted_state.sort();
-    println!("\n==========\nSorting by Block:");
-    for i in 0..bl_exec_state.len() {
-        println!("--\nSORTED STATE {}", i);
-        bl_sorted_state[i].pretty();
-    }
-    bl_sorted_state
-}
-
 pub fn sort_by_mem(bl_exec_state: &Vec<ExecState>) -> Vec<MemOp> {
     let mut sorted_memop_list = Vec::new();
     for b in bl_exec_state {
         sorted_memop_list.append(&mut b.mem_op.clone());
     }
     sorted_memop_list.sort();
-    // println!("\n==========\nSorting by Memory Address:");
-    // for i in 0..sorted_memop_list.len() {
-        // sorted_memop_list[i].pretty();
-    // }
     sorted_memop_list   
 }

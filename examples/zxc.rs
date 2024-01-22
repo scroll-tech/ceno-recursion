@@ -1,5 +1,8 @@
 // TODO: Program broke down when there is a dead program parameter
 // TODO: Need to reorder the blocks by number of execution
+// TODO: Simplify Prover data by removing bl_in
+// TODO: Hex encoding for the file
+// TODO: Better command line prompt
 
 /*
 use bellman::gadgets::test::TestConstraintSystem;
@@ -37,6 +40,7 @@ use std::path::PathBuf;
 
 const INPUT_OFFSET: usize = 6;
 const OUTPUT_OFFSET: usize = 5;
+const BENCHMARK_NAME: &str = "2pc_loop_addition";
 
 #[derive(Debug, Parser)]
 #[command(name = "zxc", about = "CirC: the circuit compiler")]
@@ -512,11 +516,11 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     let block_num_instances = r1cs_list.len();
     let num_vars = 2 * max_num_io;
     let total_num_proofs_bound = r1cs_list.len();
-    let total_num_mem_accesses_bound = 10;
+    let total_num_mem_accesses_bound = 30;
     let args: Vec<Vec<(Vec<(usize, Integer)>, Vec<(usize, Integer)>, Vec<(usize, Integer)>)>> = 
         sparse_mat_entry.iter().map(|v| v.iter().map(|i| (i.args_a.clone(), i.args_b.clone(), i.args_c.clone())).collect()).collect();
     let input_block_num = 0;
-    let output_block_num = 0;
+    let output_block_num = block_num_instances;
     
     (CompileTimeKnowledge {
         block_num_instances,
@@ -550,8 +554,11 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
 ) -> RunTimeKnowledge {
     let num_blocks = ctk.block_num_instances;
     let num_vars = ctk.num_vars;
-
-    let (_, block_id_list, block_inputs_list, mem_list) = {
+    // bl_inputs & bl_outputs records ios of blocks as lists
+    // bl_io_map maps name of io variables to their values
+    // bl_inputs & bl_outputs are used to fill in io part of vars
+    // bl_io_map is used to compute witness part of vars
+    let (_, block_id_list, bl_inputs_list, bl_outputs_list, bl_io_map_list, mem_list) = {
         let inputs = zsharp::Inputs {
             file: path,
             mode: Mode::Proof
@@ -588,7 +595,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     let mut func_outputs = Integer::from(0);
     for i in 0..block_id_list.len() {
         let id = block_id_list[i];
-        let input = block_inputs_list[i].clone();
+        let input = bl_io_map_list[i].clone();
         if VERBOSE { println!("ID: {}", id); }
         let mut evaluator = StagedWitCompEvaluator::new(&prover_data_list[id].precompute);
         let mut eval = Vec::new();
@@ -604,46 +611,64 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         // Valid bit should be 1
         inputs[0] = one.clone();
         vars[0] = one.clone();
-        let input_len = live_io_list[id].0.len();
-        let output_len = live_io_list[id].1.len();
-        for j in 0..eval.len() {
-            if j < input_len {
-                // inputs
-                inputs[live_io_list[id].0[j]] = eval[j].as_integer().unwrap();
-            } else if j < input_len + output_len {
-                // outputs
-                let k = j - input_len;
-                inputs[max_num_io + live_io_list[id].1[k]] = eval[j].as_integer().unwrap();
-            } else {
-                // witnesses, skip the 0th entry for the valid bit
-                let k = j - input_len - output_len;
-                vars[k + 1] = eval[j].as_integer().unwrap();
+        // Use bl_inputs_list to assign input
+        // Note that we do not use eval because eval automatically deletes dead registers
+        // (that need to stay for consistency check)
+        let reg_in = &bl_inputs_list[i];
+        let reg_out = &bl_outputs_list[i];
+        for j in 0..reg_in.len() {
+            if let Some(ri) = &reg_in[j] {
+                inputs[j] = ri.as_integer().unwrap();
             }
+            if let Some(ro) = &reg_out[j] {
+                inputs[max_num_io + j] = ro.as_integer().unwrap();
+            }
+        }
+
+        // Use eval to assign witnesses
+        let live_io_len = live_io_list[id].0.len() + live_io_list[id].1.len();
+        for j in live_io_len..eval.len() {
+            // witnesses, skip the 0th entry for the valid bit
+            let k = j - live_io_len;
+            vars[k + 1] = eval[j].as_integer().unwrap();
         }
         if i == block_id_list.len() - 1 {
             func_outputs = inputs[max_num_io + 5].clone();
         }
         if VERBOSE {
+            let print_width = if max_num_io > 32 {32} else {max_num_io};
             print!("{:3} ", " ");
-            for i in 0..max_num_io {
+            for i in 0..print_width {
                 print!("{:3} ", i);
             }
             println!();
             print!("{:3} ", "I");
-            for i in 0..max_num_io {
+            for i in 0..print_width {
                 print!("{:3} ", inputs[i]);
             }
-            println!();
+            if max_num_io > print_width {
+                println!("...");
+            } else {
+                println!();
+            }
             print!("{:3} ", "O");
-            for i in max_num_io..num_vars {
+            for i in max_num_io..max_num_io + print_width {
                 print!("{:3} ", inputs[i]);
             }
-            println!();
+            if max_num_io > print_width {
+                println!("...");
+            } else {
+                println!();
+            }
             print!("{:3} ", "W");
-            for i in 0..num_vars {
+            for i in 0..print_width {
                 print!("{:3} ", vars[i]);
             }
-            println!();
+            if num_vars > print_width {
+                println!("...");
+            } else {
+                println!();
+            }
         }
 
         let inputs_assignment = Assignment::new(inputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
@@ -677,7 +702,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     if VERBOSE {
         println!("\n--\nFUNC");
         print!("{:3} ", " ");
-        for i in 0..max_num_io {
+        for i in 0..if entry_regs.len() == 0 {1} else {0} {
             print!("{:3} ", i);
         }
         println!();
@@ -735,6 +760,6 @@ fn main() {
     // --
     // Write CTK, RTK to file
     // --
-    let _ = ctk.write_to_file("2pc_loop_addition".to_string());
-    let _ = rtk.write_to_file("2pc_loop_addition".to_string());
+    let _ = ctk.write_to_file(BENCHMARK_NAME.to_string());
+    let _ = rtk.write_to_file(BENCHMARK_NAME.to_string());
 }

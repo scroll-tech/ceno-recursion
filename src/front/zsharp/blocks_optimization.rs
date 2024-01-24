@@ -106,17 +106,17 @@ pub fn optimize_block<const VERBOSE: bool>(
     }
     println!("\n\n--\nOptimization:");
     
-    // Liveness
-    bls = liveness_analysis(bls, &successor, &predecessor, &exit_bls);
-    if VERBOSE {
-        println!("\n\n--\nLiveness:");   
-        print_bls(&bls, &entry_bl);
+    // Liveness & PMR
+    // As long as altered is true, we need to keep doing liveness and PMR
+    let mut altered = true;
+    while altered {
+        (bls, altered) = liveness_analysis(bls, &successor, &predecessor, &exit_bls);
+        if altered {
+            (bls, altered) = phy_mem_rearrange(bls, &predecessor_fn, &successor_fn, &exit_bls_fn);
+        }
     }
-
-    // PMR
-    bls = phy_mem_rearrange(bls, &predecessor_fn, &successor_fn, &exit_bls_fn);
     if VERBOSE {
-        println!("\n\n--\nPMR:");
+        println!("\n\n--\nLiveness & PMR:");
         print_bls(&bls, &entry_bl);
     }
 
@@ -662,12 +662,13 @@ fn is_alive(
 }
 
 // Liveness analysis should not affect CFG
+// Return new blocks and whether blocks have been altered
 fn liveness_analysis<'ast>(
     mut bls: Vec<Block<'ast>>,
     successor: &Vec<HashSet<usize>>,
     predecessor: &Vec<HashSet<usize>>,
     exit_bls: &HashSet<usize>
-) -> Vec<Block<'ast>> {
+) -> (Vec<Block<'ast>>, bool) {
 
     let mut visited: Vec<bool> = vec![false; bls.len()];
     // MEET is union, so IN and OUT are Empty Set
@@ -739,6 +740,7 @@ fn liveness_analysis<'ast>(
     }
 
     // Do this again, this time, eliminate the blocks
+    let mut altered = false;
     for i in 0..bls.len() {
         visited[i] = false;
     }
@@ -758,6 +760,13 @@ fn liveness_analysis<'ast>(
             visited[cur_bl] = true;
             let mut new_instructions = Vec::new();
 
+            // KILL and GEN within the terminator
+            match &bls[cur_bl].terminator {
+                BlockTerminator::Transition(e) => { state.extend(expr_find_val(&e)); }
+                BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
+                BlockTerminator::ProgTerm => {}            
+            }
+
             // KILL and GEN within the block
             // XXX: Seems like wasting time?
             for i in bls[cur_bl].instructions.iter().rev() {
@@ -772,6 +781,8 @@ fn liveness_analysis<'ast>(
                         // Don't remove %BP, remove them in PMR
                         if is_alive(&state, var) || var == "%BP" {
                             new_instructions.insert(0, i.clone());
+                        } else {
+                            altered = true;
                         }
                         state.remove(var);
                         state.insert("%BP".to_string());
@@ -785,6 +796,8 @@ fn liveness_analysis<'ast>(
                             state = la_kill(state, &kill);
                             state = la_gen(state, &gen);
                             new_instructions.insert(0, i.clone());
+                        } else {
+                            altered = true;
                         }
                     }
                 }
@@ -799,7 +812,7 @@ fn liveness_analysis<'ast>(
         }    
     }
 
-    return bls;
+    return (bls, altered);
 }
 
 // PMR is consisted of a liveness analysis on memory stack entries
@@ -903,12 +916,13 @@ fn pmr_stack_frame_count(frame_list: &Vec<bool>) -> usize {
     if count == 1 {0} else {count}
 }
 
+// Return new blocks and whether blocks have been altered
 fn phy_mem_rearrange<'ast>(
     mut bls: Vec<Block<'ast>>,
     predecessor_fn: &Vec<HashSet<usize>>,
     successor_fn: &Vec<HashSet<usize>>,
     exit_bls_fn: &HashSet<usize>
-) -> Vec<Block<'ast>> {
+) -> (Vec<Block<'ast>>, bool) {
     let mut visited: Vec<bool> = Vec::new();
     let mut bl_in: Vec<Vec<Vec<bool>>> = Vec::new();
     let mut bl_out: Vec<Vec<Vec<bool>>> = Vec::new();
@@ -954,7 +968,7 @@ fn phy_mem_rearrange<'ast>(
                         // Otherwise, set entry OFFSET of the last scope to be TRUE, pad state with FALSE if necessary
                         else {
                             let sp = state.len() - 1;
-                            for _ in sp..offset - 1 {
+                            for _ in state[sp].len()..*offset {
                                 state[sp].push(false);
                             }
                             state[sp].push(true);
@@ -969,6 +983,7 @@ fn phy_mem_rearrange<'ast>(
                     _ => {}
                 }
             }
+
             bl_in[cur_bl] = state;
 
             // Block Transition
@@ -987,12 +1002,14 @@ fn phy_mem_rearrange<'ast>(
     for i in 0..bls.len() {
         visited[i] = false;
     }
+
     // Start from exit block
     let mut next_bls: VecDeque<usize> = VecDeque::new();
     for eb in exit_bls_fn {
         next_bls.push_back(*eb);
     }
-        // One final backward analysis, visit every block once
+    let mut altered = false;
+    // One final backward analysis, visit every block once
     while !next_bls.is_empty() {
         let cur_bl = next_bls.pop_front().unwrap();
 
@@ -1017,7 +1034,7 @@ fn phy_mem_rearrange<'ast>(
                             // Delay popping %BP until we see the first non-BP pop
                         }
                         else {
-                            for _ in sp..offset - 1 {
+                            for _ in state[sp].len()..*offset {
                                 state[sp].push(false);
                             }
                             state[sp].push(true);
@@ -1057,6 +1074,8 @@ fn phy_mem_rearrange<'ast>(
                                 new_instructions.insert(0, BlockContent::Stmt(bp_update_stmt));
                                 // %PHY[%SP + 0] = %BP
                                 new_instructions.insert(0, BlockContent::MemPush(("%BP".to_string(), Ty::Field, 0)));
+                            } else {
+                                altered = true;
                             }
                             state.pop();
                             state_size.pop();
@@ -1065,6 +1084,8 @@ fn phy_mem_rearrange<'ast>(
                             if *offset < state[sp].len() && state[sp][*offset] {
                                 state_size[sp] -= 1;
                                 new_instructions.insert(0, BlockContent::MemPush((var.to_string(), ty.clone(), state_size[sp])));
+                            } else {
+                                altered = true;
                             }
                         }
                     }
@@ -1104,10 +1125,14 @@ fn phy_mem_rearrange<'ast>(
                                     span: Span::new("", 0, 0).unwrap()
                                 }); 
                                 new_instructions.insert(0, BlockContent::Stmt(sp_update_stmt));                                 
+                            } else {
+                                altered = true;
                             }
                         } else {
                             if !pmr_is_bp_update(&s) {
                                 new_instructions.insert(0, i.clone());
+                            } else {
+                                altered = true;
                             }
                         }
                     }
@@ -1122,7 +1147,7 @@ fn phy_mem_rearrange<'ast>(
         }
     }
     
-    return bls;
+    return (bls, altered);
 }
 
 // EBE: Backward analysis

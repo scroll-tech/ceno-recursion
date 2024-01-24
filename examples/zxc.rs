@@ -42,7 +42,6 @@ const OUTPUT_OFFSET: usize = 5;
 
 // Temporary constant for compile-time bounds
 const TOTAL_NUM_PROOFS_BOUND: usize = 40;
-const TOTAL_NUM_MEM_ACCESSSES_BOUND: usize = 120;
 
 #[derive(Debug, Parser)]
 #[command(name = "zxc", about = "CirC: the circuit compiler")]
@@ -552,7 +551,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     let block_num_instances = r1cs_list.len();
     let num_vars = 2 * max_num_io;
     let total_num_proofs_bound = TOTAL_NUM_PROOFS_BOUND;
-    let total_num_mem_accesses_bound = TOTAL_NUM_MEM_ACCESSSES_BOUND;
+    let total_num_mem_accesses_bound = TOTAL_NUM_PROOFS_BOUND * block_num_mem_accesses.iter().max().unwrap();
     let args: Vec<Vec<(Vec<(usize, Integer)>, Vec<(usize, Integer)>, Vec<(usize, Integer)>)>> = 
         sparse_mat_entry.iter().map(|v| v.iter().map(|i| (i.args_a.clone(), i.args_b.clone(), i.args_c.clone())).collect()).collect();
     let input_block_num = 0;

@@ -34,10 +34,15 @@ use circ::cfg::{
     CircOpt,
 };
 use std::path::PathBuf;
+use core::cmp::Ordering;
 
 // How many reserved variables are in front of the actual input / output?
 const INPUT_OFFSET: usize = 6;
 const OUTPUT_OFFSET: usize = 5;
+
+// Temporary constant for compile-time bounds
+const TOTAL_NUM_PROOFS_BOUND: usize = 40;
+const TOTAL_NUM_MEM_ACCESSSES_BOUND: usize = 120;
 
 #[derive(Debug, Parser)]
 #[command(name = "zxc", about = "CirC: the circuit compiler")]
@@ -343,6 +348,38 @@ impl RunTimeKnowledge {
     }
 }
 
+// Sort block_num_proofs and record where each entry is
+struct InstanceSortHelper {
+    num_exec: usize,
+    index: usize,
+  }
+impl InstanceSortHelper {
+fn new(num_exec: usize, index: usize) -> InstanceSortHelper {
+        InstanceSortHelper {
+            num_exec,
+            index
+        }
+    }
+}
+// Ordering of InstanceSortHelper solely by num_exec
+impl Ord for InstanceSortHelper {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.num_exec.cmp(&other.num_exec)
+    }
+  }
+  impl PartialOrd for InstanceSortHelper {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+  }
+  impl PartialEq for InstanceSortHelper {
+    fn eq(&self, other: &Self) -> bool {
+        self.num_exec == other.num_exec
+    }
+  }
+  impl Eq for InstanceSortHelper {}
+  
+
 // --
 // Generate constraints and others
 // --
@@ -514,8 +551,8 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     // Collect all necessary info
     let block_num_instances = r1cs_list.len();
     let num_vars = 2 * max_num_io;
-    let total_num_proofs_bound = r1cs_list.len();
-    let total_num_mem_accesses_bound = 30;
+    let total_num_proofs_bound = TOTAL_NUM_PROOFS_BOUND;
+    let total_num_mem_accesses_bound = TOTAL_NUM_MEM_ACCESSSES_BOUND;
     let args: Vec<Vec<(Vec<(usize, Integer)>, Vec<(usize, Integer)>, Vec<(usize, Integer)>)>> = 
         sparse_mat_entry.iter().map(|v| v.iter().map(|i| (i.args_a.clone(), i.args_b.clone(), i.args_c.clone())).collect()).collect();
     let input_block_num = 0;
@@ -583,12 +620,29 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     let total_num_mem_accesses = mem_list.len();
     let output_exec_num = block_id_list.len() - 1;
 
+    // num_blocks_live is # of non-zero entries in block_num_proofs
+    let num_blocks_live = block_num_proofs.iter().fold(0, |i, j| if *j > 0 { i + 1 } else { i });
+    // Sort blocks by number of execution
+    let mut inst_sorter = Vec::new();
+    for i in 0..num_blocks {
+      inst_sorter.push(InstanceSortHelper::new(block_num_proofs[i], i))
+    }
+    // Sort from high -> low
+    inst_sorter.sort_by(|a, b| b.cmp(a));
+    // index_rev[i] = j => the original ith entry should now be at the jth position
+    let mut index_rev = vec![0; num_blocks];
+    for i in 0..num_blocks {
+        index_rev[inst_sorter[i].index] = i;
+    }
+
     // Block-specific info
     let zero = Integer::from(0);
     let one = Integer::from(1);
     // Start from entry block, compute value of witnesses
-    let mut block_vars_matrix = vec![Vec::new(); num_blocks];
-    let mut block_inputs_matrix = vec![Vec::new(); num_blocks];
+    // Note: block_vars_matrix & block_inputs_matrix are sorted by block_num_proofs, tie-breaked by block id
+    // Thus, block_vars_matrix[0] might NOT store the executions of block 0!
+    let mut block_vars_matrix = vec![Vec::new(); num_blocks_live];
+    let mut block_inputs_matrix = vec![Vec::new(); num_blocks_live];
     let mut exec_inputs = Vec::new();
 
     let mut func_outputs = Integer::from(0);
@@ -673,9 +727,10 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         let inputs_assignment = Assignment::new(inputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
         let vars_assignment = Assignment::new(vars.iter().map(|i| integer_to_bytes(i.clone())).collect());
 
+        let slot = index_rev[id];
         exec_inputs.push(inputs_assignment.clone());
-        block_vars_matrix[id].push(vars_assignment);
-        block_inputs_matrix[id].push(inputs_assignment);
+        block_vars_matrix[slot].push(vars_assignment);
+        block_inputs_matrix[slot].push(inputs_assignment);
     }
 
     let mut addr_mems_list = Vec::new();

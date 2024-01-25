@@ -153,7 +153,10 @@ fn pretty_ident_expr(i: &IdentifierExpression) {
 }
 
 pub fn pretty_name(name: &str) -> String {
-    match name {
+    // Strip the 0s from the name
+    let mut name = name.to_string();
+    while name.len() > 3 && name.chars().collect::<Vec<char>>()[2] == '0' { name.remove(2); }
+    match name.as_str() {
         "%i0" => "%0(V)",
         "%i1" => "%i1(BN)",
         "%i2" => "%i2(RP)",
@@ -169,7 +172,7 @@ pub fn pretty_name(name: &str) -> String {
         "%w1" => "%w1(SP)",
         "%w2" => "%w2(BP)",
         "%w3" => "%w3(RET)",
-        _ => name
+        _ => name.as_str()
     }.to_string()
 }
 

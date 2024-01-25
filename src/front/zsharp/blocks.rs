@@ -1298,17 +1298,17 @@ impl<'ast> ZGen<'ast> {
     }
 
     // Convert a list of blocks to circ_ir, return the number of memory accesses of each block
-    pub fn bls_to_circ(&'ast self, blks: &Vec<Block>, io_size: usize) -> Vec<usize> {
+    pub fn bls_to_circ(&'ast self, blks: &Vec<Block>) -> Vec<usize> {
         let mut num_mem_accesses = Vec::new();
         for b in blks {
             self.circ_init_block(&format!("Block_{}", b.name));
-            num_mem_accesses.push(self.bl_to_circ(&b, io_size));
+            num_mem_accesses.push(self.bl_to_circ(&b));
         }
         num_mem_accesses
     }
 
     // Convert a block to circ_ir, return the number of memory accesses
-    pub fn bl_to_circ(&self, b: &Block, io_size: usize) -> usize {
+    pub fn bl_to_circ(&self, b: &Block) -> usize {
         let f = format!("Block_{}", b.name);
         // setup stack frame for entry function
         // returns the next block, so return type is Field
@@ -1346,18 +1346,15 @@ impl<'ast> ZGen<'ast> {
 
         // How many memory operations have we encountered?
         let mut mem_op_count = 0;
-        let width = io_size.to_string().chars().count();
         
         // Iterate over instructions, convert memory accesses into statements and then IR
         for i in &b.instructions {
-            let mem_str = mem_op_count.to_string();
-            let mem_str = vec!['0'; width - mem_str.chars().count()].iter().collect::<String>() + &mem_str;
             match i {
                 BlockContent::MemPush((var, ty, offset)) => {
                     // Non-deterministically supply VAL
                     self.circ_declare_input(
                         &f,
-                        format!("%mv{}", mem_str),
+                        format!("%mv{:06}", mem_op_count),
                         ty,
                         ZVis::Private(0),
                         None,
@@ -1366,7 +1363,7 @@ impl<'ast> ZGen<'ast> {
                     // Non-deterministically supply ADDR
                     self.circ_declare_input(
                         &f,
-                        format!("%ma{}", mem_str),
+                        format!("%ma{:06}", mem_op_count),
                         ty,
                         ZVis::Private(0),
                         None,
@@ -1393,7 +1390,7 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%ma{}", mem_str),
+                        value: format!("%ma{:06}", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
@@ -1404,7 +1401,7 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%mv{}", mem_str),
+                        value: format!("%mv{:06}", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
@@ -1415,7 +1412,7 @@ impl<'ast> ZGen<'ast> {
                     // Non-deterministically supply ADDR and VAL in memory
                     self.circ_declare_input(
                         &f,
-                        format!("%mv{}", mem_str),
+                        format!("%mv{:06}", mem_op_count),
                         ty,
                         ZVis::Private(0),
                         None,
@@ -1423,7 +1420,7 @@ impl<'ast> ZGen<'ast> {
                     ).unwrap();
                     self.circ_declare_input(
                         &f,
-                        format!("%ma{}", mem_str),
+                        format!("%ma{:06}", mem_op_count),
                         ty,
                         ZVis::Private(0),
                         None,
@@ -1450,14 +1447,14 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%ma{}", mem_str),
+                        value: format!("%ma{:06}", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
                     self.assert(b);
                     // Assign POP value to val
                     let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%mv{}", mem_str),
+                        value: format!("%mv{:06}", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     self.declare_init_impl_::<false>(

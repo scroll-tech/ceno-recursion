@@ -181,7 +181,6 @@ impl<'ast> ZGen<'ast> {
         let mut terminated = false;
         let mut mem_op: Vec<MemOp>;
         
-        let width = io_size.to_string().chars().count();
         // Process input variables
         // Insert a 0 in front of the input variables for BN
         let entry_regs = &[vec![Integer::from(0)], entry_regs.clone()].concat();
@@ -225,9 +224,7 @@ impl<'ast> ZGen<'ast> {
             // If it is the first block, add input to prog_reg_in
             if tr_size == 0 {
                 for i in 1..io_size {
-                    let i_str = i.to_string();
-                    let i_str = vec!['0'; width - i_str.chars().count()].iter().collect::<String>() + &i_str;
-                    prog_reg_in[i] = self.cvar_lookup(&format!("%i{}", i_str));
+                    prog_reg_in[i] = self.cvar_lookup(&format!("%i{:06}", i));
                 }
             }
             // If not the first block, redefine output of the last block as input to this block
@@ -261,9 +258,7 @@ impl<'ast> ZGen<'ast> {
 
             // Update reg_out
             for i in 1..io_size {
-                let i_str = i.to_string();
-                let i_str = vec!['0'; width - i_str.chars().count()].iter().collect::<String>() + &i_str;
-                bl_exec_state[tr_size].reg_out[i] = self.cvar_lookup(&format!("%o{}", i_str));
+                bl_exec_state[tr_size].reg_out[i] = self.cvar_lookup(&format!("%o{:06}", i));
             }
             // Update successor block ID
             bl_exec_state[tr_size].succ_id = nb;
@@ -275,8 +270,7 @@ impl<'ast> ZGen<'ast> {
         // Return value is just the value of the variable called "%RET"
         // Depending on io_size, "%RET" can be "%o5", "%o05", etc.
         // Type of return value is checked during assignment
-        let ret_reg = "%o".to_owned() + &vec!['0'; width - 1].iter().collect::<String>() + "5";
-        let ret = self.cvar_lookup(&ret_reg).ok_or(format!(
+        let ret = self.cvar_lookup("%o000005").ok_or(format!(
             "Missing return value for one or more functions."
         ));
 

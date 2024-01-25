@@ -70,7 +70,7 @@ impl FrontEnd for ZSharpFE {
         // NOTE: The input of block 0 includes %BN, which should be removed when reasoning about function input
         let func_input_width = blks[0].get_num_inputs() - 1;
         println!("\n\n--\nCirc IR:");
-        let num_mem_accesses = g.bls_to_circ(&blks, io_size);
+        let num_mem_accesses = g.bls_to_circ(&blks);
 
         g.generics_stack_pop();
         g.file_stack_pop();
@@ -113,7 +113,6 @@ impl ZSharpFE {
         // Memory accesses should be named Block_X_fX_lex0_%mvX / %maX
         let mut block_io_map_list = Vec::new();
         let suffix = format!("_v0");
-        let width = io_size.to_string().chars().count();
         for i in 0..bl_exec_state.len() {
             let state = &bl_exec_state[i];
             let prefix = format!("Block_{}_f{}_lex0_", state.blk_id, state.blk_id);
@@ -127,9 +126,7 @@ impl ZSharpFE {
                     if !prog_reg_in[j].is_none() {
                         let value = to_const_value(prog_reg_in[j].clone().unwrap())
                             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                        let j_str = j.to_string();
-                        let j_str = vec!['0'; width - j_str.chars().count()].iter().collect::<String>() + &j_str;
-                        inputs.insert(format!("{}%i{}{}", prefix, j_str, suffix), value);
+                        inputs.insert(format!("{}%i{:06}{}", prefix, j, suffix), value);
                     }
                 }
             } else {
@@ -140,9 +137,7 @@ impl ZSharpFE {
                     if !last_state.reg_out[j].is_none() {
                         let value = to_const_value(last_state.reg_out[j].clone().unwrap())
                             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                        let j_str = j.to_string();
-                        let j_str = vec!['0'; width - j_str.chars().count()].iter().collect::<String>() + &j_str;
-                        inputs.insert(format!("{}%i{}{}", prefix, j_str, suffix), value);
+                        inputs.insert(format!("{}%i{:06}{}", prefix, j, suffix), value);
                     }
                 }
             }
@@ -153,21 +148,17 @@ impl ZSharpFE {
                 if !state.reg_out[j].is_none() {
                     let value = to_const_value(state.reg_out[j].clone().unwrap())
                         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                    let j_str = j.to_string();
-                    let j_str = vec!['0'; width - j_str.chars().count()].iter().collect::<String>() + &j_str;
-                    inputs.insert(format!("{}%o{}{}", prefix, j_str, suffix), value);
+                    inputs.insert(format!("{}%o{:06}{}", prefix, j, suffix), value);
                 }
             }
             // Process mems
             for j in 0..state.mem_op.len() {
-                let j_str = j.to_string();
-                let j_str = vec!['0'; width - j_str.chars().count()].iter().collect::<String>() + &j_str;
                 let addr = to_const_value(state.mem_op[j].addr_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                inputs.insert(format!("{}%ma{}{}", prefix, j_str, suffix), addr);
+                inputs.insert(format!("{}%ma{:06}{}", prefix, j, suffix), addr);
                 let data = to_const_value(state.mem_op[j].data_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                inputs.insert(format!("{}%mv{}{}", prefix, j_str, suffix), data);
+                inputs.insert(format!("{}%mv{:06}{}", prefix, j, suffix), data);
             }
             block_io_map_list.push(inputs);
         }

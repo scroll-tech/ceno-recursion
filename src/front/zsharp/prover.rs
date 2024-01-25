@@ -181,6 +181,7 @@ impl<'ast> ZGen<'ast> {
         let mut terminated = false;
         let mut mem_op: Vec<MemOp>;
         
+        let width = io_size.to_string().chars().count();
         // Process input variables
         // Insert a 0 in front of the input variables for BN
         let entry_regs = &[vec![Integer::from(0)], entry_regs.clone()].concat();
@@ -224,7 +225,9 @@ impl<'ast> ZGen<'ast> {
             // If it is the first block, add input to prog_reg_in
             if tr_size == 0 {
                 for i in 1..io_size {
-                    prog_reg_in[i] = self.cvar_lookup(&format!("%i{}", i));
+                    let i_str = i.to_string();
+                    let i_str = vec!['0'; width - i_str.chars().count()].iter().collect::<String>() + &i_str;
+                    prog_reg_in[i] = self.cvar_lookup(&format!("%i{}", i_str));
                 }
             }
             // If not the first block, redefine output of the last block as input to this block
@@ -254,11 +257,13 @@ impl<'ast> ZGen<'ast> {
                 let _ = &bls[nb].pretty();
                 println!();
             }
-            (nb, phy_mem, terminated, mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem)?;
+            (nb, phy_mem, terminated, mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem, io_size)?;
 
             // Update reg_out
             for i in 1..io_size {
-                bl_exec_state[tr_size].reg_out[i] = self.cvar_lookup(&format!("%o{}", i));
+                let i_str = i.to_string();
+                let i_str = vec!['0'; width - i_str.chars().count()].iter().collect::<String>() + &i_str;
+                bl_exec_state[tr_size].reg_out[i] = self.cvar_lookup(&format!("%o{}", i_str));
             }
             // Update successor block ID
             bl_exec_state[tr_size].succ_id = nb;
@@ -267,9 +272,11 @@ impl<'ast> ZGen<'ast> {
             tr_size += 1;
         }
 
-        // Return value is just the value of the variable called "%RET", which is "%o5"
+        // Return value is just the value of the variable called "%RET"
+        // Depending on io_size, "%RET" can be "%o5", "%o05", etc.
         // Type of return value is checked during assignment
-        let ret = self.cvar_lookup("%o5").ok_or(format!(
+        let ret_reg = "%o".to_owned() + &vec!['0'; width - 1].iter().collect::<String>() + "5";
+        let ret = self.cvar_lookup(&ret_reg).ok_or(format!(
             "Missing return value for one or more functions."
         ));
 
@@ -304,8 +311,10 @@ impl<'ast> ZGen<'ast> {
         &self, 
         bl: &Block<'ast>,
         mut phy_mem: Vec<T>,
+        io_size: usize
     ) -> Result<(usize, Vec<T>, bool, Vec<MemOp>), String> {
         let mut mem_op: Vec<MemOp> = Vec::new();
+        let width = io_size.to_string().chars().count();
 
         for s in &bl.instructions {
             match s {

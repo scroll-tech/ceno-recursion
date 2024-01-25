@@ -1570,10 +1570,16 @@ fn var_name_to_reg_id_expr<const MODE: usize>(
         reg_size += 1;
     }
     let reg_label = reg_map.get(&var_name).unwrap().clone();
+    // Note: we cannot simply assign the variables %i1, this is because by string comparison, %10 < %2
+    // Instead, depending on number of variables, assign %01, %001, etc.
+    // However, WITNESSES DO NOT NEED TO FOLLOW THIS RULE
+    let width = reg_size.to_string().chars().count();
+    let reg_label_str = reg_label.to_string();
+    let reg_label_str = vec!['0'; width - reg_label_str.chars().count()].iter().collect::<String>() + &reg_label_str;
     match MODE {
         0 => (format!("%w{}", reg_label), reg_map, reg_size, reg_label),
-        1 => (format!("%i{}", reg_label), reg_map, reg_size, reg_label),
-        _ => (format!("%o{}", reg_label), reg_map, reg_size, reg_label)
+        1 => (format!("%i{}", reg_label_str), reg_map, reg_size, reg_label),
+        _ => (format!("%o{}", reg_label_str), reg_map, reg_size, reg_label)
     }
 }
 
@@ -1631,9 +1637,76 @@ fn var_to_reg<const MODE: usize>(
     for (v, _) in inputs {
         (_, io_map, io_size, _) = var_name_to_reg_id_expr::<1>(v.to_string(), io_map, io_size);
     }
+    // Iterate through the block for the first time, add every variable to io_map
+    for i in 0..bls.len() {
+        assert_eq!(i, bls[i].name);
+        // Map the inputs
+        for (name, _) in &bls[i].inputs {
+            (_, io_map, io_size, _) = var_name_to_reg_id_expr::<1>(name.to_string(), io_map, io_size);
+        }
+        // Map the instructions
+        for s in &bls[i].instructions {
+            match s {
+                BlockContent::MemPush((var, _, _)) => {
+                    (_, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map, witness_size);
+                }
+                BlockContent::MemPop((var, _, _)) => {
+                    (_, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map, witness_size);
+                }
+                BlockContent::Stmt(Statement::Return(_)) => {
+                    panic!("Blocks should not contain return statements.");
+                }
+                BlockContent::Stmt(Statement::Assertion(a)) => {
+                    (_, witness_map, witness_size) = var_to_reg_expr(&a.expression, witness_map, witness_size);
+                }
+                BlockContent::Stmt(Statement::Iteration(_)) => {
+                    panic!("Blocks should not contain iteration statements.")
+                }
+                BlockContent::Stmt(Statement::Conditional(_)) => {
+                    panic!("Blocks should not contain if / else statements.")
+                }
+                BlockContent::Stmt(Statement::Definition(d)) => {
+                    for l in &d.lhs {
+                        match l {
+                            TypedIdentifierOrAssignee::TypedIdentifier(tid) => {
+                                (_, witness_map, witness_size) = var_to_reg_id_expr(&tid.identifier, witness_map, witness_size);
+                            }
+                            TypedIdentifierOrAssignee::Assignee(p) => {
+                                (_, witness_map, witness_size) = var_to_reg_id_expr(&p.id, witness_map, witness_size);
+                                for aa in &p.accesses {
+                                    if let AssigneeAccess::Select(a) = aa {
+                                        if let RangeOrExpression::Expression(e) = &a.expression {
+                                            (_, witness_map, witness_size) = var_to_reg_expr(&e, witness_map, witness_size);
+                                        } else {
+                                            panic!("Range access not supported.")
+                                        }
+                                    } else {
+                                        panic!("Unsupported membership access.")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    (_, witness_map, witness_size) = var_to_reg_expr(&d.expression, witness_map, witness_size);
+                }
+                BlockContent::Stmt(Statement::CondStore(_)) => { panic!("Blocks should not contain conditional store statements.") }
+            }
+        }
+
+        // Map the outputs
+        for (name, _) in &bls[i].outputs {
+            (_, io_map, io_size, _) = var_name_to_reg_id_expr::<2>(name.to_string(), io_map, io_size);
+            (_, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>(name.to_string(), witness_map, witness_size);
+        }
+    }
+    
+    // %BN is not %i1, but %i01, %i001, etc. depending on io_size
+    let width = io_size.to_string().chars().count();
+    let input_bn_reg = "%i".to_owned() + &vec!['0'; width - 1].iter().collect::<String>() + "1";
+    let output_bn_reg = "%o".to_owned() + &vec!['0'; width - 1].iter().collect::<String>() + "1";
     // Construct block number check instruction
     let bn_id = Expression::Identifier(IdentifierExpression {
-        value: "%i1".to_string(),
+        value: input_bn_reg.to_string(),
         span: Span::new("", 0, 0).unwrap()
     });
     for i in 0..bls.len() {
@@ -1642,11 +1715,9 @@ fn var_to_reg<const MODE: usize>(
         live_io.push((Vec::new(), Vec::new()));
 
         // Add block number check
-        // We defer validity check until after R1CS is constructed
-        // This is because when the execution is invalid, every WITNESS needs to be 0
-        // Which cannot be easily captured by an if / else statement
+        // We defer validity check until after R1CS is constructed for prover's convenience
         let mut new_inputs = Vec::new();
-        new_inputs.push(("%i1".to_string(), Some(Ty::Field)));
+        new_inputs.push((input_bn_reg.to_string(), Some(Ty::Field)));
         live_io[i].0.push(1);
 
         let mut new_instr: Vec<BlockContent> = Vec::new();
@@ -1791,7 +1862,7 @@ fn var_to_reg<const MODE: usize>(
         // If in MODE 0, assert the %o variables
         // Otherwise, assign the %o variables
         let mut new_outputs = Vec::new();
-        new_outputs.push(("%o1".to_string(), Some(Ty::Field)));
+        new_outputs.push((output_bn_reg.to_string(), Some(Ty::Field)));
         for (name, ty) in &bls[i].outputs {
             let new_output_name: String;
             let live_output_label: usize;
@@ -1868,7 +1939,7 @@ fn var_to_reg<const MODE: usize>(
                 expression: Expression::Binary(BinaryExpression {
                     op: BinaryOperator::Eq,
                     left: Box::new(Expression::Identifier(IdentifierExpression {
-                        value: "%o1".to_string(),
+                        value: output_bn_reg.to_string(),
                         span: Span::new("", 0, 0).unwrap()
                     })),
                     right: Box::new(new_expr.clone()),
@@ -1885,7 +1956,7 @@ fn var_to_reg<const MODE: usize>(
                         span: Span::new("", 0, 0).unwrap()
                     })),
                     identifier: IdentifierExpression {
-                        value: "%o1".to_string(),
+                        value: output_bn_reg.to_string(),
                         span: Span::new("", 0, 0).unwrap()
                     },
                     span: Span::new("", 0, 0).unwrap()

@@ -1,5 +1,5 @@
 // TODO: Program broke down when there is a dead program parameter
-// TODO: Need to reorder the blocks by number of execution
+// TODO: CirC sorts %i10 before %i1, also needs to do the same for mem
 
 /*
 use bellman::gadgets::test::TestConstraintSystem;
@@ -136,7 +136,10 @@ fn get_sparse_cons_with_v_check(
         }
         for (var, coeff) in c.2.monomials.iter() {
             match var.ty() {
-                VarType::Inst => args_c.push((io_relabel(var.number()), coeff.i())),
+                VarType::Inst => {
+                    println!("{:?} -> {:?}", var.number(), io_relabel(var.number()));
+                    args_c.push((io_relabel(var.number()), coeff.i()))
+                },
                 VarType::FinalWit => args_c.push((witness_relabel(var.number()), coeff.i())),
                 _ => panic!("Unsupported variable type!")
             }
@@ -525,6 +528,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
             (vec![], vec![], vec![(max_num_witnesses, Integer::from(1)), (v_cnst, Integer::from(-1))]);
         sparse_mat_entry[b].push(SparseMatEntry { args_a, args_b, args_c });
         // Iterate
+        println!("b: {}", b);
         for c in r1cs.constraints() {
             sparse_mat_entry[b].push(get_sparse_cons_with_v_check(c, v_cnst, |i| io_relabel(b, i), witness_relabel));
         }
@@ -788,7 +792,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
 }
 
 fn main() {
-    let func_inputs: Vec<usize> = vec![5, 4, 3];
+    let func_inputs: Vec<usize> = vec![4];
 
     env_logger::Builder::from_default_env()
         .format_level(false)

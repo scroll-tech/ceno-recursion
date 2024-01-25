@@ -32,7 +32,7 @@ use zvisit::{ZConstLiteralRewriter, ZGenericInf, ZStatementWalker, ZVisitorMut};
 
 // garbage collection increment for adaptive GC threshold
 const GC_INC: usize = 32;
-const VERBOSE: bool = true;
+const VERBOSE: bool = false;
 
 /// Inputs to the Z# compiler
 pub struct Inputs {
@@ -70,7 +70,7 @@ impl FrontEnd for ZSharpFE {
         // NOTE: The input of block 0 includes %BN, which should be removed when reasoning about function input
         let func_input_width = blks[0].get_num_inputs() - 1;
         println!("\n\n--\nCirc IR:");
-        let num_mem_accesses = g.bls_to_circ(&blks);
+        let num_mem_accesses = g.bls_to_circ(&blks, io_size);
 
         g.generics_stack_pop();
         g.file_stack_pop();
@@ -113,6 +113,7 @@ impl ZSharpFE {
         // Memory accesses should be named Block_X_fX_lex0_%mvX / %maX
         let mut block_io_map_list = Vec::new();
         let suffix = format!("_v0");
+        let width = io_size.to_string().chars().count();
         for i in 0..bl_exec_state.len() {
             let state = &bl_exec_state[i];
             let prefix = format!("Block_{}_f{}_lex0_", state.blk_id, state.blk_id);
@@ -120,45 +121,53 @@ impl ZSharpFE {
             let mut inputs = HashMap::<String, Value, BuildHasherDefault<fxhash::FxHasher>>::default();
             // Process reg_ins
             if i == 0 {
-                for i in 0..prog_reg_in.len() {
+                for j in 0..prog_reg_in.len() {
                     // Only insert if state.reg_in[i] != None
                     // Convert T to Value
-                    if !prog_reg_in[i].is_none() {
-                        let value = to_const_value(prog_reg_in[i].clone().unwrap())
+                    if !prog_reg_in[j].is_none() {
+                        let value = to_const_value(prog_reg_in[j].clone().unwrap())
                             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                        inputs.insert(format!("{}%i{}{}", prefix, i, suffix), value);
+                        let j_str = j.to_string();
+                        let j_str = vec!['0'; width - j_str.chars().count()].iter().collect::<String>() + &j_str;
+                        inputs.insert(format!("{}%i{}{}", prefix, j_str, suffix), value);
                     }
                 }
             } else {
                 let last_state = &bl_exec_state[i - 1];
-                for i in 0..last_state.reg_out.len() {
+                for j in 0..last_state.reg_out.len() {
                     // Only insert if state.reg_in[i] != None
                     // Convert T to Value
-                    if !last_state.reg_out[i].is_none() {
-                        let value = to_const_value(last_state.reg_out[i].clone().unwrap())
+                    if !last_state.reg_out[j].is_none() {
+                        let value = to_const_value(last_state.reg_out[j].clone().unwrap())
                             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                        inputs.insert(format!("{}%i{}{}", prefix, i, suffix), value);
+                        let j_str = j.to_string();
+                        let j_str = vec!['0'; width - j_str.chars().count()].iter().collect::<String>() + &j_str;
+                        inputs.insert(format!("{}%i{}{}", prefix, j_str, suffix), value);
                     }
                 }
             }
             // Process reg_outs
-            for i in 0..state.reg_out.len() {
+            for j in 0..state.reg_out.len() {
                 // Only insert if state.reg_out[i] != None
                 // Convert T to Value
-                if !state.reg_out[i].is_none() {
-                    let value = to_const_value(state.reg_out[i].clone().unwrap())
+                if !state.reg_out[j].is_none() {
+                    let value = to_const_value(state.reg_out[j].clone().unwrap())
                         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                    inputs.insert(format!("{}%o{}{}", prefix, i, suffix), value);
+                    let j_str = j.to_string();
+                    let j_str = vec!['0'; width - j_str.chars().count()].iter().collect::<String>() + &j_str;
+                    inputs.insert(format!("{}%o{}{}", prefix, j_str, suffix), value);
                 }
             }
             // Process mems
-            for i in 0..state.mem_op.len() {
-                let addr = to_const_value(state.mem_op[i].addr_t.clone())
+            for j in 0..state.mem_op.len() {
+                let j_str = j.to_string();
+                let j_str = vec!['0'; width - j_str.chars().count()].iter().collect::<String>() + &j_str;
+                let addr = to_const_value(state.mem_op[j].addr_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                inputs.insert(format!("{}%ma{}{}", prefix, i, suffix), addr);
-                let data = to_const_value(state.mem_op[i].data_t.clone())
+                inputs.insert(format!("{}%ma{}{}", prefix, j_str, suffix), addr);
+                let data = to_const_value(state.mem_op[j].data_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                inputs.insert(format!("{}%mv{}{}", prefix, i, suffix), data);
+                inputs.insert(format!("{}%mv{}{}", prefix, j_str, suffix), data);
             }
             block_io_map_list.push(inputs);
         }

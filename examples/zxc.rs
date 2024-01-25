@@ -137,7 +137,6 @@ fn get_sparse_cons_with_v_check(
         for (var, coeff) in c.2.monomials.iter() {
             match var.ty() {
                 VarType::Inst => {
-                    println!("{:?} -> {:?}", var.number(), io_relabel(var.number()));
                     args_c.push((io_relabel(var.number()), coeff.i()))
                 },
                 VarType::FinalWit => args_c.push((witness_relabel(var.number()), coeff.i())),
@@ -792,7 +791,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
 }
 
 fn main() {
-    let func_inputs: Vec<usize> = vec![4];
+    let func_inputs: Vec<usize> = vec![5, 3, 4, 2];
 
     env_logger::Builder::from_default_env()
         .format_level(false)

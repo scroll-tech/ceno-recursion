@@ -900,7 +900,7 @@ fn pmr_join(
     let mut third = first.clone();
     for i in 0..third.len() {
         for j in 0..second[i].len() {
-            if j > third[i].len() {
+            if j >= third[i].len() {
                 third[i].push(second[i][j]);
             } else {
                 third[i][j] = third[i][j] || second[i][j];

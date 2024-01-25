@@ -445,7 +445,7 @@ impl<'ast> ZGen<'ast> {
     }
 
     // Convert each function to blocks
-    // Generic: IS_MAIN determines if we are in the main function, which has two properties:
+    // Generic: IS_MAIN determines if we are in the main function, which has three properties:
     //   1. We don't need to push %RP when doing function calls in MAIN, since %RP is undefined
     //   2. We don't update the exit block of MAIN to %RP
     //   3. We don't need to handle scoping when hitting `return` in MAIN
@@ -677,6 +677,9 @@ impl<'ast> ZGen<'ast> {
             blks.push(Block::new(blks_len));
             blks_len += 1; 
             
+            // Exit Scoping
+            (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset, var_scope_info)?;
+
             // Store Return value to a temporary %RETx
             let ret_ty = self
             .functions
@@ -687,11 +690,13 @@ impl<'ast> ZGen<'ast> {
             .returns
             .first().ok_or("No return type provided for one or more function")?;
 
+            let ret_name = format!("%RET{}", func_count);
+            self.decl_impl_::<true>(ret_name.clone(), &self.type_impl_::<true>(ret_ty)?)?;
             let update_ret_stmt = Statement::Definition(DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                     ty: ret_ty.clone(),
                     identifier: IdentifierExpression {
-                        value: format!("%RET{}", func_count),
+                        value: ret_name,
                         span: Span::new("", 0, 0).unwrap()
                     },
                     span: Span::new("", 0, 0).unwrap()
@@ -704,12 +709,6 @@ impl<'ast> ZGen<'ast> {
                 span: Span::new("", 0, 0).unwrap()
             });
             blks[blks_len - 1].instructions.push(BlockContent::Stmt(update_ret_stmt));
-            
-            // Exit Scoping
-            // We need to do it AFTER %RET has been stored somewhere else to prevent it from being overrided
-            // We also need to do it BEFORE some assigning some variable to %RET because otherwise its
-            // value might be overrided again after being assigned to %RET
-            (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset, var_scope_info)?;
         }
 
         Ok((blks, blks_len, 0, func_phy_assign, sp_offset, func_count, var_scope_info))

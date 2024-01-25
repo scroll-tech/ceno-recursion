@@ -257,7 +257,7 @@ impl<'ast> ZGen<'ast> {
                 let _ = &bls[nb].pretty();
                 println!();
             }
-            (nb, phy_mem, terminated, mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem, io_size)?;
+            (nb, phy_mem, terminated, mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem)?;
 
             // Update reg_out
             for i in 1..io_size {
@@ -310,11 +310,9 @@ impl<'ast> ZGen<'ast> {
     fn bl_eval_impl_(
         &self, 
         bl: &Block<'ast>,
-        mut phy_mem: Vec<T>,
-        io_size: usize
+        mut phy_mem: Vec<T>
     ) -> Result<(usize, Vec<T>, bool, Vec<MemOp>), String> {
         let mut mem_op: Vec<MemOp> = Vec::new();
-        let width = io_size.to_string().chars().count();
 
         for s in &bl.instructions {
             match s {

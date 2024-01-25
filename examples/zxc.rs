@@ -527,7 +527,6 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
             (vec![], vec![], vec![(max_num_witnesses, Integer::from(1)), (v_cnst, Integer::from(-1))]);
         sparse_mat_entry[b].push(SparseMatEntry { args_a, args_b, args_c });
         // Iterate
-        println!("b: {}", b);
         for c in r1cs.constraints() {
             sparse_mat_entry[b].push(get_sparse_cons_with_v_check(c, v_cnst, |i| io_relabel(b, i), witness_relabel));
         }

@@ -1354,7 +1354,7 @@ impl<'ast> ZGen<'ast> {
                     // Non-deterministically supply VAL
                     self.circ_declare_input(
                         &f,
-                        format!("%mv{:06}", mem_op_count),
+                        format!("%m{:06}v", mem_op_count),
                         ty,
                         ZVis::Private(0),
                         None,
@@ -1363,7 +1363,7 @@ impl<'ast> ZGen<'ast> {
                     // Non-deterministically supply ADDR
                     self.circ_declare_input(
                         &f,
-                        format!("%ma{:06}", mem_op_count),
+                        format!("%m{:06}a", mem_op_count),
                         ty,
                         ZVis::Private(0),
                         None,
@@ -1390,7 +1390,7 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%ma{:06}", mem_op_count),
+                        value: format!("%m{:06}a", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
@@ -1401,7 +1401,7 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%mv{:06}", mem_op_count),
+                        value: format!("%m{:06}v", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
@@ -1412,7 +1412,7 @@ impl<'ast> ZGen<'ast> {
                     // Non-deterministically supply ADDR and VAL in memory
                     self.circ_declare_input(
                         &f,
-                        format!("%mv{:06}", mem_op_count),
+                        format!("%m{:06}v", mem_op_count),
                         ty,
                         ZVis::Private(0),
                         None,
@@ -1420,7 +1420,7 @@ impl<'ast> ZGen<'ast> {
                     ).unwrap();
                     self.circ_declare_input(
                         &f,
-                        format!("%ma{:06}", mem_op_count),
+                        format!("%m{:06}a", mem_op_count),
                         ty,
                         ZVis::Private(0),
                         None,
@@ -1447,14 +1447,14 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%ma{:06}", mem_op_count),
+                        value: format!("%m{:06}a", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
                     self.assert(b);
                     // Assign POP value to val
                     let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%mv{:06}", mem_op_count),
+                        value: format!("%m{:06}v", mem_op_count),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     self.declare_init_impl_::<false>(

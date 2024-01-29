@@ -110,7 +110,7 @@ impl ZSharpFE {
         let mut block_id_list = Vec::new();
         // Convert bl_exec_state to list of String -> Value hashmaps
         // Variables should be named Block_X_fX_lex0_%XX_v0
-        // Memory accesses should be named Block_X_fX_lex0_%mvX / %maX
+        // Memory accesses should be named Block_X_fX_lex0_%mXv / %mXa
         let mut block_io_map_list = Vec::new();
         let suffix = format!("_v0");
         for i in 0..bl_exec_state.len() {
@@ -155,10 +155,10 @@ impl ZSharpFE {
             for j in 0..state.mem_op.len() {
                 let addr = to_const_value(state.mem_op[j].addr_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                inputs.insert(format!("{}%ma{:06}{}", prefix, j, suffix), addr);
+                inputs.insert(format!("{}%m{:06}a{}", prefix, j, suffix), addr);
                 let data = to_const_value(state.mem_op[j].data_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                inputs.insert(format!("{}%mv{:06}{}", prefix, j, suffix), data);
+                inputs.insert(format!("{}%m{:06}v{}", prefix, j, suffix), data);
             }
             block_io_map_list.push(inputs);
         }

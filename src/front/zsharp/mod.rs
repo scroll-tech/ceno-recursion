@@ -47,7 +47,7 @@ pub struct ZSharpFE;
 
 impl FrontEnd for ZSharpFE {
     type Inputs<'ast> = Inputs;
-    fn gen(i: Inputs) -> (Computations, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<usize>) {
+    fn gen(i: Inputs) -> (Computations, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<usize>, Vec<usize>) {
         debug!(
             "Starting Z# front-end, field: {}",
             Sort::Field(cfg().field().clone())
@@ -71,12 +71,13 @@ impl FrontEnd for ZSharpFE {
         let func_input_width = blks[0].get_num_inputs() - 1;
         println!("\n\n--\nCirc IR:");
         let num_mem_accesses = g.bls_to_circ(&blks);
+        let num_exec_bound = blks.iter().map(|i| i.prog_num_exec_bound).collect();
 
         g.generics_stack_pop();
         g.file_stack_pop();
         let mut cs = Computations::new();
         cs.comps = g.into_circify().cir_ctx().cs.borrow_mut().clone();
-        (cs, func_input_width, io_size, live_io_list, num_mem_accesses)
+        (cs, func_input_width, io_size, live_io_list, num_mem_accesses, num_exec_bound)
     }
 }
 

@@ -40,9 +40,6 @@ use core::cmp::Ordering;
 const INPUT_OFFSET: usize = 6;
 const OUTPUT_OFFSET: usize = 5;
 
-// Temporary constant for compile-time bounds
-const TOTAL_NUM_PROOFS_BOUND: usize = 40;
-
 #[derive(Debug, Parser)]
 #[command(name = "zxc", about = "CirC: the circuit compiler")]
 struct Options {
@@ -389,7 +386,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 ) -> (CompileTimeKnowledge, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<ProverData>) {
     println!("Generating Compiler Time Data...");
 
-    let (cs, func_input_width, io_size, live_io_list, block_num_mem_accesses) = {
+    let (cs, func_input_width, io_size, live_io_list, block_num_mem_accesses, block_num_exec_bound) = {
         let inputs = zsharp::Inputs {
             file: path.clone(),
             mode: Mode::Proof
@@ -552,8 +549,8 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     // Collect all necessary info
     let block_num_instances = r1cs_list.len();
     let num_vars = 2 * max_num_io;
-    let total_num_proofs_bound = TOTAL_NUM_PROOFS_BOUND;
-    let total_num_mem_accesses_bound = TOTAL_NUM_PROOFS_BOUND * block_num_mem_accesses.iter().max().unwrap();
+    let total_num_proofs_bound = block_num_exec_bound.iter().fold(0, |a, b| a + b);
+    let total_num_mem_accesses_bound = (0..block_num_instances).fold(0, |a, b| a + block_num_mem_accesses[b] * block_num_exec_bound[b]);
     let args: Vec<Vec<(Vec<(usize, Integer)>, Vec<(usize, Integer)>, Vec<(usize, Integer)>)>> = 
         sparse_mat_entry.iter().map(|v| v.iter().map(|i| (i.args_a.clone(), i.args_b.clone(), i.args_c.clone())).collect()).collect();
     let input_block_num = 0;

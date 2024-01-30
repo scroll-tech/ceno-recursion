@@ -149,7 +149,12 @@ pub struct Block<'ast> {
     pub inputs: Vec<(String, Option<Ty>)>,
     pub outputs: Vec<(String, Option<Ty>)>,
     pub instructions: Vec<BlockContent<'ast>>,
-    pub terminator: BlockTerminator<'ast>
+    pub terminator: BlockTerminator<'ast>,
+    // The upper bound on the number of times a block is executed within one execution of the function
+    pub func_num_exec_bound: usize,
+    // The upper bound on the number of times a block is executed within the entire program, obtained during optimization
+    pub prog_num_exec_bound: usize
+
 }
 
 #[derive(Clone)]
@@ -176,13 +181,15 @@ pub enum NextBlock {
 }
 
 impl<'ast> Block<'ast> {
-    pub fn new(name: usize) -> Self {
+    pub fn new(name: usize, num_exec_bound: usize) -> Self {
         let input = Self {
             name,
             inputs: Vec::new(),
             outputs: Vec::new(),
             instructions: Vec::new(),
-            terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1)))
+            terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1))),
+            func_num_exec_bound: num_exec_bound,
+            prog_num_exec_bound: num_exec_bound
         };
         input
     }
@@ -193,7 +200,9 @@ impl<'ast> Block<'ast> {
             inputs: old_bl.inputs.clone(),
             outputs: old_bl.outputs.clone(),
             instructions: old_bl.instructions.clone(),
-            terminator: old_bl.terminator.clone()
+            terminator: old_bl.terminator.clone(),
+            func_num_exec_bound: old_bl.func_num_exec_bound,
+            prog_num_exec_bound: old_bl.prog_num_exec_bound,
         };
         input
     }
@@ -211,6 +220,7 @@ impl<'ast> Block<'ast> {
 
     pub fn pretty(&self) {
         println!("\nBlock {}:", self.name);
+        println!("Execution Bound: func - {}, prog - {}", self.func_num_exec_bound, self.prog_num_exec_bound);
         println!("Inputs:");
 
         for i in &self.inputs {
@@ -246,24 +256,6 @@ impl<'ast> Block<'ast> {
                 print!("Program terminates.")
             }
         }
-    }
-
-    pub fn contains_input(&self, input: &str) -> bool {
-        for i in &self.inputs {
-            if i.0 == input.to_string() {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    pub fn contains_output(&self, output: &str) -> bool {
-        for i in &self.outputs {
-            if i.0 == output.to_string() {
-                return true;
-            }
-        }
-        return false;
     }
 }
 
@@ -328,7 +320,7 @@ impl<'ast> ZGen<'ast> {
         let mut blks = Vec::new();
         let mut blks_len = 0;
         // Create the initial block
-        blks.push(Block::new(0));
+        blks.push(Block::new(0, 1));
         blks_len += 1;
         // Initialize %RP
         let rp_init_stmt = Statement::Definition(DefinitionStatement {
@@ -488,7 +480,7 @@ impl<'ast> ZGen<'ast> {
             self.cvar_enter_function();
 
             // Create new Block
-            blks.push(Block::new(blks_len));
+            blks.push(Block::new(blks_len, 1));
             blks_len += 1;
 
             // Add scoping to parameters and process the scoped parameters
@@ -506,7 +498,7 @@ impl<'ast> ZGen<'ast> {
             let mut sp_offset = 0;
             // Iterate through Stmts
             for s in &f.statements {
-                (blks, blks_len, _, sp_offset, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, s, ret_ty, sp_offset, Vec::new(), var_scope_info)?;
+                (blks, blks_len, _, sp_offset, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, s, ret_ty, sp_offset, Vec::new(), var_scope_info, 1)?;
             }
 
             // Set terminator to ProgTerm if in main, point to %RP otherwise
@@ -674,7 +666,9 @@ impl<'ast> ZGen<'ast> {
             blks[blks_len - 1].terminator = term;
 
             // Create new Block
-            blks.push(Block::new(blks_len));
+            // The new block should have the same number of execution bound as the previous block
+            let num_exec_bound = blks[blks_len - 1].func_num_exec_bound;
+            blks.push(Block::new(blks_len, num_exec_bound));
             blks_len += 1; 
             
             // Exit Scoping
@@ -737,7 +731,9 @@ impl<'ast> ZGen<'ast> {
         // For each variable, usize indicates the number of times it has been defined in previous scopes
         //                    bool indicates whether it has yet to be defined in the current scope
         //                    true ==> for the next definition, we need to increment the usize
-        mut var_scope_info: HashMap<String, (usize, bool)>
+        mut var_scope_info: HashMap<String, (usize, bool)>,
+        // How many times will this statement be executed within the function
+        num_exec_bound: usize,
     ) -> Result<(Vec<Block>, usize, Vec<Vec<(usize, String)>>, usize, HashMap<String, (usize, bool)>), String> {
         debug!("Block Gen Stmt: {}", s.span().as_str());
 
@@ -775,7 +771,7 @@ impl<'ast> ZGen<'ast> {
 
                 // Create a dummy block in case there are anything after return
                 // Will be eliminated during DBE
-                blks.push(Block::new(blks_len));
+                blks.push(Block::new(blks_len, num_exec_bound));
                 blks_len += 1;
 
             }
@@ -804,11 +800,27 @@ impl<'ast> ZGen<'ast> {
                 let new_v_name: String;
                 (new_v_name, var_scope_info) = bl_gen_unroll_scope::<true>(v_name.clone(), var_scope_info)?;
 
-                // Create and push FROM statement
                 let from_expr: Expression;
                 (blks, blks_len, func_phy_assign, sp_offset, var_scope_info, from_expr, _) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &it.from, func_phy_assign, sp_offset, 0, var_scope_info)?;
+                let to_expr: Expression;
+                (blks, blks_len, func_phy_assign, sp_offset, var_scope_info, to_expr, _) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &it.to, func_phy_assign, sp_offset, 0, var_scope_info)?;
 
+                // Record the number of iterations of the loop
+                // Currently only support from_expr and to_expr being constants
+                let loop_num_it = {
+                    let from_const = if let Expression::Literal(LiteralExpression::DecimalLiteral(ref dle)) = from_expr {
+                        dle.value.value.parse::<usize>().unwrap()
+                    } else { panic!("Unsupported loop: from expression is not constant") };
+                    let to_const = if let Expression::Literal(LiteralExpression::DecimalLiteral(ref dle)) = to_expr {
+                        dle.value.value.parse::<usize>().unwrap()
+                    } else { panic!("Unsupported loop: from expression is not constant") };
+                    
+                    to_const - from_const
+                };
+
+                // Create and push FROM statement
                 let new_id = IdentifierExpression {
                     value: new_v_name,
                     span: Span::new("", 0, 0).unwrap()
@@ -831,12 +843,12 @@ impl<'ast> ZGen<'ast> {
                 let old_state = blks_len - 1;
 
                 // Create new Block
-                blks.push(Block::new(blks_len));
+                blks.push(Block::new(blks_len, loop_num_it * num_exec_bound));
                 blks_len += 1;
-
+                
                 // Iterate through Stmts
                 for body in &it.statements {
-                    (blks, blks_len, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, body, ret_ty, sp_offset, func_phy_assign, var_scope_info)?;
+                    (blks, blks_len, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, body, ret_ty, sp_offset, func_phy_assign, var_scope_info, loop_num_it * num_exec_bound)?;
                 }
 
                 // Exit scoping to iterator scope
@@ -867,9 +879,6 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(step_stmt));
 
                 // Create and push TRANSITION statement
-                let to_expr: Expression;
-                (blks, blks_len, func_phy_assign, sp_offset, var_scope_info, to_expr, _) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &it.to, func_phy_assign, sp_offset, 0, var_scope_info)?;
                 let new_state = blks_len - 1;
                 let term = BlockTerminator::Transition(
                     bl_trans(
@@ -882,7 +891,7 @@ impl<'ast> ZGen<'ast> {
                 blks[old_state].terminator = term;
 
                 // Create new block
-                blks.push(Block::new(blks_len));
+                blks.push(Block::new(blks_len, num_exec_bound));
                 blks_len += 1;
 
                 // Exit scoping again to outside the loop
@@ -900,11 +909,11 @@ impl<'ast> ZGen<'ast> {
                 // Enter Scoping
                 (blks, func_phy_assign, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
                 // Create new Block
-                blks.push(Block::new(blks_len));
+                blks.push(Block::new(blks_len, num_exec_bound));
                 blks_len += 1;
                 // Iterate through Stmts
                 for body in &c.ifbranch {
-                    (blks, blks_len, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, body, ret_ty, sp_offset, func_phy_assign, var_scope_info)?;
+                    (blks, blks_len, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, body, ret_ty, sp_offset, func_phy_assign, var_scope_info, num_exec_bound)?;
                 }
                 // Exit Scoping
                 (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset, var_scope_info)?;
@@ -914,11 +923,11 @@ impl<'ast> ZGen<'ast> {
                 // Enter Scoping
                 (blks, func_phy_assign, sp_offset) = self.bl_gen_enter_scope_(blks, blks_len, func_phy_assign, sp_offset)?;
                 // Create new Block
-                blks.push(Block::new(blks_len));
+                blks.push(Block::new(blks_len, num_exec_bound));
                 blks_len += 1;
                 // Iterate through Stmts
                 for body in &c.elsebranch {
-                    (blks, blks_len, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, body, ret_ty, sp_offset, func_phy_assign, var_scope_info)?;
+                    (blks, blks_len, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, body, ret_ty, sp_offset, func_phy_assign, var_scope_info, num_exec_bound)?;
                 }
                 // Exit Scoping
                 (blks, func_phy_assign, sp_offset, var_scope_info) = self.bl_gen_exit_scope_(blks, blks_len, func_phy_assign, sp_offset, var_scope_info)?;
@@ -940,7 +949,7 @@ impl<'ast> ZGen<'ast> {
                 // Transition of else block is already correct
 
                 // Create new Block
-                blks.push(Block::new(blks_len));
+                blks.push(Block::new(blks_len, num_exec_bound));
                 blks_len += 1;
             }
             Statement::Definition(d) => {

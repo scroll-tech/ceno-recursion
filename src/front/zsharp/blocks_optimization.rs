@@ -106,6 +106,9 @@ pub fn optimize_block<const VERBOSE: bool>(
     }
     println!("\n\n--\nOptimization:");
     
+    // Compute number of execution bound for each block
+    bls = compute_num_exec_bound(bls, &predecessor, &successor_fn, &entry_bls_fn);
+
     // Liveness & PMR
     // As long as altered is true, we need to keep doing liveness and PMR
     let mut altered = true;
@@ -518,6 +521,46 @@ fn construct_flow_graph(
         }
     }
     return (successor, predecessor, exit_bls, entry_bl_fn, successor_fn, predecessor_fn, exit_bls_fn);
+}
+
+// Given CFG, compute the upper bound on number of executions of each block within the program
+fn compute_num_exec_bound<'ast>(
+    mut bls: Vec<Block<'ast>>,
+    predecessor: &Vec<HashSet<usize>>,
+    successor_fn: &Vec<HashSet<usize>>,
+    entry_bls_fn: &HashSet<usize>
+) -> Vec<Block<'ast>> {
+    let mut changed = true;
+    while changed {
+        changed = false;
+
+        // For every function entrance, use its callers to determine the # of executions of the function
+        for i in entry_bls_fn {
+            let b = &bls[*i];
+            let mut num_func_exec = 0;
+            for p in &predecessor[*i] {
+                num_func_exec += bls[*p].prog_num_exec_bound;
+            }
+            if num_func_exec == 0 { num_func_exec = 1 };
+            // If there are more execs to the function than expected, update prog_num_exec_bound for all blocks of the function
+            if b.prog_num_exec_bound != num_func_exec * b.func_num_exec_bound {
+                changed = true;
+
+                let mut next_bls: VecDeque<usize> = VecDeque::new();
+                next_bls.push_back(*i);
+                while !next_bls.is_empty() {
+                    let cur_bl = next_bls.pop_front().unwrap();
+                    bls[cur_bl].prog_num_exec_bound = num_func_exec * bls[cur_bl].func_num_exec_bound;
+                    for j in &successor_fn[cur_bl] {
+                        if bls[*j].prog_num_exec_bound != num_func_exec * bls[*j].func_num_exec_bound {
+                            next_bls.push_back(*j);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    bls
 }
 
 // Given an expression, find all variables it references

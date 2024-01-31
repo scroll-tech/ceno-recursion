@@ -186,6 +186,7 @@ fn write_bytes(mut f: &File, bytes: &[u8; 32]) -> std::io::Result<()> {
 struct CompileTimeKnowledge {
     block_num_instances: usize,
     num_vars: usize,
+    num_inputs_unpadded: usize,
     total_num_proofs_bound: usize,
     block_num_mem_accesses: Vec<usize>,
     total_num_mem_accesses_bound: usize,
@@ -205,6 +206,7 @@ impl CompileTimeKnowledge {
         let mut f = File::create(file_name)?;
         writeln!(&mut f, "{}", self.block_num_instances)?;
         writeln!(&mut f, "{}", self.num_vars)?;
+        writeln!(&mut f, "{}", self.num_inputs_unpadded)?;
         writeln!(&mut f, "{}", self.total_num_proofs_bound)?;
         for i in &self.block_num_mem_accesses {
             write!(&mut f, "{} ", i)?;
@@ -559,6 +561,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     (CompileTimeKnowledge {
         block_num_instances,
         num_vars,
+        num_inputs_unpadded: io_size,
         total_num_proofs_bound,
         block_num_mem_accesses,
         total_num_mem_accesses_bound,

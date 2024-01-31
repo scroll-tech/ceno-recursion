@@ -1652,7 +1652,11 @@ fn var_to_reg<const MODE: usize>(
     inputs: Vec<(String, Ty)>
 ) -> (Vec<Block>, HashMap<String, usize>, usize, HashMap<String, usize>, usize, Vec<(Vec<usize>, Vec<usize>)>) {
     // reg_map is consisted of (io_map, and witness_map)
+    // 
     // Reserve registers 0 - 5 for %V, %NB, %RP, %SP, %BP, and %RET in io
+
+
+    
     let mut io_map: HashMap<String, usize> = HashMap::new();
     let mut io_size = 0;
     (_, io_map, io_size, _) = var_name_to_reg_id_expr::<1>("%V".to_string(), io_map, io_size);
@@ -1669,17 +1673,22 @@ fn var_to_reg<const MODE: usize>(
     (_, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>("%BP".to_string(), witness_map, witness_size);
     (_, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>("%RET".to_string(), witness_map, witness_size);
 
-    // Record down labels of all live inputs / outputs of each block
-    let mut live_io: Vec<(Vec<usize>, Vec<usize>)> = Vec::new();
-
-    // Iterate through program input and all block inputs and outputs to obtain name of all io variables
+    // Add all program inputs
     for (v, _) in inputs {
         (_, io_map, io_size, _) = var_name_to_reg_id_expr::<1>(v.to_string(), io_map, io_size);
     }
 
-    // Construct block number check instruction
+    // IO REGISTER ALLOCATION
+    // Iterate through all input / output states, if two variables appear in the same input / output state, mark them as intefering
+
+
+    // VARIABLE RENAMING
+    // Record down labels of all live inputs / outputs of each block
+    let mut live_io: Vec<(Vec<usize>, Vec<usize>)> = Vec::new();
+
+    // Expression for block number check
     let bn_id = Expression::Identifier(IdentifierExpression {
-        value: "%i000001".to_string(),
+        value: format!("%i{:06}", 1),
         span: Span::new("", 0, 0).unwrap()
     });
     for i in 0..bls.len() {
@@ -1690,7 +1699,7 @@ fn var_to_reg<const MODE: usize>(
         // Add block number check
         // We defer validity check until after R1CS is constructed for prover's convenience
         let mut new_inputs = Vec::new();
-        new_inputs.push(("%i000001".to_string(), Some(Ty::Field)));
+        new_inputs.push((format!("%i{:06}", 1), Some(Ty::Field)));
         live_io[i].0.push(1);
 
         let mut new_instr: Vec<BlockContent> = Vec::new();
@@ -1835,7 +1844,7 @@ fn var_to_reg<const MODE: usize>(
         // If in MODE 0, assert the %o variables
         // Otherwise, assign the %o variables
         let mut new_outputs = Vec::new();
-        new_outputs.push(("%o000001".to_string(), Some(Ty::Field)));
+        new_outputs.push((format!("%o{:06}", 1), Some(Ty::Field)));
         for (name, ty) in &bls[i].outputs {
             let new_output_name: String;
             let live_output_label: usize;
@@ -1912,7 +1921,7 @@ fn var_to_reg<const MODE: usize>(
                 expression: Expression::Binary(BinaryExpression {
                     op: BinaryOperator::Eq,
                     left: Box::new(Expression::Identifier(IdentifierExpression {
-                        value: "%o000001".to_string(),
+                        value: format!("%o{:06}", 1),
                         span: Span::new("", 0, 0).unwrap()
                     })),
                     right: Box::new(new_expr.clone()),
@@ -1929,7 +1938,7 @@ fn var_to_reg<const MODE: usize>(
                         span: Span::new("", 0, 0).unwrap()
                     })),
                     identifier: IdentifierExpression {
-                        value: "%o000001".to_string(),
+                        value: format!("%o{:06}", 1),
                         span: Span::new("", 0, 0).unwrap()
                     },
                     span: Span::new("", 0, 0).unwrap()

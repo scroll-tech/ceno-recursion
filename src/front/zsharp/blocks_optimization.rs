@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use crate::front::zsharp::Ty;
 use itertools::Itertools;
+use std::cmp::max;
 
 fn type_to_ty(t: Type) -> Result<Ty, String> {
     /*
@@ -155,10 +156,13 @@ pub fn process_block<const VERBOSE: bool, const MODE: usize>(
     inputs: Vec<(String, Ty)>
 ) -> (Vec<Block>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>) {
     // VtR
-    let (bls, io_map, io_size, witness_map, witness_size, live_io) = var_to_reg::<MODE>(bls, inputs);
+    let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) = var_to_reg::<MODE>(bls, entry_bl, inputs);
     if VERBOSE {
         println!("\n\n--\nVar -> Reg:");
-        println!("Var -> IO map: {:?}", io_map);
+        println!("Var -> IO map:");
+        for i in 0..transition_map_list.len() {
+            println!("i = {}: {:?}", i, transition_map_list[i]);
+        }
         println!("Var -> Witness map: {:?}", witness_map);
         println!("Live variables: ");
         for i in 0..live_io.len() {
@@ -1499,48 +1503,47 @@ fn set_input_output<'bl>(
 
 // Turn all variables in an expression to a register reference
 // Whenever we meet a variable X, if reg_map contains X and scope_map[X] = Y, update X to %Y
-// otherwise, update X to %<reg_size>, add (X, reg_size) to reg_map, and increment reg_size by 1
-// Returns the new expression, new reg_map, and new reg_size
+// otherwise, update X to %<reg_size> and add X to reg_map
+// Returns the new expression and new reg_map
 fn var_to_reg_expr<'ast>(
     e: &Expression<'ast>, 
     mut reg_map: HashMap<String, usize>, 
-    mut reg_size: usize
-) -> (Expression<'ast>, HashMap<String, usize>, usize) {
+) -> (Expression<'ast>, HashMap<String, usize>) {
     match e {
         Expression::Ternary(t) => {
             let new_first: Expression;
             let new_second: Expression;
             let new_third: Expression;
-            (new_first, reg_map, reg_size) = var_to_reg_expr(&t.first, reg_map, reg_size);
-            (new_second, reg_map, reg_size) = var_to_reg_expr(&t.second, reg_map, reg_size);
-            (new_third, reg_map, reg_size) = var_to_reg_expr(&t.third, reg_map, reg_size);
+            (new_first, reg_map) = var_to_reg_expr(&t.first, reg_map);
+            (new_second, reg_map) = var_to_reg_expr(&t.second, reg_map);
+            (new_third, reg_map) = var_to_reg_expr(&t.third, reg_map);
             return (Expression::Ternary(TernaryExpression {
                 first: Box::new(new_first),
                 second: Box::new(new_second),
                 third: Box::new(new_third),
                 span: t.span
-            }), reg_map, reg_size);
+            }), reg_map);
         }
         Expression::Binary(b) => {
             let new_left: Expression;
             let new_right: Expression;
-            (new_left, reg_map, reg_size) = var_to_reg_expr(&b.left, reg_map, reg_size);
-            (new_right, reg_map, reg_size) = var_to_reg_expr(&b.right, reg_map, reg_size);
+            (new_left, reg_map) = var_to_reg_expr(&b.left, reg_map);
+            (new_right, reg_map) = var_to_reg_expr(&b.right, reg_map);
             return (Expression::Binary(BinaryExpression {
                 op: b.op.clone(),
                 left: Box::new(new_left),
                 right: Box::new(new_right),
                 span: b.span
-            }), reg_map, reg_size);
+            }), reg_map);
         }
         Expression::Unary(u) => {
             let new_expr: Expression;
-            (new_expr, reg_map, reg_size) = var_to_reg_expr(&u.expression, reg_map, reg_size);
+            (new_expr, reg_map) = var_to_reg_expr(&u.expression, reg_map);
             return (Expression::Unary(UnaryExpression {
                 op: u.op.clone(),
                 expression: Box::new(new_expr),
                 span: u.span
-            }), reg_map, reg_size);
+            }), reg_map);
         }
         Expression::Postfix(p) => {
             let mut new_accesses = Vec::new();
@@ -1548,7 +1551,7 @@ fn var_to_reg_expr<'ast>(
                 if let Access::Select(a) = aa {
                     if let RangeOrExpression::Expression(e) = &a.expression {
                         let new_expr: Expression;
-                        (new_expr, reg_map, reg_size) = var_to_reg_expr(&e, reg_map, reg_size);
+                        (new_expr, reg_map) = var_to_reg_expr(&e, reg_map);
                         new_accesses.push(Access::Select(ArrayAccess {
                             expression: RangeOrExpression::Expression(new_expr),
                             span: a.span
@@ -1561,20 +1564,20 @@ fn var_to_reg_expr<'ast>(
                 }
             }
             let new_id_expr: IdentifierExpression;
-            (new_id_expr, reg_map, reg_size) = var_to_reg_id_expr(&p.id, reg_map, reg_size);
+            (new_id_expr, reg_map) = var_to_reg_id_expr(&p.id, reg_map);
             return (Expression::Postfix(PostfixExpression {
                 id: new_id_expr,
                 accesses: new_accesses,
                 span: p.span
-            }), reg_map, reg_size);
+            }), reg_map);
         }
         Expression::Identifier(i) => {
             let new_id_expr: IdentifierExpression;
-            (new_id_expr, reg_map, reg_size) = var_to_reg_id_expr(&i, reg_map, reg_size);
-            return (Expression::Identifier(new_id_expr), reg_map, reg_size);
+            (new_id_expr, reg_map) = var_to_reg_id_expr(&i, reg_map);
+            return (Expression::Identifier(new_id_expr), reg_map);
         }
         Expression::Literal(_) => {
-            return (e.clone(), reg_map, reg_size);
+            return (e.clone(), reg_map);
         }
         _ => {
             panic!("Unsupported Expression.");
@@ -1585,40 +1588,35 @@ fn var_to_reg_expr<'ast>(
 fn var_to_reg_id_expr<'ast>(
     ie: &IdentifierExpression<'ast>, 
     mut reg_map: HashMap<String, usize>,
-    mut reg_size: usize
-) -> (IdentifierExpression<'ast>, HashMap<String, usize>, usize) {
+) -> (IdentifierExpression<'ast>, HashMap<String, usize>) {
     let var_name: String;
-    (var_name, reg_map, reg_size, _) = var_name_to_reg_id_expr::<0>(ie.value.to_string(), reg_map, reg_size);
+    (var_name, reg_map, _) = var_name_to_reg_id_expr::<0>(ie.value.to_string(), reg_map);
     (IdentifierExpression {
         value: var_name,
         span: ie.span
-    }, reg_map, reg_size)
+    }, reg_map)
 }
 
 // MODE: 0 - WITNESS, 1 - INPUT, 2 - OUTPUT
 fn var_name_to_reg_id_expr<const MODE: usize>(
     str_name: String,
     mut reg_map: HashMap<String, usize>,
-    mut reg_size: usize    
-) -> (String, HashMap<String, usize>, usize, usize) {
-    // if reserved_variable(&str_name) {
-        // return (str_name, reg_map, reg_size);
-    // }
+) -> (String, HashMap<String, usize>, usize) {
+    let reg_size = reg_map.len();
     
     // Strip the scoping "@x" from the variable name
     let var_name = str_name.split('@').collect::<Vec<&str>>()[0].to_string();
 
     if !reg_map.contains_key(&var_name) {
         reg_map.insert(var_name.clone(), reg_size);
-        reg_size += 1;
     }
     let reg_label = reg_map.get(&var_name).unwrap().clone();
     // Note: we cannot simply assign the variables %i1, this is because by string comparison, %10 < %2
     // However, WITNESSES DO NOT NEED TO FOLLOW THIS RULE
     match MODE {
-        0 => (format!("%w{}", reg_label), reg_map, reg_size, reg_label),
-        1 => (format!("%i{:06}", reg_label), reg_map, reg_size, reg_label),
-        _ => (format!("%o{:06}", reg_label), reg_map, reg_size, reg_label)
+        0 => (format!("%w{}", reg_label), reg_map, reg_label),
+        1 => (format!("%i{:06}", reg_label), reg_map, reg_label),
+        _ => (format!("%o{:06}", reg_label), reg_map, reg_label)
     }
 }
 
@@ -1649,40 +1647,126 @@ fn var_name_to_reg_id_expr<const MODE: usize>(
 //  MODE = 1 - Compute Mode, output registers are assigned and not checked
 fn var_to_reg<const MODE: usize>(
     mut bls: Vec<Block>,
+    entry_bl: usize,
     inputs: Vec<(String, Ty)>
-) -> (Vec<Block>, HashMap<String, usize>, usize, HashMap<String, usize>, usize, Vec<(Vec<usize>, Vec<usize>)>) {
-    // reg_map is consisted of (io_map, and witness_map)
-    // 
-    // Reserve registers 0 - 5 for %V, %NB, %RP, %SP, %BP, and %RET in io
-
-
+) -> (Vec<Block>, Vec<HashMap<String, usize>>, usize, HashMap<String, usize>, usize, Vec<(Vec<usize>, Vec<usize>)>) {
+    // Construct a new CFG for the program
+    // Note that this is the CFG after DBE, and might be different from the previous CFG
+    let (successor, predecessor, _, _, _, _, _) = 
+        construct_flow_graph(&bls, entry_bl);
     
-    let mut io_map: HashMap<String, usize> = HashMap::new();
-    let mut io_size = 0;
-    (_, io_map, io_size, _) = var_name_to_reg_id_expr::<1>("%V".to_string(), io_map, io_size);
-    (_, io_map, io_size, _) = var_name_to_reg_id_expr::<1>("%NB".to_string(), io_map, io_size);
-    (_, io_map, io_size, _) = var_name_to_reg_id_expr::<1>("%RP".to_string(), io_map, io_size);
-    (_, io_map, io_size, _) = var_name_to_reg_id_expr::<1>("%SP".to_string(), io_map, io_size);
-    (_, io_map, io_size, _) = var_name_to_reg_id_expr::<1>("%BP".to_string(), io_map, io_size);
-    (_, io_map, io_size, _) = var_name_to_reg_id_expr::<1>("%RET".to_string(), io_map, io_size);
-    // Reserve registers 0 - 3 for %RP, %SP, %BP, and %RET in w
-    let mut witness_map: HashMap<String, usize> = HashMap::new();
-    let mut witness_size = 0;
-    (_, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>("%RP".to_string(), witness_map, witness_size);
-    (_, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>("%SP".to_string(), witness_map, witness_size);
-    (_, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>("%BP".to_string(), witness_map, witness_size);
-    (_, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>("%RET".to_string(), witness_map, witness_size);
+    // reg_map is consisted of two Var -> Reg Maps: TRANSITION_MAP_LIST & WITNESS_MAP
+    // TRANSITION_MAP_LIST is a list of maps corresponding to each transition state
+    // Reserve registers 0 - 5 for %V, %NB, %RP, %SP, %BP, and %RET
+    let mut transition_map_list = Vec::new();
+    // MAX_IO_SIZE is the size of the largest maps among TRANSITION_MAP_LIST
+    let mut max_io_size = 0;
+    // BL_IN and BL_OUT records which transition state the inputs & outputs of each block is in
+    // TRANSITION_MAP_LIST[BL_IN[X]] is the register map used by the inputs of block X
+    let mut bl_in: Vec<Option<usize>> = vec![None; bls.len()];
+    let mut bl_out: Vec<Option<usize>> = vec![None; bls.len()];
 
-    // Add all program inputs
-    for (v, _) in inputs {
-        (_, io_map, io_size, _) = var_name_to_reg_id_expr::<1>(v.to_string(), io_map, io_size);
+    // Process program inputs
+    let input_map = {
+        let mut io_map: HashMap<String, usize> = HashMap::new();
+        // Reserved registers
+        (_, io_map, _) = var_name_to_reg_id_expr::<1>("%V".to_string(), io_map);
+        (_, io_map, _) = var_name_to_reg_id_expr::<1>("%NB".to_string(), io_map);
+        (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RP".to_string(), io_map);
+        (_, io_map, _) = var_name_to_reg_id_expr::<1>("%SP".to_string(), io_map);
+        (_, io_map, _) = var_name_to_reg_id_expr::<1>("%BP".to_string(), io_map);
+        (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RET".to_string(), io_map);
+        // inputs
+        for (v, _) in &inputs {
+            (_, io_map, _) = var_name_to_reg_id_expr::<1>(v.to_string(), io_map);
+        }
+        io_map
+    };
+    bl_in[entry_bl] = Some(0);
+    max_io_size = max(max_io_size, input_map.len());
+    transition_map_list.push(input_map);
+
+    // Process all transition states
+    for i in 0..bls.len() {
+        // Only process block output states
+        if bl_out[i] == None {
+            let trans_size = transition_map_list.len();
+
+            // Initialize register map
+            let mut io_map = {
+                let mut io_map: HashMap<String, usize> = HashMap::new();
+                // Reserved registers
+                (_, io_map, _) = var_name_to_reg_id_expr::<1>("%V".to_string(), io_map);
+                (_, io_map, _) = var_name_to_reg_id_expr::<1>("%NB".to_string(), io_map);
+                (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RP".to_string(), io_map);
+                (_, io_map, _) = var_name_to_reg_id_expr::<1>("%SP".to_string(), io_map);
+                (_, io_map, _) = var_name_to_reg_id_expr::<1>("%BP".to_string(), io_map);
+                (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RET".to_string(), io_map);
+                io_map
+            };
+
+            // Add all live variables to register map
+            // As well as set bl_in and bl_out
+            // Entry in next_bls is (block_id, should we update bl_out?)
+            let mut next_bls: VecDeque<(usize, bool)> = VecDeque::new();
+            next_bls.push_back((i, true));
+            while next_bls.len() != 0 {
+                let (cur_bl, update_out) = next_bls.pop_front().unwrap();
+                if update_out {
+                    if bl_out[cur_bl] == None {
+                        // Add outputs to io_map
+                        for (v, _) in &bls[cur_bl].outputs {
+                            (_, io_map, _) = var_name_to_reg_id_expr::<2>(v.to_string(), io_map);
+                        }
+                        // Update bl_out
+                        bl_out[cur_bl] = Some(trans_size);
+                        // Add successors to next_bls
+                        for succ_bl in &successor[cur_bl] {
+                            if bl_in[*succ_bl] == None {
+                                next_bls.push_back((*succ_bl, false));
+                            }
+                        }
+                    }
+                } else {
+                    if bl_in[cur_bl] == None {
+                        // Add inputs to io_map
+                        for (v, _) in &bls[cur_bl].inputs {
+                            (_, io_map, _) = var_name_to_reg_id_expr::<1>(v.to_string(), io_map);
+                        }
+                        // Update bl_in
+                        bl_in[cur_bl] = Some(trans_size);
+                        // Add predecessors to next_bls
+                        for pred_bl in &predecessor[cur_bl] {
+                            if bl_out[*pred_bl] == None {
+                                next_bls.push_back((*pred_bl, true));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Insert io_map to transition_map_list
+            max_io_size = max(max_io_size, io_map.len());
+            transition_map_list.push(io_map);
+        }
     }
 
-    // IO REGISTER ALLOCATION
-    // Iterate through all input / output states, if two variables appear in the same input / output state, mark them as intefering
+    // Make sure all bl_in and bl_outs are defined
+    for i in 0..bls.len() {
+        assert!(bl_in[i] != None);
+        assert!(bl_out[i] != None);
+    }
+    
+    // --
+    // WITNESS_MAP is one single map to describe all block witnesses
+    // Reserve registers 0 - 3 for %RP, %SP, %BP, and %RET
+    let mut witness_map: HashMap<String, usize> = HashMap::new();
+    (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%RP".to_string(), witness_map);
+    (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%SP".to_string(), witness_map);
+    (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%BP".to_string(), witness_map);
+    (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%RET".to_string(), witness_map);
 
 
-    // VARIABLE RENAMING
     // Record down labels of all live inputs / outputs of each block
     let mut live_io: Vec<(Vec<usize>, Vec<usize>)> = Vec::new();
 
@@ -1726,14 +1810,16 @@ fn var_to_reg<const MODE: usize>(
         new_instr.push(BlockContent::Stmt(block_num_check_stmt));
 
         // Map the inputs
+        // Nothing in transition_map_list should change now
+        let io_map = &transition_map_list[bl_in[i].unwrap()];
         for (name, ty) in &bls[i].inputs {
             let new_input_name: String;
             let live_input_label: usize;
-            (new_input_name, io_map, io_size, live_input_label) = var_name_to_reg_id_expr::<1>(name.to_string(), io_map, io_size);
+            (new_input_name, _, live_input_label) = var_name_to_reg_id_expr::<1>(name.to_string(), io_map.clone());
             new_inputs.push((new_input_name.to_string(), ty.clone()));
             live_io[i].0.push(live_input_label);
             let new_witness_name: String;
-            (new_witness_name, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>(name.to_string(), witness_map, witness_size);
+            (new_witness_name, witness_map, _) = var_name_to_reg_id_expr::<0>(name.to_string(), witness_map);
             // For each input, assign a witness to its value
             let witness_assign_stmt = DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
@@ -1759,12 +1845,12 @@ fn var_to_reg<const MODE: usize>(
             match s {
                 BlockContent::MemPush((var, ty, offset)) => {
                     let var_name: String;
-                    (var_name, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map, witness_size);
+                    (var_name, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
                     new_instr.push(BlockContent::MemPush((var_name, ty.clone(), *offset)));
                 }
                 BlockContent::MemPop((var, ty, offset)) => {
                     let var_name: String;
-                    (var_name, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map, witness_size);
+                    (var_name, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
                     new_instr.push(BlockContent::MemPop((var_name, ty.clone(), *offset)));
                 }
                 BlockContent::Stmt(Statement::Return(_)) => {
@@ -1772,7 +1858,7 @@ fn var_to_reg<const MODE: usize>(
                 }
                 BlockContent::Stmt(Statement::Assertion(a)) => {
                     let new_expr: Expression;
-                    (new_expr, witness_map, witness_size) = var_to_reg_expr(&a.expression, witness_map, witness_size);
+                    (new_expr, witness_map) = var_to_reg_expr(&a.expression, witness_map);
                     let new_stmt = AssertionStatement {
                         expression: new_expr,
                         message: a.message.clone(),
@@ -1792,7 +1878,7 @@ fn var_to_reg<const MODE: usize>(
                         match l {
                             TypedIdentifierOrAssignee::TypedIdentifier(tid) => {
                                 let new_id_expr: IdentifierExpression;
-                                (new_id_expr, witness_map, witness_size) = var_to_reg_id_expr(&tid.identifier, witness_map, witness_size);
+                                (new_id_expr, witness_map) = var_to_reg_id_expr(&tid.identifier, witness_map);
                                 new_lhs.push(TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier{
                                     ty: tid.ty.clone(),
                                     identifier: new_id_expr,
@@ -1801,13 +1887,13 @@ fn var_to_reg<const MODE: usize>(
                             }
                             TypedIdentifierOrAssignee::Assignee(p) => {
                                 let new_id_expr: IdentifierExpression;
-                                (new_id_expr, witness_map, witness_size) = var_to_reg_id_expr(&p.id, witness_map, witness_size);
+                                (new_id_expr, witness_map) = var_to_reg_id_expr(&p.id, witness_map);
                                 let mut new_accesses: Vec<AssigneeAccess> = Vec::new();
                                 for aa in &p.accesses {
                                     if let AssigneeAccess::Select(a) = aa {
                                         if let RangeOrExpression::Expression(e) = &a.expression {
                                             let new_expr: Expression;
-                                            (new_expr, witness_map, witness_size) = var_to_reg_expr(&e, witness_map, witness_size);
+                                            (new_expr, witness_map) = var_to_reg_expr(&e, witness_map);
                                             new_accesses.push(AssigneeAccess::Select(ArrayAccess {
                                                 expression: RangeOrExpression::Expression(new_expr),
                                                 span: a.span
@@ -1828,7 +1914,7 @@ fn var_to_reg<const MODE: usize>(
                         }
                     }
                     let new_expr: Expression;
-                    (new_expr, witness_map, witness_size) = var_to_reg_expr(&d.expression, witness_map, witness_size);
+                    (new_expr, witness_map) = var_to_reg_expr(&d.expression, witness_map);
                     let new_stmt = DefinitionStatement {
                         lhs: new_lhs,
                         expression: new_expr,
@@ -1843,16 +1929,17 @@ fn var_to_reg<const MODE: usize>(
         // Map the outputs
         // If in MODE 0, assert the %o variables
         // Otherwise, assign the %o variables
+        let io_map = &transition_map_list[bl_out[i].unwrap()];
         let mut new_outputs = Vec::new();
         new_outputs.push((format!("%o{:06}", 1), Some(Ty::Field)));
         for (name, ty) in &bls[i].outputs {
             let new_output_name: String;
             let live_output_label: usize;
-            (new_output_name, io_map, io_size, live_output_label) = var_name_to_reg_id_expr::<2>(name.to_string(), io_map, io_size);
+            (new_output_name, _, live_output_label) = var_name_to_reg_id_expr::<2>(name.to_string(), io_map.clone());
             new_outputs.push((new_output_name.to_string(), ty.clone()));
             live_io[i].1.push(live_output_label);
             let new_witness_name: String;
-            (new_witness_name, witness_map, witness_size, _) = var_name_to_reg_id_expr::<0>(name.to_string(), witness_map, witness_size);
+            (new_witness_name, witness_map, _) = var_name_to_reg_id_expr::<0>(name.to_string(), witness_map);
 
             if MODE == 0 {
                 // For each output, assert that it is equal to the corresponding witness
@@ -1899,7 +1986,7 @@ fn var_to_reg<const MODE: usize>(
         let new_expr = {
             let new_expr: Expression;
             if let BlockTerminator::Transition(e) = &bls[i].terminator {
-                (new_expr, witness_map, witness_size) = var_to_reg_expr(&e, witness_map, witness_size);
+                (new_expr, witness_map) = var_to_reg_expr(&e, witness_map);
                 bls[i].terminator = BlockTerminator::Transition(new_expr.clone());
             } else {
                 // If it is the end of the program, assign %BN to be bls.len()
@@ -1955,10 +2042,10 @@ fn var_to_reg<const MODE: usize>(
         // Sort live_io
         live_io[i].0.sort();
         live_io[i].1.sort();
-
-        if io_size > 999999 {
-            panic!("Register assignment failed: number of i/o variables cannot exceed 999999!")
-        }
     }
-    (bls, io_map, io_size, witness_map, witness_size, live_io)
+    if max_io_size > 999999 {
+        panic!("Register assignment failed: number of i/o variables cannot exceed 999999!")
+    }
+    let witness_size = witness_map.len();
+    (bls, transition_map_list, max_io_size, witness_map, witness_size, live_io)
 }

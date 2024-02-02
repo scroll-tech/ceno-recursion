@@ -187,6 +187,7 @@ struct CompileTimeKnowledge {
     block_num_instances: usize,
     num_vars: usize,
     num_inputs_unpadded: usize,
+    num_vars_per_block: Vec<usize>,
     total_num_proofs_bound: usize,
     block_num_mem_accesses: Vec<usize>,
     total_num_mem_accesses_bound: usize,
@@ -207,6 +208,10 @@ impl CompileTimeKnowledge {
         writeln!(&mut f, "{}", self.block_num_instances)?;
         writeln!(&mut f, "{}", self.num_vars)?;
         writeln!(&mut f, "{}", self.num_inputs_unpadded)?;
+        for i in &self.num_vars_per_block {
+            write!(&mut f, "{} ", i)?;
+        }
+        writeln!(&mut f, "")?;
         writeln!(&mut f, "{}", self.total_num_proofs_bound)?;
         for i in &self.block_num_mem_accesses {
             write!(&mut f, "{} ", i)?;
@@ -453,6 +458,8 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     let mut max_num_cons = 1;
     // Obtain a list of prover data by block
     let mut prover_data_list = Vec::new();
+    // Obtain the actual number of witnesse per block, round to the next power of 2
+    let mut num_vars_per_block = Vec::new();
     while let Some(c) = cs.comps.get(&block_name) {
         let mut r1cs = to_r1cs(c, cfg());
 
@@ -475,8 +482,9 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
             reduce_linearities(r1cs, cfg())
         };
         */
-        // Add W to witness
-        let num_witnesses = r1cs.num_vars() + 1;
+        // Add W to witness, but remove all inputs / outputs
+        let num_witnesses = r1cs.num_vars() + 1 - live_io_list[block_num].0.len() - live_io_list[block_num].1.len();
+        num_vars_per_block.push(num_witnesses.next_power_of_two());
         // Include V * V = V and 0 = W - V
         let num_cons = r1cs.constraints().len() + 2;
         if num_witnesses > max_num_witnesses { max_num_witnesses = num_witnesses };
@@ -561,6 +569,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         block_num_instances,
         num_vars,
         num_inputs_unpadded,
+        num_vars_per_block,
         total_num_proofs_bound,
         block_num_mem_accesses,
         total_num_mem_accesses_bound,
@@ -587,7 +596,6 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     prover_data_list: Vec<ProverData>
 ) -> RunTimeKnowledge {
     let num_blocks = ctk.block_num_instances;
-    let num_vars = ctk.num_vars;
     let num_input_unpadded = ctk.num_inputs_unpadded;
     let num_ios = (2 * num_input_unpadded).next_power_of_two();
     // bl_outputs records ios of blocks as lists
@@ -660,7 +668,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         // Inputs are described in a length-(num_vars) array, consisted of input + output
         // Vars are described in a length-(num_vars) array, consisted of witnesses
         let mut inputs: Vec<Integer> = vec![zero.clone(); num_ios];
-        let mut vars: Vec<Integer> = vec![zero.clone(); num_vars];
+        let mut vars: Vec<Integer> = vec![zero.clone(); ctk.num_vars_per_block[id]];
         // Valid bit should be 1
         inputs[0] = one.clone();
         vars[0] = one.clone();
@@ -689,7 +697,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             func_outputs = inputs[num_input_unpadded + 5].clone();
         }
         if VERBOSE {
-            let print_width = if num_input_unpadded > 32 {32} else {num_input_unpadded};
+            let print_width = min(num_input_unpadded, 32);
             print!("{:3} ", " ");
             for i in 0..print_width {
                 print!("{:3} ", i);
@@ -714,10 +722,11 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
                 println!();
             }
             print!("{:3} ", "W");
+            let print_width = min(vars.len(), print_width);
             for i in 0..print_width {
                 print!("{:3} ", vars[i]);
             }
-            if num_vars > print_width {
+            if vars.len() > print_width {
                 println!("...");
             } else {
                 println!();

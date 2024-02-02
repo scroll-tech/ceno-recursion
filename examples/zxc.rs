@@ -385,7 +385,7 @@ impl Ord for InstanceSortHelper {
 // --
 fn get_compile_time_knowledge<const VERBOSE: bool>(
     path: PathBuf
-) -> (CompileTimeKnowledge, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<ProverData>) {
+) -> (CompileTimeKnowledge, Vec<(Vec<usize>, Vec<usize>)>, Vec<ProverData>) {
     println!("Generating Compiler Time Data...");
 
     let (cs, func_input_width, io_size, live_io_list, block_num_mem_accesses, block_num_exec_bound) = {
@@ -441,7 +441,6 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         }
     }
 
-    let max_num_io: usize;
     if VERBOSE { println!("Converting to r1cs:"); }
     let mut block_num = 0;
     let mut block_name = format!("Block_{}", block_num);
@@ -488,7 +487,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     }
     
     max_num_witnesses = max_num_witnesses.next_power_of_two();
-    max_num_io = max_num_witnesses / 2;
+    let num_inputs_unpadded = io_size;
     let max_num_cons = max_num_cons.next_power_of_two();
 
     // Convert R1CS into Spartan sparse format
@@ -506,7 +505,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         if i < live_io_list[b].0.len() { 
             live_io_list[b].0[i]
         } else {
-            live_io_list[b].1[i - live_io_list[b].0.len()] + max_num_io
+            live_io_list[b].1[i - live_io_list[b].0.len()] + num_inputs_unpadded
         }
     };
     // Add all IOs and WV in front
@@ -550,7 +549,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 
     // Collect all necessary info
     let block_num_instances = r1cs_list.len();
-    let num_vars = 2 * max_num_io;
+    let num_vars = max_num_witnesses;
     let total_num_proofs_bound = block_num_exec_bound.iter().fold(0, |a, b| a + b);
     let total_num_mem_accesses_bound = (0..block_num_instances).fold(0, |a, b| a + block_num_mem_accesses[b] * block_num_exec_bound[b]);
     let args: Vec<Vec<(Vec<(usize, Integer)>, Vec<(usize, Integer)>, Vec<(usize, Integer)>)>> = 
@@ -561,7 +560,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     (CompileTimeKnowledge {
         block_num_instances,
         num_vars,
-        num_inputs_unpadded: io_size,
+        num_inputs_unpadded,
         total_num_proofs_bound,
         block_num_mem_accesses,
         total_num_mem_accesses_bound,
@@ -572,7 +571,6 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         output_offset: OUTPUT_OFFSET,
         output_block_num
       },
-      max_num_io,
       live_io_list,
       prover_data_list
     )
@@ -585,12 +583,13 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     path: PathBuf,
     entry_regs: Vec<Integer>,
     ctk: &CompileTimeKnowledge,
-    max_num_io: usize,
     live_io_list: Vec<(Vec<usize>, Vec<usize>)>,
     prover_data_list: Vec<ProverData>
 ) -> RunTimeKnowledge {
     let num_blocks = ctk.block_num_instances;
     let num_vars = ctk.num_vars;
+    let num_input_unpadded = ctk.num_inputs_unpadded;
+    let num_ios = (2 * num_input_unpadded).next_power_of_two();
     // bl_outputs records ios of blocks as lists
     // bl_io_map maps name of io variables to their values
     // bl_outputs are used to fill in io part of vars
@@ -660,7 +659,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
 
         // Inputs are described in a length-(num_vars) array, consisted of input + output
         // Vars are described in a length-(num_vars) array, consisted of witnesses
-        let mut inputs: Vec<Integer> = vec![zero.clone(); num_vars];
+        let mut inputs: Vec<Integer> = vec![zero.clone(); num_ios];
         let mut vars: Vec<Integer> = vec![zero.clone(); num_vars];
         // Valid bit should be 1
         inputs[0] = one.clone();
@@ -675,7 +674,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
                 inputs[j] = ri.as_integer().unwrap();
             }
             if let Some(ro) = &reg_out[j] {
-                inputs[max_num_io + j] = ro.as_integer().unwrap();
+                inputs[num_input_unpadded + j] = ro.as_integer().unwrap();
             }
         }
 
@@ -687,10 +686,10 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             vars[k + 1] = eval[j].as_integer().unwrap();
         }
         if i == block_id_list.len() - 1 {
-            func_outputs = inputs[max_num_io + 5].clone();
+            func_outputs = inputs[num_input_unpadded + 5].clone();
         }
         if VERBOSE {
-            let print_width = if max_num_io > 32 {32} else {max_num_io};
+            let print_width = if num_input_unpadded > 32 {32} else {num_input_unpadded};
             print!("{:3} ", " ");
             for i in 0..print_width {
                 print!("{:3} ", i);
@@ -700,16 +699,16 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             for i in 0..print_width {
                 print!("{:3} ", inputs[i]);
             }
-            if max_num_io > print_width {
+            if num_input_unpadded > print_width {
                 println!("...");
             } else {
                 println!();
             }
             print!("{:3} ", "O");
-            for i in max_num_io..max_num_io + print_width {
+            for i in num_input_unpadded..num_input_unpadded + print_width {
                 print!("{:3} ", inputs[i]);
             }
-            if max_num_io > print_width {
+            if num_input_unpadded > print_width {
                 println!("...");
             } else {
                 println!();
@@ -805,14 +804,14 @@ fn main() {
     // --
     let benchmark_name = options.path.as_os_str().to_str().unwrap();
     let path = PathBuf::from(format!("../zok_tests/benchmarks/{}.zok", benchmark_name));
-    let (ctk, max_num_io, live_io_list, prover_data_list) = 
+    let (ctk, live_io_list, prover_data_list) = 
         get_compile_time_knowledge::<false>(path.clone());
 
     // --
     // Generate Witnesses
     // --
     let entry_regs: Vec<Integer> = func_inputs.iter().map(|i| Integer::from(*i)).collect();
-    let rtk = get_run_time_knowledge::<true>(path.clone(), entry_regs, &ctk, max_num_io, live_io_list, prover_data_list);
+    let rtk = get_run_time_knowledge::<true>(path.clone(), entry_regs, &ctk, live_io_list, prover_data_list);
 
     // --
     // Write CTK, RTK to file

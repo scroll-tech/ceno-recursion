@@ -1307,17 +1307,15 @@ impl<'ast> ZGen<'ast> {
     }
 
     // Convert a list of blocks to circ_ir, return the number of memory accesses of each block
-    pub fn bls_to_circ(&'ast self, blks: &Vec<Block>) -> Vec<usize> {
-        let mut num_mem_accesses = Vec::new();
+    pub fn bls_to_circ(&'ast self, blks: &Vec<Block>) {
         for b in blks {
             self.circ_init_block(&format!("Block_{}", b.name));
-            num_mem_accesses.push(self.bl_to_circ(&b));
+            self.bl_to_circ(&b);
         }
-        num_mem_accesses
     }
 
     // Convert a block to circ_ir, return the number of memory accesses
-    pub fn bl_to_circ(&self, b: &Block) -> usize {
+    pub fn bl_to_circ(&self, b: &Block) {
         let f = format!("Block_{}", b.name);
         // setup stack frame for entry function
         // returns the next block, so return type is Field
@@ -1550,8 +1548,6 @@ impl<'ast> ZGen<'ast> {
                 _ => { panic!("Supported Mode!") }
             }
         }
-        
-        mem_op_count
     }
 
     fn circ_init_block(&self, f: &str) {

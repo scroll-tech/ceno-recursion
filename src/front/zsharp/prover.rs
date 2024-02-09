@@ -34,13 +34,6 @@ impl MemOp {
         };
         input
     }
-
-    fn pretty(&self) {
-        print!("Addr: {:02}\tData: ", self.addr);
-        self.data_t.pretty(&mut std::io::stdout().lock())
-            .expect("error pretty-printing value");
-        println!();
-    }
 }
 // Ordering of MemOp solely by address
 impl Ord for MemOp {
@@ -80,24 +73,6 @@ impl ExecState {
             mem_op: Vec::new()
         };
         input
-    }
-
-    fn pretty(&self) {
-        println!("Block ID: {}", self.blk_id);
-        print!("Reg\t%BN\t%RP\t%SP\t%BP\t%RET");
-        print!("\nOut:");
-        for i in &self.reg_out[1..] {
-            print!("\t");
-            if let Some(t) = i {
-                t.pretty(&mut std::io::stdout().lock())
-                    .expect("error pretty-printing value");
-            }
-        }
-        println!("\nSuccessor ID: {}", self.succ_id);
-        println!("Memory Operations:");
-        for m in &self.mem_op {
-            m.pretty();
-        }
     }
 }
 

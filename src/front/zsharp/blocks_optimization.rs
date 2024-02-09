@@ -100,7 +100,7 @@ pub fn optimize_block<const VERBOSE: bool>(
     inputs: Vec<(String, Ty)>
 ) -> (Vec<Block>, usize) {
     // Construct CFG
-    let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
+    let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn, _) = 
         construct_flow_graph(&bls, entry_bl);
     if VERBOSE {
         print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
@@ -150,13 +150,19 @@ pub fn optimize_block<const VERBOSE: bool>(
 
 // Returns: Blocks, entry block, # of registers
 // Inputs are (variable, type) pairs
+//  MODE = 0 - Verification Mode, output registers are witnesses and checked using assertion
+//  MODE = 1 - Compute Mode, output registers are assigned and not checked
 pub fn process_block<const VERBOSE: bool, const MODE: usize>(
     bls: Vec<Block>,
     entry_bl: usize,
     inputs: Vec<(String, Ty)>
-) -> (Vec<Block>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>) {
+) -> (Vec<Block>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, usize, usize, Vec<usize>) {
+    // Construct a new CFG for the program
+    // Note that this is the CFG after DBE, and might be different from the previous CFG
+    let (successor, predecessor, exit_bls, _, _, _, _, rp_successor) = construct_flow_graph(&bls, entry_bl);
+
     // VtR
-    let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) = var_to_reg::<MODE>(bls, entry_bl, inputs);
+    let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) = var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl, inputs);
     if VERBOSE {
         println!("\n\n--\nVar -> Reg:");
         println!("Var -> IO map:");
@@ -169,8 +175,13 @@ pub fn process_block<const VERBOSE: bool, const MODE: usize>(
             println!("  BLOCK {}: {:?}", i, live_io[i])
         }
     }
+
+    // Bound # of Proofs and # of memory accesses
+    let (total_num_proofs_bound, total_num_mem_accesses_bound, num_mem_accesses) =
+        get_blocks_meta_info(&bls, &predecessor, &successor, entry_bl, &exit_bls);
+
     print_bls(&bls, &entry_bl);
-    (bls, entry_bl, io_size, witness_size, live_io)
+    (bls, entry_bl, io_size, witness_size, live_io, total_num_proofs_bound, total_num_mem_accesses_bound, num_mem_accesses)
 }
 
 // If bc is a statement of form field %RP = val,
@@ -349,26 +360,26 @@ fn bl_trans_replace<'ast>(e: &Expression<'ast>, old_val: usize, new_val: &Expres
 
 // Return value: successor, rp_successor, successor_fn, visited, next_bls
 fn flow_graph_transition<const IS_RP: bool>(
-    cur_bl: &usize,
+    cur_bl: usize,
     next_bl: &NextBlock,
     rp_slot: usize,
     mut successor: Vec<HashSet<usize>>,
-    mut rp_successor: Vec<HashSet<usize>>,
+    mut rp_successor: Vec<HashSet<(usize, usize)>>,
     mut successor_fn: Vec<HashSet<usize>>,
     mut visited: Vec<bool>,
     mut next_bls: VecDeque<usize>
-) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, Vec<HashSet<usize>>, Vec<bool>, VecDeque<usize>) {
+) -> (Vec<HashSet<usize>>, Vec<HashSet<(usize, usize)>>, Vec<HashSet<usize>>, Vec<bool>, VecDeque<usize>) {
 
     match next_bl {
         NextBlock::Label(tmp_bl) => {
             // If RP is set, only add RP to successor_fn of cur_bl
             if rp_slot == 0 || IS_RP {
-                successor_fn[*cur_bl].insert(*tmp_bl);
+                successor_fn[cur_bl].insert(*tmp_bl);
             }
             
             // Add next_bl to successor of cur_bl if not RP
             if !IS_RP {
-                successor[*cur_bl].insert(*tmp_bl);
+                successor[cur_bl].insert(*tmp_bl);
             }
             
             let old_rp_successor = rp_successor[*tmp_bl].clone();
@@ -378,11 +389,11 @@ fn flow_graph_transition<const IS_RP: bool>(
             // let next_bl inherit rp_successor of cur_bl
             if rp_slot != 0 && !IS_RP {
                 // Function call
-                rp_successor[*tmp_bl].insert(rp_slot);
+                rp_successor[*tmp_bl].insert((cur_bl, rp_slot));
             } else {
                 // No function call
-                for i in rp_successor[*cur_bl].clone().iter() {
-                    rp_successor[*tmp_bl].insert(*i);
+                for i in rp_successor[cur_bl].clone().iter() {
+                    rp_successor[*tmp_bl].insert(i.clone());
                 }     
             }
 
@@ -398,8 +409,8 @@ fn flow_graph_transition<const IS_RP: bool>(
                 panic!("Control flow graph construction fails: reaching end of function point but %RP not set!")
             }
             // Add everything in rp_successor of cur_bl to successor of cur_bl
-            for i in rp_successor[*cur_bl].iter() {
-                successor[*cur_bl].insert(*i);
+            for i in rp_successor[cur_bl].iter() {
+                successor[cur_bl].insert(i.clone().1);
             }
             // Whatever that rp is should already be in next_bls
         }
@@ -416,13 +427,11 @@ fn flow_graph_transition<const IS_RP: bool>(
 // ret[4]: map from block to all its successors, with function calls redirected to %RP and function return as temination
 // ret[5]: map from block to all its predecessors, with same tweak as ret[4]
 // ret[6]: list of all blocks that ends with ProgTerm or Rp
-
-// NOTE: This is placed before EBE, so no block ends with branching will have Rp in one or more blocks
-//       Similarly, function entry blocks should only be reachable from function calls
+// ret[7]: list of (caller, %RP) for every block within a non-main function
 fn construct_flow_graph(
     bls: &Vec<Block>,
     entry_bl: usize
-) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, HashSet<usize>, HashSet<usize>, Vec<HashSet<usize>>, Vec<HashSet<usize>>, HashSet<usize>) {
+) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, HashSet<usize>, HashSet<usize>, Vec<HashSet<usize>>, Vec<HashSet<usize>>, HashSet<usize>, Vec<HashSet<(usize, usize)>>) {
     let bl_size = bls.len();
     
     // list of all blocks that ends with ProgTerm
@@ -435,27 +444,18 @@ fn construct_flow_graph(
     let mut exit_bls_fn: HashSet<usize> = HashSet::new();
     
     // Start from entry_bl, do a BFS, add all blocks in its terminator to its successor
-    // When we reach a function call (i.e., %RP is set), add value of %RP to the callee's rp_successor
+    // When we reach a function call (i.e., %RP is set), add (cur_bl, %RP) to the callee's rp_successor
     // Propagate rp_successor until we reach an rp() terminator, at that point, append rp_successor to successor
     // We don't care about blocks that won't be touched by BFS, they'll get eliminated anyways
-    let mut successor: Vec<HashSet<usize>> = Vec::new();
-    let mut rp_successor: Vec<HashSet<usize>> = Vec::new();
-    let mut visited: Vec<bool> = Vec::new();
+    let mut successor: Vec<HashSet<usize>> = vec![HashSet::new(); bl_size];
+    let mut rp_successor: Vec<HashSet<(usize, usize)>> = vec![HashSet::new(); bl_size];
+    let mut visited: Vec<bool> = vec![false; bl_size];
     // predecessor is just the inverse of successor
-    let mut predecessor: Vec<HashSet<usize>> = Vec::new();
+    let mut predecessor: Vec<HashSet<usize>> = vec![HashSet::new(); bl_size];
 
     // successor & predecessor within a function, ignoring function calls (which is redirected to %RP)
-    let mut successor_fn: Vec<HashSet<usize>> = Vec::new();
-    let mut predecessor_fn: Vec<HashSet<usize>> = Vec::new();
-
-    for _ in 0..bl_size {
-        successor.push(HashSet::new());
-        rp_successor.push(HashSet::new());
-        visited.push(false);
-        predecessor.push(HashSet::new());
-        successor_fn.push(HashSet::new());
-        predecessor_fn.push(HashSet::new());
-    }
+    let mut successor_fn: Vec<HashSet<usize>> = vec![HashSet::new(); bl_size];
+    let mut predecessor_fn: Vec<HashSet<usize>> = vec![HashSet::new(); bl_size];
 
     let mut next_bls: VecDeque<usize> = VecDeque::new();
     let _ = std::mem::replace(&mut visited[entry_bl], true);
@@ -478,7 +478,7 @@ fn construct_flow_graph(
         // Process RP block
         if rp_slot != 0 {
             (successor, rp_successor, successor_fn, visited, next_bls) = 
-                flow_graph_transition::<true>(&cur_bl, &NextBlock::Label(rp_slot), rp_slot, successor, rp_successor, successor_fn, visited, next_bls);
+                flow_graph_transition::<true>(cur_bl, &NextBlock::Label(rp_slot), rp_slot, successor, rp_successor, successor_fn, visited, next_bls);
         }
 
         // Append everything in the terminator of cur_bl to next_bls
@@ -488,7 +488,7 @@ fn construct_flow_graph(
                 let branches = bl_trans_find_val(&e);
                 for b in &branches {
                     (successor, rp_successor, successor_fn, visited, next_bls) = 
-                        flow_graph_transition::<false>(&cur_bl, b, rp_slot, successor, rp_successor, successor_fn, visited, next_bls);
+                        flow_graph_transition::<false>(cur_bl, b, rp_slot, successor, rp_successor, successor_fn, visited, next_bls);
                 }
                 // if %RP is set, the next block must be a function entrance
                 if rp_slot != 0 {
@@ -524,7 +524,7 @@ fn construct_flow_graph(
             predecessor_fn[*j].insert(i);
         }
     }
-    return (successor, predecessor, exit_bls, entry_bl_fn, successor_fn, predecessor_fn, exit_bls_fn);
+    return (successor, predecessor, exit_bls, entry_bl_fn, successor_fn, predecessor_fn, exit_bls_fn, rp_successor);
 }
 
 // Given CFG, compute the upper bound on number of executions of each block within the program
@@ -654,6 +654,11 @@ fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
         Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
     }
 }
+
+// Constant propagation
+// Do not remove any variable definition statement & do not replace any memory operations
+// These will be handled by liveness analysis & PMR
+// Question: what should we do to scope change if the variable in the next scope no longer exist? This could be a more general question.
 
 // Standard Liveness Analysis
 // We do not analyze the liveness of %BP, %SP, %RP, %RET, or %ARG
@@ -1645,16 +1650,13 @@ fn var_name_to_reg_id_expr<const MODE: usize>(
 // var_to_reg takes in two modes:
 //  MODE = 0 - Verification Mode, output registers are witnesses and checked using assertion
 //  MODE = 1 - Compute Mode, output registers are assigned and not checked
-fn var_to_reg<const MODE: usize>(
-    mut bls: Vec<Block>,
+fn var_to_reg<'a, const MODE: usize>(
+    mut bls: Vec<Block<'a>>,
+    predecessor: &Vec<HashSet<usize>>,
+    successor: &Vec<HashSet<usize>>,
     entry_bl: usize,
     inputs: Vec<(String, Ty)>
-) -> (Vec<Block>, Vec<HashMap<String, usize>>, usize, HashMap<String, usize>, usize, Vec<(Vec<usize>, Vec<usize>)>) {
-    // Construct a new CFG for the program
-    // Note that this is the CFG after DBE, and might be different from the previous CFG
-    let (successor, predecessor, _, _, _, _, _) = 
-        construct_flow_graph(&bls, entry_bl);
-    
+) -> (Vec<Block<'a>>, Vec<HashMap<String, usize>>, usize, HashMap<String, usize>, usize, Vec<(Vec<usize>, Vec<usize>)>) {    
     // reg_map is consisted of two Var -> Reg Maps: TRANSITION_MAP_LIST & WITNESS_MAP
     // TRANSITION_MAP_LIST is a list of maps corresponding to each transition state
     // Reserve registers 0 - 5 for %V, %NB, %RP, %SP, %BP, and %RET
@@ -2048,4 +2050,131 @@ fn var_to_reg<const MODE: usize>(
     }
     let witness_size = witness_map.len();
     (bls, transition_map_list, max_io_size, witness_map, witness_size, live_io)
+}
+
+// Given a CFG, recursively remove all back-edges
+fn back_edge_removal(
+    cur_bl: usize,
+    mut predecessor: Vec<HashSet<usize>>,
+    mut successor: Vec<HashSet<usize>>,
+    mut visited_bls: HashSet<usize>,
+) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, HashSet<usize>) {
+    visited_bls.insert(cur_bl);
+
+    // Remove all backedges
+    for succ in successor[cur_bl].clone() {
+        // if succ has been visited, it is a backedge, remove it
+        if visited_bls.contains(&succ) {
+            successor[cur_bl].remove(&succ);
+            predecessor[succ].remove(&cur_bl);
+        }
+    }
+
+    // Recursively search through children
+    for succ in successor[cur_bl].clone() {
+        (predecessor, successor, visited_bls) = back_edge_removal(succ, predecessor, successor, visited_bls);
+    }
+
+    visited_bls.remove(&cur_bl);
+    (predecessor, successor, visited_bls)
+}
+
+// Compute # of memory accesses for each block
+// Then bound the total # of block executions & the total # of memory accesses
+// We do so through a DP algorithm starting from the exit block
+fn get_blocks_meta_info(
+    bls: &Vec<Block>,
+    predecessor: &Vec<HashSet<usize>>,
+    successor: &Vec<HashSet<usize>>,
+    entry_bl: usize,
+    exit_bls: &HashSet<usize>,
+) -> (usize, usize, Vec<usize>) {
+    // Compute the number of memory accesses 
+    let mut num_mem_accesses = Vec::new();
+    for b in bls {
+        let mut mem_accesses_count = 0;
+        for i in &b.instructions {
+            match i {
+                BlockContent::MemPop(_) => {
+                    mem_accesses_count += 1;
+                }
+                BlockContent::MemPush(_) => {
+                    mem_accesses_count += 1;
+                }
+                _ => {}
+            }
+        }
+        num_mem_accesses.push(mem_accesses_count);
+    }
+
+    // Eliminate all back-edges
+    let (predecessor, successor, _) = back_edge_removal(entry_bl, predecessor.clone(), successor.clone(), HashSet::new());
+
+    // TODO: Still need to deal with function calls
+
+    // A DP algorithm to find total_num_proofs_bound & total_num_mem_accesses_bound
+    // For each block, record:8
+    // 1. on the execution path that starts at this block and contains to the most number of executions of blocks, what blocks are visited?
+    // 2. what is the total number of executions on that path?
+    // 3. repeat 1 and 2 for memory
+    let mut total_num_proofs = vec![0; bls.len()];
+    let mut total_num_proofs_path = vec![HashSet::new(); bls.len()];
+    let mut total_num_mem_accesses = vec![0; bls.len()];
+    let mut total_num_mem_accesses_path = vec![HashSet::new(); bls.len()];
+    // Start from exit block
+    let mut next_bls: VecDeque<usize> = VecDeque::new();
+    for eb in exit_bls {
+        next_bls.push_back(*eb);
+    }
+    while !next_bls.is_empty() {
+        let cur_bl = next_bls.pop_front().unwrap();
+ 
+        let mut max_successor_num_proofs = bls[cur_bl].prog_num_exec_bound;
+        let mut max_successor_num_proofs_path = HashSet::new();
+        max_successor_num_proofs_path.insert(cur_bl);
+        let mut max_successor_num_mem_accesses = bls[cur_bl].prog_num_exec_bound * num_mem_accesses[cur_bl];
+        let mut max_successor_num_mem_accesses_path = HashSet::new();
+        max_successor_num_mem_accesses_path.insert(cur_bl);
+        for succ in &successor[cur_bl] {
+            // num_proofs
+            let mut succ_num_proofs = total_num_proofs[*succ];
+            let mut succ_num_proofs_path = total_num_proofs_path[*succ].clone();
+            if !succ_num_proofs_path.contains(&cur_bl) {
+                succ_num_proofs += bls[cur_bl].prog_num_exec_bound;
+                succ_num_proofs_path.insert(cur_bl);
+            }
+            if max_successor_num_proofs < succ_num_proofs {
+                max_successor_num_proofs = succ_num_proofs;
+                max_successor_num_proofs_path = succ_num_proofs_path;
+            }
+            // num_mem_accesses
+            let mut succ_num_mem_accesses = total_num_mem_accesses[*succ];
+            let mut succ_num_mem_accesses_path = total_num_mem_accesses_path[*succ].clone();
+            if !succ_num_mem_accesses_path.contains(&cur_bl) {
+                succ_num_mem_accesses += bls[cur_bl].prog_num_exec_bound * num_mem_accesses[cur_bl];
+                succ_num_mem_accesses_path.insert(cur_bl);
+            }
+            if max_successor_num_mem_accesses < succ_num_mem_accesses {
+                max_successor_num_mem_accesses = succ_num_mem_accesses;
+                max_successor_num_mem_accesses_path = succ_num_mem_accesses_path;
+            }
+        }
+
+        // If either total_num_proofs or total_num_mem_accesses changes, need to reprocess predecessor except itself
+        if max_successor_num_proofs != total_num_proofs[cur_bl] || max_successor_num_mem_accesses != total_num_mem_accesses[cur_bl] {
+            for pred in &predecessor[cur_bl] {
+                if *pred != cur_bl && !next_bls.contains(pred) { next_bls.push_back(*pred); }
+            }
+        }
+        if max_successor_num_proofs != total_num_proofs[cur_bl] {
+            total_num_proofs[cur_bl] = max_successor_num_proofs;
+            total_num_proofs_path[cur_bl] = max_successor_num_proofs_path;
+        }
+        if max_successor_num_mem_accesses != total_num_mem_accesses[cur_bl] {
+            total_num_mem_accesses[cur_bl] = max_successor_num_mem_accesses;
+            total_num_mem_accesses_path[cur_bl] = max_successor_num_mem_accesses_path;
+        }
+    }
+
+    (total_num_proofs[entry_bl], total_num_mem_accesses[entry_bl], num_mem_accesses)
 }

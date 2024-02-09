@@ -47,7 +47,7 @@ pub struct ZSharpFE;
 
 impl FrontEnd for ZSharpFE {
     type Inputs<'ast> = Inputs;
-    fn gen(i: Inputs) -> (Computations, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<usize>, Vec<usize>) {
+    fn gen(i: Inputs) -> (Computations, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<usize>, usize, usize) {
         debug!(
             "Starting Z# front-end, field: {}",
             Sort::Field(cfg().field().clone())
@@ -66,18 +66,18 @@ impl FrontEnd for ZSharpFE {
             println!("");
         }
         let (blks, entry_bl) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs.clone());
-        let (blks, _, io_size, _, live_io_list) = blocks_optimization::process_block::<VERBOSE, 0>(blks, entry_bl, inputs);
+        let (blks, _, io_size, _, live_io_list, total_num_proofs_bound, total_num_mem_accesses_bound, num_mem_accesses) = 
+            blocks_optimization::process_block::<VERBOSE, 0>(blks, entry_bl, inputs);
         // NOTE: The input of block 0 includes %BN, which should be removed when reasoning about function input
         let func_input_width = blks[0].get_num_inputs() - 1;
         println!("\n\n--\nCirc IR:");
-        let num_mem_accesses = g.bls_to_circ(&blks);
-        let num_exec_bound = blks.iter().map(|i| i.prog_num_exec_bound).collect();
+        g.bls_to_circ(&blks);
 
         g.generics_stack_pop();
         g.file_stack_pop();
         let mut cs = Computations::new();
         cs.comps = g.into_circify().cir_ctx().cs.borrow_mut().clone();
-        (cs, func_input_width, io_size, live_io_list, num_mem_accesses, num_exec_bound)
+        (cs, func_input_width, io_size, live_io_list, num_mem_accesses, total_num_proofs_bound, total_num_mem_accesses_bound)
     }
 }
 
@@ -99,7 +99,7 @@ impl ZSharpFE {
         
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
         let (blks, entry_bl) = blocks_optimization::optimize_block::<VERBOSE>(blks, entry_bl, inputs.clone());
-        let (blks, entry_bl, io_size, _, _) = blocks_optimization::process_block::<VERBOSE, 1>(blks, entry_bl, inputs);
+        let (blks, entry_bl, io_size, _, _, _, _, _) = blocks_optimization::process_block::<VERBOSE, 1>(blks, entry_bl, inputs);
         println!("\n\n--\nInterpretation:");
         let (ret, _, prog_reg_in, bl_exec_state, mem_list) = g.bl_eval_entry_fn::<VERBOSE>(entry_bl, entry_regs, &blks, io_size)
         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
@@ -1336,7 +1336,7 @@ impl<'ast> ZGen<'ast> {
                     _ => {
                         panic!("Conversion of conditional statement to IR not implemented!")
                     }
-                }
+                };
                 Ok(())
             }
             ast::Statement::Definition(d) => {

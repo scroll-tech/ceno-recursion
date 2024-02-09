@@ -23,7 +23,7 @@ pub trait FrontEnd {
     type Inputs<'ast>;
 
     /// Compile the program to constraints
-    fn gen<'ast>(i: Self::Inputs<'ast>) -> (Computations, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<usize>, Vec<usize>);
+    fn gen<'ast>(i: Self::Inputs<'ast>) -> (Computations, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<usize>, usize, usize);
 }
 
 #[derive(Clone, Copy, Debug)]

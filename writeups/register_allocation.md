@@ -17,4 +17,21 @@ Disregarding spilling, the minimum number of registers we need is the maximum nu
 
 However, what needs to be considered is the block transition. If block 1 precedes block 2, then the Var -> Reg Map needs to be the same for the OUTPUT 1 and the INPUT 2. If block 3 also precedes block 2, then the Var -> Reg Map of OUTPUT 3 should also match OUTPUT 1. We call one such set of input / output states a _transition state_. The strategy is thus to define one Var -> Reg Map per transition state, as well as program input / output.
 
-## The Case to Preserve Continuation Passing
+## From Continuation Passing to Revserse Spilling
+
+Due to the write-once nature of memory, spilling becomes a difficult task. This is because the write-once restriction forces memory to operate like a stack simulation (see stack_simulation.md), with explicit stack and base pointer. To illustrate the problem, consider a control-flow sequence of block A -> B -> C -> D. Suppose that variable X is used in A and C, while variable X is used in B and D, one cannot spill X at A and load at C, while simultaneously spill Y at B and load Y at D, since this breaks the stack simulation. As a result, scope change + continaution passing should remain the main method to limit the number of variables in the transition state.
+
+Instead of reasoning about spilling, we reason about **reverse spilling**, where we attempt to avoid continuation passing by renaming variables. The main motivation is that since the I/O width is set, any transition state that does not fully utilize the width is wasted. In the case that the width is unfulfilled, we should pass variables in previous scopes to reduce memory accesses.
+
+### A general framework
+
+To facilitate reverse spilling, we propose that stack operations should only be added at the end of optimization, not at the beginning. In particular,
+* During block generation, variables of **every scope of every function** should be assigned a different suffix. This includes different scopes that have the same depth.
+* During initial optimization, we add every live variable of every scope to the input / output of each block.
+* Once liveness analysis / dead block elmination concludes, infer the minimum io width: i.e. the number of variables in the transition state if all older scopes of a variable is spilled.
+* Next for each block whose input / output size exceeds io width, decide what variable of the older scope to spill, based on:
+  * If we want to spill a variable, always spill the one with the oldest scope
+  * If we want to choose between variables, always spill the one that is used across most block input / outputs
+  * Note: two variables are considered the same across multiple blocks if:
+    1. They share the same scope number
+    2. The same variable of the next scope also share the same scope number

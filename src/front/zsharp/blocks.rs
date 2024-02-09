@@ -152,9 +152,6 @@ pub struct Block<'ast> {
     pub terminator: BlockTerminator<'ast>,
     // The upper bound on the number of times a block is executed within one execution of the function
     pub func_num_exec_bound: usize,
-    // The upper bound on the number of times a block is executed within the entire program, obtained during optimization
-    pub prog_num_exec_bound: usize
-
 }
 
 #[derive(Clone)]
@@ -189,7 +186,6 @@ impl<'ast> Block<'ast> {
             instructions: Vec::new(),
             terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1))),
             func_num_exec_bound: num_exec_bound,
-            prog_num_exec_bound: num_exec_bound
         };
         input
     }
@@ -202,7 +198,6 @@ impl<'ast> Block<'ast> {
             instructions: old_bl.instructions.clone(),
             terminator: old_bl.terminator.clone(),
             func_num_exec_bound: old_bl.func_num_exec_bound,
-            prog_num_exec_bound: old_bl.prog_num_exec_bound,
         };
         input
     }
@@ -220,7 +215,7 @@ impl<'ast> Block<'ast> {
 
     pub fn pretty(&self) {
         println!("\nBlock {}:", self.name);
-        println!("Execution Bound: func - {}, prog - {}", self.func_num_exec_bound, self.prog_num_exec_bound);
+        println!("Execution Bound: {}", self.func_num_exec_bound);
         println!("Inputs:");
 
         for i in &self.inputs {

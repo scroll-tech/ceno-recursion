@@ -25,21 +25,27 @@ We run a DP algorithm that starts from the program exit blocks. For every block 
 At a glance, it seems like this approach solves the problem: for every branching, the block preceeds the if / else statement can only pick either the successor representing the if branch or the successor representing the else branch. However, this observation no longer hold when the branching statement is present inside a loop. The branching can go either way for different iterations, but what we really want is for every iteration to always pick the more "expensive" branch.
 
 ## Approach #3
-It seems clear from the shortcoming of approach #2 that we should start by thinking about loops. To do so, we employ a strategy similar to finding the strongest connected components:
-* Start with the most inner loop, bound the number of block executions that can occur in that loop
-* Collapse the loop into a single node, set the number of block executions to the bound we derive for the loop
-* Process the new most inner loop, continue the process until there are no loops left
-* Finally, perform Naive Approach #2 on the loopless CFG
+It seems clear from the shortcoming of approach #2 that we should start by thinking about loops. The easiest way to deal with it is surprisingly, ignore it. The reason is that, when bounding the total number of execution of a block within a function, the number of iterations is already taken into consideration, so there is no need for loops. This derives the following strategy:
+* Eliminate all loops of the CFG
+* Perform Naive Approach #2 on the loopless CFG
+> **Note**: one might be tempted to run DFS on the CFG to remove backedges. However, this is both incorrect and unnecessary. Incorrect because under different traverse rules, backedges might not be equal to the returning edge in a loop. Unnecessary because the way blocks are generated ensures that returning edge in a loop always start from a block with a higher label to one with a lower label.
+
 Wait, but what about function calls? Recall that how we bound the number of executions of each block is: `number of executions within the function * number of executions of the function`. However, number of executions of the function itself can be subject to the branching problem. Furthermore, even the most precise function execution bound is not good enough. To illustrate, consider the following case:
-* There are two functions A and B. In the if branch, A is executed 3 times while B is executed 5 times. In the else branch, A is executed 5 times and B is executed 3 times.
-Both A and B have execution bound as 5, but in no case would both functions be executed 5 times. Note that this is not an issue for individual blocks, because the lack of `jump` statements ensures that no block will be executed in both an if branch and an else branch.
+> There are two functions A and B. In the if branch, A is executed 3 times while B is executed 5 times. In the else branch, A is executed 5 times and B is executed 3 times.  
+Both A and B have execution bound as 5, but in no case would both functions be executed 5 times.
+
+Note that this is not an issue for individual blocks, because the lack of `jump` statements ensures that no block will be executed in both an if branch and an else branch.
 
 ## Approach #4
 To take function calls into consideration, we revise the above approach:
-* Sort the functions by topological order
-* Starting with the function that does not call any other functions:
-  * Run the Approach #3 to obtain the total number of block executions during **ONE execution** that function
-  * Collapse the function into one single node
-  * For each call of the function, replace the function with the collapsed node, set the number of block executions to be: `total number of block executions during that function * the number of times the caller is executed`
-* Continue the above function for the new functions that do not call any other functions
+* Differentiate between function call edges, function return edges, and normal transition edges
+* Similar as the DP algorithm described in Approach #3, start from the program exit block and process in reverse order:
+  * For every block, only record the maximum number of block executions until _the end of the function_
+  * For any caller block to another function, the maximum number of block execution `M_b` is given by  
+  `M_b = M_h * E_b + M_r`  
+  where `M_h` is the maximum number of block execution at the callee function header, `E_b` is the number of executions of the caller, and `M_r` is the maximum number of block execution at the return block of the function.
+* If a block is not in the main function, always keep process its predecessors. If a block is in the main function, only process its predecessors if values of the block have been changed.
 * Finally, obtain total number of proofs through the entry node.
+
+## Note:
+This still does not give us a 100% tight upperbound. The reason is that in a loop, a branch might never be taken by all iterations (e.g. condition on parity of the iteration counter).

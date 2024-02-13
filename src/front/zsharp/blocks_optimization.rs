@@ -93,6 +93,10 @@ fn print_bls(bls: &Vec<Block>, entry_bl: &usize) {
     }    
 }
 
+// --
+// BLOCK OPTIMIZATION
+// --
+
 // Returns: Blocks
 // Inputs are (variable, type) pairs
 pub fn optimize_block<const VERBOSE: bool>(
@@ -102,7 +106,7 @@ pub fn optimize_block<const VERBOSE: bool>(
 ) -> (Vec<Block>, usize) {
     println!("\n\n--\nOptimization:");
     // Construct CFG
-    let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn, _) = 
+    let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
         construct_flow_graph(&bls, entry_bl);
     if VERBOSE {
         print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
@@ -144,46 +148,6 @@ pub fn optimize_block<const VERBOSE: bool>(
         print_bls(&bls, &entry_bl);
     }
     (bls, entry_bl)
-}
-
-// Returns: Blocks, entry block, # of registers
-// Inputs are (variable, type) pairs
-//  MODE = 0 - Verification Mode, output registers are witnesses and checked using assertion
-//  MODE = 1 - Compute Mode, output registers are assigned and not checked
-pub fn process_block<const VERBOSE: bool, const MODE: usize>(
-    bls: Vec<Block>,
-    entry_bl: usize,
-    inputs: Vec<(String, Ty)>
-) -> (Vec<Block>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, usize, usize, Vec<usize>) {
-    println!("\n\n--\nPost-Processing:");
-    // Construct a new CFG for the program
-    // Note that this is the CFG after DBE, and might be different from the previous CFG
-    let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn, is_main) = construct_flow_graph(&bls, entry_bl);
-    if VERBOSE {
-        print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
-    }
-
-    // VtR
-    let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) = var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl, inputs);
-    if VERBOSE {
-        println!("\n\n--\nVar -> Reg:");
-        println!("Var -> IO map:");
-        for i in 0..transition_map_list.len() {
-            println!("i = {}: {:?}", i, transition_map_list[i]);
-        }
-        println!("Var -> Witness map: {:?}", witness_map);
-        println!("Live variables: ");
-        for i in 0..live_io.len() {
-            println!("  BLOCK {}: {:?}", i, live_io[i])
-        }
-    }
-
-    // Bound # of Proofs and # of memory accesses
-    let (total_num_proofs_bound, total_num_mem_accesses_bound, num_mem_accesses) =
-        get_blocks_meta_info(&bls, &predecessor, &successor, entry_bl, &exit_bls, &successor_fn, &predecessor_fn, &is_main);
-
-    print_bls(&bls, &entry_bl);
-    (bls, entry_bl, io_size, witness_size, live_io, total_num_proofs_bound, total_num_mem_accesses_bound, num_mem_accesses)
 }
 
 // If bc is a statement of form field %RP = val,
@@ -433,7 +397,7 @@ fn flow_graph_transition<const IS_RP: bool>(
 fn construct_flow_graph(
     bls: &Vec<Block>,
     entry_bl: usize
-) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, HashSet<usize>, HashSet<usize>, Vec<HashSet<usize>>, Vec<HashSet<usize>>, HashSet<usize>, Vec<bool>) {
+) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, HashSet<usize>, HashSet<usize>, Vec<HashSet<usize>>, Vec<HashSet<usize>>, HashSet<usize>) {
     let bl_size = bls.len();
     
     // list of all blocks that ends with ProgTerm
@@ -526,9 +490,7 @@ fn construct_flow_graph(
             predecessor_fn[*j].insert(i);
         }
     }
-    // If rp_successor is unset, the block is part of the main function
-    let is_main = rp_successor.iter().map(|i| i.len() == 0).collect();
-    return (successor, predecessor, exit_bls, entry_bl_fn, successor_fn, predecessor_fn, exit_bls_fn, is_main);
+    return (successor, predecessor, exit_bls, entry_bl_fn, successor_fn, predecessor_fn, exit_bls_fn);
 }
 
 // Given an expression, find all variables it references
@@ -623,6 +585,7 @@ fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
 // Do not remove any variable definition statement & do not replace any memory operations
 // These will be handled by liveness analysis & PMR
 // Question: what should we do to scope change if the variable in the next scope no longer exist? This could be a more general question.
+fn _constant_propagation() {}
 
 // Standard Liveness Analysis
 // We do not analyze the liveness of %BP, %SP, %RP, %RET, or %ARG
@@ -1470,6 +1433,223 @@ fn set_input_output<'bl>(
     return bls;
 }
 
+// --
+// BLOCK PREPROCESSING
+// --
+
+// Returns: Blocks, entry block, # of registers
+// Inputs are (variable, type) pairs
+//  MODE = 0 - Verification Mode, output registers are witnesses and checked using assertion
+//  MODE = 1 - Compute Mode, output registers are assigned and not checked
+pub fn process_block<const VERBOSE: bool, const MODE: usize>(
+    bls: Vec<Block>,
+    entry_bl: usize,
+    inputs: Vec<(String, Ty)>
+) -> (Vec<Block>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, usize, usize, Vec<usize>) {
+    println!("\n\n--\nPost-Processing:");
+    // Construct a new CFG for the program
+    // Note that this is the CFG after DBE, and might be different from the previous CFG
+    let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = construct_flow_graph(&bls, entry_bl);
+    if VERBOSE {
+        print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+    }
+
+    // Perform topological sort on functions
+    let sorted_fns = fn_top_sort(&bls, &successor, &successor_fn);
+    // Convert vector into map from fn_name -> index in sorted_fns
+    let mut fn_top_map = HashMap::new();
+    for i in 0..sorted_fns.len() {
+        fn_top_map.insert(sorted_fns[i].to_string(), i);
+    }
+    if VERBOSE {
+        print!("FN TOP SORT: {}", sorted_fns[0]);
+        for i in 1..sorted_fns.len() {
+            print!(" -> {}", sorted_fns[i]);
+        }
+        println!();
+    }
+    
+    // Obtain io_size = maximum # of variables in a transition state that belong to the current function & have different names
+    // Note that this value is not the final io_size as it does not include any reserved registers
+    let tmp_io_size = get_max_io_size(&bls, &inputs);
+    // Perform spilling
+    let bls = resolve_spilling(bls, tmp_io_size, &fn_top_map);
+
+    // VtR
+    let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) = var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl, inputs);
+    if VERBOSE {
+        println!("\n\n--\nVar -> Reg:");
+        println!("Var -> IO map:");
+        for i in 0..transition_map_list.len() {
+            println!("i = {}: {:?}", i, transition_map_list[i]);
+        }
+        println!("Var -> Witness map: {:?}", witness_map);
+        println!("Live variables: ");
+        for i in 0..live_io.len() {
+            println!("  BLOCK {}: {:?}", i, live_io[i])
+        }
+    }
+
+    // Bound # of Proofs and # of memory accesses
+    let (total_num_proofs_bound, total_num_mem_accesses_bound, num_mem_accesses) =
+        get_blocks_meta_info(&bls, &predecessor, &successor, entry_bl, &exit_bls, &successor_fn, &predecessor_fn);
+
+    print_bls(&bls, &entry_bl);
+    (bls, entry_bl, io_size, witness_size, live_io, total_num_proofs_bound, total_num_mem_accesses_bound, num_mem_accesses)
+}
+
+// Sort functions in topological order
+fn top_sort_helper(
+    cur_name: &str,
+    call_graph: &HashMap<String, HashSet<String>>,
+    mut visited: HashMap<String, bool>,
+    mut chain: Vec<String>
+) -> (Vec<String>, HashMap<String, bool>) {
+    visited.insert(cur_name.to_string(), true);
+    for s in call_graph.get(cur_name).unwrap() {
+        if !visited.get(s).unwrap() {
+            (chain, visited) = top_sort_helper(s, call_graph, visited, chain);
+        }
+    }
+    chain.insert(0, cur_name.to_string());
+    return (chain, visited);
+}
+
+fn fn_top_sort(
+    bls: &Vec<Block>,
+    successor: &Vec<HashSet<usize>>,
+    successor_fn: &Vec<HashSet<usize>>,
+) -> Vec<String> {
+    // First construct function call graph
+    let mut fn_call_graph: HashMap<String, HashSet<String>> = HashMap::new();
+    // Initialize every function to NOT VISITED
+    let mut visited = HashMap::new();
+    fn_call_graph.insert("main".to_string(), HashSet::new());
+    for cur_bl in 0..bls.len() {
+        let b = &bls[cur_bl];
+        let caller_name = b.fn_name.to_string();
+        if !visited.contains_key(&caller_name) {
+            visited.insert(caller_name.to_string(), false);
+            fn_call_graph.insert(caller_name.to_string(), HashSet::new());
+        }
+        // if cur_bl is a caller of a function, add the call to call graph
+        if successor_fn[cur_bl].len() != 0 && successor_fn[cur_bl] != successor[cur_bl] {
+            assert_eq!(successor[cur_bl].len(), 1);
+            assert_eq!(successor_fn[cur_bl].len(), 1);
+            let callee_name = bls[Vec::from_iter(successor[cur_bl].clone())[0]].fn_name.to_string();
+
+            let mut callee_list = fn_call_graph.get(&caller_name).unwrap().clone();
+            callee_list.insert(callee_name);
+            fn_call_graph.insert(caller_name, callee_list);
+        }
+    }
+    // Next perform top sort using call graph
+    top_sort_helper("main", &fn_call_graph, visited, Vec::new()).0
+}
+
+// Given var = <name>:<func_name>@<scope>, return (name, func_name, scope)
+fn strip_var(var: String) -> (String, String, usize) {
+    let var_segs = var.split(':').collect::<Vec<&str>>();
+    let var_name = var_segs[0].to_string();
+    let var_segs = var_segs[1].split('@').collect::<Vec<&str>>();
+    let func_name = var_segs[0].to_string();
+    let scope: usize = var_segs[1].to_string().parse().unwrap();
+
+    (var_name, func_name, scope)
+}
+
+// Obtain io_size = maximum # of variables in a transition state that belong to the current function & have different names
+fn get_max_io_size(bls: &Vec<Block>, inputs: &Vec<(String, Ty)>) -> usize {
+    let mut io_size = inputs.len();
+    // Process block outputs
+    for b in bls {
+        let mut essential_vars = HashSet::new();
+        for (v, _) in &b.outputs {
+            // Skip all reserved registers
+            if v.chars().next().unwrap() != '%' {
+                let (var_name, func_name, _) = strip_var(v.clone());
+                if func_name == b.fn_name {
+                    essential_vars.insert(var_name);
+                }
+            }
+        }
+        io_size = max(io_size, essential_vars.len());
+    }
+    io_size
+}
+
+// Given a program state, return candidate variables to be spilled
+// Variables are of the lowest scope of the front most function in top sort
+// Returns the function, the scope, and all potential variables
+// Assume there must be some candidate that can be spilled
+fn get_spill_candidates(
+    inputs: &Vec<String>, 
+    fn_top_map: &HashMap<String, usize>
+) -> (String, usize, HashSet<String>) {
+    assert!(inputs.len() > 0);
+    let mut var_name_set = HashSet::new();
+    let (tmp_name, mut min_fn, mut min_scope) = strip_var(inputs[0].to_string());
+    var_name_set.insert(tmp_name);
+    for i in &inputs[1..] {
+        let (tmp_name, tmp_fn, tmp_scope) = strip_var(i.to_string());
+        // var is in the lowest scope
+        if tmp_fn == min_fn && tmp_scope == min_scope {
+            var_name_set.insert(tmp_name);
+        }
+        // var has lower scope than min
+        else if fn_top_map.get(&tmp_fn).unwrap() < fn_top_map.get(&tmp_fn).unwrap() ||
+        tmp_fn == min_fn && tmp_scope < min_scope {
+            min_fn = tmp_fn;
+            min_scope = tmp_scope;
+            var_name_set = HashSet::new();
+            var_name_set.insert(tmp_name);
+        }
+    }
+    (min_fn, min_scope, var_name_set)
+}
+
+// Perform spilling so all input / output state width <= io_size
+fn resolve_spilling<'ast>(
+    bls: Vec<Block<'ast>>,
+    io_size: usize,
+    fn_top_map: &HashMap<String, usize>
+) -> Vec<Block<'ast>> {
+    // Spill if NUMBER OF NON_RESERVED REGISTER exceeds tmp_io_size
+    // Next_spill = X indicates that the input width of block X exceeds io_size.
+    // Initialize to an arbitrary non-zero value, repeat until next_spill is 0
+    let mut next_spill = 1;
+    // How many variables do we need to spill?
+    let mut spill_size = 0;
+    while next_spill != 0 {
+        // Find the next spill
+        next_spill = 0;
+        for i in 1..bls.len() {
+            let b = &bls[i];
+            // Compute the number of inputs excluding the reserved registers
+            let mut input_count = 0;
+            for (v, _) in &b.inputs {
+                if v.chars().next().unwrap() != '%' {
+                    input_count += 1;
+                }
+            }
+            if input_count > io_size {
+                spill_size = input_count - io_size;
+                next_spill = i;
+                break;
+            }
+        }
+        if next_spill == 0 {
+            break;
+        }
+        let (spill_fn, spill_scope, spill_vars) = 
+            get_spill_candidates(&bls[next_spill].inputs.iter().map(|i| i.0.clone()).collect(), fn_top_map);
+        println!("BLOCK TO SPILL: {}, SIZE: {}", next_spill, spill_size);
+        println!("CANDIDATES: fn = {}, scope = {}, vars = {:?}", spill_fn, spill_scope, spill_vars);
+        break;
+    }
+    bls
+}
+
 // Turn all variables in an expression to a register reference
 // Whenever we meet a variable X, if reg_map contains X and scope_map[X] = Y, update X to %Y
 // otherwise, update X to %<reg_size> and add X to reg_map
@@ -1568,14 +1748,11 @@ fn var_to_reg_id_expr<'ast>(
 
 // MODE: 0 - WITNESS, 1 - INPUT, 2 - OUTPUT
 fn var_name_to_reg_id_expr<const MODE: usize>(
-    str_name: String,
+    var_name: String,
     mut reg_map: HashMap<String, usize>,
 ) -> (String, HashMap<String, usize>, usize) {
     let reg_size = reg_map.len();
     
-    // Strip the scoping "@x" from the variable name
-    let var_name = str_name.split('@').collect::<Vec<&str>>()[0].to_string();
-
     if !reg_map.contains_key(&var_name) {
         reg_map.insert(var_name.clone(), reg_size);
     }
@@ -2025,9 +2202,8 @@ fn get_blocks_meta_info(
     successor: &Vec<HashSet<usize>>,
     entry_bl: usize,
     exit_bls: &HashSet<usize>,
-    successor_fn: &Vec<HashSet<usize>>, 
+    successor_fn: &Vec<HashSet<usize>>,
     predecessor_fn: &Vec<HashSet<usize>>,
-    is_main: &Vec<bool>,
 ) -> (usize, usize, Vec<usize>) {
     // Compute the number of memory accesses 
     let mut num_mem_accesses = Vec::new();
@@ -2079,8 +2255,8 @@ fn get_blocks_meta_info(
     while !next_bls.is_empty() {
         let cur_bl = next_bls.pop_front().unwrap();
 
-        let mut max_successor_num_proofs = bls[cur_bl].func_num_exec_bound;
-        let mut max_successor_num_mem_accesses = bls[cur_bl].func_num_exec_bound * num_mem_accesses[cur_bl];
+        let mut max_successor_num_proofs = bls[cur_bl].fn_num_exec_bound;
+        let mut max_successor_num_mem_accesses = bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
 
         // if cur_bl is the exit block of a function, do not reason about successors
         if successor_fn[cur_bl].len() == 0 {} 
@@ -2090,19 +2266,19 @@ fn get_blocks_meta_info(
             assert_eq!(successor_fn[cur_bl].len(), 1);
             let func_header = Vec::from_iter(successor[cur_bl].clone())[0];
             let return_bl = Vec::from_iter(successor_fn[cur_bl].clone())[0];
-            max_successor_num_proofs += bls[cur_bl].func_num_exec_bound * total_num_proofs[func_header] + total_num_proofs[return_bl];
-            max_successor_num_mem_accesses += bls[cur_bl].func_num_exec_bound * total_num_mem_accesses[func_header] + total_num_mem_accesses[return_bl];
+            max_successor_num_proofs += bls[cur_bl].fn_num_exec_bound * total_num_proofs[func_header] + total_num_proofs[return_bl];
+            max_successor_num_mem_accesses += bls[cur_bl].fn_num_exec_bound * total_num_mem_accesses[func_header] + total_num_mem_accesses[return_bl];
         }
         // otherwise, process all the successors
         else {
             for succ in &successor_fn_no_loop[cur_bl] {
                 // num_proofs
-                let succ_num_proofs = total_num_proofs[*succ] + bls[cur_bl].func_num_exec_bound;
+                let succ_num_proofs = total_num_proofs[*succ] + bls[cur_bl].fn_num_exec_bound;
                 if max_successor_num_proofs < succ_num_proofs {
                     max_successor_num_proofs = succ_num_proofs;
                 }
                 // num_mem_accesses
-                let succ_num_mem_accesses = total_num_mem_accesses[*succ] + bls[cur_bl].func_num_exec_bound * num_mem_accesses[cur_bl];
+                let succ_num_mem_accesses = total_num_mem_accesses[*succ] + bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
                 if max_successor_num_mem_accesses < succ_num_mem_accesses {
                     max_successor_num_mem_accesses = succ_num_mem_accesses;
                 }
@@ -2110,7 +2286,7 @@ fn get_blocks_meta_info(
         }
 
         // If any value changes or block is not in the main function, process the predecessors
-        if !is_main[cur_bl] || max_successor_num_proofs != total_num_proofs[cur_bl] || max_successor_num_mem_accesses != total_num_mem_accesses[cur_bl] {
+        if bls[cur_bl].fn_name != "main".to_string() || max_successor_num_proofs != total_num_proofs[cur_bl] || max_successor_num_mem_accesses != total_num_mem_accesses[cur_bl] {
             // If head of a function, process all callers
             if predecessor_fn[cur_bl].len() == 0 {
                 for pred in &predecessor[cur_bl] {

@@ -25,13 +25,12 @@ Instead of reasoning about spilling, we reason about **reverse spilling**, where
 
 ### A general framework
 
-To facilitate reverse spilling, we propose that stack operations should only be added at the end of optimization, not at the beginning. In particular,
-* During block generation, variables of **every scope of every function** should be assigned a different suffix. This includes different scopes that have the same depth.
+To facilitate reverse spilling, we propose that stack operations should only be added at the end of optimization, not at the beginning. In particular
+* Every variable should be called `<name>:<func_name>@<scope>`, where `<func_name>` is the name of the function and `<scope>` is the depth of the current scope.
 * During initial optimization, we add every live variable of every scope to the input / output of each block.
 * Once liveness analysis / dead block elmination concludes, infer the minimum io width: i.e. the number of variables in the transition state if all older scopes of a variable is spilled.
+* Before starting the spilling process, perform a topological sort on all functions.
 * Next for each block whose input / output size exceeds io width, decide what variable of the older scope to spill, based on:
-  * If we want to spill a variable, always spill the one with the oldest scope
-  * If we want to choose between variables, always spill the one that is used across most block input / outputs
-  * Note: two variables are considered the same across multiple blocks if:
-    1. They share the same scope number
-    2. The same variable of the next scope also share the same scope number
+  * Always spill on a variable of the oldest scope of the front most function by top sort
+  * For tie-breaker, spill the variable with the longest gap of usage
+  * For function calls, still need to spill %RP and all %RETX

@@ -1,5 +1,4 @@
-// TODO: Program broke down when there is a dead program parameter
-// TODO: CirC sorts %i10 before %i1, also needs to do the same for mem
+// TODO: Might want to simplify Liveness Analysis & PMR now that scope changes are handled in optimization
 
 /*
 use bellman::gadgets::test::TestConstraintSystem;

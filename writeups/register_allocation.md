@@ -30,7 +30,18 @@ To facilitate reverse spilling, we propose that stack operations should only be 
 * During initial optimization, we add every live variable of every scope to the input / output of each block.
 * Once liveness analysis / dead block elmination concludes, infer the minimum io width: i.e. the number of variables in the transition state if all older scopes of a variable is spilled.
 * Before starting the spilling process, perform a topological sort on all functions.
-* Next for each block whose input / output size exceeds io width, decide what variable of the older scope to spill, based on:
-  * Always spill on a variable of the oldest scope of the front most function by top sort
-  * For tie-breaker, spill the variable with the longest gap of usage
-  * For function calls, still need to spill %RP and all %RETX
+* Next for each block whose input / output size exceeds io width, find all **spill candidates**, i.e. variables that can be spilled
+* For each spill candidate:
+  * Traverse through CFG to find the first block(s) where the variable is no longer spillable, at the end of this block is where spill needs to occur.  
+  * Starting from the head block(s), traverse backward (including function calls) until the scope of he head block is popped out. The total number of blocks along the path(s) is the **spill gap**.
+* Starting from the candidate with the highest spill gap, repeat until io size matches io width:
+  * Append PUSH statement to the end of each head block, set up %BP and %SP if necessary.
+  * For every successor until the tail block, remove the candidate from input & output
+  * Insert POP statement at the end of the block(s) immediately before the tail block.
+* Perform one final analysis to add %BP and %SP to block i/o's
+
+## Note on Feb. 13
+The major challenge of the current approach is mainly on complexity & implementation. While io width and which registers to spill can be easily obtained, here are some of the issues that come up:
+1. It is not as intuitive to determine what is the variable with the longest gap of usage, especially when considering loops & function calls
+2. It is difficult to handle %BP
+3. Variable of other functions are hard to reason about. The same variable might be declared in different places across different scopes

@@ -1457,10 +1457,10 @@ pub fn process_block<const VERBOSE: bool, const MODE: usize>(
     // Perform topological sort on functions
     let sorted_fns = fn_top_sort(&bls, &successor, &successor_fn);
     // Convert vector into map from fn_name -> index in sorted_fns
-    let mut fn_top_map = HashMap::new();
-    for i in 0..sorted_fns.len() {
-        fn_top_map.insert(sorted_fns[i].to_string(), i);
-    }
+    // let mut fn_top_map = HashMap::new();
+    // for i in 0..sorted_fns.len() {
+        // fn_top_map.insert(sorted_fns[i].to_string(), i);
+    // }
     if VERBOSE {
         print!("FN TOP SORT: {}", sorted_fns[0]);
         for i in 1..sorted_fns.len() {
@@ -1469,11 +1469,13 @@ pub fn process_block<const VERBOSE: bool, const MODE: usize>(
         println!();
     }
     
+    /*
     // Obtain io_size = maximum # of variables in a transition state that belong to the current function & have different names
     // Note that this value is not the final io_size as it does not include any reserved registers
     let tmp_io_size = get_max_io_size(&bls, &inputs);
     // Perform spilling
-    let bls = resolve_spilling(bls, tmp_io_size, &fn_top_map);
+    let bls = resolve_spilling(bls, tmp_io_size);
+    */
 
     // VtR
     let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) = var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl, inputs);
@@ -1492,7 +1494,7 @@ pub fn process_block<const VERBOSE: bool, const MODE: usize>(
 
     // Bound # of Proofs and # of memory accesses
     let (total_num_proofs_bound, total_num_mem_accesses_bound, num_mem_accesses) =
-        get_blocks_meta_info(&bls, &predecessor, &successor, entry_bl, &exit_bls, &successor_fn, &predecessor_fn);
+        get_blocks_meta_info(&bls, &successor, entry_bl, &exit_bls_fn, &successor_fn, &predecessor_fn, &sorted_fns);
 
     print_bls(&bls, &entry_bl);
     (bls, entry_bl, io_size, witness_size, live_io, total_num_proofs_bound, total_num_mem_accesses_bound, num_mem_accesses)
@@ -1547,15 +1549,51 @@ fn fn_top_sort(
     top_sort_helper("main", &fn_call_graph, visited, Vec::new()).0
 }
 
-// Given var = <name>:<func_name>@<scope>, return (name, func_name, scope)
-fn strip_var(var: String) -> (String, String, usize) {
-    let var_segs = var.split(':').collect::<Vec<&str>>();
-    let var_name = var_segs[0].to_string();
-    let var_segs = var_segs[1].split('@').collect::<Vec<&str>>();
-    let func_name = var_segs[0].to_string();
-    let scope: usize = var_segs[1].to_string().parse().unwrap();
+// Information regarding one variable for spilling
+#[derive(Clone, Debug, PartialEq)]
+struct VarSpillInfo {
+    var_name: String,
+    fn_name: String,
+    scope: usize
+}
 
-    (var_name, func_name, scope)
+impl VarSpillInfo {
+    fn new(var: String) -> VarSpillInfo {
+        let var_segs = var.split(':').collect::<Vec<&str>>();
+        let var_name = var_segs[0].to_string();
+        let var_segs = var_segs[1].split('@').collect::<Vec<&str>>();
+        let fn_name = var_segs[0].to_string();
+        let scope: usize = var_segs[1].to_string().parse().unwrap();
+    
+        VarSpillInfo {
+            var_name,
+            fn_name,
+            scope
+        }
+    }
+
+    // if a.below(b), then whenever b is in scope, a is not
+    fn below(&self, other: &VarSpillInfo) -> bool {
+        self.var_name == other.var_name && self.fn_name == other.fn_name && self.scope < other.scope
+    }
+
+    // determine whether self is in scope of a given program state
+    fn in_scope(&self, state: &Vec<String>, f_name: String) -> bool {
+        if self.fn_name != f_name { return false; }
+        let mut in_scope = false;
+        for s in state {
+            let s_spill = VarSpillInfo::new(s.clone());
+            // In scope only if it actually appears in the state
+            if *self == s_spill {
+                in_scope = true;
+            }
+            // And no variable of the same name has higher scope
+            if self.below(&VarSpillInfo::new(s.clone())) {
+                return false;
+            }
+        }
+        in_scope
+    }
 }
 
 // Obtain io_size = maximum # of variables in a transition state that belong to the current function & have different names
@@ -1567,9 +1605,9 @@ fn get_max_io_size(bls: &Vec<Block>, inputs: &Vec<(String, Ty)>) -> usize {
         for (v, _) in &b.outputs {
             // Skip all reserved registers
             if v.chars().next().unwrap() != '%' {
-                let (var_name, func_name, _) = strip_var(v.clone());
-                if func_name == b.fn_name {
-                    essential_vars.insert(var_name);
+                let v_spill = VarSpillInfo::new(v.clone());
+                if v_spill.fn_name == b.fn_name {
+                    essential_vars.insert(v_spill.var_name);
                 }
             }
         }
@@ -1578,41 +1616,27 @@ fn get_max_io_size(bls: &Vec<Block>, inputs: &Vec<(String, Ty)>) -> usize {
     io_size
 }
 
-// Given a program state, return candidate variables to be spilled
-// Variables are of the lowest scope of the front most function in top sort
-// Returns the function, the scope, and all potential variables
-// Assume there must be some candidate that can be spilled
+// Given a program INPUT state, return all variables that can be spilled
+// Note: In at least one of the blocks, all returned variables need to be spilled
 fn get_spill_candidates(
     inputs: &Vec<String>, 
-    fn_top_map: &HashMap<String, usize>
-) -> (String, usize, HashSet<String>) {
+    f_name: String,
+) -> Vec<VarSpillInfo> {
     assert!(inputs.len() > 0);
-    let mut var_name_set = HashSet::new();
-    let (tmp_name, mut min_fn, mut min_scope) = strip_var(inputs[0].to_string());
-    var_name_set.insert(tmp_name);
-    for i in &inputs[1..] {
-        let (tmp_name, tmp_fn, tmp_scope) = strip_var(i.to_string());
-        // var is in the lowest scope
-        if tmp_fn == min_fn && tmp_scope == min_scope {
-            var_name_set.insert(tmp_name);
-        }
-        // var has lower scope than min
-        else if fn_top_map.get(&tmp_fn).unwrap() < fn_top_map.get(&tmp_fn).unwrap() ||
-        tmp_fn == min_fn && tmp_scope < min_scope {
-            min_fn = tmp_fn;
-            min_scope = tmp_scope;
-            var_name_set = HashSet::new();
-            var_name_set.insert(tmp_name);
+    let mut spill_list = Vec::new();
+    for i in inputs {
+        let i_spill = VarSpillInfo::new(i.clone());
+        if !i_spill.in_scope(inputs, f_name.to_string()) {
+            spill_list.push(i_spill);
         }
     }
-    (min_fn, min_scope, var_name_set)
+    spill_list
 }
 
 // Perform spilling so all input / output state width <= io_size
 fn resolve_spilling<'ast>(
     bls: Vec<Block<'ast>>,
-    io_size: usize,
-    fn_top_map: &HashMap<String, usize>
+    io_size: usize
 ) -> Vec<Block<'ast>> {
     // Spill if NUMBER OF NON_RESERVED REGISTER exceeds tmp_io_size
     // Next_spill = X indicates that the input width of block X exceeds io_size.
@@ -1641,10 +1665,14 @@ fn resolve_spilling<'ast>(
         if next_spill == 0 {
             break;
         }
-        let (spill_fn, spill_scope, spill_vars) = 
-            get_spill_candidates(&bls[next_spill].inputs.iter().map(|i| i.0.clone()).collect(), fn_top_map);
+        let candidates = get_spill_candidates(&bls[next_spill].inputs.iter().map(|i| i.0.clone()).collect(), bls[next_spill].fn_name.clone());
         println!("BLOCK TO SPILL: {}, SIZE: {}", next_spill, spill_size);
-        println!("CANDIDATES: fn = {}, scope = {}, vars = {:?}", spill_fn, spill_scope, spill_vars);
+        println!("CANDIDATES: {:?}", candidates);
+        
+        // Traverse backwards in CFG to find where the spill first occurs
+        // For each spill candidate, record: 1. where is the candidate first spillable? 2. how many blocks will this spill last?
+        // For every candidate, there should only be one block where the candidate is first spillable
+
         break;
     }
     bls
@@ -2198,12 +2226,12 @@ fn var_to_reg<'a, const MODE: usize>(
 // We do so through a DP algorithm starting from the exit block
 fn get_blocks_meta_info(
     bls: &Vec<Block>,
-    predecessor: &Vec<HashSet<usize>>,
     successor: &Vec<HashSet<usize>>,
     entry_bl: usize,
-    exit_bls: &HashSet<usize>,
+    exit_bls_fn: &HashSet<usize>,
     successor_fn: &Vec<HashSet<usize>>,
     predecessor_fn: &Vec<HashSet<usize>>,
+    sorted_fns: &Vec<String>
 ) -> (usize, usize, Vec<usize>) {
     // Compute the number of memory accesses 
     let mut num_mem_accesses = Vec::new();
@@ -2230,94 +2258,81 @@ fn get_blocks_meta_info(
     // Instead, for every block, remove any successor with smaller block label
     for i in 0..bls.len() {
         for j in predecessor_fn_no_loop[i].clone() {
-            if j > i {
+            if j >= i {
                 predecessor_fn_no_loop[i].remove(&j);
             }
         }
         for j in successor_fn_no_loop[i].clone() {
-            if j < i {
+            if j <= i {
                 successor_fn_no_loop[i].remove(&j);
             }
         }
     }
 
-    // A DP algorithm to find total_num_proofs_bound & total_num_mem_accesses_bound
-    // Note that we have eliminated all loops
-    // For each block, record the maximum number of block executions from the block to the end of the program
-    // And the maximum number of memory accesses
+    // Starting from the front-most function in top sort, analyze all blocks within the function
     let mut total_num_proofs = vec![0; bls.len()];
     let mut total_num_mem_accesses = vec![0; bls.len()];
-    // Start from exit block
-    let mut next_bls: VecDeque<usize> = VecDeque::new();
-    for eb in exit_bls {
-        next_bls.push_back(*eb);
-    }
-    while !next_bls.is_empty() {
-        let cur_bl = next_bls.pop_front().unwrap();
-
-        let mut max_successor_num_proofs = bls[cur_bl].fn_num_exec_bound;
-        let mut max_successor_num_mem_accesses = bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
-
-        // if cur_bl is the exit block of a function, do not reason about successors
-        if successor_fn[cur_bl].len() == 0 {} 
-        // if cur_bl is a caller of a function, need to process both the function head block and the return block
-        else if successor_fn[cur_bl] != successor[cur_bl] {
-            assert_eq!(successor[cur_bl].len(), 1);
-            assert_eq!(successor_fn[cur_bl].len(), 1);
-            let func_header = Vec::from_iter(successor[cur_bl].clone())[0];
-            let return_bl = Vec::from_iter(successor_fn[cur_bl].clone())[0];
-            max_successor_num_proofs += bls[cur_bl].fn_num_exec_bound * total_num_proofs[func_header] + total_num_proofs[return_bl];
-            max_successor_num_mem_accesses += bls[cur_bl].fn_num_exec_bound * total_num_mem_accesses[func_header] + total_num_mem_accesses[return_bl];
-        }
-        // otherwise, process all the successors
-        else {
-            for succ in &successor_fn_no_loop[cur_bl] {
-                // num_proofs
-                let succ_num_proofs = total_num_proofs[*succ] + bls[cur_bl].fn_num_exec_bound;
-                if max_successor_num_proofs < succ_num_proofs {
-                    max_successor_num_proofs = succ_num_proofs;
-                }
-                // num_mem_accesses
-                let succ_num_mem_accesses = total_num_mem_accesses[*succ] + bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
-                if max_successor_num_mem_accesses < succ_num_mem_accesses {
-                    max_successor_num_mem_accesses = succ_num_mem_accesses;
-                }
+    for f_name in sorted_fns.iter().rev() {
+        // A DP algorithm to find total_num_proofs_bound & total_num_mem_accesses_bound
+        // Note that we have eliminated all loops
+        // For each block, record the maximum number of block executions from the block to the end of the function
+        // And the maximum number of memory accesses
+        // Start from exit block
+        let mut next_bls: VecDeque<usize> = VecDeque::new();
+        for eb in exit_bls_fn {
+            if &bls[*eb].fn_name == f_name {
+                next_bls.push_back(*eb);
             }
         }
+        while !next_bls.is_empty() {
+            let cur_bl = next_bls.pop_front().unwrap();
 
-        // If any value changes or block is not in the main function, process the predecessors
-        if bls[cur_bl].fn_name != "main".to_string() || max_successor_num_proofs != total_num_proofs[cur_bl] || max_successor_num_mem_accesses != total_num_mem_accesses[cur_bl] {
-            // If head of a function, process all callers
-            if predecessor_fn[cur_bl].len() == 0 {
-                for pred in &predecessor[cur_bl] {
-                    if !next_bls.contains(pred) {
-                        next_bls.push_back(*pred);
-                    }
-                }
+            let mut max_successor_num_proofs = bls[cur_bl].fn_num_exec_bound;
+            let mut max_successor_num_mem_accesses = bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
+
+            // if cur_bl is the exit block of a function, do not reason about successors
+            if successor_fn[cur_bl].len() == 0 {} 
+            // if cur_bl is a caller of a function, need to process both the function head block and the return block
+            else if successor_fn[cur_bl] != successor[cur_bl] {
+                assert_eq!(successor[cur_bl].len(), 1);
+                assert_eq!(successor_fn[cur_bl].len(), 1);
+                let func_header = Vec::from_iter(successor[cur_bl].clone())[0];
+                let return_bl = Vec::from_iter(successor_fn[cur_bl].clone())[0];
+                assert!(total_num_proofs[func_header] != 0);
+                max_successor_num_proofs += bls[cur_bl].fn_num_exec_bound * total_num_proofs[func_header] + total_num_proofs[return_bl];
+                max_successor_num_mem_accesses += bls[cur_bl].fn_num_exec_bound * total_num_mem_accesses[func_header] + total_num_mem_accesses[return_bl];
             }
-            // If the destination of a return, process all functions returning to it
-            else if predecessor_fn[cur_bl] != predecessor[cur_bl] {
-                for pred in &predecessor[cur_bl] {
-                    if !next_bls.contains(pred) {
-                        next_bls.push_back(*pred);
-                    }
-                }
-            }
-            // Otherwise process all non-loop predecessors
+            // otherwise, process all the successors
             else {
+                for succ in &successor_fn_no_loop[cur_bl] {
+                    // num_proofs
+                    let succ_num_proofs = total_num_proofs[*succ] + bls[cur_bl].fn_num_exec_bound;
+                    if max_successor_num_proofs < succ_num_proofs {
+                        max_successor_num_proofs = succ_num_proofs;
+                    }
+                    // num_mem_accesses
+                    let succ_num_mem_accesses = total_num_mem_accesses[*succ] + bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
+                    if max_successor_num_mem_accesses < succ_num_mem_accesses {
+                        max_successor_num_mem_accesses = succ_num_mem_accesses;
+                    }
+                }
+            }
+
+            // If any value changes, process all non-loop predecessors
+            if max_successor_num_proofs != total_num_proofs[cur_bl] || max_successor_num_mem_accesses != total_num_mem_accesses[cur_bl] {
                 for pred in &predecessor_fn_no_loop[cur_bl] {
                     if !next_bls.contains(pred) {
                         next_bls.push_back(*pred);
                     }
                 }
             }
-        }
-        // Update values
-        if max_successor_num_proofs != total_num_proofs[cur_bl] {
-            total_num_proofs[cur_bl] = max_successor_num_proofs;
-        }
-        if max_successor_num_mem_accesses != total_num_mem_accesses[cur_bl] {
-            total_num_mem_accesses[cur_bl] = max_successor_num_mem_accesses;
+            // Update values
+            if max_successor_num_proofs != total_num_proofs[cur_bl] {
+                total_num_proofs[cur_bl] = max_successor_num_proofs;
+            }
+            if max_successor_num_mem_accesses != total_num_mem_accesses[cur_bl] {
+                total_num_mem_accesses[cur_bl] = max_successor_num_mem_accesses;
+            }
         }
     }
 

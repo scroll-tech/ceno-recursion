@@ -38,14 +38,17 @@ Note that this is not an issue for individual blocks, because the lack of `jump`
 
 ## Approach #4
 To take function calls into consideration, we revise the above approach:
-* Differentiate between function call edges, function return edges, and normal transition edges
-* Similar as the DP algorithm described in Approach #3, start from the program exit block and process in reverse order:
-  * For every block, only record the maximum number of block executions until _the end of the function_
-  * For any caller block to another function, the maximum number of block execution `M_b` is given by  
-  `M_b = M_h * E_b + M_r`  
-  where `M_h` is the maximum number of block execution at the callee function header, `E_b` is the number of executions of the caller, and `M_r` is the maximum number of block execution at the return block of the function.
-* If a block is not in the main function, always keep process its predecessors. If a block is in the main function, only process its predecessors if values of the block have been changed.
-* Finally, obtain total number of proofs through the entry node.
+* Differentiate between function call edges, function return edges, and normal transition edges.
+* Perform a topological sort on all functions based on call graph.
+* Starting from the function on top of the top sort:
+  * Similar as the DP algorithm described in Approach #3, start from the function exit block and process in reverse order:
+    * For every block, only record the maximum number of block executions until _the end of the function_.
+    * For any caller block to another function, by definition of top sort, that function must have already been processed. The maximum number of block execution `M_b` is given by  
+      `M_b = M_h * E_b + M_r`  
+      where `M_h` is the maximum number of block execution at the callee function header, `E_b` is the number of executions of the caller, and `M_r` is the maximum number of block execution at the return block of the function.
+  * Only process its predecessors **in the function** if values of the block have been changed. If the block is only reachable from another function, process the caller block of that function.
+  * Once a function is processed, obtain the total number of proofs during one execution of the function at the function entry block.
+* Finally, obtain total number of proofs through the entry block.
 
 ## Note:
 This still does not give us a 100% tight upperbound. The reason is that in a loop, a branch might never be taken by all iterations (e.g. condition on parity of the iteration counter).

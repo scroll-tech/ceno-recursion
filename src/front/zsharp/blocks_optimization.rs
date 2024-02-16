@@ -1549,21 +1549,23 @@ fn fn_top_sort(
 struct VarSpillInfo {
     var_name: String,
     fn_name: String,
-    scope: usize
+    scope: usize,
+    version: usize
 }
 
 impl VarSpillInfo {
     fn new(var: String) -> VarSpillInfo {
-        let var_segs = var.split(':').collect::<Vec<&str>>();
+        let var_segs = var.split('.').collect::<Vec<&str>>();
         let var_name = var_segs[0].to_string();
-        let var_segs = var_segs[1].split('@').collect::<Vec<&str>>();
-        let fn_name = var_segs[0].to_string();
-        let scope: usize = var_segs[1].to_string().parse().unwrap();
+        let fn_name = var_segs[1].to_string();
+        let scope: usize = var_segs[2].to_string().parse().unwrap();
+        let version: usize = var_segs[3].to_string().parse().unwrap();
     
         VarSpillInfo {
             var_name,
             fn_name,
-            scope
+            scope,
+            version
         }
     }
 
@@ -1573,6 +1575,7 @@ impl VarSpillInfo {
     }
 
     // determine whether self is in scope of a given program state
+    // return all variables that immediately override self
     fn in_scope(&self, state: &Vec<String>, f_name: String) -> bool {
         if self.fn_name != f_name { return false; }
         let mut in_scope = false;

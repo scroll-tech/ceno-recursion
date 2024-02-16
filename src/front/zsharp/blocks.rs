@@ -251,11 +251,14 @@ impl<'ast> Block<'ast> {
 
 // All information regarding scoping of every variable
 pub struct VarScopeInfo {
-    // Every time a variable is assigned a value at a specific scope, it receives a new version number
-    // Use var_version to record the version number of each (var_name, fn_name) at each scope
+    // Every time a variable is overwritten at a new scope, it receives a new version number at the specific depth
+    // Use var_version to record the version number of each (var_name, fn_name) at each depth
+    // Note: variable depth is how many times the variable has been overwritten, which might be different from the depth of the scope
     var_version: HashMap<(String, String), Vec<usize>>,
-    // Use var_stack to track on which scopes are each variables defined
-    var_stack: HashMap<(String, String), Vec<usize>>,
+    // Use var_stack to track the depth of the variable
+    // For each (var_name, fn_name), record its depth and all scopes that it has been defined
+    // i.e., (2, (0, 2, 3)) means the current depth is 2 and the variables has been defined in scope 0, 2, 3
+    var_stack: HashMap<(String, String), (usize, Vec<usize>)>,
 }
 
 impl VarScopeInfo {
@@ -269,72 +272,60 @@ impl VarScopeInfo {
     // Declare a variable in a given scope of a given function, return the new variable name
     fn declare_var(&mut self, var_name: &str, fn_name: &str, cur_scope: usize) -> String {
         let name = &(var_name.to_string(), fn_name.to_string());
-        if let Some(scope_stack) = self.var_stack.get(name) {
-            if scope_stack.len() > 0 && scope_stack[scope_stack.len() - 1] == cur_scope {
-                // If it is shadowing
-            } else {
-                // Otherwise, update scope and version number for the variable
-                assert!(scope_stack.len() == 0 || scope_stack[scope_stack.len() - 1] < cur_scope);
-                let mut scope_stack = scope_stack.clone();
-                scope_stack.push(cur_scope);
-                self.var_stack.insert(name.clone(), scope_stack.to_vec());
-                let mut version_list = self.var_version.get(name).unwrap().to_vec();
-                if version_list.len() > cur_scope {
-                    // If the variable has a version at cur_scope, increment it by 1 and return
-                    let new_version = version_list[cur_scope] + 1;
-                    version_list[cur_scope] = new_version;
-                    self.var_version.insert(name.clone(), version_list);
-                } else {
-                    // Otherwise, append 0 to version_list until it reaches cur_scope
-                    version_list.extend(vec![0; cur_scope + 1 - version_list.len()]);
-                    self.var_version.insert(name.clone(), version_list);
+        match self.var_stack.get(name) {
+            Some((depth, stack)) => {
+                assert!(stack.len() == 0 || stack[stack.len() - 1] <= cur_scope);
+                // If stack[stack.len() - 1] == cur_scope, this is shadowing and we don't need to do anything
+                if stack.len() == 0 || stack[stack.len() - 1] < cur_scope {
+                    let new_depth = depth + 1;
+                    let new_stack = [stack.to_vec(), vec![cur_scope]].concat();
+                    let mut version_list = self.var_version.get(name).unwrap().to_vec();
+                    if version_list.len() > new_depth {
+                        // If the variable has a version at cur_scope, increment it by 1
+                        version_list[new_depth] += 1;
+                        self.var_version.insert(name.clone(), version_list);
+                    } else {
+                        // Otherwise, assign version 0 to the new depth
+                        // Assert that new_depth is only one-depth higher than the previous highest depth
+                        assert_eq!(version_list.len(), new_depth);
+                        version_list.push(0);
+                        self.var_version.insert(name.clone(), version_list);
+                    }
+                    self.var_stack.insert(name.clone(), (new_depth, new_stack));
                 }
+            },
+            None => {
+                // If the variable is never defined, add variable to var_version and var_stack
+                let depth_stack = (0, vec![cur_scope]);
+                self.var_stack.insert(name.clone(), depth_stack);
+                let version_list = vec![0];
+                self.var_version.insert(name.clone(), version_list.to_vec());
             }
-        } else {
-            // If the variable is never defined, add variable to var_version and var_stack
-            let scope_stack = vec![cur_scope];
-            self.var_stack.insert(name.clone(), scope_stack.to_vec());
-            let version_list = vec![0; cur_scope + 1];
-            self.var_version.insert(name.clone(), version_list.to_vec());
         }
-        self.get_var_extended_name(var_name, fn_name).unwrap()
+        self.reference_var(var_name, fn_name).unwrap()
     }
 
-    // Reference a variable in a given scope of a given function, assert that the variable already exists
-    // Returns the variable name
+    // Given a variable, return "<var_name>.<func_name>.<scope>.<version>"
     fn reference_var(&self, var_name: &str, fn_name: &str) -> Result<String, String> {
         let name = &(var_name.to_string(), fn_name.to_string());
-        if let Some(_) = self.var_stack.get(name) {
-            // If the variable is in scope, return its name
-            return self.get_var_extended_name(var_name, fn_name);
+        if let Some((depth, _)) = self.var_stack.get(&name) {
+            let version = self.var_version.get(&name).unwrap()[*depth];
+            Ok(format!("{}.{}.{}.{}", var_name, fn_name, depth, version))
         } else {
-            return Err(format!("reference_var failed: variable {} does not exist in function {}", var_name, fn_name));
+            Err(format!("get_var_extended_name failed: variable {} does not exist in function {}", var_name, fn_name))
         }
     }
 
-    // Given a variable, return "<var_name>@<func_name>@<scope>@<version>"
-    fn get_var_extended_name(&self, var_name: &str, fn_name: &str) -> Result<String, String> {
-        let name = &(var_name.to_string(), fn_name.to_string());
-        if self.var_stack.get(&name) == None {
-            return Err(format!("get_var_extended_name failed: variable {} does not exist in function {}", var_name, fn_name));
-        }
-        let scope_stack = self.var_stack.get(&name).unwrap();
-        let cur_scope = scope_stack[scope_stack.len() - 1];
-        let version_list = self.var_version.get(&name).unwrap();
-        let version = version_list[cur_scope];
-        Ok(format!("{}@{}@{}@{}", var_name, fn_name, cur_scope, version))
-    }
-
-    // Given the function and current scope, exit the scope
+    // exit the current scope
     fn exit_scope(&mut self, fn_name: &str, cur_scope: usize) {
         // First record all variables that need scope change
         let mut updates = HashMap::new();
-        for ((var_name, var_fn_name), scope_stack) in &self.var_stack {
-            if var_fn_name == fn_name && scope_stack.len() > 0 {
-                let var_top_scope = scope_stack[scope_stack.len() - 1];
+        for ((var_name, var_fn_name), (depth, stack)) in &self.var_stack {
+            if var_fn_name == fn_name && stack.len() > 0 {
+                let var_top_scope = stack[stack.len() - 1];
                 assert!(var_top_scope <= cur_scope);
                 if var_top_scope == cur_scope {
-                    updates.insert((var_name.to_string(), var_fn_name.to_string()), scope_stack[..scope_stack.len() - 1].to_vec());
+                    updates.insert((var_name.to_string(), var_fn_name.to_string()), (depth - 1, stack[..stack.len() - 1].to_vec()));
                 }
             }
         }
@@ -343,38 +334,6 @@ impl VarScopeInfo {
             self.var_stack.insert(name, stack);
         }
     }
-}
-
-// Given a variable, unroll its scoping according to var_scope_info
-// Separate the cases into whether we are declaring the variable,
-// assignment is NOT a declaration
-fn bl_gen_unroll_scope<const IS_DECL: bool>(
-    var: String, 
-    f_name: &str,
-    mut var_scope_info: HashMap<String, (usize, bool)>
-) -> Result<(String, HashMap<String, (usize, bool)>), String> {
-    if var.chars().nth(0).unwrap() == '%' {
-        return Ok((var, var_scope_info));
-    }
-    let new_var: String;
-    if !var_scope_info.contains_key(&var) {
-        if !IS_DECL {
-            return Err(format!("Variable {} referenced before definition in bl_gen_unroll_scope!", var));
-        } else {
-            var_scope_info.insert(var.clone(), (0, false));
-            new_var = format!("{}:{}@0", var, f_name);
-        }
-    } else {
-        let (mut scope, need_push) = var_scope_info.get(&var).unwrap();
-        if *need_push && IS_DECL {
-            scope += 1;
-            var_scope_info.insert(var.clone(), (scope, false));
-            new_var = format!("{}:{}@{}", var.clone(), f_name, scope);                
-        } else {
-            new_var = format!("{}:{}@{}", var, f_name, scope);
-        }
-    }
-    return Ok((new_var, var_scope_info));
 }
 
 impl<'ast> ZGen<'ast> {
@@ -577,7 +536,7 @@ impl<'ast> ZGen<'ast> {
                 var_scope_info.declare_var(&p_id, &f_name, 0);
                 let p_ty = self.type_impl_::<true>(&p.ty)?;
                 self.decl_impl_::<true>(p_id.clone(), &p_ty)?;
-                inputs.push((var_scope_info.get_var_extended_name(&p_id, &f_name)?, p_ty.clone()));     
+                inputs.push((var_scope_info.reference_var(&p_id, &f_name)?, p_ty.clone()));     
             }
 
             // Iterate through Stmts
@@ -737,7 +696,7 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].instructions.push(BlockContent::MemPop(("%BP".to_string(), Ty::Field, 0)));
             }
 
-            // Store Return value to a temporary retx
+            // Store Return value to a temporary variable "ret@X"
             let ret_ty = self
             .functions
             .get(&f_path)
@@ -747,7 +706,7 @@ impl<'ast> ZGen<'ast> {
             .returns
             .first().ok_or("No return type provided for one or more function")?;
 
-            let ret_name = format!("ret{}", func_count);
+            let ret_name = format!("ret@{}", func_count);
             self.decl_impl_::<true>(ret_name.clone(), &self.type_impl_::<true>(ret_ty)?)?;
             let ret_extended_name = var_scope_info.declare_var(&ret_name, &caller_name, caller_scope);
             let update_ret_stmt = Statement::Definition(DefinitionStatement {
@@ -1166,7 +1125,7 @@ impl<'ast> ZGen<'ast> {
                     (blks, blks_len, _, var_scope_info, func_count) =
                         self.bl_gen_function_call_::<IS_MAIN>(blks, blks_len, args, callee_path.clone(), callee_name.clone(), func_count, var_scope_info)?;
 
-                    let ret_name = format!("ret{}", func_count);
+                    let ret_name = format!("ret@{}", func_count);
                     let ret_extended_name = var_scope_info.reference_var(&ret_name, f_name)?;
                     ret_e = Expression::Identifier(IdentifierExpression {
                         value: ret_extended_name,
@@ -1178,7 +1137,7 @@ impl<'ast> ZGen<'ast> {
                 };
             }
             Expression::Identifier(i) => {
-                let new_var: String = var_scope_info.get_var_extended_name(&i.value.clone(), &f_name)?;
+                let new_var: String = var_scope_info.reference_var(&i.value.clone(), &f_name)?;
                 ret_e = Expression::Identifier(IdentifierExpression {
                     value: new_var,
                     span: Span::new("", 0, 0).unwrap()

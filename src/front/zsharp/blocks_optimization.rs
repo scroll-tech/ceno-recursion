@@ -112,17 +112,10 @@ pub fn optimize_block<const VERBOSE: bool>(
         print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
     }
 
-    // Liveness & PMR
-    // As long as altered is true, we need to keep doing liveness and PMR
-    let mut altered = true;
-    while altered {
-        (bls, altered) = liveness_analysis(bls, &successor, &predecessor, &exit_bls);
-        if altered {
-            (bls, altered) = phy_mem_rearrange(bls, &predecessor_fn, &successor_fn, &exit_bls_fn);
-        }
-    }
+    // Liveness
+    bls = liveness_analysis(bls, &successor, &predecessor, &exit_bls);
     if VERBOSE {
-        println!("\n\n--\nLiveness & PMR:");
+        println!("\n\n--\nLiveness:");
         print_bls(&bls, &entry_bl);
     }
 
@@ -647,7 +640,7 @@ fn liveness_analysis<'ast>(
     successor: &Vec<HashSet<usize>>,
     predecessor: &Vec<HashSet<usize>>,
     exit_bls: &HashSet<usize>
-) -> (Vec<Block<'ast>>, bool) {
+) -> Vec<Block<'ast>> {
 
     let mut visited: Vec<bool> = vec![false; bls.len()];
     // MEET is union, so IN and OUT are Empty Set
@@ -719,7 +712,6 @@ fn liveness_analysis<'ast>(
     }
 
     // Do this again, this time, eliminate the blocks
-    let mut altered = false;
     for i in 0..bls.len() {
         visited[i] = false;
     }
@@ -760,8 +752,6 @@ fn liveness_analysis<'ast>(
                         // Don't remove %BP, remove them in PMR
                         if is_alive(&state, var) || var == "%BP" {
                             new_instructions.insert(0, i.clone());
-                        } else {
-                            altered = true;
                         }
                         state.remove(var);
                         state.insert("%BP".to_string());
@@ -775,8 +765,6 @@ fn liveness_analysis<'ast>(
                             state = la_kill(state, &kill);
                             state = la_gen(state, &gen);
                             new_instructions.insert(0, i.clone());
-                        } else {
-                            altered = true;
                         }
                     }
                 }
@@ -791,9 +779,10 @@ fn liveness_analysis<'ast>(
         }    
     }
 
-    return (bls, altered);
+    return bls;
 }
 
+/*
 // PMR is consisted of a liveness analysis on memory stack entries
 // Liveness analysis on the stack (LAS)
 // DIRECTION: Backward
@@ -1128,6 +1117,7 @@ fn phy_mem_rearrange<'ast>(
     
     return (bls, altered);
 }
+*/
 
 // EBE: Backward analysis
 // If a block is empty and its terminator is a coda (to another block or %RP)
@@ -1245,7 +1235,7 @@ fn dead_block_elimination(
     return (new_bls, new_entry_bl, label_map);
 }
 
-// For each block, set its input to be variables that are alive at the entry point of the block and their type
+// For each block, set its input to be variables that are alive & defined at the entry point of the block and their type
 // Returns: bls
 // This pass consists of a liveness analysis and a reaching definition (for typing)
 fn set_input_output<'bl>(
@@ -1416,14 +1406,19 @@ fn set_input_output<'bl>(
         // For this primitive implementation, take every register up to reg_size as input
         // Something fishy is going on if inputs or outputs have been defined
         assert!(bls[i].inputs.len() == 0);
+        // Only variables that are alive & defined will become parts of inputs / outputs
         if i != 0 {
             for name in input_lst[i].iter().sorted() {
-                bls[i].inputs.push((name.to_string(), Some(ty_map_in[i].get(name).unwrap().clone())));
+                if let Some(ty) = ty_map_in[i].get(name) {
+                    bls[i].inputs.push((name.to_string(), Some(ty.clone())));
+                }
             }
         }
         assert!(bls[i].outputs.len() == 0);
         for name in output_lst[i].iter().sorted() {
-            bls[i].outputs.push((name.to_string(), Some(ty_map_out[i].get(name).unwrap().clone())));
+            if let Some(ty) = ty_map_out[i].get(name) {
+                bls[i].outputs.push((name.to_string(), Some(ty.clone())));
+            }
         }
     }
     for (name, ty) in &inputs {

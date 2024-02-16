@@ -203,16 +203,41 @@ impl<'ast> ZGen<'ast> {
                 }
             }
             // If not the first block, redefine output of the last block as input to this block
+            // If an input is not defined in the previous output, then set it to 0
+            // Record the transition state
             else {
                 for (name, ty) in &bls[nb].inputs {
                     if let Some(x) = ty {
                         let output_name = str::replace(name, "i", "o");
-                        let val = self.cvar_lookup(&output_name).unwrap();
+                        let val = self.cvar_lookup(&output_name).unwrap_or(
+                            self.expr_impl_::<true>(
+                                &Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                                    value: DecimalNumber {
+                                        value: "0".to_string(),
+                                        span: Span::new("", 0, 0).unwrap()
+                                    },
+                                    suffix: Some(match x {
+                                        Ty::Field => DecimalSuffix::Field(FieldSuffix {
+                                            span: Span::new("", 0, 0).unwrap()
+                                        }),
+                                        _ => panic!("Unsupported input type: {:?}!", x)
+                                    }),
+                                    span: Span::new("", 0, 0).unwrap()
+                                }))
+                            ).unwrap()
+                        );
                         self.declare_init_impl_::<true>(
                             name.to_string(),
                             x.clone(),
                             val,
                         )?;
+                    }
+                }
+                // Record the last transition state as the union of reg_in and reg_out
+                for i in 1..io_size {
+                    bl_exec_state[tr_size - 1].reg_out[i] = self.cvar_lookup(&format!("%o{:06}", i));
+                    if bl_exec_state[tr_size - 1].reg_out[i].is_none() {
+                        bl_exec_state[tr_size - 1].reg_out[i] = self.cvar_lookup(&format!("%i{:06}", i));
                     }
                 }
             }
@@ -231,21 +256,20 @@ impl<'ast> ZGen<'ast> {
             }
             (nb, phy_mem, terminated, mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem)?;
 
-            // Update reg_out
-            for i in 1..io_size {
-                bl_exec_state[tr_size].reg_out[i] = self.cvar_lookup(&format!("%o{:06}", i));
-            }
             // Update successor block ID
             bl_exec_state[tr_size].succ_id = nb;
             // Update Memory Op
             bl_exec_state[tr_size].mem_op = mem_op;
             tr_size += 1;
         }
-
-        // Return value is just the value of the variable called "%RET"
-        // Depending on io_size, "%RET" can be "%o5", "%o05", etc.
+        
+        // Record the final transition state
+        for i in 1..io_size {
+            bl_exec_state[tr_size - 1].reg_out[i] = self.cvar_lookup(&format!("%o{:06}", i));
+        }
+        // Return value is just the value of the variable called "%RET", which is %o5
         // Type of return value is checked during assignment
-        let ret = self.cvar_lookup("%o000005").ok_or(format!(
+        let ret = self.cvar_lookup(&format!("%o{:06}", 5usize)).ok_or(format!(
             "Missing return value for one or more functions."
         ));
 

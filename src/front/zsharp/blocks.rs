@@ -806,6 +806,10 @@ impl<'ast> ZGen<'ast> {
                 // Standalone Scope for the Iterator
                 cur_scope = self.bl_gen_enter_scope_(cur_scope)?;
 
+                // Create new Block for iterator initialization & scoping resolution
+                blks.push(Block::new(blks_len, num_exec_bound, f_name.to_string(), cur_scope));
+                blks_len += 1;
+
                 // STORE iterator value in Physical Mem if has appeared before  
 
                 // Initialize the scoped iterator
@@ -868,6 +872,10 @@ impl<'ast> ZGen<'ast> {
                 // Exit scoping to iterator scope
                 (var_scope_info, cur_scope) = self.bl_gen_exit_scope_(var_scope_info, f_name, cur_scope)?;
 
+                // Create new Block for iterator update
+                blks.push(Block::new(blks_len, loop_num_it * num_exec_bound, f_name.to_string(), cur_scope));
+                blks_len += 1;
+
                 // Create and push STEP statement
                 let step_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
@@ -903,6 +911,10 @@ impl<'ast> ZGen<'ast> {
                 );
                 blks[new_state].terminator = term.clone();
                 blks[old_state].terminator = term;
+
+                // Create new Block to resolve any scope change on the iterator
+                blks.push(Block::new(blks_len, loop_num_it * num_exec_bound, f_name.to_string(), cur_scope));
+                blks_len += 1;
 
                 // Exit scoping again to outside the loop
                 (var_scope_info, cur_scope) = self.bl_gen_exit_scope_(var_scope_info, f_name, cur_scope)?;

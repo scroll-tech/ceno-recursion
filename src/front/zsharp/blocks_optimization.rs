@@ -6,8 +6,7 @@
 use std::collections::VecDeque;
 use zokrates_pest_ast::*;
 use crate::front::zsharp::blocks::*;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, BTreeMap};
 use crate::front::zsharp::Ty;
 use itertools::Itertools;
 use std::cmp::max;
@@ -113,19 +112,26 @@ pub fn optimize_block<const VERBOSE: bool>(
     }
 
     // Liveness
-    bls = liveness_analysis(bls, &successor, &predecessor, &exit_bls);
+    bls = liveness_analysis(bls, &successor, &predecessor, &successor_fn, &exit_bls, &exit_bls_fn);
     if VERBOSE {
         println!("\n\n--\nLiveness:");
         print_bls(&bls, &entry_bl);
     }
 
-    // Set Input
+    // Set Input Output
     // Putting this here because EBE and DBE destroys CFG
-    bls = set_input_output(bls, &successor, &predecessor, &entry_bl, &exit_bls, inputs.clone());
+    bls = set_input_output(bls, &successor, &predecessor, &successor_fn, &entry_bl, &exit_bls, &exit_bls_fn, inputs.clone());
     if VERBOSE {
         println!("\n\n--\nSet Input Output:");
         print_bls(&bls, &entry_bl);
     }
+
+    // Spilling
+    // Obtain io_size = maximum # of variables in a transition state that belong to the current function & have different names
+    // Note that this value is not the final io_size as it does not include any reserved registers
+    let tmp_io_size = get_max_io_size(&bls, &inputs);
+    // Perform spilling
+    let mut bls = resolve_spilling(bls, tmp_io_size, &predecessor, &successor, entry_bl, &predecessor_fn, &successor_fn);
 
     // EBE
     (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
@@ -486,6 +492,56 @@ fn construct_flow_graph(
     return (successor, predecessor, exit_bls, entry_bl_fn, successor_fn, predecessor_fn, exit_bls_fn);
 }
 
+// Sort functions in topological order
+fn top_sort_helper(
+    cur_name: &str,
+    call_graph: &HashMap<String, HashSet<String>>,
+    mut visited: HashMap<String, bool>,
+    mut chain: Vec<String>
+) -> (Vec<String>, HashMap<String, bool>) {
+    visited.insert(cur_name.to_string(), true);
+    for s in call_graph.get(cur_name).unwrap() {
+        if !visited.get(s).unwrap() {
+            (chain, visited) = top_sort_helper(s, call_graph, visited, chain);
+        }
+    }
+    chain.insert(0, cur_name.to_string());
+    return (chain, visited);
+}
+
+fn fn_top_sort(
+    bls: &Vec<Block>,
+    successor: &Vec<HashSet<usize>>,
+    successor_fn: &Vec<HashSet<usize>>,
+) -> Vec<String> {
+    // First construct function call graph
+    let mut fn_call_graph: HashMap<String, HashSet<String>> = HashMap::new();
+    // Initialize every function to NOT VISITED
+    let mut visited = HashMap::new();
+    fn_call_graph.insert("main".to_string(), HashSet::new());
+    for cur_bl in 0..bls.len() {
+        let b = &bls[cur_bl];
+        let caller_name = b.fn_name.to_string();
+        if !visited.contains_key(&caller_name) {
+            visited.insert(caller_name.to_string(), false);
+            fn_call_graph.insert(caller_name.to_string(), HashSet::new());
+        }
+        // if cur_bl is a caller of a function, add the call to call graph
+        if successor_fn[cur_bl].len() != 0 && successor_fn[cur_bl] != successor[cur_bl] {
+            assert_eq!(successor[cur_bl].len(), 1);
+            assert_eq!(successor_fn[cur_bl].len(), 1);
+            let callee_name = bls[Vec::from_iter(successor[cur_bl].clone())[0]].fn_name.to_string();
+
+            let mut callee_list = fn_call_graph.get(&caller_name).unwrap().clone();
+            callee_list.insert(callee_name);
+            fn_call_graph.insert(caller_name, callee_list);
+        }
+    }
+    // Next perform top sort using call graph
+    top_sort_helper("main", &fn_call_graph, visited, Vec::new()).0
+}
+
+
 // Given an expression, find all variables it references
 fn expr_find_val(e: &Expression) -> HashSet<String> {
     match e {
@@ -593,16 +649,6 @@ fn _constant_propagation() {}
 // MEET:
 //    Set Union
 
-// MEET of liveness_analysis
-fn la_meet(
-    first: &HashSet<String>,
-    second: &HashSet<String>
-) -> HashSet<String> {
-    let mut third = first.clone();
-    third.extend(second.clone());
-    third
-}
-
 // GEN all variables in gen
 fn la_gen(
     mut state: HashSet<String>,
@@ -639,7 +685,9 @@ fn liveness_analysis<'ast>(
     mut bls: Vec<Block<'ast>>,
     successor: &Vec<HashSet<usize>>,
     predecessor: &Vec<HashSet<usize>>,
-    exit_bls: &HashSet<usize>
+    successor_fn: &Vec<HashSet<usize>>,
+    exit_bls: &HashSet<usize>,
+    exit_bls_fn: &HashSet<usize>
 ) -> Vec<Block<'ast>> {
 
     let mut visited: Vec<bool> = vec![false; bls.len()];
@@ -661,14 +709,38 @@ fn liveness_analysis<'ast>(
     while !next_bls.is_empty() {
         let cur_bl = next_bls.pop_front().unwrap();
 
-        // State is the Union of all successors
+        // State is the union of all local successors AND
+        // if cur_bl is a function return block, then all successors, AND
+        // if cur_bl calls another function, then all parameters + reserved variables
         let mut state: HashSet<String> = HashSet::new();
-        for s in &successor[cur_bl] {
-            state = la_meet(&state, &bl_in[*s]);
+        // local successors
+        for s in &successor_fn[cur_bl] {
+            state.extend(bl_in[*s].clone());
         }
+        // function return block
+        if exit_bls_fn.contains(&cur_bl) {
+            for s in &successor[cur_bl] {
+                state.extend(bl_in[*s].clone());
+            }
+        }
+        // function caller
+        else {
+            for s in &successor[cur_bl] {
+                let callee_name = &bls[*s].fn_name;
+                if callee_name != &bls[cur_bl].fn_name {
+                    for i in &bl_in[*s].clone() {
+                        if i.chars().next().unwrap() == '%' || &VarSpillInfo::new(i.to_string()).fn_name == callee_name {
+                            state.insert(i.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        // program exit block
         if exit_bls.contains(&cur_bl) {
             state.insert("%RET".to_string());
         }
+
         // Only analyze if never visited before or OUT changes
         if !visited[cur_bl] || state != bl_out[cur_bl] {
             
@@ -781,6 +853,620 @@ fn liveness_analysis<'ast>(
 
     return bls;
 }
+
+// For each block, set its input to be variables that are alive & defined at the entry point of the block and their type
+// Returns: bls
+// This pass consists of a liveness analysis and a reaching definition (for typing)
+fn set_input_output<'bl>(
+    mut bls: Vec<Block<'bl>>,
+    successor: &Vec<HashSet<usize>>,
+    predecessor: &Vec<HashSet<usize>>,
+    successor_fn: &Vec<HashSet<usize>>,
+    entry_bl: &usize,
+    exit_bls: &HashSet<usize>,
+    exit_bls_fn: &HashSet<usize>,
+    inputs: Vec<(String, Ty)>
+) -> Vec<Block<'bl>> {
+    // Liveness
+    let mut visited: Vec<bool> = vec![false; bls.len()];
+    // MEET is union, so IN and OUT are Empty Set
+    let mut bl_in: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
+    let mut bl_out: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
+    
+    // Can this ever happen?
+    if exit_bls.is_empty() { 
+        panic!("The program has no exit block!");
+    }
+    
+    // Start from exit block
+    let mut next_bls: VecDeque<usize> = VecDeque::new();
+    for eb in exit_bls {
+        next_bls.push_back(*eb);
+    }
+    // Backward analysis!
+    while !next_bls.is_empty() { 
+
+        let cur_bl = next_bls.pop_front().unwrap();   
+
+        // State is the union of all local successors AND
+        // if cur_bl is a function return block, then all successors, AND
+        // if cur_bl calls another function, then all parameters + reserved variables
+        let mut state: HashSet<String> = HashSet::new();
+        // local successors
+        for s in &successor_fn[cur_bl] {
+            state.extend(bl_in[*s].clone());
+        }
+        // function return block
+        if exit_bls_fn.contains(&cur_bl) {
+            for s in &successor[cur_bl] {
+                state.extend(bl_in[*s].clone());
+            }
+        }
+        // function caller
+        else {
+            for s in &successor[cur_bl] {
+                let callee_name = &bls[*s].fn_name;
+                if callee_name != &bls[cur_bl].fn_name {
+                    for i in &bl_in[*s].clone() {
+                        if i.chars().next().unwrap() == '%' || &VarSpillInfo::new(i.to_string()).fn_name == callee_name {
+                            state.insert(i.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        // program exit block
+        if exit_bls.contains(&cur_bl) {
+            state.insert("%RET".to_string());
+        }
+
+        // Only analyze if never visited before or OUT changes
+        if !visited[cur_bl] || state != bl_out[cur_bl] {
+            
+            bl_out[cur_bl] = state.clone();
+            visited[cur_bl] = true;
+            
+            // KILL and GEN within the terminator
+            match &bls[cur_bl].terminator {
+                BlockTerminator::Transition(e) => { state.extend(expr_find_val(&e)); }
+                BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
+                BlockTerminator::ProgTerm => {}            
+            }
+
+            // KILL and GEN within the block
+            // We assume that liveness analysis has been performed, don't reason about usefulness of variables
+            for i in bls[cur_bl].instructions.iter().rev() {
+                match i {
+                    BlockContent::MemPush((var, _, _)) => {
+                        state.insert(var.to_string());
+                        state.insert("%SP".to_string());
+                    }
+                    BlockContent::MemPop((var, _, _)) => {
+                        state.remove(&var.to_string());
+                        state.insert("%BP".to_string());
+                    }
+                    BlockContent::Stmt(s) => {
+                        let (kill, gen) = stmt_find_val(&s);
+                        for k in kill {
+                            state.remove(&k.to_string());
+                        }
+                        state.extend(gen);
+                    }
+                }
+            }
+            bl_in[cur_bl] = state;
+
+            // Block Transition
+            for tmp_bl in predecessor[cur_bl].clone() {
+                next_bls.push_back(tmp_bl);
+            }
+        }    
+    }
+
+    let input_lst = bl_in;
+    let output_lst = bl_out;
+
+    // bl_in now consists of all the variables alive at the entry point of each block, now use a forward analysis
+    // to find their types
+    // Assume that there are no generic / dynamic types
+
+    // Typing
+    let mut visited: Vec<bool> = vec![false; bls.len()];
+    // MEET is union, so IN and OUT are Empty Set
+    let mut bl_in: Vec<HashMap<String, Ty>> = vec![HashMap::new(); bls.len()];
+    let mut bl_out: Vec<HashMap<String, Ty>> = vec![HashMap::new(); bls.len()];
+    
+    // Start from entry block
+    let mut next_bls: VecDeque<usize> = VecDeque::new();
+    next_bls.push_back(*entry_bl);
+    // Forward analysis!
+    while !next_bls.is_empty() {
+        let cur_bl = next_bls.pop_front().unwrap();
+
+        // State is the union of all predecessors
+        let mut state: HashMap<String, Ty> = HashMap::new();
+        for s in &predecessor[cur_bl] {
+            for (name, ty) in &bl_out[*s] {
+                if let Some(k) = state.get(name) {
+                    if *ty != *k {
+                        panic!("Dynamic and generic types not supported!")
+                    }
+                }
+                if state.get(name) == None {
+                    state.insert(name.to_string(), ty.clone());
+                }
+            }
+        }
+        // If we are at entry block, state also includes *live* program parameters
+        if cur_bl == *entry_bl {
+            for (var, ty) in &inputs {
+                state.insert(var.clone(), ty.clone());
+            }
+        }
+
+        // Only analyze if never visited before or OUT changes
+        if !visited[cur_bl] || state != bl_in[cur_bl] {
+            
+            bl_in[cur_bl] = state.clone();
+            visited[cur_bl] = true;
+
+            // No KILL, GEN if we meet a typed definition
+            // The only case we need to process is Typed Definition
+            for i in bls[cur_bl].instructions.iter().rev() {
+                match i {
+                    BlockContent::MemPush(_) => {}
+                    BlockContent::MemPop(_) => {}
+                    BlockContent::Stmt(s) => {
+                        if let Statement::Definition(ds) = s {
+                            for d in &ds.lhs {
+                                if let TypedIdentifierOrAssignee::TypedIdentifier(p) = d {
+                                    let name = p.identifier.value.to_string();
+                                    let ty = type_to_ty(p.ty.clone());
+                                    state.insert(name, ty.unwrap());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            bl_out[cur_bl] = state;
+
+            // Terminator is just an expression so we don't need to worry about it
+
+            // Block Transition
+            for tmp_bl in successor[cur_bl].clone() {
+                next_bls.push_back(tmp_bl);
+            }
+        }    
+    }
+
+    let ty_map_in = bl_in;
+    let ty_map_out = bl_out;
+
+    // Update input of all blocks
+    // Note: block 0 takes function input and %BN as input
+    for i in 0..bls.len() {
+        // For this primitive implementation, take every register up to reg_size as input
+        // Something fishy is going on if inputs or outputs have been defined
+        assert!(bls[i].inputs.len() == 0);
+        // Only variables that are alive & defined will become parts of inputs / outputs
+        if i != 0 {
+            for name in input_lst[i].iter().sorted() {
+                if let Some(ty) = ty_map_in[i].get(name) {
+                    bls[i].inputs.push((name.to_string(), Some(ty.clone())));
+                }
+            }
+        }
+        assert!(bls[i].outputs.len() == 0);
+        for name in output_lst[i].iter().sorted() {
+            if let Some(ty) = ty_map_out[i].get(name) {
+                bls[i].outputs.push((name.to_string(), Some(ty.clone())));
+            }
+        }
+    }
+    for (name, ty) in &inputs {
+        bls[0].inputs.push((name.to_string(), Some(ty.clone())));
+    }
+
+    return bls;
+}
+
+// Information regarding one variable for spilling
+#[derive(Clone, Debug, PartialEq)]
+struct VarSpillInfo {
+    var_name: String,
+    fn_name: String,
+    scope: usize,
+    version: usize
+}
+
+impl VarSpillInfo {
+    fn new(var: String) -> VarSpillInfo {
+        let var_segs = var.split('.').collect::<Vec<&str>>();
+        let var_name = var_segs[0].to_string();
+        let fn_name = var_segs[1].to_string();
+        let scope: usize = var_segs[2].to_string().parse().unwrap();
+        let version: usize = var_segs[3].to_string().parse().unwrap();
+    
+        VarSpillInfo {
+            var_name,
+            fn_name,
+            scope,
+            version
+        }
+    }
+
+    // a.x is directly below a.y if y = x + 1
+    fn directly_below(&self, other: &VarSpillInfo) -> bool {
+        self.var_name == other.var_name && self.fn_name == other.fn_name && self.scope + 1 == other.scope
+    }
+
+    // return all variables that shadowed self
+    // If a variable is shadowed, return the name of their shadower(s).
+    // Otherwise, the variable is out of scope due to a function call, return the name of the callee function.
+    fn get_shadowers(&self, state: &Vec<String>, f_name: &str) -> Vec<String> {
+        if &self.fn_name != f_name { return vec![f_name.to_string()]; }
+        // there are shadowers only if self actually appears in state
+        let mut appear = false;
+        // shadowers are directly above self
+        let mut shadowers = Vec::new();
+        for s in state {
+            // Skip all reserved registers
+            if s.chars().next().unwrap() != '%' {
+                let s_spill = VarSpillInfo::new(s.clone());
+                if *self == s_spill {
+                    appear = true;
+                }
+                // Add all shadowers
+                if self.directly_below(&s_spill) {
+                    shadowers.push(s.to_string());
+                }
+            }
+        }
+        if appear { shadowers } else { Vec::new() }
+    }
+}
+
+// Obtain io_size = maximum # of variables in any transition state that are in scope
+fn get_max_io_size(bls: &Vec<Block>, inputs: &Vec<(String, Ty)>) -> usize {
+    let mut io_size = inputs.len();
+    // Process block outputs
+    for b in bls {
+        let mut essential_vars = HashSet::new();
+        for (v, _) in &b.outputs {
+            // Skip all reserved registers
+            if v.chars().next().unwrap() != '%' {
+                let v_spill = VarSpillInfo::new(v.clone());
+                if v_spill.fn_name == b.fn_name {
+                    essential_vars.insert(v_spill.var_name);
+                }
+            }
+        }
+        io_size = max(io_size, essential_vars.len());
+    }
+    io_size
+}
+
+// Given a program INPUT state, return all candidates in the form of (shadower, candidate)
+fn get_spill_candidates(
+    inputs: &Vec<String>, 
+    f_name: &str,
+) -> HashMap<String, HashSet<String>> {
+    assert!(inputs.len() > 0);
+    let mut spill_map: HashMap<String, HashSet<String>> = HashMap::new();
+    for i in inputs {
+        // Skip all reserved registers
+        if i.chars().next().unwrap() != '%' {
+            let i_spill = VarSpillInfo::new(i.clone());
+            let shadowers = i_spill.get_shadowers(inputs, f_name);
+            for s in shadowers {
+                let mut cs = if let Some(cs) = spill_map.get(&s) { cs.clone() } else {HashSet::new()};
+                cs.insert(i.to_string());
+                spill_map.insert(s.to_string(), cs);
+            }
+        }
+    }
+    spill_map
+}
+
+// Perform spilling so all input / output state width <= io_size
+fn resolve_spilling<'ast>(
+    bls: Vec<Block<'ast>>,
+    io_size: usize,
+    predecessor: &Vec<HashSet<usize>>,
+    successor: &Vec<HashSet<usize>>,
+    entry_bl: usize,
+    predecessor_fn: &Vec<HashSet<usize>>,
+    successor_fn: &Vec<HashSet<usize>>,
+) -> Vec<Block<'ast>> {
+    // Number of spills required for every block
+    let mut spill_size = vec![0];
+    for i in 1..bls.len() {
+        let b = &bls[i];
+        // Compute the number of inputs excluding the reserved registers
+        let mut input_count = 0;
+        for (v, _) in &b.inputs {
+            if v.chars().next().unwrap() != '%' {
+                input_count += 1;
+            }
+        }
+        spill_size.push(if input_count > io_size { input_count - io_size } else { 0 });
+    }
+    println!("\n--\nIO SIZE: {}", io_size);
+    for i in 0..spill_size.len() {
+        println!("Block: {}, Spill Size: {}", i, spill_size[i]);
+    }
+
+    // Forward Analysis to determine the effectiveness of spilling each candidate
+    // Program state is consisted of two parts
+    // STACK: every (shadower, candidate) pair in stack, as well as when to pop them out
+    // Out-of-Scope(OOS): every *live* local variables that are out of scope to prevent duplicate pushes
+
+    // GEN: Whenever a variable is defined or function is called
+    //      If the variable or function shadows a variable in block output, and the variable is not out-of-scope, update STACK and OOS
+    // KILL: Whenever a shadower is out of scope, update STACK and OOP
+    
+    // OOS is a set of all local variables out of scope
+    let mut oos_in: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
+    let mut oos_out: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
+    // STACK is (shadower, candidate, pop_function, pop_scope).
+    // When the current scope is (pop_function, pop_scope), need to pop the spill
+    let mut stack_in: Vec<HashSet<(String, String, String, usize)>> = vec![HashSet::new(); bls.len()];
+    let mut stack_out: Vec<HashSet<(String, String, String, usize)>> = vec![HashSet::new(); bls.len()];
+    let mut visited = vec![false; bls.len()];
+    let mut next_bls: VecDeque<usize> = VecDeque::new();
+    next_bls.push_back(entry_bl);
+    while !next_bls.is_empty() {
+        let cur_bl = next_bls.pop_front().unwrap();
+        
+        // JOIN of OOS
+        let mut oos = {
+            let mut oos = HashSet::new();
+            // oos only stores local variables, so only process local predecessors
+            // there is no join, OOS of all predecessors should either be the same or empty
+            for p in &predecessor_fn[cur_bl] {
+                if oos.len() == 0 {
+                    oos = oos_out[*p].clone();
+                }
+                assert!(oos_out[*p].len() == 0 || oos == oos_out[*p]);
+            }
+            oos
+        };
+
+        // JOIN of STACK:
+        let mut stack = {
+            let mut stack = HashSet::new();
+            // if a function entry block, union over all predecessors
+            if predecessor_fn[cur_bl].len() == 0 {
+                for p in &predecessor[cur_bl] {
+                    stack.extend(stack_out[*p].clone());
+                }
+            }
+            // otherwise, union over local predecessors
+            // function calls should not affect the scope stack of the caller function
+            else {
+                for p in &predecessor_fn[cur_bl] {
+                    stack.extend(stack_out[*p].clone());
+                }
+            }
+            stack
+        };
+
+        // Iterate through the statements and process definition statements
+        if !visited[cur_bl] || oos_in[cur_bl] != oos || stack_in[cur_bl] != stack {
+            visited[cur_bl] = true;
+            oos_in[cur_bl] = oos.clone();
+            stack_in[cur_bl] = stack.clone();
+
+            // Pop out scope changes due to function call
+            for s in stack.clone() {
+                if bls[cur_bl].fn_name == s.2 && bls[cur_bl].scope <= s.3 {
+                    stack.remove(&s);
+                    oos.remove(&s.1);
+                }
+            }
+
+            // Check shadower declaration
+            for i in &bls[cur_bl].instructions {
+                match i {
+                    BlockContent::Stmt(stmt) => {
+                        // GEN describes all newly defined variables
+                        let (gen, _) = stmt_find_val(stmt);
+                        for shadower in &gen {
+                            let shadower_alive = bls[cur_bl].outputs.iter().fold(false, |a, b| a || &b.0 == shadower);
+                            // Proceed if the shadower live till the end of the block
+                            if shadower_alive && shadower.chars().next().unwrap() != '%' {
+                                let shadower_vsi = VarSpillInfo::new(shadower.to_string());
+                                // Iterate through outputs of cur_bl (live variables)
+                                for (candidate, _) in &bls[cur_bl].outputs {
+                                    // Proceed if in scope
+                                    if candidate.chars().next().unwrap() != '%' && !oos.contains(candidate) {
+                                        // Proceed if there is shadowing
+                                        if VarSpillInfo::new(candidate.to_string()).directly_below(&shadower_vsi) {
+                                            // GEN
+                                            oos.insert(candidate.to_string());
+                                            // pop_scope is current scope - 1
+                                            stack.insert((shadower.to_string(), candidate.to_string(), bls[cur_bl].fn_name.to_string(), bls[cur_bl].scope - 1));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    _ => {}
+                }
+            }
+
+            // First assert on CFG shape: all fn_successors can only have one scope other than the scope of cur_bl
+            let mut succ_scope = bls[cur_bl].scope;
+            for succ in &successor_fn[cur_bl] {
+                assert!(bls[*succ].scope == bls[cur_bl].scope || bls[*succ].scope == succ_scope || succ_scope == bls[cur_bl].scope);
+                if succ_scope != bls[*succ].scope { succ_scope = bls[*succ].scope };
+            }
+            // If there is a scope change in fn_successor, pop out all candidates that are no longer spilled
+            if succ_scope < bls[cur_bl].scope {
+                for s in stack.clone() {
+                    if bls[cur_bl].fn_name == s.2 && succ_scope <= s.3 {
+                        stack.remove(&s);
+                        oos.remove(&s.1);
+                    }
+                }
+            }
+
+            // If there is a function call, push all live & in-scope candidates onto stack
+            if successor_fn[cur_bl].len() != 0 && successor_fn[cur_bl] != successor[cur_bl] {
+                assert_eq!(successor[cur_bl].len(), 1);
+                assert_eq!(successor_fn[cur_bl].len(), 1);
+                let callee = Vec::from_iter(successor[cur_bl].clone())[0];
+                let callee_name = &bls[callee].fn_name;
+                let caller_name = &bls[cur_bl].fn_name;
+                // Iterate through outputs (live variables)
+                for (candidate, _) in &bls[cur_bl].outputs {
+                    if candidate.chars().next().unwrap() != '%' {
+                        // Only if in scope
+                        if !oos.contains(candidate) {
+                            if &VarSpillInfo::new(candidate.to_string()).fn_name == caller_name {
+                                // GEN
+                                oos.insert(candidate.to_string());
+                                // pop_scope is current scope
+                                stack.insert((callee_name.to_string(), candidate.to_string(), caller_name.to_string(), bls[cur_bl].scope));
+                            }
+                        }
+                    }
+                }
+            }
+            
+            oos_out[cur_bl] = oos.clone();
+            stack_out[cur_bl] = stack.clone();
+            for succ in &successor[cur_bl] {
+                next_bls.push_back(*succ);
+            }
+        }
+    }
+    for i in 1..bls.len() {
+        println!("BLOCK: {}", i);
+        println!("OOS: {:?}\nSTACK: ", oos_in[i]);
+        for s in &stack_in[i] {
+            println!("{:?}", s);
+        }
+    }
+    // As long as any block has spill_size > 0, keep vote out the candidate that can reduce the most total_spill_size
+    let mut total_spill_size = spill_size.iter().fold(0, |a, b| a + b);
+    let mut spills: HashMap<String, HashSet<String>> = HashMap::new();
+    while total_spill_size > 0 {
+        // Compute vote score for each candidate, use BTreeMap to make ranking deterministic
+        // Scores records all blocks where the spilling of the candidate can affect spill_size
+        let mut scores: BTreeMap<(String, String, String, usize), Vec<usize>> = BTreeMap::new();
+        for i in 1..bls.len() {
+            // Only gain score if the block requires spilling
+            if spill_size[i] > 0 {
+                for stack in &stack_in[i] {
+                    let candidate = stack.clone();
+                    if let Some(b) = scores.get(&candidate) {
+                        scores.insert(candidate, [b.to_vec(), vec![i]].concat());
+                    } else {
+                        scores.insert(candidate, vec![i]);
+                    }
+                }
+            }
+        }
+        let mut scores = Vec::from_iter(scores);
+        scores.sort_by(|(_, a), (_, b)| b.len().cmp(&a.len()));
+        // Pick the #0 candidate
+        println!("CHOICE: {:?}", scores[0]);
+        let ((shadower, var, _, _), _) = &scores[0];
+        // Add the candidate to spills
+        let mut vars = if let Some(vars) = spills.get(shadower) { vars.clone() } else { HashSet::new() };
+        vars.insert(var.to_string());
+        spills.insert(shadower.to_string(), vars);
+        // Remove the candidate from stack_in
+        for b in &scores[0].1 {
+            stack_in[*b].remove(&scores[0].0);
+            // spill_size only decreases if var is alive & not shadowed by something else in the state
+            let var_alive = bls[*b].inputs.iter().fold(false, |a, b| a || &b.0 == var);
+            let spill_size_decrease = stack_in[*b].iter().fold(true, |a, b| a && &b.1 != var);
+            if var_alive && spill_size_decrease {
+                spill_size[*b] -= 1;
+                total_spill_size -= 1;
+            }
+        }
+    }
+
+    // Iterate through the blocks again, this time add push and pop statements
+    // State is consisted of liveness and stack information
+    // GEN: when a shadower is defined and variable is alive and not on stack, PUSH the variable onto stack
+    // KILL: when a shadower is out of scope, POP the variable out of the stack
+    // In addition, need to keep track of whether the BP update statement has been inserted
+    let mut bl_in: Vec<HashSet<(String, String, String, usize)>> = vec![HashSet::new(); bls.len()];
+    let mut bl_out: Vec<HashSet<(String, String, String, usize)>> = vec![HashSet::new(); bls.len()];
+    let mut visited = vec![false; bls.len()];
+    let mut next_bls: VecDeque<usize> = VecDeque::new();
+    next_bls.push_back(entry_bl);
+    /*
+    while !next_bls.is_empty() {
+        let cur_bl = next_bls.pop_front().unwrap();
+        
+        // Union over predecessors
+        let mut state = HashSet::new();
+        for p in &predecessor[cur_bl] {
+            state.extend(bl_out[*p].clone());
+        }
+        // Iterate through the statements and process definition statements
+        if !visited[cur_bl] || bl_in[cur_bl] != state {
+            visited[cur_bl] = true;
+            bl_in[cur_bl] = state.clone();
+
+            // Check if BP update statement has been defined
+            let mut bp_update_defined = false;
+            // All POP and PUSHES are inserted at the end of the instructions
+            let mut mem_ops = Vec::new();
+
+            // Check shadower declaration
+            for i in &bls[cur_bl].instructions {
+                match i {
+                    BlockContent::Stmt(stmt) => {
+                        // GEN describes all newly defined variables
+                        let (gen, _) = stmt_find_val(stmt);
+                        for shadower in &gen {
+                            if let Some(cs) = spills.get(shadower) {
+                                for candidate in cs {
+                                    // pop_scope is current scope - 1
+                                    state.insert((shadower.to_string(), candidate.to_string(), bls[cur_bl].fn_name.to_string(), bls[cur_bl].scope - 1));
+                                }
+                            }
+                        }
+                    },
+                    _ => {}
+                }
+            }
+            // Process function calls
+            if successor_fn[cur_bl].len() != 0 && successor_fn[cur_bl] != successor[cur_bl] {
+                assert_eq!(successor[cur_bl].len(), 1);
+                assert_eq!(successor_fn[cur_bl].len(), 1);
+                let callee_name = &bls[Vec::from_iter(successor[cur_bl].clone())[0]].fn_name;
+                let caller_name = &bls[cur_bl].fn_name;
+                if let Some(cs) = spills.get(callee_name) {
+                    for candidate in cs {
+                        // Only spill variables that belong to the caller function
+                        if &VarSpillInfo::new(candidate.to_string()).fn_name == caller_name {
+                            // pop_scope is current scope
+                            state.insert((callee_name.to_string(), candidate.to_string(), caller_name.to_string(), bls[cur_bl].scope));
+                        }
+                    }
+                }
+            }
+
+            bl_out[cur_bl] = state.clone();
+            for succ in &successor[cur_bl] {
+                next_bls.push_back(*succ);
+            }
+        }
+    }
+    */
+
+    bls
+}
+
 
 /*
 // PMR is consisted of a liveness analysis on memory stack entries
@@ -1235,199 +1921,6 @@ fn dead_block_elimination(
     return (new_bls, new_entry_bl, label_map);
 }
 
-// For each block, set its input to be variables that are alive & defined at the entry point of the block and their type
-// Returns: bls
-// This pass consists of a liveness analysis and a reaching definition (for typing)
-fn set_input_output<'bl>(
-    mut bls: Vec<Block<'bl>>,
-    successor: &Vec<HashSet<usize>>,
-    predecessor: &Vec<HashSet<usize>>,
-    entry_bl: &usize,
-    exit_bls: &HashSet<usize>,
-    inputs: Vec<(String, Ty)>
-) -> Vec<Block<'bl>> {
-    // Liveness
-    let mut visited: Vec<bool> = vec![false; bls.len()];
-    // MEET is union, so IN and OUT are Empty Set
-    let mut bl_in: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
-    let mut bl_out: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
-    
-    // Can this ever happen?
-    if exit_bls.is_empty() { 
-        panic!("The program has no exit block!");
-    }
-    
-    // Start from exit block
-    let mut next_bls: VecDeque<usize> = VecDeque::new();
-    for eb in exit_bls {
-        next_bls.push_back(*eb);
-    }
-    // Backward analysis!
-    while !next_bls.is_empty() { 
-
-        let cur_bl = next_bls.pop_front().unwrap();   
-
-        // State is the union of all successors
-        let mut state: HashSet<String> = HashSet::new();
-        // Add %oRET to output of every exit blocks
-        if exit_bls.contains(&cur_bl) {
-            state.insert("%RET".to_string());
-        }
-        for s in &successor[cur_bl] {
-            state.extend(bl_in[*s].clone());
-        }
-
-        // Only analyze if never visited before or OUT changes
-        if !visited[cur_bl] || state != bl_out[cur_bl] {
-            
-            bl_out[cur_bl] = state.clone();
-            visited[cur_bl] = true;
-            
-            // KILL and GEN within the terminator
-            match &bls[cur_bl].terminator {
-                BlockTerminator::Transition(e) => { state.extend(expr_find_val(&e)); }
-                BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-                BlockTerminator::ProgTerm => {}            
-            }
-
-            // KILL and GEN within the block
-            // We assume that liveness analysis has been performed, don't reason about usefulness of variables
-            for i in bls[cur_bl].instructions.iter().rev() {
-                match i {
-                    BlockContent::MemPush((var, _, _)) => {
-                        state.insert(var.to_string());
-                        state.insert("%SP".to_string());
-                    }
-                    BlockContent::MemPop((var, _, _)) => {
-                        state.remove(&var.to_string());
-                        state.insert("%BP".to_string());
-                    }
-                    BlockContent::Stmt(s) => {
-                        let (kill, gen) = stmt_find_val(&s);
-                        for k in kill {
-                            state.remove(&k.to_string());
-                        }
-                        state.extend(gen);
-                    }
-                }
-            }
-            bl_in[cur_bl] = state;
-
-            // Block Transition
-            for tmp_bl in predecessor[cur_bl].clone() {
-                next_bls.push_back(tmp_bl);
-            }
-        }    
-    }
-
-    let input_lst = bl_in;
-    let output_lst = bl_out;
-
-    // bl_in now consists of all the variables alive at the entry point of each block, now use a forward analysis
-    // to find their types
-    // Assume that there are no generic / dynamic types
-
-    // Typing
-    let mut visited: Vec<bool> = vec![false; bls.len()];
-    // MEET is union, so IN and OUT are Empty Set
-    let mut bl_in: Vec<HashMap<String, Ty>> = vec![HashMap::new(); bls.len()];
-    let mut bl_out: Vec<HashMap<String, Ty>> = vec![HashMap::new(); bls.len()];
-    
-    // Start from entry block
-    let mut next_bls: VecDeque<usize> = VecDeque::new();
-    next_bls.push_back(*entry_bl);
-    // Forward analysis!
-    while !next_bls.is_empty() {
-        let cur_bl = next_bls.pop_front().unwrap();
-
-        // State is the union of all predecessors
-        let mut state: HashMap<String, Ty> = HashMap::new();
-        for s in &predecessor[cur_bl] {
-            for (name, ty) in &bl_out[*s] {
-                if let Some(k) = state.get(name) {
-                    if *ty != *k {
-                        panic!("Dynamic and generic types not supported!")
-                    }
-                }
-                if state.get(name) == None {
-                    state.insert(name.to_string(), ty.clone());
-                }
-            }
-        }
-        // If we are at entry block, state also includes *live* program parameters
-        if cur_bl == *entry_bl {
-            for (var, ty) in &inputs {
-                state.insert(var.clone(), ty.clone());
-            }
-        }
-
-        // Only analyze if never visited before or OUT changes
-        if !visited[cur_bl] || state != bl_in[cur_bl] {
-            
-            bl_in[cur_bl] = state.clone();
-            visited[cur_bl] = true;
-
-            // No KILL, GEN if we meet a typed definition
-            // The only case we need to process is Typed Definition
-            for i in bls[cur_bl].instructions.iter().rev() {
-                match i {
-                    BlockContent::MemPush(_) => {}
-                    BlockContent::MemPop(_) => {}
-                    BlockContent::Stmt(s) => {
-                        if let Statement::Definition(ds) = s {
-                            for d in &ds.lhs {
-                                if let TypedIdentifierOrAssignee::TypedIdentifier(p) = d {
-                                    let name = p.identifier.value.to_string();
-                                    let ty = type_to_ty(p.ty.clone());
-                                    state.insert(name, ty.unwrap());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            bl_out[cur_bl] = state;
-
-            // Terminator is just an expression so we don't need to worry about it
-
-            // Block Transition
-            for tmp_bl in successor[cur_bl].clone() {
-                next_bls.push_back(tmp_bl);
-            }
-        }    
-    }
-
-    let ty_map_in = bl_in;
-    let ty_map_out = bl_out;
-
-    // Update input of all blocks
-    // Note: block 0 takes function input and %BN as input
-    for i in 0..bls.len() {
-        // For this primitive implementation, take every register up to reg_size as input
-        // Something fishy is going on if inputs or outputs have been defined
-        assert!(bls[i].inputs.len() == 0);
-        // Only variables that are alive & defined will become parts of inputs / outputs
-        if i != 0 {
-            for name in input_lst[i].iter().sorted() {
-                if let Some(ty) = ty_map_in[i].get(name) {
-                    bls[i].inputs.push((name.to_string(), Some(ty.clone())));
-                }
-            }
-        }
-        assert!(bls[i].outputs.len() == 0);
-        for name in output_lst[i].iter().sorted() {
-            if let Some(ty) = ty_map_out[i].get(name) {
-                bls[i].outputs.push((name.to_string(), Some(ty.clone())));
-            }
-        }
-    }
-    for (name, ty) in &inputs {
-        bls[0].inputs.push((name.to_string(), Some(ty.clone())));
-    }
-
-    return bls;
-}
-
 // --
 // BLOCK PREPROCESSING
 // --
@@ -1451,11 +1944,6 @@ pub fn process_block<const VERBOSE: bool, const MODE: usize>(
 
     // Perform topological sort on functions
     let sorted_fns = fn_top_sort(&bls, &successor, &successor_fn);
-    // Convert vector into map from fn_name -> index in sorted_fns
-    // let mut fn_top_map = HashMap::new();
-    // for i in 0..sorted_fns.len() {
-        // fn_top_map.insert(sorted_fns[i].to_string(), i);
-    // }
     if VERBOSE {
         print!("FN TOP SORT: {}", sorted_fns[0]);
         for i in 1..sorted_fns.len() {
@@ -1464,13 +1952,6 @@ pub fn process_block<const VERBOSE: bool, const MODE: usize>(
         println!();
     }
     
-    /*
-    // Obtain io_size = maximum # of variables in a transition state that belong to the current function & have different names
-    // Note that this value is not the final io_size as it does not include any reserved registers
-    let tmp_io_size = get_max_io_size(&bls, &inputs);
-    // Perform spilling
-    let bls = resolve_spilling(bls, tmp_io_size);
-    */
 
     // VtR
     let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) = var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl, inputs);
@@ -1493,187 +1974,6 @@ pub fn process_block<const VERBOSE: bool, const MODE: usize>(
 
     print_bls(&bls, &entry_bl);
     (bls, entry_bl, io_size, witness_size, live_io, total_num_proofs_bound, total_num_mem_accesses_bound, num_mem_accesses)
-}
-
-// Sort functions in topological order
-fn top_sort_helper(
-    cur_name: &str,
-    call_graph: &HashMap<String, HashSet<String>>,
-    mut visited: HashMap<String, bool>,
-    mut chain: Vec<String>
-) -> (Vec<String>, HashMap<String, bool>) {
-    visited.insert(cur_name.to_string(), true);
-    for s in call_graph.get(cur_name).unwrap() {
-        if !visited.get(s).unwrap() {
-            (chain, visited) = top_sort_helper(s, call_graph, visited, chain);
-        }
-    }
-    chain.insert(0, cur_name.to_string());
-    return (chain, visited);
-}
-
-fn fn_top_sort(
-    bls: &Vec<Block>,
-    successor: &Vec<HashSet<usize>>,
-    successor_fn: &Vec<HashSet<usize>>,
-) -> Vec<String> {
-    // First construct function call graph
-    let mut fn_call_graph: HashMap<String, HashSet<String>> = HashMap::new();
-    // Initialize every function to NOT VISITED
-    let mut visited = HashMap::new();
-    fn_call_graph.insert("main".to_string(), HashSet::new());
-    for cur_bl in 0..bls.len() {
-        let b = &bls[cur_bl];
-        let caller_name = b.fn_name.to_string();
-        if !visited.contains_key(&caller_name) {
-            visited.insert(caller_name.to_string(), false);
-            fn_call_graph.insert(caller_name.to_string(), HashSet::new());
-        }
-        // if cur_bl is a caller of a function, add the call to call graph
-        if successor_fn[cur_bl].len() != 0 && successor_fn[cur_bl] != successor[cur_bl] {
-            assert_eq!(successor[cur_bl].len(), 1);
-            assert_eq!(successor_fn[cur_bl].len(), 1);
-            let callee_name = bls[Vec::from_iter(successor[cur_bl].clone())[0]].fn_name.to_string();
-
-            let mut callee_list = fn_call_graph.get(&caller_name).unwrap().clone();
-            callee_list.insert(callee_name);
-            fn_call_graph.insert(caller_name, callee_list);
-        }
-    }
-    // Next perform top sort using call graph
-    top_sort_helper("main", &fn_call_graph, visited, Vec::new()).0
-}
-
-// Information regarding one variable for spilling
-#[derive(Clone, Debug, PartialEq)]
-struct VarSpillInfo {
-    var_name: String,
-    fn_name: String,
-    scope: usize,
-    version: usize
-}
-
-impl VarSpillInfo {
-    fn new(var: String) -> VarSpillInfo {
-        let var_segs = var.split('.').collect::<Vec<&str>>();
-        let var_name = var_segs[0].to_string();
-        let fn_name = var_segs[1].to_string();
-        let scope: usize = var_segs[2].to_string().parse().unwrap();
-        let version: usize = var_segs[3].to_string().parse().unwrap();
-    
-        VarSpillInfo {
-            var_name,
-            fn_name,
-            scope,
-            version
-        }
-    }
-
-    // if a.below(b), then whenever b is in scope, a is not
-    fn below(&self, other: &VarSpillInfo) -> bool {
-        self.var_name == other.var_name && self.fn_name == other.fn_name && self.scope < other.scope
-    }
-
-    // determine whether self is in scope of a given program state
-    // return all variables that immediately override self
-    fn in_scope(&self, state: &Vec<String>, f_name: String) -> bool {
-        if self.fn_name != f_name { return false; }
-        let mut in_scope = false;
-        for s in state {
-            let s_spill = VarSpillInfo::new(s.clone());
-            // In scope only if it actually appears in the state
-            if *self == s_spill {
-                in_scope = true;
-            }
-            // And no variable of the same name has higher scope
-            if self.below(&VarSpillInfo::new(s.clone())) {
-                return false;
-            }
-        }
-        in_scope
-    }
-}
-
-// Obtain io_size = maximum # of variables in a transition state that belong to the current function & have different names
-fn get_max_io_size(bls: &Vec<Block>, inputs: &Vec<(String, Ty)>) -> usize {
-    let mut io_size = inputs.len();
-    // Process block outputs
-    for b in bls {
-        let mut essential_vars = HashSet::new();
-        for (v, _) in &b.outputs {
-            // Skip all reserved registers
-            if v.chars().next().unwrap() != '%' {
-                let v_spill = VarSpillInfo::new(v.clone());
-                if v_spill.fn_name == b.fn_name {
-                    essential_vars.insert(v_spill.var_name);
-                }
-            }
-        }
-        io_size = max(io_size, essential_vars.len());
-    }
-    io_size
-}
-
-// Given a program INPUT state, return all variables that can be spilled
-// Note: In at least one of the blocks, all returned variables need to be spilled
-fn get_spill_candidates(
-    inputs: &Vec<String>, 
-    f_name: String,
-) -> Vec<VarSpillInfo> {
-    assert!(inputs.len() > 0);
-    let mut spill_list = Vec::new();
-    for i in inputs {
-        let i_spill = VarSpillInfo::new(i.clone());
-        if !i_spill.in_scope(inputs, f_name.to_string()) {
-            spill_list.push(i_spill);
-        }
-    }
-    spill_list
-}
-
-// Perform spilling so all input / output state width <= io_size
-fn resolve_spilling<'ast>(
-    bls: Vec<Block<'ast>>,
-    io_size: usize
-) -> Vec<Block<'ast>> {
-    // Spill if NUMBER OF NON_RESERVED REGISTER exceeds tmp_io_size
-    // Next_spill = X indicates that the input width of block X exceeds io_size.
-    // Initialize to an arbitrary non-zero value, repeat until next_spill is 0
-    let mut next_spill = 1;
-    // How many variables do we need to spill?
-    let mut spill_size = 0;
-    while next_spill != 0 {
-        // Find the next spill
-        next_spill = 0;
-        for i in 1..bls.len() {
-            let b = &bls[i];
-            // Compute the number of inputs excluding the reserved registers
-            let mut input_count = 0;
-            for (v, _) in &b.inputs {
-                if v.chars().next().unwrap() != '%' {
-                    input_count += 1;
-                }
-            }
-            if input_count > io_size {
-                spill_size = input_count - io_size;
-                next_spill = i;
-                break;
-            }
-        }
-        if next_spill == 0 {
-            break;
-        }
-        let candidates = get_spill_candidates(&bls[next_spill].inputs.iter().map(|i| i.0.clone()).collect(), bls[next_spill].fn_name.clone());
-        println!("BLOCK TO SPILL: {}, SIZE: {}", next_spill, spill_size);
-        println!("CANDIDATES: {:?}", candidates);
-        
-        // Traverse backwards in CFG to find where the spill first occurs
-        // For each spill candidate, record: 1. where is the candidate first spillable? 2. how many blocks will this spill last?
-        // For every candidate, there should only be one block where the candidate is first spillable
-
-        break;
-    }
-    bls
 }
 
 // Turn all variables in an expression to a register reference
@@ -1922,6 +2222,7 @@ fn var_to_reg<'a, const MODE: usize>(
 
     // Make sure all bl_in and bl_outs are defined
     for i in 0..bls.len() {
+        println!("i: {}", i);
         assert!(bl_in[i] != None);
         assert!(bl_out[i] != None);
     }

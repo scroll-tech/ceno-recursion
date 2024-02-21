@@ -368,31 +368,6 @@ impl<'ast> ZGen<'ast> {
         // Create the initial block
         blks.push(Block::new(0, 1, f_name.to_string(), 0));
         blks_len += 1;
-        // Initialize %RP
-        let rp_init_stmt = Statement::Definition(DefinitionStatement {
-            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                ty: Type::Basic(BasicType::Field(FieldType {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                identifier: IdentifierExpression {
-                    value: "%RP".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                span: Span::new("", 0, 0).unwrap()
-            })],
-            expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: "0".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            })),
-            span: Span::new("", 0, 0).unwrap()
-        });
-        blks[blks_len - 1].instructions.push(BlockContent::Stmt(rp_init_stmt));
         // Initialize %SP
         let sp_init_stmt = Statement::Definition(DefinitionStatement {
             lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {

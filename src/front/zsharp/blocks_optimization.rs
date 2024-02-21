@@ -119,19 +119,26 @@ pub fn optimize_block<const VERBOSE: bool>(
     }
 
     // Set Input Output
-    // Putting this here because EBE and DBE destroys CFG
     bls = set_input_output(bls, &successor, &predecessor, &successor_fn, &entry_bl, &exit_bls, &exit_bls_fn, inputs.clone());
-    if VERBOSE {
-        println!("\n\n--\nSet Input Output:");
-        print_bls(&bls, &entry_bl);
-    }
 
     // Spilling
     // Obtain io_size = maximum # of variables in a transition state that belong to the current function & have different names
     // Note that this value is not the final io_size as it does not include any reserved registers
     let tmp_io_size = get_max_io_size(&bls, &inputs);
     // Perform spilling
-    let mut bls = resolve_spilling(bls, tmp_io_size, &predecessor, &successor, entry_bl, &predecessor_fn, &successor_fn);
+    let mut bls = resolve_spilling(bls, tmp_io_size, &predecessor, &successor, entry_bl, &entry_bls_fn, &predecessor_fn, &successor_fn);
+    if VERBOSE {
+        println!("\n\n--\nSpilling:");
+        print_bls(&bls, &entry_bl);
+    }
+
+    // Set I/O again after spilling
+    // Putting this here because EBE and DBE destroys CFG
+    bls = set_input_output(bls, &successor, &predecessor, &successor_fn, &entry_bl, &exit_bls, &exit_bls_fn, inputs.clone());
+    if VERBOSE {
+        println!("\n\n--\nSet Input Output:");
+        print_bls(&bls, &entry_bl);
+    }
 
     // EBE
     (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
@@ -1046,9 +1053,7 @@ fn set_input_output<'bl>(
     // Update input of all blocks
     // Note: block 0 takes function input and %BN as input
     for i in 0..bls.len() {
-        // For this primitive implementation, take every register up to reg_size as input
-        // Something fishy is going on if inputs or outputs have been defined
-        assert!(bls[i].inputs.len() == 0);
+        bls[i].inputs = Vec::new();
         // Only variables that are alive & defined will become parts of inputs / outputs
         if i != 0 {
             for name in input_lst[i].iter().sorted() {
@@ -1057,7 +1062,7 @@ fn set_input_output<'bl>(
                 }
             }
         }
-        assert!(bls[i].outputs.len() == 0);
+        bls[i].outputs = Vec::new();
         for name in output_lst[i].iter().sorted() {
             if let Some(ty) = ty_map_out[i].get(name) {
                 bls[i].outputs.push((name.to_string(), Some(ty.clone())));
@@ -1100,31 +1105,6 @@ impl VarSpillInfo {
     fn directly_below(&self, other: &VarSpillInfo) -> bool {
         self.var_name == other.var_name && self.fn_name == other.fn_name && self.scope + 1 == other.scope
     }
-
-    // return all variables that shadowed self
-    // If a variable is shadowed, return the name of their shadower(s).
-    // Otherwise, the variable is out of scope due to a function call, return the name of the callee function.
-    fn get_shadowers(&self, state: &Vec<String>, f_name: &str) -> Vec<String> {
-        if &self.fn_name != f_name { return vec![f_name.to_string()]; }
-        // there are shadowers only if self actually appears in state
-        let mut appear = false;
-        // shadowers are directly above self
-        let mut shadowers = Vec::new();
-        for s in state {
-            // Skip all reserved registers
-            if s.chars().next().unwrap() != '%' {
-                let s_spill = VarSpillInfo::new(s.clone());
-                if *self == s_spill {
-                    appear = true;
-                }
-                // Add all shadowers
-                if self.directly_below(&s_spill) {
-                    shadowers.push(s.to_string());
-                }
-            }
-        }
-        if appear { shadowers } else { Vec::new() }
-    }
 }
 
 // Obtain io_size = maximum # of variables in any transition state that are in scope
@@ -1147,35 +1127,66 @@ fn get_max_io_size(bls: &Vec<Block>, inputs: &Vec<(String, Ty)>) -> usize {
     io_size
 }
 
-// Given a program INPUT state, return all candidates in the form of (shadower, candidate)
-fn get_spill_candidates(
-    inputs: &Vec<String>, 
-    f_name: &str,
-) -> HashMap<String, HashSet<String>> {
-    assert!(inputs.len() > 0);
-    let mut spill_map: HashMap<String, HashSet<String>> = HashMap::new();
-    for i in inputs {
-        // Skip all reserved registers
-        if i.chars().next().unwrap() != '%' {
-            let i_spill = VarSpillInfo::new(i.clone());
-            let shadowers = i_spill.get_shadowers(inputs, f_name);
-            for s in shadowers {
-                let mut cs = if let Some(cs) = spill_map.get(&s) { cs.clone() } else {HashSet::new()};
-                cs.insert(i.to_string());
-                spill_map.insert(s.to_string(), cs);
+// Given a statement, decide if it is of form %SP = %SP + x
+fn is_sp_push(s: &Statement) -> bool {
+    if let Statement::Definition(d) = s {
+        let mut is_sp = false;
+        if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
+            if a.id.value == "%SP".to_string() {
+                is_sp = true;
+            }
+        }
+        if let TypedIdentifierOrAssignee::TypedIdentifier(ty) = &d.lhs[0] {
+            if ty.identifier.value == "%SP".to_string() {
+                is_sp = true;
+            }
+        }
+        if is_sp {
+            if let Expression::Binary(b) = &d.expression {
+                if let Expression::Identifier(ie) = &*b.left {
+                    if ie.value == "%SP".to_string() && b.op == BinaryOperator::Add {
+                        return true;
+                    }
+                }
             }
         }
     }
-    spill_map
+    return false;
+}
+
+// Given a statement, decide if it is of form %BP = %SP
+fn is_bp_update(s: &Statement) -> bool {
+    if let Statement::Definition(d) = s {
+        if let TypedIdentifierOrAssignee::TypedIdentifier(td) = &d.lhs[0] {
+            if td.identifier.value == "%BP".to_string() {
+                if let Expression::Identifier(ie) = &d.expression {
+                    if ie.value == "%SP".to_string() {
+                        return true;
+                    }
+                }
+            }
+        }
+        if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
+            if a.id.value == "%BP".to_string() {
+                if let Expression::Identifier(ie) = &d.expression {
+                    if ie.value == "%SP".to_string() {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
 }
 
 // Perform spilling so all input / output state width <= io_size
 fn resolve_spilling<'ast>(
-    bls: Vec<Block<'ast>>,
+    mut bls: Vec<Block<'ast>>,
     io_size: usize,
     predecessor: &Vec<HashSet<usize>>,
     successor: &Vec<HashSet<usize>>,
     entry_bl: usize,
+    entry_bls_fn: &HashSet<usize>,
     predecessor_fn: &Vec<HashSet<usize>>,
     successor_fn: &Vec<HashSet<usize>>,
 ) -> Vec<Block<'ast>> {
@@ -1391,35 +1402,115 @@ fn resolve_spilling<'ast>(
             }
         }
     }
+    // If size of spills is not zero, need to add %BP and %SP to block 0
+    if spills.len() > 0 {
+        let mut new_instructions = Vec::new();
+        // Initialize %SP
+        let sp_init_stmt = Statement::Definition(DefinitionStatement {
+            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                ty: Type::Basic(BasicType::Field(FieldType {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                identifier: IdentifierExpression {
+                    value: "%SP".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                span: Span::new("", 0, 0).unwrap()
+            })],
+            expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: "0".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            span: Span::new("", 0, 0).unwrap()
+        });
+        new_instructions.push(BlockContent::Stmt(sp_init_stmt));
+        // Initialize %BP
+        let bp_init_stmt = Statement::Definition(DefinitionStatement {
+            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                ty: Type::Basic(BasicType::Field(FieldType {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                identifier: IdentifierExpression {
+                    value: "%BP".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                span: Span::new("", 0, 0).unwrap()
+            })],
+            expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: "0".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            span: Span::new("", 0, 0).unwrap()
+        });
+        new_instructions.push(BlockContent::Stmt(bp_init_stmt));
+        bls[0].instructions = new_instructions;
+    }
 
-    // Iterate through the blocks again, this time add push and pop statements
-    // State is consisted of liveness and stack information
-    // GEN: when a shadower is defined and variable is alive and not on stack, PUSH the variable onto stack
-    // KILL: when a shadower is out of scope, POP the variable out of the stack
-    // In addition, need to keep track of whether the BP update statement has been inserted
-    let mut bl_in: Vec<HashSet<(String, String, String, usize)>> = vec![HashSet::new(); bls.len()];
-    let mut bl_out: Vec<HashSet<(String, String, String, usize)>> = vec![HashSet::new(); bls.len()];
+    // Iterate through the blocks FUNCTION BY FUNCTION, add push and pop statements if variable is in SPILLS
+    // STATE, GEN, KILL follows above
+    // OOS: Out-of-Scope
+    let mut oos_in: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
+    let mut oos_out: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
+    // STACK is a (ordered) list of variables in stack per stack frame
+    let mut stack_in: Vec<Vec<Vec<(String, Ty)>>> = vec![Vec::new(); bls.len()];
+    let mut stack_out: Vec<Vec<Vec<(String, Ty)>>> = vec![Vec::new(); bls.len()];
     let mut visited = vec![false; bls.len()];
     let mut next_bls: VecDeque<usize> = VecDeque::new();
-    next_bls.push_back(entry_bl);
-    /*
+    for e in entry_bls_fn {
+        next_bls.push_back(*e);
+    }
     while !next_bls.is_empty() {
         let cur_bl = next_bls.pop_front().unwrap();
         
-        // Union over predecessors
-        let mut state = HashSet::new();
-        for p in &predecessor[cur_bl] {
-            state.extend(bl_out[*p].clone());
-        }
-        // Iterate through the statements and process definition statements
-        if !visited[cur_bl] || bl_in[cur_bl] != state {
-            visited[cur_bl] = true;
-            bl_in[cur_bl] = state.clone();
+        // JOIN of OOS & STACK
+        let (mut oos, mut stack) = {
+            let mut oos = HashSet::new();
+            let mut stack = Vec::new();
+            // there is no join, OOS & STACK of all predecessors should either be the same or empty
+            for p in &predecessor_fn[cur_bl] {
+                if oos.len() == 0 {
+                    oos = oos_out[*p].clone();
+                }
+                if stack.len() == 0 {
+                    stack = stack_out[*p].clone();
+                }
+                assert!(oos_out[*p].len() == 0 || oos == oos_out[*p]);
+                assert!(stack_out[*p].len() == 0 || stack == stack_out[*p]);
+            }
+            (oos, stack)
+        };
 
-            // Check if BP update statement has been defined
-            let mut bp_update_defined = false;
-            // All POP and PUSHES are inserted at the end of the instructions
-            let mut mem_ops = Vec::new();
+        // No need to visit a block twice
+        if !visited[cur_bl] {
+            visited[cur_bl] = true;
+            oos_in[cur_bl] = oos.clone();
+            stack_in[cur_bl] = stack.clone();
+            while stack.len() < bls[cur_bl].scope { stack.push(Vec::new()); }
+
+            let mut new_instructions = Vec::new();
+            let mut sp_offset = 0;
+
+            // Handle function return scope change
+            while stack.len() > bls[cur_bl].scope {
+                let mut sp_offset = stack[stack.len() - 1].len() - 1;
+                for (var, ty) in stack[stack.len() - 1].iter().rev() {
+                    new_instructions.push(BlockContent::MemPop((var.to_string(), ty.clone(), sp_offset)));
+                    sp_offset -= 1;
+                }
+                stack.pop();
+            }
 
             // Check shadower declaration
             for i in &bls[cur_bl].instructions {
@@ -1428,42 +1519,246 @@ fn resolve_spilling<'ast>(
                         // GEN describes all newly defined variables
                         let (gen, _) = stmt_find_val(stmt);
                         for shadower in &gen {
-                            if let Some(cs) = spills.get(shadower) {
-                                for candidate in cs {
-                                    // pop_scope is current scope - 1
-                                    state.insert((shadower.to_string(), candidate.to_string(), bls[cur_bl].fn_name.to_string(), bls[cur_bl].scope - 1));
+                            let shadower_alive = bls[cur_bl].outputs.iter().fold(false, |a, b| a || &b.0 == shadower);
+                            // Proceed if the shadower live till the end of the block
+                            if shadower_alive && shadower.chars().next().unwrap() != '%' {
+                                // Check if any variables need to be spilled
+                                if let Some(vars) = spills.get(shadower) {
+                                    for var in vars {
+                                        if !oos.contains(var) {
+                                            let var_type: Option<Ty> = bls[cur_bl].outputs.iter().fold(None, |a, b| if &b.0 == var { b.1.clone() } else { a });
+                                            if let Some(var_ty) = var_type {
+                                                // GEN
+                                                oos.insert(var.to_string());
+
+                                                if sp_offset == 0 {
+                                                    // %PHY[%SP + 0] = %BP
+                                                    new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));
+                                                    // %BP = %SP
+                                                    let bp_update_stmt = Statement::Definition(DefinitionStatement {
+                                                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                                            ty: Type::Basic(BasicType::Field(FieldType {
+                                                                span: Span::new("", 0, 0).unwrap()
+                                                            })),
+                                                            identifier: IdentifierExpression {
+                                                                value: "%BP".to_string(),
+                                                                span: Span::new("", 0, 0).unwrap()
+                                                            },
+                                                            span: Span::new("", 0, 0).unwrap()
+                                                        })],
+                                                        expression: Expression::Identifier(IdentifierExpression {
+                                                            value: "%SP".to_string(),
+                                                            span: Span::new("", 0, 0).unwrap()
+                                                        }),
+                                                        span: Span::new("", 0, 0).unwrap()
+                                                    });
+                                                    new_instructions.push(BlockContent::Stmt(bp_update_stmt));
+                                                    stack[bls[cur_bl].scope - 1].push(("%BP".to_string(), Ty::Field));
+                                                    sp_offset += 1;
+                                                }
+                                                // %PHY[%SP + ?] = Var
+                                                new_instructions.push(BlockContent::MemPush((var.to_string(), var_ty.clone(), sp_offset)));
+                                                stack[bls[cur_bl].scope - 1].push((var.to_string(), var_ty.clone()));
+                                                sp_offset += 1;
+                                            }
+                                        }
+                                    }
                                 }
                             }
+                        }
+                        if !is_sp_push(&stmt) && !is_bp_update(&stmt) {
+                            new_instructions.push(i.clone());
                         }
                     },
                     _ => {}
                 }
             }
-            // Process function calls
-            if successor_fn[cur_bl].len() != 0 && successor_fn[cur_bl] != successor[cur_bl] {
-                assert_eq!(successor[cur_bl].len(), 1);
-                assert_eq!(successor_fn[cur_bl].len(), 1);
-                let callee_name = &bls[Vec::from_iter(successor[cur_bl].clone())[0]].fn_name;
-                let caller_name = &bls[cur_bl].fn_name;
-                if let Some(cs) = spills.get(callee_name) {
-                    for candidate in cs {
-                        // Only spill variables that belong to the caller function
-                        if &VarSpillInfo::new(candidate.to_string()).fn_name == caller_name {
-                            // pop_scope is current scope
-                            state.insert((callee_name.to_string(), candidate.to_string(), caller_name.to_string(), bls[cur_bl].scope));
-                        }
+            // %SP = %SP + ?
+            if sp_offset > 0 {
+                let sp_update_stmt = Statement::Definition(DefinitionStatement {
+                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        ty: Type::Basic(BasicType::Field(FieldType {
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        identifier: IdentifierExpression {
+                            value: "%SP".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        span: Span::new("", 0, 0).unwrap()
+                    })],
+                    expression: Expression::Binary(BinaryExpression {
+                        op: BinaryOperator::Add,
+                        left: Box::new(Expression::Identifier(IdentifierExpression {
+                            value: "%SP".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                            value: DecimalNumber {
+                                value: sp_offset.to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            span: Span::new("", 0, 0).unwrap()
+                        }))),
+                        span: Span::new("", 0, 0).unwrap()
+                    }),
+                    span: Span::new("", 0, 0).unwrap()
+                }); 
+                new_instructions.push(BlockContent::Stmt(sp_update_stmt));                            
+            }
+
+            // If there is a scope change in fn_successor, pop out all candidates that are no longer spilled
+            let mut succ_scope = bls[cur_bl].scope;
+            for succ in &successor_fn[cur_bl] {
+                if succ_scope != bls[*succ].scope { succ_scope = bls[*succ].scope };
+            }
+            if succ_scope < bls[cur_bl].scope {
+                while stack.len() > succ_scope {
+                    let mut sp_offset = stack[stack.len() - 1].len() - 1;
+                    for (var, ty) in stack[stack.len() - 1].iter().rev() {
+                        new_instructions.push(BlockContent::MemPop((var.to_string(), ty.clone(), sp_offset)));
+                        sp_offset -= 1;
                     }
+                    stack.pop();
                 }
             }
 
-            bl_out[cur_bl] = state.clone();
-            for succ in &successor[cur_bl] {
+            // If there is a function call, push all live & in-scope candidates onto stack
+            if successor_fn[cur_bl].len() != 0 && successor_fn[cur_bl] != successor[cur_bl] {
+                assert_eq!(successor[cur_bl].len(), 1);
+                assert_eq!(successor_fn[cur_bl].len(), 1);
+                stack.push(Vec::new());
+
+                // the last instruction is %RP = ?, which should appear after scope change
+                let rp_update_inst = new_instructions.pop().unwrap();
+
+                let callee = Vec::from_iter(successor[cur_bl].clone())[0];
+                let callee_name = &bls[callee].fn_name;
+                let caller_name = &bls[cur_bl].fn_name;
+                // Check if any variables need to be spilled
+                if let Some(vars) = spills.get(callee_name) {
+                    for var in vars {
+                        if !oos.contains(var) {
+                            let var_type: Option<Ty> = bls[cur_bl].outputs.iter().fold(None, |a, b| if &b.0 == var { b.1.clone() } else { a });
+                            if let Some(var_ty) = var_type {
+                                // GEN
+                                oos.insert(var.to_string());
+
+                                if sp_offset == 0 {
+                                    // %PHY[%SP + 0] = %BP
+                                    new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));
+                                    // %BP = %SP
+                                    let bp_update_stmt = Statement::Definition(DefinitionStatement {
+                                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                            ty: Type::Basic(BasicType::Field(FieldType {
+                                                span: Span::new("", 0, 0).unwrap()
+                                            })),
+                                            identifier: IdentifierExpression {
+                                                value: "%BP".to_string(),
+                                                span: Span::new("", 0, 0).unwrap()
+                                            },
+                                            span: Span::new("", 0, 0).unwrap()
+                                        })],
+                                        expression: Expression::Identifier(IdentifierExpression {
+                                            value: "%SP".to_string(),
+                                            span: Span::new("", 0, 0).unwrap()
+                                        }),
+                                        span: Span::new("", 0, 0).unwrap()
+                                    });
+                                    new_instructions.push(BlockContent::Stmt(bp_update_stmt));
+                                    stack[bls[cur_bl].scope - 1].push(("%BP".to_string(), Ty::Field));
+                                    sp_offset += 1;
+                                }
+                                // %PHY[%SP + ?] = Var
+                                new_instructions.push(BlockContent::MemPush((var.to_string(), var_ty.clone(), sp_offset)));
+                                stack[bls[cur_bl].scope - 1].push((var.to_string(), var_ty.clone()));
+                                sp_offset += 1;
+                            }
+                        }
+                    }
+                }
+                // Also push in %RP if caller is not main
+                if caller_name != "main" {
+                    if sp_offset == 0 {
+                        // %PHY[%SP + 0] = %BP
+                        new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));
+                        // %BP = %SP
+                        let bp_update_stmt = Statement::Definition(DefinitionStatement {
+                            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                ty: Type::Basic(BasicType::Field(FieldType {
+                                    span: Span::new("", 0, 0).unwrap()
+                                })),
+                                identifier: IdentifierExpression {
+                                    value: "%BP".to_string(),
+                                    span: Span::new("", 0, 0).unwrap()
+                                },
+                                span: Span::new("", 0, 0).unwrap()
+                            })],
+                            expression: Expression::Identifier(IdentifierExpression {
+                                value: "%SP".to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            }),
+                            span: Span::new("", 0, 0).unwrap()
+                        });
+                        new_instructions.push(BlockContent::Stmt(bp_update_stmt));
+                        stack[bls[cur_bl].scope - 1].push(("%BP".to_string(), Ty::Field));
+                        sp_offset += 1;
+                    }
+                    // %PHY[%SP + ?] = %RP
+                    new_instructions.push(BlockContent::MemPush(("%RP".to_string(), Ty::Field, sp_offset)));
+                    stack[bls[cur_bl].scope - 1].push(("%RP".to_string(), Ty::Field));
+                    sp_offset += 1;
+                }
+                // %SP = %SP + ?
+                if sp_offset > 0 {
+                    let sp_update_stmt = Statement::Definition(DefinitionStatement {
+                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                            ty: Type::Basic(BasicType::Field(FieldType {
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            identifier: IdentifierExpression {
+                                value: "%SP".to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            span: Span::new("", 0, 0).unwrap()
+                        })],
+                        expression: Expression::Binary(BinaryExpression {
+                            op: BinaryOperator::Add,
+                            left: Box::new(Expression::Identifier(IdentifierExpression {
+                                value: "%SP".to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                                value: DecimalNumber {
+                                    value: sp_offset.to_string(),
+                                    span: Span::new("", 0, 0).unwrap()
+                                },
+                                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                    span: Span::new("", 0, 0).unwrap()
+                                })),
+                                span: Span::new("", 0, 0).unwrap()
+                            }))),
+                            span: Span::new("", 0, 0).unwrap()
+                        }),
+                        span: Span::new("", 0, 0).unwrap()
+                    }); 
+                    new_instructions.push(BlockContent::Stmt(sp_update_stmt));                            
+                }
+                // %RP = ?
+                new_instructions.push(rp_update_inst);
+            }
+
+            bls[cur_bl].instructions = new_instructions;
+            oos_out[cur_bl] = oos.clone();
+            stack_out[cur_bl] = stack.clone();
+            for succ in &successor_fn[cur_bl] {
                 next_bls.push_back(*succ);
             }
         }
     }
-    */
-
+    
     bls
 }
 
@@ -1809,6 +2104,7 @@ fn phy_mem_rearrange<'ast>(
 // If a block is empty and its terminator is a coda (to another block or %RP)
 // replace all the reference to it in its predecessors with that terminator
 // If a block terminates with a branching and both branches to the same block, eliminate the branching
+// If a block only has one successor and that successor only has one predecessor, merge the two blocks
 
 // We assume that something would happen after the function call, so we do not change the value of any %RP
 // This would not affect correctness. Worst case it might make DBE later inefficient.
@@ -1835,9 +2131,9 @@ fn empty_block_elimination(
     let mut next_bls: VecDeque<usize> = VecDeque::new();
     for eb in exit_bls {
         next_bls.push_back(eb);
-        let _ = std::mem::replace(&mut visited[eb], true);
+        visited[eb] = true;
     }
-    // Backward analysis!
+    // Backward analysis to isolate empty blocks
     while !next_bls.is_empty() {
         let cur_bl = next_bls.pop_front().unwrap();
 
@@ -1847,7 +2143,7 @@ fn empty_block_elimination(
             // either we haven't processed the predecessor
             // or cur_bl is empty so predecessors will be changed
             if !visited[tmp_bl] || bls[cur_bl].instructions.len() == 0 {
-                let _ = std::mem::replace(&mut visited[tmp_bl], true);
+                visited[tmp_bl] = true;
                 
                 if bls[cur_bl].instructions.len() == 0 {
                     if let BlockTerminator::Transition(cur_e) = &bls[cur_bl].terminator {
@@ -2222,7 +2518,6 @@ fn var_to_reg<'a, const MODE: usize>(
 
     // Make sure all bl_in and bl_outs are defined
     for i in 0..bls.len() {
-        println!("i: {}", i);
         assert!(bl_in[i] != None);
         assert!(bl_out[i] != None);
     }

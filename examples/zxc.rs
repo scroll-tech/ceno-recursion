@@ -796,7 +796,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
 }
 
 fn main() {
-    let func_inputs: Vec<usize> = vec![945594, 2, 3, 5, 7, 9];
+    let func_inputs: Vec<usize> = vec![5, 4, 3, 2, 1];
 
     env_logger::Builder::from_default_env()
         .format_level(false)

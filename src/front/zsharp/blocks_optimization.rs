@@ -112,14 +112,18 @@ pub fn optimize_block<const VERBOSE: bool>(
     }
 
     // Liveness
-    bls = liveness_analysis(bls, &successor, &predecessor, &successor_fn, &exit_bls, &exit_bls_fn);
+    bls = liveness_analysis(bls, &successor, &predecessor, &successor_fn, &predecessor_fn, &exit_bls, &exit_bls_fn);
     if VERBOSE {
         println!("\n\n--\nLiveness:");
         print_bls(&bls, &entry_bl);
     }
 
     // Set Input Output
-    bls = set_input_output(bls, &successor, &predecessor, &successor_fn, &entry_bl, &exit_bls, &exit_bls_fn, inputs.clone());
+    bls = set_input_output(bls, &successor, &predecessor, &successor_fn, &predecessor_fn, &entry_bl, &exit_bls, &exit_bls_fn, inputs.clone());
+    if VERBOSE {
+        println!("\n\n--\nSet Input Output before Spilling:");
+        print_bls(&bls, &entry_bl);
+    }
 
     // Spilling
     // Obtain io_size = maximum # of variables in a transition state that belong to the current function & have different names
@@ -132,16 +136,8 @@ pub fn optimize_block<const VERBOSE: bool>(
         print_bls(&bls, &entry_bl);
     }
 
-    // Set I/O again after spilling
-    // Putting this here because EBE and DBE destroys CFG
-    bls = set_input_output(bls, &successor, &predecessor, &successor_fn, &entry_bl, &exit_bls, &exit_bls_fn, inputs.clone());
-    if VERBOSE {
-        println!("\n\n--\nSet Input Output:");
-        print_bls(&bls, &entry_bl);
-    }
-
     // EBE
-    (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor);
+    (_, predecessor, bls) = empty_block_elimination(bls, exit_bls, successor, predecessor, &entry_bls_fn, &exit_bls_fn);
     if VERBOSE {
         println!("\n\n--\nEBE:");
         print_bls(&bls, &entry_bl);
@@ -151,6 +147,17 @@ pub fn optimize_block<const VERBOSE: bool>(
     (bls, entry_bl, _) = dead_block_elimination(bls, entry_bl, predecessor);
     if VERBOSE {
         println!("\n\n--\nDBE:");
+        print_bls(&bls, &entry_bl);
+    }
+
+    // Construct CFG again after DBE
+    let (successor, predecessor, exit_bls, _, successor_fn, predecessor_fn, exit_bls_fn) = 
+        construct_flow_graph(&bls, entry_bl);
+
+    // Set I/O again after optimizations
+    bls = set_input_output(bls, &successor, &predecessor, &successor_fn, &predecessor_fn, &entry_bl, &exit_bls, &exit_bls_fn, inputs.clone());
+    if VERBOSE {
+        println!("\n\n--\nSet Input Output after Spilling:");
         print_bls(&bls, &entry_bl);
     }
     (bls, entry_bl)
@@ -693,6 +700,7 @@ fn liveness_analysis<'ast>(
     successor: &Vec<HashSet<usize>>,
     predecessor: &Vec<HashSet<usize>>,
     successor_fn: &Vec<HashSet<usize>>,
+    predecessor_fn: &Vec<HashSet<usize>>,
     exit_bls: &HashSet<usize>,
     exit_bls_fn: &HashSet<usize>
 ) -> Vec<Block<'ast>> {
@@ -784,8 +792,13 @@ fn liveness_analysis<'ast>(
             bl_in[cur_bl] = state;
 
             // Block Transition
-            for tmp_bl in predecessor[cur_bl].clone() {
-                next_bls.push_back(tmp_bl);
+            for tmp_bl in &predecessor[cur_bl] {
+                next_bls.push_back(*tmp_bl);
+            }
+            for tmp_bl in &predecessor_fn[cur_bl]{
+                if !predecessor[cur_bl].contains(tmp_bl) {
+                    next_bls.push_back(*tmp_bl);
+                }
             }
         }    
     }
@@ -852,8 +865,13 @@ fn liveness_analysis<'ast>(
             bls[cur_bl].instructions = new_instructions;
 
             // Block Transition
-            for tmp_bl in predecessor[cur_bl].clone() {
-                next_bls.push_back(tmp_bl);
+            for tmp_bl in &predecessor[cur_bl] {
+                next_bls.push_back(*tmp_bl);
+            }
+            for tmp_bl in &predecessor_fn[cur_bl]{
+                if !predecessor[cur_bl].contains(tmp_bl) {
+                    next_bls.push_back(*tmp_bl);
+                }
             }
         }    
     }
@@ -869,6 +887,7 @@ fn set_input_output<'bl>(
     successor: &Vec<HashSet<usize>>,
     predecessor: &Vec<HashSet<usize>>,
     successor_fn: &Vec<HashSet<usize>>,
+    predecessor_fn: &Vec<HashSet<usize>>,
     entry_bl: &usize,
     exit_bls: &HashSet<usize>,
     exit_bls_fn: &HashSet<usize>,
@@ -964,8 +983,13 @@ fn set_input_output<'bl>(
             bl_in[cur_bl] = state;
 
             // Block Transition
-            for tmp_bl in predecessor[cur_bl].clone() {
-                next_bls.push_back(tmp_bl);
+            for tmp_bl in &predecessor[cur_bl] {
+                next_bls.push_back(*tmp_bl);
+            }
+            for tmp_bl in &predecessor_fn[cur_bl]{
+                if !predecessor[cur_bl].contains(tmp_bl) {
+                    next_bls.push_back(*tmp_bl);
+                }
             }
         }    
     }
@@ -1041,8 +1065,8 @@ fn set_input_output<'bl>(
             // Terminator is just an expression so we don't need to worry about it
 
             // Block Transition
-            for tmp_bl in successor[cur_bl].clone() {
-                next_bls.push_back(tmp_bl);
+            for tmp_bl in &successor[cur_bl] {
+                next_bls.push_back(*tmp_bl);
             }
         }    
     }
@@ -1203,10 +1227,6 @@ fn resolve_spilling<'ast>(
         }
         spill_size.push(if input_count > io_size { input_count - io_size } else { 0 });
     }
-    println!("\n--\nIO SIZE: {}", io_size);
-    for i in 0..spill_size.len() {
-        println!("Block: {}, Spill Size: {}", i, spill_size[i]);
-    }
 
     // Forward Analysis to determine the effectiveness of spilling each candidate
     // Program state is consisted of two parts
@@ -1354,13 +1374,6 @@ fn resolve_spilling<'ast>(
             }
         }
     }
-    for i in 1..bls.len() {
-        println!("BLOCK: {}", i);
-        println!("OOS: {:?}\nSTACK: ", oos_in[i]);
-        for s in &stack_in[i] {
-            println!("{:?}", s);
-        }
-    }
     // As long as any block has spill_size > 0, keep vote out the candidate that can reduce the most total_spill_size
     let mut total_spill_size = spill_size.iter().fold(0, |a, b| a + b);
     let mut spills: HashMap<String, HashSet<String>> = HashMap::new();
@@ -1384,7 +1397,6 @@ fn resolve_spilling<'ast>(
         let mut scores = Vec::from_iter(scores);
         scores.sort_by(|(_, a), (_, b)| b.len().cmp(&a.len()));
         // Pick the #0 candidate
-        println!("CHOICE: {:?}", scores[0]);
         let ((shadower, var, _, _), _) = &scores[0];
         // Add the candidate to spills
         let mut vars = if let Some(vars) = spills.get(shadower) { vars.clone() } else { HashSet::new() };
@@ -1460,6 +1472,55 @@ fn resolve_spilling<'ast>(
 
     // Iterate through the blocks FUNCTION BY FUNCTION, add push and pop statements if variable is in SPILLS
     // STATE, GEN, KILL follows above
+    // %BP = %SP
+    let bp_update_stmt = Statement::Definition(DefinitionStatement {
+        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+            ty: Type::Basic(BasicType::Field(FieldType {
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            identifier: IdentifierExpression {
+                value: "%BP".to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            },
+            span: Span::new("", 0, 0).unwrap()
+        })],
+        expression: Expression::Identifier(IdentifierExpression {
+            value: "%SP".to_string(),
+            span: Span::new("", 0, 0).unwrap()
+        }),
+        span: Span::new("", 0, 0).unwrap()
+    });
+    let sp_update_stmt = |sp_offset: usize | Statement::Definition(DefinitionStatement {
+        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+            ty: Type::Basic(BasicType::Field(FieldType {
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            identifier: IdentifierExpression {
+                value: "%SP".to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            },
+            span: Span::new("", 0, 0).unwrap()
+        })],
+        expression: Expression::Binary(BinaryExpression {
+            op: BinaryOperator::Add,
+            left: Box::new(Expression::Identifier(IdentifierExpression {
+                value: "%SP".to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: sp_offset.to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            }))),
+            span: Span::new("", 0, 0).unwrap()
+        }),
+        span: Span::new("", 0, 0).unwrap()
+    }); 
     // OOS: Out-of-Scope
     let mut oos_in: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
     let mut oos_out: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
@@ -1508,6 +1569,7 @@ fn resolve_spilling<'ast>(
                 for (var, ty) in stack[stack.len() - 1].iter().rev() {
                     new_instructions.push(BlockContent::MemPop((var.to_string(), ty.clone(), sp_offset)));
                     sp_offset -= 1;
+                    oos.remove(var);
                 }
                 stack.pop();
             }
@@ -1515,6 +1577,7 @@ fn resolve_spilling<'ast>(
             let cur_frame = bls[cur_bl].scope - 1;
 
             // Check shadower declaration
+            // Ignore all memory instructions
             for i in &bls[cur_bl].instructions {
                 match i {
                     BlockContent::Stmt(stmt) => {
@@ -1537,24 +1600,7 @@ fn resolve_spilling<'ast>(
                                                     // %PHY[%SP + 0] = %BP
                                                     new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));
                                                     // %BP = %SP
-                                                    let bp_update_stmt = Statement::Definition(DefinitionStatement {
-                                                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                                                            ty: Type::Basic(BasicType::Field(FieldType {
-                                                                span: Span::new("", 0, 0).unwrap()
-                                                            })),
-                                                            identifier: IdentifierExpression {
-                                                                value: "%BP".to_string(),
-                                                                span: Span::new("", 0, 0).unwrap()
-                                                            },
-                                                            span: Span::new("", 0, 0).unwrap()
-                                                        })],
-                                                        expression: Expression::Identifier(IdentifierExpression {
-                                                            value: "%SP".to_string(),
-                                                            span: Span::new("", 0, 0).unwrap()
-                                                        }),
-                                                        span: Span::new("", 0, 0).unwrap()
-                                                    });
-                                                    new_instructions.push(BlockContent::Stmt(bp_update_stmt));
+                                                    new_instructions.push(BlockContent::Stmt(bp_update_stmt.clone()));
                                                     stack[cur_frame].push(("%BP".to_string(), Ty::Field));
                                                     sp_offset += 1;
                                                 }
@@ -1574,41 +1620,6 @@ fn resolve_spilling<'ast>(
                     },
                     _ => {}
                 }
-            }
-            // %SP = %SP + ?
-            if sp_offset > 0 {
-                let sp_update_stmt = Statement::Definition(DefinitionStatement {
-                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                        ty: Type::Basic(BasicType::Field(FieldType {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        identifier: IdentifierExpression {
-                            value: "%SP".to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        span: Span::new("", 0, 0).unwrap()
-                    })],
-                    expression: Expression::Binary(BinaryExpression {
-                        op: BinaryOperator::Add,
-                        left: Box::new(Expression::Identifier(IdentifierExpression {
-                            value: "%SP".to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                            value: DecimalNumber {
-                                value: sp_offset.to_string(),
-                                span: Span::new("", 0, 0).unwrap()
-                            },
-                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                                span: Span::new("", 0, 0).unwrap()
-                            })),
-                            span: Span::new("", 0, 0).unwrap()
-                        }))),
-                        span: Span::new("", 0, 0).unwrap()
-                    }),
-                    span: Span::new("", 0, 0).unwrap()
-                }); 
-                new_instructions.push(BlockContent::Stmt(sp_update_stmt));                            
             }
 
             // If there is a scope change in fn_successor, pop out all candidates that are no longer spilled
@@ -1636,24 +1647,12 @@ fn resolve_spilling<'ast>(
 
                 // the last instruction is %RP = ?, which should appear after scope change
                 let rp_update_inst = new_instructions.pop().unwrap();
-                // %BP = %SP
-                let bp_update_stmt = Statement::Definition(DefinitionStatement {
-                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                        ty: Type::Basic(BasicType::Field(FieldType {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        identifier: IdentifierExpression {
-                            value: "%BP".to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        span: Span::new("", 0, 0).unwrap()
-                    })],
-                    expression: Expression::Identifier(IdentifierExpression {
-                        value: "%SP".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    }),
-                    span: Span::new("", 0, 0).unwrap()
-                });
+
+                // %SP = %SP + ?
+                if sp_offset > 0 {
+                    new_instructions.push(BlockContent::Stmt(sp_update_stmt(sp_offset)));   
+                    sp_offset = 0;                         
+                }
 
                 let callee = Vec::from_iter(successor[cur_bl].clone())[0];
                 let callee_name = &bls[callee].fn_name;
@@ -1670,6 +1669,7 @@ fn resolve_spilling<'ast>(
                                 if sp_offset == 0 {
                                     // %PHY[%SP + 0] = %BP
                                     new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));
+                                    // %BP = %SP
                                     new_instructions.push(BlockContent::Stmt(bp_update_stmt.clone()));
                                     stack[cur_frame].push(("%BP".to_string(), Ty::Field));
                                     sp_offset += 1;
@@ -1687,7 +1687,8 @@ fn resolve_spilling<'ast>(
                     if sp_offset == 0 {
                         // %PHY[%SP + 0] = %BP
                         new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));
-                        new_instructions.push(BlockContent::Stmt(bp_update_stmt));
+                        // %BP = %SP
+                        new_instructions.push(BlockContent::Stmt(bp_update_stmt.clone()));
                         stack[cur_frame].push(("%BP".to_string(), Ty::Field));
                         sp_offset += 1;
                     }
@@ -1696,43 +1697,12 @@ fn resolve_spilling<'ast>(
                     stack[cur_frame].push(("%RP".to_string(), Ty::Field));
                     sp_offset += 1;
                 }
-                // %SP = %SP + ?
-                if sp_offset > 0 {
-                    let sp_update_stmt = Statement::Definition(DefinitionStatement {
-                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                            ty: Type::Basic(BasicType::Field(FieldType {
-                                span: Span::new("", 0, 0).unwrap()
-                            })),
-                            identifier: IdentifierExpression {
-                                value: "%SP".to_string(),
-                                span: Span::new("", 0, 0).unwrap()
-                            },
-                            span: Span::new("", 0, 0).unwrap()
-                        })],
-                        expression: Expression::Binary(BinaryExpression {
-                            op: BinaryOperator::Add,
-                            left: Box::new(Expression::Identifier(IdentifierExpression {
-                                value: "%SP".to_string(),
-                                span: Span::new("", 0, 0).unwrap()
-                            })),
-                            right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                                value: DecimalNumber {
-                                    value: sp_offset.to_string(),
-                                    span: Span::new("", 0, 0).unwrap()
-                                },
-                                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                                    span: Span::new("", 0, 0).unwrap()
-                                })),
-                                span: Span::new("", 0, 0).unwrap()
-                            }))),
-                            span: Span::new("", 0, 0).unwrap()
-                        }),
-                        span: Span::new("", 0, 0).unwrap()
-                    }); 
-                    new_instructions.push(BlockContent::Stmt(sp_update_stmt));                            
-                }
                 // %RP = ?
                 new_instructions.push(rp_update_inst);
+            }
+            // %SP = %SP + ?
+            if sp_offset > 0 {
+                new_instructions.push(BlockContent::Stmt(sp_update_stmt(sp_offset)));                        
             }
 
             bls[cur_bl].instructions = new_instructions;
@@ -1743,364 +1713,27 @@ fn resolve_spilling<'ast>(
             }
         }
     }
-    
     bls
 }
-
-
-/*
-// PMR is consisted of a liveness analysis on memory stack entries
-// Liveness analysis on the stack (LAS)
-// DIRECTION: Backward
-// LATTICE:
-//   TOP: An empty list
-//   Otherwise, a list of list that records whether each stack frame of every scope is alive.
-//     The last list indicates the current stack frame. Note that a stack frame might have size 0.
-//   BOTTOM: None
-// TRANSFER:
-//    GEN: If a variable is popped from the stack:
-//         - If it is %BP, initialize a new scope
-//         - Mark the stack frame at the offset to be alive
-//   KILL: If a variable is pushed onto the stack:
-//         - If it is %BP, pop out the current scope
-
-// Given a statement, decide if it is of form %SP = %SP + x
-fn pmr_is_push(s: &Statement) -> bool {
-    if let Statement::Definition(d) = s {
-        let mut is_sp = false;
-        if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
-            if a.id.value == "%SP".to_string() {
-                is_sp = true;
-            }
-        }
-        if let TypedIdentifierOrAssignee::TypedIdentifier(ty) = &d.lhs[0] {
-            if ty.identifier.value == "%SP".to_string() {
-                is_sp = true;
-            }
-        }
-        if is_sp {
-            if let Expression::Binary(b) = &d.expression {
-                if let Expression::Identifier(ie) = &*b.left {
-                    if ie.value == "%SP".to_string() && b.op == BinaryOperator::Add {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    return false;
-}
-
-// Given a statement, decide if it is of form %BP = %SP
-fn pmr_is_bp_update(s: &Statement) -> bool {
-    if let Statement::Definition(d) = s {
-        if let TypedIdentifierOrAssignee::TypedIdentifier(td) = &d.lhs[0] {
-            if td.identifier.value == "%BP".to_string() {
-                if let Expression::Identifier(ie) = &d.expression {
-                    if ie.value == "%SP".to_string() {
-                        return true;
-                    }
-                }
-            }
-        }
-        if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
-            if a.id.value == "%BP".to_string() {
-                if let Expression::Identifier(ie) = &d.expression {
-                    if ie.value == "%SP".to_string() {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    return false;
-}
-
-fn pmr_join(
-    first: Vec<Vec<bool>>,
-    second: &Vec<Vec<bool>>
-) -> Vec<Vec<bool>> {
-    // If any of them is TOP, return the other one
-    if first.len() == 0 {
-        return second.clone();
-    }
-    if second.len() == 0 {
-        return first;
-    }
-    // Reject the join if they do not have the same scope
-    if first.len() != second.len() {
-        panic!("PMR join fail: cannot join two states with different scopes!")
-    }
-    let mut third = first.clone();
-    for i in 0..third.len() {
-        for j in 0..second[i].len() {
-            if j >= third[i].len() {
-                third[i].push(second[i][j]);
-            } else {
-                third[i][j] = third[i][j] || second[i][j];
-            }
-        }
-    }
-    third
-}
-
-// Given all stack frames of a scope, how many live entries are in the stack?
-fn pmr_stack_frame_count(frame_list: &Vec<bool>) -> usize {
-    let count = frame_list.iter().fold(0, |a, b| if *b {a + 1} else {a});
-    if count == 1 {0} else {count}
-}
-
-// Return new blocks and whether blocks have been altered
-fn phy_mem_rearrange<'ast>(
-    mut bls: Vec<Block<'ast>>,
-    predecessor_fn: &Vec<HashSet<usize>>,
-    successor_fn: &Vec<HashSet<usize>>,
-    exit_bls_fn: &HashSet<usize>
-) -> (Vec<Block<'ast>>, bool) {
-    let mut visited: Vec<bool> = Vec::new();
-    let mut bl_in: Vec<Vec<Vec<bool>>> = Vec::new();
-    let mut bl_out: Vec<Vec<Vec<bool>>> = Vec::new();
-    for _ in 0..bls.len() {
-        visited.push(false);
-        bl_in.push(Vec::new());
-        bl_out.push(Vec::new());
-    }
-
-    // LIVENESS ANALYSIS
-    // This shouldn't happen
-    if exit_bls_fn.is_empty() { 
-        panic!("The program has no exit block!");
-    }
-    // Start from exit block
-    let mut next_bls: VecDeque<usize> = VecDeque::new();
-    for eb in exit_bls_fn {
-        next_bls.push_back(*eb);
-    }
-    // Backward analysis!
-    while !next_bls.is_empty() {
-        let cur_bl = next_bls.pop_front().unwrap();
-
-        // State is the Union of all successors
-        let mut state = Vec::new();
-        for s in &successor_fn[cur_bl] {
-            state = pmr_join(state, &bl_in[*s]);
-        }
-
-        // Only analyze if never visited before or OUT changes
-        if !visited[cur_bl] || state != bl_out[cur_bl] {
-            bl_out[cur_bl] = state.clone();
-            visited[cur_bl] = true;
-
-            // GEN within the block
-            for i in bls[cur_bl].instructions.iter().rev() {
-                match i {
-                    BlockContent::MemPop((var, _, offset)) => {
-                        // If we encounter a %BP, push in a new scope
-                        if var == "%BP" {
-                            state.push(vec![true]);
-                        }
-                        // Otherwise, set entry OFFSET of the last scope to be TRUE, pad state with FALSE if necessary
-                        else {
-                            let sp = state.len() - 1;
-                            for _ in state[sp].len()..*offset {
-                                state[sp].push(false);
-                            }
-                            state[sp].push(true);
-                        }
-                    }
-                    BlockContent::MemPush((var, _, _)) => {
-                        // If we encounter a %BP, pop out the last scope
-                        if var == "%BP" {
-                            state.pop();
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            bl_in[cur_bl] = state;
-
-            // Block Transition
-            for tmp_bl in predecessor_fn[cur_bl].clone() {
-                next_bls.push_back(tmp_bl);
-            }
-        }
-    }
-
-    // Use bl_out to derive bl_out_size, which records the number of live stack frames within each scope
-    let bl_out_size: Vec<Vec<usize>> = bl_out.iter().map(
-        |i| i.iter().map(
-            |j| pmr_stack_frame_count(j)
-        ).collect()
-    ).collect();
-    for i in 0..bls.len() {
-        visited[i] = false;
-    }
-
-    // Start from exit block
-    let mut next_bls: VecDeque<usize> = VecDeque::new();
-    for eb in exit_bls_fn {
-        next_bls.push_back(*eb);
-    }
-    let mut altered = false;
-    // One final backward analysis, visit every block once
-    while !next_bls.is_empty() {
-        let cur_bl = next_bls.pop_front().unwrap();
-
-        // Only analyze if never visited before
-        if !visited[cur_bl] {
-            visited[cur_bl] = true;
-            // State is bl_out
-            // State_size is bl_out_size
-            let mut state = bl_out[cur_bl].clone();
-            let mut state_size = bl_out_size[cur_bl].clone();
-            // Push in new instructions
-            let mut new_instructions = Vec::new();
-
-            // GEN within the block
-            for i in bls[cur_bl].instructions.iter().rev() {
-                let sp = state.len() - 1;
-                match i {
-                    BlockContent::MemPop((var, ty, offset)) => {
-                        if var == "%BP" {
-                            state.push(vec![true]);
-                            state_size.push(0);
-                            // Delay popping %BP until we see the first non-BP pop
-                        }
-                        else {
-                            for _ in state[sp].len()..*offset {
-                                state[sp].push(false);
-                            }
-                            state[sp].push(true);
-                            // If this is the first pop of the scope pop out %BP first
-                            if state_size[sp] == 0 {
-                                new_instructions.insert(0, BlockContent::MemPop(("%BP".to_string(), Ty::Field, 0)));
-                                state_size[sp] += 1;
-                            }
-                            new_instructions.insert(0, BlockContent::MemPop((var.to_string(), ty.clone(), state_size[sp])));
-                            state_size[sp] += 1;
-                        }
-                    }
-                    BlockContent::MemPush((var, ty, offset)) => {
-                        if var == "%BP" {
-                            // Only include the push %BP statement if anything else is pushed onto the stack
-                            // In that case, state_size[sp] should be 1
-                            assert!(state_size[sp] <= 1);
-                            if state_size[sp] == 1 {
-                                // %BP = %SP
-                                let bp_update_stmt = Statement::Definition(DefinitionStatement {
-                                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                                        ty: Type::Basic(BasicType::Field(FieldType {
-                                            span: Span::new("", 0, 0).unwrap()
-                                        })),
-                                        identifier: IdentifierExpression {
-                                            value: "%BP".to_string(),
-                                            span: Span::new("", 0, 0).unwrap()
-                                        },
-                                        span: Span::new("", 0, 0).unwrap()
-                                    })],
-                                    expression: Expression::Identifier(IdentifierExpression {
-                                        value: "%SP".to_string(),
-                                        span: Span::new("", 0, 0).unwrap()
-                                    }),
-                                    span: Span::new("", 0, 0).unwrap()
-                                });
-                                new_instructions.insert(0, BlockContent::Stmt(bp_update_stmt));
-                                // %PHY[%SP + 0] = %BP
-                                new_instructions.insert(0, BlockContent::MemPush(("%BP".to_string(), Ty::Field, 0)));
-                            } else {
-                                altered = true;
-                            }
-                            state.pop();
-                            state_size.pop();
-                        } else {
-                            // Use state to determine whether stack entry is alive
-                            if *offset < state[sp].len() && state[sp][*offset] {
-                                state_size[sp] -= 1;
-                                new_instructions.insert(0, BlockContent::MemPush((var.to_string(), ty.clone(), state_size[sp])));
-                            } else {
-                                altered = true;
-                            }
-                        }
-                    }
-                    BlockContent::Stmt(s) => {
-                        // %SP = %SP + X
-                        if pmr_is_push(&s) {
-                            if state_size[sp] != 0 {
-                                let sp_update_stmt = Statement::Definition(DefinitionStatement {
-                                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                                        ty: Type::Basic(BasicType::Field(FieldType {
-                                            span: Span::new("", 0, 0).unwrap()
-                                        })),
-                                        identifier: IdentifierExpression {
-                                            value: "%SP".to_string(),
-                                            span: Span::new("", 0, 0).unwrap()
-                                        },
-                                        span: Span::new("", 0, 0).unwrap()
-                                    })],
-                                    expression: Expression::Binary(BinaryExpression {
-                                        op: BinaryOperator::Add,
-                                        left: Box::new(Expression::Identifier(IdentifierExpression {
-                                            value: "%SP".to_string(),
-                                            span: Span::new("", 0, 0).unwrap()
-                                        })),
-                                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                                            value: DecimalNumber {
-                                                value: state_size[sp].to_string(),
-                                                span: Span::new("", 0, 0).unwrap()
-                                            },
-                                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                                                span: Span::new("", 0, 0).unwrap()
-                                            })),
-                                            span: Span::new("", 0, 0).unwrap()
-                                        }))),
-                                        span: Span::new("", 0, 0).unwrap()
-                                    }),
-                                    span: Span::new("", 0, 0).unwrap()
-                                }); 
-                                new_instructions.insert(0, BlockContent::Stmt(sp_update_stmt));                                 
-                            } else {
-                                altered = true;
-                            }
-                        } else {
-                            if !pmr_is_bp_update(&s) {
-                                new_instructions.insert(0, i.clone());
-                            } else {
-                                altered = true;
-                            }
-                        }
-                    }
-                }
-            }
-            bls[cur_bl].instructions = new_instructions;
-
-            // Block Transition
-            for tmp_bl in predecessor_fn[cur_bl].clone() {
-                next_bls.push_back(tmp_bl);
-            }
-        }
-    }
-    
-    return (bls, altered);
-}
-*/
 
 // EBE: Backward analysis
 // If a block is empty and its terminator is a coda (to another block or %RP)
 // replace all the reference to it in its predecessors with that terminator
 // If a block terminates with a branching and both branches to the same block, eliminate the branching
 // If a block only has one successor and that successor only has one predecessor, merge the two blocks
-
+//
 // We assume that something would happen after the function call, so we do not change the value of any %RP
 // This would not affect correctness. Worst case it might make DBE later inefficient.
-
+//
 // CFG will be DESTROYED after this! Only do it after all statement analyses.
-fn empty_block_elimination(
-    mut bls: Vec<Block>,
+fn empty_block_elimination<'ast>(
+    mut bls: Vec<Block<'ast>>,
     exit_bls: HashSet<usize>,
     mut successor: Vec<HashSet<usize>>,
-    mut predecessor: Vec<HashSet<usize>>
-) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, Vec<Block>) {
+    mut predecessor: Vec<HashSet<usize>>,
+    entry_bls_fn: &HashSet<usize>,
+    exit_bls_fn: &HashSet<usize>
+) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, Vec<Block<'ast>>) {
 
     let mut visited: Vec<bool> = Vec::new();
     for _ in 0..bls.len() {
@@ -2130,6 +1763,26 @@ fn empty_block_elimination(
             if !visited[tmp_bl] || bls[cur_bl].instructions.len() == 0 {
                 visited[tmp_bl] = true;
                 
+                // If the block only has one predecessor and the predecessor only has one successor
+                // And the transition does not involve function calls / returns, merge the two blocks
+                if !entry_bls_fn.contains(&cur_bl) && predecessor[cur_bl].len() == 1 {
+                    let p = Vec::from_iter(predecessor[cur_bl].clone())[0];
+                    if !exit_bls_fn.contains(&p) && successor[p].len() == 1 {
+                        // Add all instructions in cur_bl to p
+                        let bc = bls[cur_bl].instructions.clone();
+                        bls[p].instructions.extend(bc);
+                        // Set terminator of p to terminator of cur_bl
+                        bls[p].terminator = bls[cur_bl].terminator.clone();
+                        // Update CFG
+                        successor[p].remove(&cur_bl);
+                        predecessor[cur_bl].remove(&p);
+                        for i in successor[cur_bl].clone() {
+                            successor[p].insert(i);
+                            predecessor[i].insert(p);
+                        }
+                    }
+                }
+
                 if bls[cur_bl].instructions.len() == 0 {
                     if let BlockTerminator::Transition(cur_e) = &bls[cur_bl].terminator {
                         if let BlockTerminator::Transition(e) = &bls[tmp_bl].terminator {
@@ -2232,7 +1885,6 @@ pub fn process_block<const VERBOSE: bool, const MODE: usize>(
         }
         println!();
     }
-    
 
     // VtR
     let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) = var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl, inputs);

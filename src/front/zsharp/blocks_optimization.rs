@@ -1512,6 +1512,8 @@ fn resolve_spilling<'ast>(
                 stack.pop();
             }
 
+            let cur_frame = bls[cur_bl].scope - 1;
+
             // Check shadower declaration
             for i in &bls[cur_bl].instructions {
                 match i {
@@ -1553,12 +1555,12 @@ fn resolve_spilling<'ast>(
                                                         span: Span::new("", 0, 0).unwrap()
                                                     });
                                                     new_instructions.push(BlockContent::Stmt(bp_update_stmt));
-                                                    stack[bls[cur_bl].scope - 1].push(("%BP".to_string(), Ty::Field));
+                                                    stack[cur_frame].push(("%BP".to_string(), Ty::Field));
                                                     sp_offset += 1;
                                                 }
                                                 // %PHY[%SP + ?] = Var
                                                 new_instructions.push(BlockContent::MemPush((var.to_string(), var_ty.clone(), sp_offset)));
-                                                stack[bls[cur_bl].scope - 1].push((var.to_string(), var_ty.clone()));
+                                                stack[cur_frame].push((var.to_string(), var_ty.clone()));
                                                 sp_offset += 1;
                                             }
                                         }
@@ -1627,12 +1629,31 @@ fn resolve_spilling<'ast>(
 
             // If there is a function call, push all live & in-scope candidates onto stack
             if successor_fn[cur_bl].len() != 0 && successor_fn[cur_bl] != successor[cur_bl] {
+                let cur_frame = cur_frame + 1;
                 assert_eq!(successor[cur_bl].len(), 1);
                 assert_eq!(successor_fn[cur_bl].len(), 1);
                 stack.push(Vec::new());
 
                 // the last instruction is %RP = ?, which should appear after scope change
                 let rp_update_inst = new_instructions.pop().unwrap();
+                // %BP = %SP
+                let bp_update_stmt = Statement::Definition(DefinitionStatement {
+                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        ty: Type::Basic(BasicType::Field(FieldType {
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        identifier: IdentifierExpression {
+                            value: "%BP".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        span: Span::new("", 0, 0).unwrap()
+                    })],
+                    expression: Expression::Identifier(IdentifierExpression {
+                        value: "%SP".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    }),
+                    span: Span::new("", 0, 0).unwrap()
+                });
 
                 let callee = Vec::from_iter(successor[cur_bl].clone())[0];
                 let callee_name = &bls[callee].fn_name;
@@ -1649,31 +1670,13 @@ fn resolve_spilling<'ast>(
                                 if sp_offset == 0 {
                                     // %PHY[%SP + 0] = %BP
                                     new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));
-                                    // %BP = %SP
-                                    let bp_update_stmt = Statement::Definition(DefinitionStatement {
-                                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                                            ty: Type::Basic(BasicType::Field(FieldType {
-                                                span: Span::new("", 0, 0).unwrap()
-                                            })),
-                                            identifier: IdentifierExpression {
-                                                value: "%BP".to_string(),
-                                                span: Span::new("", 0, 0).unwrap()
-                                            },
-                                            span: Span::new("", 0, 0).unwrap()
-                                        })],
-                                        expression: Expression::Identifier(IdentifierExpression {
-                                            value: "%SP".to_string(),
-                                            span: Span::new("", 0, 0).unwrap()
-                                        }),
-                                        span: Span::new("", 0, 0).unwrap()
-                                    });
-                                    new_instructions.push(BlockContent::Stmt(bp_update_stmt));
-                                    stack[bls[cur_bl].scope - 1].push(("%BP".to_string(), Ty::Field));
+                                    new_instructions.push(BlockContent::Stmt(bp_update_stmt.clone()));
+                                    stack[cur_frame].push(("%BP".to_string(), Ty::Field));
                                     sp_offset += 1;
                                 }
                                 // %PHY[%SP + ?] = Var
                                 new_instructions.push(BlockContent::MemPush((var.to_string(), var_ty.clone(), sp_offset)));
-                                stack[bls[cur_bl].scope - 1].push((var.to_string(), var_ty.clone()));
+                                stack[cur_frame].push((var.to_string(), var_ty.clone()));
                                 sp_offset += 1;
                             }
                         }
@@ -1684,31 +1687,13 @@ fn resolve_spilling<'ast>(
                     if sp_offset == 0 {
                         // %PHY[%SP + 0] = %BP
                         new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));
-                        // %BP = %SP
-                        let bp_update_stmt = Statement::Definition(DefinitionStatement {
-                            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                                ty: Type::Basic(BasicType::Field(FieldType {
-                                    span: Span::new("", 0, 0).unwrap()
-                                })),
-                                identifier: IdentifierExpression {
-                                    value: "%BP".to_string(),
-                                    span: Span::new("", 0, 0).unwrap()
-                                },
-                                span: Span::new("", 0, 0).unwrap()
-                            })],
-                            expression: Expression::Identifier(IdentifierExpression {
-                                value: "%SP".to_string(),
-                                span: Span::new("", 0, 0).unwrap()
-                            }),
-                            span: Span::new("", 0, 0).unwrap()
-                        });
                         new_instructions.push(BlockContent::Stmt(bp_update_stmt));
-                        stack[bls[cur_bl].scope - 1].push(("%BP".to_string(), Ty::Field));
+                        stack[cur_frame].push(("%BP".to_string(), Ty::Field));
                         sp_offset += 1;
                     }
                     // %PHY[%SP + ?] = %RP
                     new_instructions.push(BlockContent::MemPush(("%RP".to_string(), Ty::Field, sp_offset)));
-                    stack[bls[cur_bl].scope - 1].push(("%RP".to_string(), Ty::Field));
+                    stack[cur_frame].push(("%RP".to_string(), Ty::Field));
                     sp_offset += 1;
                 }
                 // %SP = %SP + ?

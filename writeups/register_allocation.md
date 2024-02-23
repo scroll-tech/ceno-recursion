@@ -31,78 +31,80 @@ To motivate the framework below, we begin by setting up a general approach:
 3. Rank every spill candidate by the number of transition states they are spillable in. Continually picking and removing the candidates with the top rank until size of every transition state is within I/O width.
 4. Finally, traverse through the program and insert `PUSH` and `POP` instructions to spill all picked candidates.
 
-The major challenge to this approach is that one variable does not correspond to one spill candidate. To illustrate, see the following example:
+The major challenge to this approach is that a spill candidate does not correspond to one variable, but rather one _location_ of a variable. To illustrate, see the following example:
 ```python
-int a.0 = 0
+int a0 = 0
 {
-  int a.1 = 0
+  int a1 = 0
   # TRANSITION 1: a.0, a.1
   ...
 }
 {
-  int a.1 = 1
+  int a1 = 1
   # TRANSITION 2: a.0, a.1
   ...
 }
 ```
-In this example, `a.0` is shadowed by `a.1` in both transition 1 and transition 2 and thus is a spill candidate in both blocks. However, these two spills can be performed independently. It might be the case that only the transition 1 exceeds io width, and so `a.0` only needs to be spilled in transition 1.
+In this example, `a0` is shadowed by `a1` in both transition 1 and transition 2 and thus is a spill candidate in both blocks. However, these two spills can be performed independently. It might be the case that only the transition 1 exceeds io width, and so `a0` only needs to be spilled in transition 1.
 
-This example shows that one cannot simply use the candidate name (i.e. `a.0`) to mark spill candidates. Further remark that SSA would not solve the problem in the example either. Instead, we introduce the _version number_ everytime a variable is defined in a new scope. Furthermore, each spill candidate is now denoted as `(shadower, candidate)`, where `shadower` is the variable that shadows the candidate. The above example is now transformed to:
+This example shows that one cannot simply use the candidate name (i.e. `a0`) to mark spill candidates. Further remark that SSA would not solve the problem in the example either. Rather, each shadowing of the variable in a new scope results in a _new location_ where the variable can be spilled. We denote each candidate as `(variable, location)`, and transform the above example to:
 ```python
-int a.0.0 = 0
+int a0 = 0
 {
-  int a.1.0 = 0
-  # TRANSITION 1: a.0.0, a.1.0
+  int a1.loc0 = 0
+  # TRANSITION 1: a.0, a.1.loc0
   ...
 }
 {
-  int a.1.1 = 1
-  # TRANSITION 2: a.0.0, a.1.1
+  int a1.loc1 = 1
+  # TRANSITION 2: a.0, a.1.loc1
   ...
 }
 ```
-In transition 1, the spill candidate is `(a.1.0, a.0.0)` and in transition 2, the candidate is `(a.1.1, a.0.0)`. The two spill candidates are now distinguishable.
+In transition 1, the spill candidate is `(a0, loc0)` and in transition 2, the candidate is `(a0, loc1)`. The two spill candidates are now distinguishable.
 
-The above problem is further complicated by the usage of function calls, where the removal of a spill candidate does not always correspond to the removal of a live variable in a transition state. To demonstrate, consider the following example:
+This relationship between variables and locations also manifest as the difference between spilling a variable and removing it from the transition states. To demonstrate, consider the following example:
 ```python
-int a.0.0 = 0
+int a0 = 0
 {
-  int a.1.0 = 0
+  int a1.loc0 = 0
   foo()
   ...
 }
 {
-  int a.1.1 = 1
+  int a1.loc1 = 1
   foo()
   ...
 }
 ```
-There are three variables alive in the function `foo`: `a.0.0, a.1.0, a.1.1`, and two spill candidates: `(a.1.0, a.0.0)` and `(a.1.1, a.0.0)`. However, removing the candidate `(a.1.0, a.0.0)` does not remove `a.0.0` from live variables, because `a.0.0` is still alive during a different function call, i.e. the one that produced the spill candidate `(a.1.1, a.0.0)`. However, not spilling `(a.1.0, a.0.0)` also leads to `a.0.0` always being alive. Thus extra caution needs to be made on how to quantify the effect of spilling `(a.1.0, a.0.0)`.
+There are three variables alive in the function `foo`: `a0, a1.loc0, a1.loc1`, and two spill candidates: `(a0, loc0)` and `(a0, loc1)`. However, spilling the candidate `(a0, loc0)` does not remove `a0` from the transition state, because `a0` is still in scope when called from `loc1`. Similarly, only spilling `(a0, loc0)` is also insufficient. Thus, a variable should only be removed from the transition state if **it is spilled in all locations**.
 
 ### A Framework with Static Analysis
 
 With the above challenges in mind, we incorporate Static Analysis into our general approach to provide a detailed framework:
 1. During block generation
   - Rename variables on scope change to avoid any continuation passing, with the only exception of spilling `%RP` before a function call
-  - For every variable, append its function name, scope, and version to it. e.g. `a -> a.main.1.0`
-2. After liveness analysis
-  - Iterate through all transition states to obtain the io width as well as the spill size (number of live variables - io_width) for every transition state.
+  - For every variable, append its function name, scope, and location to it. e.g. `a -> main.a1.0`
+2. A liveness analysis computes the set of live variables for each **transition state (TS)**. 
+3. After liveness analysis
+  - Iterate through all transition states to obtain the **io width**, defined as the maximum number of variables alive & in-scope within a TS.
+  - For each TS, define its **spill size** as (number of live variables - io_width).
   - A forward analysis to find all spill candidates:
-    - STATE: set of all spilled variables in the form of `(shadower, candidate, pop_info)`, where `pop_info` indicates when to pop the spilled variable out
-      - `shadower` is either a variable name or a function name
+    - STATE: set of all spilled variables in the form of `(candidate, location)`, where
+      - `location` also includes scope information of when the spill should be popped
     - GEN:
-      - When a variable is declared and _alive by the end of the block_, if it shadows any variables that are _alive by the end of the block and not spilled_, add `(shadower, candidate, pop_info)` to program state.
-      - When a function is called, for every variable that is _alive by the end of the function call and not spilled_, add `(callee_name, candidate, pop_info)` to program state
-    - KILL: Every time a scope is exited, check all spilled variables. If `pop_info` of any candidate matches the new scope, pop the spilled variable.
-      - For simplicity, we assume that there is always a block per scope during scope changes.
+      - When a variable is declared and _alive by the end of the block_, if it shadows any candidates that are _alive by the end of the block and not spilled_, add `(candidate, location)` to program state.
+      - When a function is called, for every variable that is _alive by the end of the function call and not spilled_, add `(candidate, location)` to program state
+    - KILL: Every time a scope is exited, check all spilled variables. If `location` of any candidate no longer matches the scope, pop the spilled variable.
+    - JOIN: states are joined through set union
   - At the end of the forward analysis, we obtain a list of spill candidates for every transition state.
-3. To rank the spill candidates, we repeat the following process until spill size is 0 for all transition states
-  - Use a list `spills` to keep track of the candidates that actually will be spilled
+5. To rank the spill candidates, we repeat the following process until spill size is 0 for all transition states
+  - Use a list `spills` to keep track of the candidates that are selected to be spilled
   - Iterate through all transition states and keep track of how many times each spill candidate appears.
-  - Add the candidate with the most appearance to `spills`, remove the candidate from all transition states, recompute the number of live variables and spill size
-4. One final static analysis **on each function separately**:
+  - Add the candidate with the most appearance to `spills`, remove the candidate from all transition states, recompute the size of the TS and spill size
+6. One final static analysis **on each function separately**:
     - STATE: the entire memory stack, including variables and types
     - GEN:
-      - When a variable is declared and _alive by the end of the block_, if it is a shadower in `spills` and any variables it shadows is not in stack and alive by the end of the block, insert PUSH statement and add the variable to stack
-      - When a function is called and if it is a shadower in `spills`, for every variable it shadows that is _alive by the end of the function call and not spilled_, insert PUSH statement and add the variable to stack
+      - When a variable is declared and _alive by the end of the block_, if it is a location in `spills` and any variables it shadows is not in stack and alive by the end of the block, insert PUSH statement and add the variable to stack
+      - When a function is called and if it is a location in `spills`, for every variable it shadows that is _alive by the end of the function call and not spilled_, insert PUSH statement and add the variable to stack
     - KILL: Every time a scope is exited, pop the stack and restore the variables using POP statements accordingly.

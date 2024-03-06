@@ -473,6 +473,22 @@ impl<E: Embeddable> Circify<E> {
         }
     }
 
+    /// Reset this circify back to default
+    pub fn reset(&mut self, e: E) {
+        let cs = Rc::new(RefCell::new(FxHashMap::default()));
+        self.e = e;
+        self.vals = HashMap::default();
+        self.fn_stack = Vec::new();
+        self.fn_ctr = 0;
+        self.globals = LexScope::with_prefix("global".to_string());
+        self.cir_ctx = CirCtx {
+            mem: Rc::new(RefCell::new(mem::MemManager::default())),
+            cs,
+        };
+        self.condition = leaf_term(Op::Const(Value::Bool(true)));
+        self.typedefs = HashMap::default();
+    }
+
     /// Get the circuit generation context
     pub fn cir_ctx(&self) -> &CirCtx {
         &self.cir_ctx

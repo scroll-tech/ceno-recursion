@@ -1161,21 +1161,23 @@ impl<'ast> ZGen<'ast> {
         Ok((var_scope_info, cur_scope - 1))
     }
 
-    // Convert a list of blocks to circ_ir, return the number of memory accesses of each block
+    // Convert a list of blocks to circ_ir
     pub fn bls_to_circ(&'ast self, blks: &Vec<Block>) {
         for b in blks {
-            self.circ_init_block(&format!("Block_{}", b.name));
-            self.bl_to_circ(&b);
+            let f = &format!("Block_{}", b.name);
+            self.circ_init_block(f);
+            self.bl_to_circ::<false>(&b, f);
         }
     }
 
-    // Convert a block to circ_ir, return the number of memory accesses
-    pub fn bl_to_circ(&self, b: &Block) {
-        let f = format!("Block_{}", b.name);
+    // Convert a block to circ_ir
+    // This can be done to either produce the constraints, or to estimate the size of constraints
+    // In estimation mode, we rename all output variable from X -> oX, add assertion, and process the terminator
+    pub fn bl_to_circ<const ESTIMATE: bool>(&self, b: &Block, f: &str) {
         // setup stack frame for entry function
         // returns the next block, so return type is Field
         let ret_ty = Some(Ty::Field);
-        self.circ_enter_fn(format!("Block_{}", b.name), ret_ty.clone());
+        self.circ_enter_fn(f.to_string(), ret_ty.clone());
 
         // Declare all inputs of the block
         for (name, ty) in &b.inputs {
@@ -1191,18 +1193,20 @@ impl<'ast> ZGen<'ast> {
                 r.unwrap();
             }
         }
-        // Declare all outputs of the block
-        for (name, ty) in &b.outputs {
-            if let Some(x) = ty {
-                let r = self.circ_declare_input(
-                    &f,
-                    name.clone(),
-                    x,
-                    ZVis::Public,
-                    None,
-                    true,
-                );
-                r.unwrap();
+        // If not in estimation mode, declare all outputs of the block
+        if !ESTIMATE {
+            for (name, ty) in &b.outputs {
+                if let Some(x) = ty {
+                    let r = self.circ_declare_input(
+                        &f,
+                        name.clone(),
+                        x,
+                        ZVis::Public,
+                        None,
+                        true,
+                    );
+                    r.unwrap();
+                }
             }
         }
 
@@ -1330,8 +1334,93 @@ impl<'ast> ZGen<'ast> {
             }
         }
         
-        // Block transition should have been converted to a statement in block_optimization
-        // DO NOT PROCESS IT!!!
+        // If in estimation mode, declare and assert all outputs of the block
+        // Furthermore, process the terminator
+        if ESTIMATE {
+            // PROCESS OUTPUT
+            for (name, ty) in &b.outputs {
+                if let Some(x) = ty {
+                    let output_name = format!("o{}", name);
+                    // Declare the output
+                    let r = self.circ_declare_input(
+                        &f,
+                        output_name.clone(),
+                        x,
+                        ZVis::Public,
+                        None,
+                        true,
+                    );
+                    r.unwrap();
+                    // Assert the correctness of the output
+                    let output_check_stmt = Statement::Assertion(AssertionStatement {
+                        expression: Expression::Binary(BinaryExpression {
+                            op: BinaryOperator::Eq,
+                            left: Box::new(Expression::Identifier(IdentifierExpression {
+                                value: output_name,
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            right: Box::new(Expression::Identifier(IdentifierExpression {
+                                value: name.to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            span: Span::new("", 0, 0).unwrap()
+                        }),
+                        message: None,
+                        span: Span::new("", 0, 0).unwrap()
+                    });
+                    self.stmt_impl_::<false>(&output_check_stmt).unwrap();
+                }
+            }
+
+            // PROCESS TERMINATOR
+            // Should only be used to estimate the number of constraints
+            // generate terminator statement
+            let new_expr = {
+                if let BlockTerminator::Transition(e) = &b.terminator {
+                    e.clone()
+                } else {
+                    // If it is the end of the program, assign %BN to 0 (an arbitrary number)
+                    Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                        value: DecimalNumber {
+                            value: "0".to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        span: Span::new("", 0, 0).unwrap()
+                    }))
+                }
+            };
+
+            let output_block_check_stmt = Statement::Assertion(AssertionStatement {
+                expression: Expression::Binary(BinaryExpression {
+                    op: BinaryOperator::Eq,
+                    left: Box::new(Expression::Identifier(IdentifierExpression {
+                        value: format!("%oBN"),
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    right: Box::new(new_expr.clone()),
+                    span: Span::new("", 0, 0).unwrap()
+                }),
+                message: None,
+                span: Span::new("", 0, 0).unwrap()
+            });
+
+            // Declare %oBN
+            let r = self.circ_declare_input(
+                &f,
+                "%oBN".to_string(),
+                &Ty::Field,
+                ZVis::Public,
+                None,
+                true,
+            );
+            r.unwrap();
+            // Process statement
+            self.stmt_impl_::<false>(&output_block_check_stmt).unwrap();
+        }
+
         if let Some(r) = self.circ_exit_fn() {
             match self.mode {
                 Mode::Mpc(_) => {
@@ -1342,7 +1431,7 @@ impl<'ast> ZGen<'ast> {
                         .cir_ctx()
                         .cs
                         .borrow_mut()
-                        .get_mut(&f)
+                        .get_mut(f)
                         .unwrap()
                         .outputs
                         .extend(ret_terms);
@@ -1376,7 +1465,7 @@ impl<'ast> ZGen<'ast> {
                     if !matches!(t_sort, Sort::BitVector(_)) {
                         panic!("Cannot maximize output of type {}", t_sort);
                     }
-                    self.circ.borrow().cir_ctx().cs.borrow_mut().get_mut(&f).unwrap().outputs.push(t);
+                    self.circ.borrow().cir_ctx().cs.borrow_mut().get_mut(f).unwrap().outputs.push(t);
                 }
                 /*
                 Mode::ProofOfHighValue(v) => {
@@ -1405,7 +1494,7 @@ impl<'ast> ZGen<'ast> {
         }
     }
 
-    fn circ_init_block(&self, f: &str) {
+    pub fn circ_init_block(&self, f: &str) {
         self.circ
             .borrow()
             .cir_ctx()

@@ -19,6 +19,8 @@ use crate::front::zsharp::cfg;
 
 use crate::front::zsharp::ZSharp;
 
+const MIN_BLOCK_SIZE: usize = 1024;
+
 fn type_to_ty(t: Type) -> Result<Ty, String> {
     /*
     fn lift(t: BasicOrStructType) -> Type {
@@ -496,6 +498,17 @@ fn is_alive(
     state.get(var) != None
 }
 
+// Join for block merge
+fn bm_join(
+    state: Option<usize>,
+    other: usize
+) -> Option<usize> {
+    if let Some(cur_state) = state {
+        if cur_state != other { Some(0) }
+        else { Some(other) }
+    } else { Some(other) }
+}
+
 // Turn all variables in an expression to a register reference
 // Whenever we meet a variable X, if reg_map contains X and scope_map[X] = Y, update X to %Y
 // otherwise, update X to %<reg_size> and add X to reg_map
@@ -697,7 +710,7 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Resolve block merge
-        bls = self.resolve_block_merge(bls);
+        bls = self.resolve_block_merge(bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
 
         // Spilling
         // Obtain io_size = maximum # of variables in a transition state that belong to the current function & have different names
@@ -1108,50 +1121,6 @@ impl<'ast> ZGen<'ast> {
         return bls;
     }
 
-    // Count number of constraints for a block
-    fn bl_count_num_cons(
-        &self,
-        bl: &Block<'ast>
-    ) -> usize {
-        let block_name = &format!("Pseudo_Block_{}", bl.name);
-        self.circ_init_block(block_name);
-        self.bl_to_circ::<true>(bl, block_name);
-
-        let mut cs = Computations::new();
-        cs.comps = self.circ.borrow().cir_ctx().cs.borrow_mut().clone();
-
-        if let Some(c) = cs.comps.get(block_name) {
-            let mut r1cs = to_r1cs(c, cfg());
-    
-            // Remove the last constraint because it is about the return value
-            r1cs.constraints.pop();
-
-            return r1cs.constraints.len();
-        } else {
-            panic!("Count num cons failed: block {} does not exist!", bl.name);
-        }
-    }
-
-    // Handle block merges
-    fn resolve_block_merge(
-        &self,
-        bls: Vec<Block<'ast>>,
-    ) -> Vec<Block<'ast>> {
-        // Obtain number of constraints for all blocks
-        let mut bl_cons_count = Vec::new();
-        for b in &bls {
-            let count = self.bl_count_num_cons(b);
-            println!("BLOCK: {}, COUNT: {}", b.name, count);
-            bl_cons_count.push(count);
-        }
-        // Reset self.circ
-        self.circ.borrow_mut().reset(ZSharp::new());
-
-        // Backward analysis: for each block, if there exists a potential merge component, record the size of constraints of that component
-        
-        bls
-    }
-
     // For each block, set its input to be variables that are alive & defined at the entry point of the block and their type
     // Returns: bls
     // This pass consists of a liveness analysis and a reaching definition (for typing)
@@ -1372,6 +1341,129 @@ impl<'ast> ZGen<'ast> {
         }
 
         return bls;
+    }
+
+    // Count number of constraints for a block
+    fn bl_count_num_cons(
+        &self,
+        bl: &Block<'ast>
+    ) -> usize {
+        let block_name = &format!("Pseudo_Block_{}", bl.name);
+        self.circ_init_block(block_name);
+        self.bl_to_circ::<true>(bl, block_name);
+
+        let mut cs = Computations::new();
+        cs.comps = self.circ.borrow().cir_ctx().cs.borrow_mut().clone();
+
+        if let Some(c) = cs.comps.get(block_name) {
+            let mut r1cs = to_r1cs(c, cfg());
+    
+            // Remove the last constraint because it is about the return value
+            r1cs.constraints.pop();
+
+            return r1cs.constraints.len();
+        } else {
+            panic!("Count num cons failed: block {} does not exist!", bl.name);
+        }
+    }
+
+    // Handle block merges
+    fn resolve_block_merge(
+        &self,
+        bls: Vec<Block<'ast>>,
+        successor_fn: &Vec<HashSet<usize>>,
+        predecessor_fn: &Vec<HashSet<usize>>,
+        exit_bls_fn: &HashSet<usize>
+    ) -> Vec<Block<'ast>> {
+        // Obtain number of constraints for all blocks
+        let mut bl_cons_count = Vec::new();
+        for b in &bls {
+            let count = self.bl_count_num_cons(b);
+            println!("BLOCK: {}, COUNT: {}", b.name, count);
+            bl_cons_count.push(count);
+        }
+        // Reset self.circ
+        self.circ.borrow_mut().reset(ZSharp::new());
+
+        // Maximum # of constraints is max(MIN_BLOCK_SIZE, bl_cons_count.max().next_power_of_two())
+        let max_num_cons = max(MIN_BLOCK_SIZE, bl_cons_count.iter().max().unwrap().next_power_of_two());
+        println!("MAX_NUM_CONS = {}", max_num_cons);
+        
+        // Backward analysis within each function: for each block, if there exists a potential merge component, record the size of constraints of that component
+        let mut visited: Vec<bool> = vec![false; bls.len()];
+        let mut count_list = vec![0; bls.len()];
+        // scope_state is a stack which, for every scope <= current scope, records the LABEL of the last block of that scope
+        // Use 0 to indicate that such a block does not exist
+        let mut scope_list = vec![Vec::new(); bls.len()];
+
+        // Start from function exit block
+        let mut next_bls: VecDeque<usize> = VecDeque::new();
+        for eb in exit_bls_fn {
+            next_bls.push_back(*eb);
+        }
+        // Backward analysis!
+        // TODO: TAKE FUNCTION CALL INTO CONSIDERATION
+        while !next_bls.is_empty() {
+            let cur_bl = next_bls.pop_front().unwrap();
+
+            let cur_scope = bls[cur_bl].scope;
+            // Compute scope_state using bm_join
+            let mut scope_state: Vec<Option<usize>> = vec![None; cur_scope + 1];
+            for succ in &successor_fn[cur_bl] {
+                // Only join if scope_list[succ] is not TOP
+                if scope_list[*succ].len() > 0 {
+                    let succ_scope = bls[*succ].scope;
+                    for i in 0..cur_scope + 1 {
+                        // If every scope < succ_scope, join scope_state of the successor with scope_state of the current block
+                        if i < succ_scope {
+                            let succ_state = scope_list[*succ][i];
+                            scope_state[i] = bm_join(scope_state[i], succ_state);
+                        }
+                        // Set succ_scope of scope_state to succ
+                        else if i == succ_scope {
+                            scope_state[i] = bm_join(scope_state[i], *succ);
+                        }
+                        // If succ_scope < cur_scope, every remaining scope in scope_state is BOT
+                        else {
+                            scope_state[i] = Some(0);
+                        }
+                    }
+                }
+            }
+            let scope_state: Vec<usize> = scope_state.iter().map(|i| if let Some(state) = i { *state } else { 0 }).collect();
+            // Compute count_state, only defined if scope_state[cur_scope] != 0
+            let mut count_state = 0;
+            if scope_state[cur_scope] != 0 {
+                // Add all successors with higher scope than cur_scope
+                for succ in &successor_fn[cur_bl] {
+                    let succ_scope = bls[*succ].scope;
+                    if succ_scope > cur_scope {
+                        // Add num_iteration * count
+                        count_state += bls[cur_bl].fn_num_exec_bound / bls[*succ].fn_num_exec_bound * count_list[*succ];
+                    }
+                }
+                // Add count of scope_state[cur_scope]
+                count_state += count_list[scope_state[cur_scope]];
+            }
+
+            println!("VISITED: {}, COUNT: {}, SCOPE: {:?}", cur_bl, count_state, scope_state);
+
+            if !visited[cur_bl] || scope_state != scope_list[cur_bl] || count_state != count_list[cur_bl] {
+                visited[cur_bl] = true;
+                scope_list[cur_bl] = scope_state;
+                count_list[cur_bl] = count_state;
+
+                for p in &predecessor_fn[cur_bl] {
+                    next_bls.push_back(*p);
+                }
+            }
+        }
+
+        for i in 0..bls.len() {
+            println!("BLOCK: {}, COUNT: {}, SCOPE: {:?}", i, count_list[i], scope_list[i]);
+        }
+
+        bls
     }
 
     // Obtain io_size = maximum # of variables in any transition state that are in scope
@@ -1726,21 +1818,34 @@ impl<'ast> ZGen<'ast> {
         }
         while !next_bls.is_empty() {
             let cur_bl = next_bls.pop_front().unwrap();
+            let cur_scope = bls[cur_bl].scope;
             
             // JOIN of OOS & STACK
             let (mut oos, mut stack) = {
                 let mut oos = HashSet::new();
                 let mut stack = Vec::new();
-                // there is no join, OOS & STACK of all predecessors should either be the same or empty
+                // OOS of all predecessors should either be the same or empty
+                // the first cur_scope + 1 entries of all predecessors should either be the same of empty
+                // any other entries should always be empty
                 for p in &predecessor_fn[cur_bl] {
                     if oos.len() == 0 {
                         oos = oos_out[*p].clone();
                     }
                     if stack.len() == 0 {
-                        stack = stack_out[*p].clone();
+                        // fill stack up to cur_scope
+                        stack = (0..cur_scope + 1).map(|i| if stack_out[*p].len() > i { stack_out[*p][i].clone() } else { Vec::new() }).collect();
                     }
+
                     assert!(oos_out[*p].len() == 0 || oos == oos_out[*p]);
-                    assert!(stack_out[*p].len() == 0 || stack == stack_out[*p]);
+                    if stack_out[*p].len() != 0 {
+                        for i in 0..stack_out[*p].len() {
+                            if i <= cur_scope {
+                                assert_eq!(stack[i], stack_out[*p][i]);
+                            } else {
+                                assert!(stack_out[*p][i].len() == 0);
+                            }
+                        }
+                    }
                 }
                 (oos, stack)
             };
@@ -1750,7 +1855,6 @@ impl<'ast> ZGen<'ast> {
                 visited[cur_bl] = true;
                 oos_in[cur_bl] = oos.clone();
                 stack_in[cur_bl] = stack.clone();
-                while stack.len() < bls[cur_bl].scope { stack.push(Vec::new()); }
 
                 let mut new_instructions = Vec::new();
                 let mut sp_offset = 0;
@@ -1815,9 +1919,9 @@ impl<'ast> ZGen<'ast> {
                 }
 
                 // If there is a scope change in fn_successor, pop out all candidates that are no longer spilled
-                let mut succ_scope = bls[cur_bl].scope;
+                let mut succ_scope = 0;
                 for succ in &successor_fn[cur_bl] {
-                    if succ_scope != bls[*succ].scope { succ_scope = bls[*succ].scope };
+                    if succ_scope < bls[*succ].scope { succ_scope = bls[*succ].scope };
                 }
                 if succ_scope < bls[cur_bl].scope {
                     while stack.len() > succ_scope {

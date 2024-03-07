@@ -785,8 +785,6 @@ impl<'ast> ZGen<'ast> {
                 blks.push(Block::new(blks_len, num_exec_bound, f_name.to_string(), cur_scope));
                 blks_len += 1;
 
-                // STORE iterator value in Physical Mem if has appeared before  
-
                 // Initialize the scoped iterator
                 let v_name = it.index.value.clone();
                 let ty = self.type_impl_::<true>(&it.ty)?;
@@ -830,11 +828,21 @@ impl<'ast> ZGen<'ast> {
                 });
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(from_stmt));
 
-                // New Scope AGAIN to deal with any overwrites to the iterator within the loop
+                // The block merge analysis requires a loop to start and end at the same & new scope
+                // In practice this is translated to an empty block that serves as a loop header
+                // Loop structure is of the following:
+                // Scope:         X           X + 1         X + 2        X + 1          X
+                // Block Name:  FROM BL -> LOOP HEADER -> LOOP BODY -> UPDATE BL -> LOOP TAIL
+
+                // New Scope to enter LOOP HEADER
                 cur_scope = self.bl_gen_enter_scope_(cur_scope)?;
+                // Create new Block
+                blks.push(Block::new(blks_len, loop_num_it * num_exec_bound, f_name.to_string(), cur_scope));
+                blks_len += 1;
+                let loop_header = blks_len - 1;
 
-                let old_state = blks_len - 1;
-
+                // New Scope AGAIN to enter LOOP BODY
+                cur_scope = self.bl_gen_enter_scope_(cur_scope)?;
                 // Create new Block
                 blks.push(Block::new(blks_len, loop_num_it * num_exec_bound, f_name.to_string(), cur_scope));
                 blks_len += 1;
@@ -844,9 +852,8 @@ impl<'ast> ZGen<'ast> {
                     (blks, blks_len, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, body, ret_ty, f_name, var_scope_info, loop_num_it * num_exec_bound, cur_scope)?;
                 }
 
-                // Exit scoping to iterator scope
+                // Exit scoping for UPDATE BL
                 (var_scope_info, cur_scope) = self.bl_gen_exit_scope_(var_scope_info, f_name, cur_scope)?;
-
                 // Create new Block for iterator update
                 blks.push(Block::new(blks_len, loop_num_it * num_exec_bound, f_name.to_string(), cur_scope));
                 blks_len += 1;
@@ -875,21 +882,23 @@ impl<'ast> ZGen<'ast> {
                 });
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(step_stmt));
 
-                // Create and push TRANSITION statement
-                let new_state = blks_len - 1;
-                let term = BlockTerminator::Transition(
-                    bl_trans(
-                        cond_expr(new_id.clone(), to_expr), 
-                        NextBlock::Label(old_state + 1), 
-                        NextBlock::Label(new_state + 1)
-                    )
-                );
-                blks[new_state].terminator = term.clone();
-                blks[old_state].terminator = term;
-
+                // Exit scoping for LOOP TAIL
+                (var_scope_info, cur_scope) = self.bl_gen_exit_scope_(var_scope_info, f_name, cur_scope)?;
                 // Create new Block to resolve any scope change on the iterator
                 blks.push(Block::new(blks_len, loop_num_it * num_exec_bound, f_name.to_string(), cur_scope));
                 blks_len += 1;
+
+                // Create and push TRANSITION statement towards header & tail
+                let loop_tail = blks_len - 1;
+                let term = BlockTerminator::Transition(
+                    bl_trans(
+                        cond_expr(new_id.clone(), to_expr), 
+                        NextBlock::Label(loop_header), 
+                        NextBlock::Label(loop_tail)
+                    )
+                );
+                blks[loop_header - 1].terminator = term.clone();
+                blks[loop_tail - 1].terminator = term;
 
                 // Exit scoping again to outside the loop
                 (var_scope_info, cur_scope) = self.bl_gen_exit_scope_(var_scope_info, f_name, cur_scope)?;

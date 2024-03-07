@@ -1391,7 +1391,10 @@ impl<'ast> ZGen<'ast> {
         
         // Backward analysis within each function: for each block, if there exists a potential merge component, record the size of constraints of that component
         let mut visited: Vec<bool> = vec![false; bls.len()];
+        // count is the size of the component
         let mut count_list = vec![0; bls.len()];
+        // agg_count is the total size of the entire scope, used by the component calculation in the previous scope
+        let mut agg_count_list = vec![0; bls.len()];
         // scope_state is a stack which, for every scope <= current scope, records the LABEL of the last block of that scope
         // Use 0 to indicate that such a block does not exist
         let mut scope_list = vec![Vec::new(); bls.len()];
@@ -1431,27 +1434,29 @@ impl<'ast> ZGen<'ast> {
                 }
             }
             let scope_state: Vec<usize> = scope_state.iter().map(|i| if let Some(state) = i { *state } else { 0 }).collect();
-            // Compute count_state, only defined if scope_state[cur_scope] != 0
-            let mut count_state = 0;
+            // Compute count_state && agg_count_state, initialize to the number of constraints of itself
+            let mut count_state = bl_cons_count[cur_bl];
+            let mut agg_count_state = bl_cons_count[cur_bl];
             if scope_state[cur_scope] != 0 {
                 // Add all successors with higher scope than cur_scope
                 for succ in &successor_fn[cur_bl] {
                     let succ_scope = bls[*succ].scope;
                     if succ_scope > cur_scope {
                         // Add num_iteration * count
-                        count_state += bls[cur_bl].fn_num_exec_bound / bls[*succ].fn_num_exec_bound * count_list[*succ];
+                        count_state += bls[*succ].fn_num_exec_bound / bls[cur_bl].fn_num_exec_bound * agg_count_list[*succ];
+                        agg_count_state += bls[*succ].fn_num_exec_bound / bls[cur_bl].fn_num_exec_bound * agg_count_list[*succ];
                     }
                 }
                 // Add count of scope_state[cur_scope]
-                count_state += count_list[scope_state[cur_scope]];
+                count_state += bl_cons_count[scope_state[cur_scope]];
+                agg_count_state += agg_count_list[scope_state[cur_scope]];
             }
 
-            println!("VISITED: {}, COUNT: {}, SCOPE: {:?}", cur_bl, count_state, scope_state);
-
-            if !visited[cur_bl] || scope_state != scope_list[cur_bl] || count_state != count_list[cur_bl] {
+            if !visited[cur_bl] || scope_state != scope_list[cur_bl] || count_state != count_list[cur_bl] || agg_count_state != agg_count_list[cur_bl] {
                 visited[cur_bl] = true;
                 scope_list[cur_bl] = scope_state;
                 count_list[cur_bl] = count_state;
+                agg_count_list[cur_bl] = agg_count_state;
 
                 for p in &predecessor_fn[cur_bl] {
                     next_bls.push_back(*p);
@@ -1460,7 +1465,7 @@ impl<'ast> ZGen<'ast> {
         }
 
         for i in 0..bls.len() {
-            println!("BLOCK: {}, COUNT: {}, SCOPE: {:?}", i, count_list[i], scope_list[i]);
+            println!("BLOCK: {}, COUNT: {}, AGG_COUNT: {}, SCOPE: {:?}", i, count_list[i], agg_count_list[i], scope_list[i]);
         }
 
         bls
@@ -1819,7 +1824,7 @@ impl<'ast> ZGen<'ast> {
         while !next_bls.is_empty() {
             let cur_bl = next_bls.pop_front().unwrap();
             let cur_scope = bls[cur_bl].scope;
-            
+
             // JOIN of OOS & STACK
             let (mut oos, mut stack) = {
                 let mut oos = HashSet::new();
@@ -1831,7 +1836,7 @@ impl<'ast> ZGen<'ast> {
                     if oos.len() == 0 {
                         oos = oos_out[*p].clone();
                     }
-                    if stack.len() == 0 {
+                    if stack.len() == 0 && stack_out[*p].len() != 0 {
                         // fill stack up to cur_scope
                         stack = (0..cur_scope + 1).map(|i| if stack_out[*p].len() > i { stack_out[*p][i].clone() } else { Vec::new() }).collect();
                     }
@@ -1847,6 +1852,8 @@ impl<'ast> ZGen<'ast> {
                         }
                     }
                 }
+                // fill stack up to cur_scope
+                stack.extend(vec![Vec::new(); cur_scope + 1 - stack.len()]);
                 (oos, stack)
             };
 

@@ -509,6 +509,52 @@ fn bm_join(
     } else { Some(other) }
 }
 
+// Convert a terminator into a list of instructions
+fn term_to_instr<'ast>(
+    bls: &Vec<Block>,
+    term: &Expression<'ast>,
+    instr_list: &Vec<Vec<BlockContent<'ast>>>
+) -> Vec<BlockContent<'ast>> {
+    // There are three cases for the terminator
+    // A ternary should be converted to an if / else statement
+    // A constant literal should be converted to the corresponding instruction list x looping
+    // Any reference to %RP should result in the termination of the conversion
+    match term {
+        Expression::Ternary(t) => {
+            let left_instr = term_to_instr(bls, &t.second, instr_list);
+            let right_instr = term_to_instr(bls, &t.third, instr_list);
+            // No memory ops should be contained within left_instr & right_instr
+            let left_stmt = left_instr.iter().map(|i|
+                if let BlockContent::Stmt(s) = i { s.clone() } else { panic!{"Terminator to instruction failed: branch blocks should not contain memory operations!"} }
+            ).collect();
+            let right_stmt = right_instr.iter().map(|i|
+                if let BlockContent::Stmt(s) = i { s.clone() } else { panic!{"Terminator to instruction failed: branch blocks should not contain memory operations!"} }
+            ).collect();
+            let cond_stmt = Statement::Conditional(ConditionalStatement {
+                condition: *t.first.clone(),
+                ifbranch: left_stmt,
+                dummy: Vec::new(),
+                elsebranch: right_stmt,
+                span: Span::new("", 0, 0).unwrap()
+            });
+
+            vec![BlockContent::Stmt(cond_stmt)]
+        }
+        Expression::Literal(le) => {
+            if let LiteralExpression::DecimalLiteral(dle) = le {
+                let next_bl: usize = dle.value.value.parse().unwrap();
+                instr_list[next_bl].clone()
+            } else {
+                panic!("Terminator to instruction failed: terminator cannot contain boolean or hex")
+            }
+        }
+        Expression::Identifier(i) => {
+            panic!("Terminator to instruction failed: cannot merge blocks terminating in %RP")
+        }
+        _ => { panic!("Terminator to instruction failed: terminator must be ternary, literal, or %RP") }
+    }
+}
+
 // Turn all variables in an expression to a register reference
 // Whenever we meet a variable X, if reg_map contains X and scope_map[X] = Y, update X to %Y
 // otherwise, update X to %<reg_size> and add X to reg_map
@@ -1391,7 +1437,7 @@ impl<'ast> ZGen<'ast> {
         
         // Backward analysis within each function: for each block, if there exists a potential merge component, record the size of constraints of that component
         let mut visited: Vec<bool> = vec![false; bls.len()];
-        // count is the size of the component
+        // count is the size of the component, set to 0 if a component does not exist
         let mut count_list = vec![0; bls.len()];
         // agg_count is the total size of the entire scope, used by the component calculation in the previous scope
         let mut agg_count_list = vec![0; bls.len()];
@@ -1434,10 +1480,13 @@ impl<'ast> ZGen<'ast> {
                 }
             }
             let scope_state: Vec<usize> = scope_state.iter().map(|i| if let Some(state) = i { *state } else { 0 }).collect();
-            // Compute count_state && agg_count_state, initialize to the number of constraints of itself
-            let mut count_state = bl_cons_count[cur_bl];
+            // Compute count && agg_count
+            // Count is undefined if a component does not exist
+            // Initialize agg_count to the number of constraints of itself
+            let mut count_state = 0;
             let mut agg_count_state = bl_cons_count[cur_bl];
             if scope_state[cur_scope] != 0 {
+                count_state += bl_cons_count[cur_bl];
                 // Add all successors with higher scope than cur_scope
                 for succ in &successor_fn[cur_bl] {
                     let succ_scope = bls[*succ].scope;
@@ -1466,6 +1515,36 @@ impl<'ast> ZGen<'ast> {
 
         for i in 0..bls.len() {
             println!("BLOCK: {}, COUNT: {}, AGG_COUNT: {}, SCOPE: {:?}", i, count_list[i], agg_count_list[i], scope_list[i]);
+        }
+
+        // Iterate through the blocks to perform merge
+        // This is a partial backward analysis on the component we want to merge
+        // We want to merge the largest component possible, which means it will start at the block with the lowest label
+        for i in 0..bls.len() {
+            if count_list[i] > 0 && count_list[i] < max_num_cons {
+                let comp_head = i;
+                let comp_scope = bls[comp_head].scope;
+                let comp_tail = scope_list[comp_head][comp_scope];
+                // Backward analysis starting from comp_tail
+                // STATE is a list of instructions of all merged blocks of the current scope
+                let mut instr_list: Vec<Vec<BlockContent<'ast>>> = vec![Vec::new(); bls.len()];
+                let mut visited: Vec<bool> = vec![false; bls.len()];
+
+                // Start from comp_tail
+                let mut next_bls: VecDeque<usize> = VecDeque::new();
+                next_bls.push_back(comp_tail);
+
+                while !next_bls.is_empty() {
+                    let cur_bl = next_bls.pop_front().unwrap();
+                    let cur_scope = bls[cur_bl].scope;
+
+                    // Instruction state should mimic the block terminator
+                    // Each ternary in the terminator is converted to an if / else statement
+                    // If any memory ops are performed inside the component, throw an error
+                    // let instr_state = Vec::new();
+
+                }
+            }
         }
 
         bls

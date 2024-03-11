@@ -144,7 +144,7 @@ pub struct Block<'ast> {
     pub scope: usize
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum BlockContent<'ast> {
     MemPush((String, Ty, usize)), // %PHY[%SP + offset] = id
     MemPop((String, Ty, usize)),  // id = %PHY[%BP + offset]

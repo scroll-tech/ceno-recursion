@@ -76,6 +76,9 @@ fn pretty_cond_stmt(indent: usize, c: &ConditionalStatement) {
     for s in &c.ifbranch {
         pretty_stmt(indent + 1, &s);
     }
+    for _ in 0..indent * 4 {
+        print!(" ");
+    }
     println!("else:");
     for s in &c.elsebranch {
         pretty_stmt(indent + 1, &s);

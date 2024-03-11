@@ -18,8 +18,10 @@ use crate::target::r1cs::trans::to_r1cs;
 use crate::front::zsharp::cfg;
 
 use crate::front::zsharp::ZSharp;
+use crate::front::zsharp::pretty::*;
 
 const MIN_BLOCK_SIZE: usize = 1024;
+const CFG_VERBOSE: bool = false;
 
 fn type_to_ty(t: Type) -> Result<Ty, String> {
     /*
@@ -510,19 +512,30 @@ fn bm_join(
 }
 
 // Convert a terminator into a list of instructions
+// Returns the constructed statement as well as how many times it should repeat (if in a loop)
 fn term_to_instr<'ast>(
     bls: &Vec<Block>,
     term: &Expression<'ast>,
-    instr_list: &Vec<Vec<BlockContent<'ast>>>
-) -> Vec<BlockContent<'ast>> {
+    instr_list: &Vec<Vec<BlockContent<'ast>>>,
+    cur_bl: usize,
+) -> (Vec<BlockContent<'ast>>, usize) {
     // There are three cases for the terminator
     // A ternary should be converted to an if / else statement
     // A constant literal should be converted to the corresponding instruction list x looping
     // Any reference to %RP should result in the termination of the conversion
     match term {
         Expression::Ternary(t) => {
-            let left_instr = term_to_instr(bls, &t.second, instr_list);
-            let right_instr = term_to_instr(bls, &t.third, instr_list);
+            let (left_instr, left_repeat) = term_to_instr(bls, &t.second, instr_list, cur_bl);
+            let (right_instr, right_repeat) = term_to_instr(bls, &t.third, instr_list, cur_bl);
+            // If both left and right are empty, don't construct if / else
+            if left_instr.len() == 0 && right_instr.len() == 0 {
+                return (Vec::new(), 1);
+            }
+
+            // Restrictions on loop structure
+            assert_eq!(right_repeat, 1);
+            assert!(left_repeat == 1 || right_instr.len() == 0);
+
             // No memory ops should be contained within left_instr & right_instr
             let left_stmt = left_instr.iter().map(|i|
                 if let BlockContent::Stmt(s) = i { s.clone() } else { panic!{"Terminator to instruction failed: branch blocks should not contain memory operations!"} }
@@ -538,17 +551,25 @@ fn term_to_instr<'ast>(
                 span: Span::new("", 0, 0).unwrap()
             });
 
-            vec![BlockContent::Stmt(cond_stmt)]
+            (vec![BlockContent::Stmt(cond_stmt); left_repeat], 1)
         }
         Expression::Literal(le) => {
             if let LiteralExpression::DecimalLiteral(dle) = le {
+                let cur_scope = bls[cur_bl].scope;
                 let next_bl: usize = dle.value.value.parse().unwrap();
-                instr_list[next_bl].clone()
+                let next_scope = bls[next_bl].scope;
+                if next_scope > cur_scope {
+                    // Copy from instr_list only if scope of next_bl is higher than cur_scope
+                    // DO NOT unroll the loops here. We need to unroll with the condition
+                    (instr_list[next_bl].clone(), bls[next_bl].fn_num_exec_bound / bls[cur_bl].fn_num_exec_bound)
+                } else {
+                    (Vec::new(), 1)
+                }
             } else {
                 panic!("Terminator to instruction failed: terminator cannot contain boolean or hex")
             }
         }
-        Expression::Identifier(i) => {
+        Expression::Identifier(_) => {
             panic!("Terminator to instruction failed: cannot merge blocks terminating in %RP")
         }
         _ => { panic!("Terminator to instruction failed: terminator must be ternary, literal, or %RP") }
@@ -723,28 +744,23 @@ impl<'ast> ZGen<'ast> {
         // Construct CFG
         let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
             self.construct_flow_graph(&bls, entry_bl);
-        if VERBOSE {
+        if VERBOSE && CFG_VERBOSE {
             print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
         }
 
         // Liveness
         bls = self.liveness_analysis(bls, &successor, &predecessor, &successor_fn, &predecessor_fn, &exit_bls, &exit_bls_fn);
+        // DBE
+        (bls, entry_bl, _) = self.dead_block_elimination(bls, entry_bl, predecessor);
         if VERBOSE {
             println!("\n\n--\nLiveness:");
             print_bls(&bls, &entry_bl);
         }
 
-        // First DBE
-        (bls, entry_bl, _) = self.dead_block_elimination(bls, entry_bl, predecessor);
-        if VERBOSE {
-            println!("\n\n--\nFirst DBE:");
-            print_bls(&bls, &entry_bl);
-        }
-
         // Reconstruct CFG
-        let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
+        let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
             self.construct_flow_graph(&bls, entry_bl);
-        if VERBOSE {
+        if VERBOSE && CFG_VERBOSE {
             print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
         }
 
@@ -757,6 +773,25 @@ impl<'ast> ZGen<'ast> {
 
         // Resolve block merge
         bls = self.resolve_block_merge(bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
+        // Reconstruct CFG
+        let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
+        self.construct_flow_graph(&bls, entry_bl);
+        if VERBOSE && CFG_VERBOSE {
+            print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+        }
+        // DBE
+        (bls, entry_bl, _) = self.dead_block_elimination(bls, entry_bl, predecessor);
+        if VERBOSE {
+            println!("\n\n--\nBlock Merge:");
+            print_bls(&bls, &entry_bl);
+        }
+
+        // Reconstruct CFG
+        let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
+        self.construct_flow_graph(&bls, entry_bl);
+        if VERBOSE {
+            print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+        }
 
         // Spilling
         // Obtain io_size = maximum # of variables in a transition state that belong to the current function & have different names
@@ -771,21 +806,19 @@ impl<'ast> ZGen<'ast> {
 
         // EBE
         (_, predecessor, bls) = self.empty_block_elimination(bls, exit_bls, successor, predecessor, &entry_bls_fn, &exit_bls_fn);
-        if VERBOSE {
-            println!("\n\n--\nEBE:");
-            print_bls(&bls, &entry_bl);
-        }
-
-        // Second DBE
+        // DBE
         (bls, entry_bl, _) = self.dead_block_elimination(bls, entry_bl, predecessor);
         if VERBOSE {
-            println!("\n\n--\nSecond DBE:");
+            println!("\n\n--\nEBE:");
             print_bls(&bls, &entry_bl);
         }
 
         // Construct CFG again after DBE
         let (successor, predecessor, exit_bls, _, successor_fn, predecessor_fn, exit_bls_fn) = 
             self.construct_flow_graph(&bls, entry_bl);
+        if VERBOSE && CFG_VERBOSE {
+            print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+        }
 
         // Set I/O again after optimizations
         bls = self.set_input_output(bls, &successor, &predecessor, &successor_fn, &predecessor_fn, &entry_bl, &exit_bls, &exit_bls_fn, inputs.clone());
@@ -1416,23 +1449,23 @@ impl<'ast> ZGen<'ast> {
     // Handle block merges
     fn resolve_block_merge(
         &self,
-        bls: Vec<Block<'ast>>,
+        mut bls: Vec<Block<'ast>>,
         successor_fn: &Vec<HashSet<usize>>,
         predecessor_fn: &Vec<HashSet<usize>>,
         exit_bls_fn: &HashSet<usize>
     ) -> Vec<Block<'ast>> {
         // Obtain number of constraints for all blocks
-        let mut bl_cons_count = Vec::new();
+        let mut bl_num_cons = Vec::new();
         for b in &bls {
-            let count = self.bl_count_num_cons(b);
-            println!("BLOCK: {}, COUNT: {}", b.name, count);
-            bl_cons_count.push(count);
+            let num_cons = self.bl_count_num_cons(b);
+            println!("BLOCK: {}, NUM_CONS: {}", b.name, num_cons);
+            bl_num_cons.push(num_cons);
         }
         // Reset self.circ
         self.circ.borrow_mut().reset(ZSharp::new());
 
-        // Maximum # of constraints is max(MIN_BLOCK_SIZE, bl_cons_count.max().next_power_of_two())
-        let max_num_cons = max(MIN_BLOCK_SIZE, bl_cons_count.iter().max().unwrap().next_power_of_two());
+        // Maximum # of constraints is max(MIN_BLOCK_SIZE, bl_num_cons.max().next_power_of_two())
+        let max_num_cons = max(MIN_BLOCK_SIZE, bl_num_cons.iter().max().unwrap().next_power_of_two());
         println!("MAX_NUM_CONS = {}", max_num_cons);
         
         // Backward analysis within each function: for each block, if there exists a potential merge component, record the size of constraints of that component
@@ -1484,9 +1517,9 @@ impl<'ast> ZGen<'ast> {
             // Count is undefined if a component does not exist
             // Initialize agg_count to the number of constraints of itself
             let mut count_state = 0;
-            let mut agg_count_state = bl_cons_count[cur_bl];
+            let mut agg_count_state = bl_num_cons[cur_bl];
             if scope_state[cur_scope] != 0 {
-                count_state += bl_cons_count[cur_bl];
+                count_state += bl_num_cons[cur_bl];
                 // Add all successors with higher scope than cur_scope
                 for succ in &successor_fn[cur_bl] {
                     let succ_scope = bls[*succ].scope;
@@ -1497,7 +1530,7 @@ impl<'ast> ZGen<'ast> {
                     }
                 }
                 // Add count of scope_state[cur_scope]
-                count_state += bl_cons_count[scope_state[cur_scope]];
+                count_state += bl_num_cons[scope_state[cur_scope]];
                 agg_count_state += agg_count_list[scope_state[cur_scope]];
             }
 
@@ -1520,29 +1553,78 @@ impl<'ast> ZGen<'ast> {
         // Iterate through the blocks to perform merge
         // This is a partial backward analysis on the component we want to merge
         // We want to merge the largest component possible, which means it will start at the block with the lowest label
-        for i in 0..bls.len() {
-            if count_list[i] > 0 && count_list[i] < max_num_cons {
-                let comp_head = i;
-                let comp_scope = bls[comp_head].scope;
-                let comp_tail = scope_list[comp_head][comp_scope];
-                // Backward analysis starting from comp_tail
-                // STATE is a list of instructions of all merged blocks of the current scope
-                let mut instr_list: Vec<Vec<BlockContent<'ast>>> = vec![Vec::new(); bls.len()];
-                let mut visited: Vec<bool> = vec![false; bls.len()];
+        // Repeat the merge process until there is nothing left to be merged
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for i in 0..bls.len() {
+                if count_list[i] > 0 && count_list[i] < max_num_cons {
+                    // Process a merge
+                    let comp_head = i;
+                    let comp_scope = bls[comp_head].scope;
+                    let comp_tail = scope_list[comp_head][comp_scope];
+                    // Backward analysis starting from comp_tail
+                    // STATE is a list of instructions of all merged blocks of the current scope
+                    let mut instr_list: Vec<Vec<BlockContent<'ast>>> = vec![Vec::new(); bls.len()];
+                    let mut visited: Vec<bool> = vec![false; bls.len()];
 
-                // Start from comp_tail
-                let mut next_bls: VecDeque<usize> = VecDeque::new();
-                next_bls.push_back(comp_tail);
+                    // Start from comp_tail
+                    let mut next_bls: VecDeque<usize> = VecDeque::new();
+                    next_bls.push_back(comp_tail);
 
-                while !next_bls.is_empty() {
-                    let cur_bl = next_bls.pop_front().unwrap();
-                    let cur_scope = bls[cur_bl].scope;
+                    while !next_bls.is_empty() {
+                        let cur_bl = next_bls.pop_front().unwrap();
+                        let cur_scope = bls[cur_bl].scope;
 
-                    // Instruction state should mimic the block terminator
-                    // Each ternary in the terminator is converted to an if / else statement
-                    // If any memory ops are performed inside the component, throw an error
-                    // let instr_state = Vec::new();
+                        // Instructions of cur_bl
+                        let mut instr_state = Vec::new();
+                        instr_state.extend(bls[cur_bl].instructions.clone());
+                        // Instructions of successors & next block in scope, if not comp_tail
+                        if cur_bl != comp_tail {                  
+                            if let BlockTerminator::Transition(t) = &bls[cur_bl].terminator {
+                                instr_state.extend(term_to_instr(&bls, t, &instr_list, cur_bl).0);
+                            }
+                            instr_state.extend(instr_list[scope_list[cur_bl][cur_scope]].clone());
+                        }
 
+                        if !visited[cur_bl] || instr_state != instr_list[cur_bl] {
+                            visited[cur_bl] = true;
+                            instr_list[cur_bl] = instr_state;
+                            if cur_bl != comp_head {
+                                for p in &predecessor_fn[cur_bl] {
+                                    next_bls.push_back(*p);
+                                }
+                            }
+                        }
+
+                        // Clear count_list for all intermediate blocks within the component since they are now dead
+                        if cur_bl != comp_head && cur_bl != comp_tail {
+                            count_list[cur_bl] = 0;
+                        }
+                    }
+
+                    // Recompute num_cons, scope, & count for comp_head & comp_tail
+                    bl_num_cons[comp_head] = count_list[comp_head];
+                    count_list[comp_head] = if count_list[comp_tail] == 0 { 0 } else { bl_num_cons[comp_head] + count_list[comp_tail] - bl_num_cons[comp_tail] };
+                    scope_list[comp_head] = scope_list[comp_tail].clone();
+                    count_list[comp_tail] = 0;
+
+                    println!("\n--\nHEAD: {}, TAIL: {}", comp_head, comp_tail);
+                    println!("NUM_CONS: {}, COUNT: {}", bl_num_cons[comp_head], count_list[comp_head]);
+                    println!("INSTRS:");
+                    for c in &instr_list[comp_head] {
+                        match c {
+                            BlockContent::MemPush((id, ty, offset)) => { println!("    %PHY[%SP + {offset}] = {} <{ty}>", pretty_name(id)) }
+                            BlockContent::MemPop((id, ty, offset)) => { println!("    {ty} {} = %PHY[%BP + {offset}]", pretty_name(id)) }
+                            BlockContent::Stmt(s) => { pretty_stmt(0, &s); }
+                        }
+                    }
+
+                    bls[comp_head].instructions = instr_list[comp_head].clone();
+                    bls[comp_head].terminator = bls[comp_tail].terminator.clone();
+
+                    changed = true;
+                    break;
                 }
             }
         }
@@ -2257,7 +2339,7 @@ impl<'ast> ZGen<'ast> {
         // Construct a new CFG for the program
         // Note that this is the CFG after DBE, and might be different from the previous CFG
         let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = self.construct_flow_graph(&bls, entry_bl);
-        if VERBOSE {
+        if VERBOSE && CFG_VERBOSE {
             print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
         }
 

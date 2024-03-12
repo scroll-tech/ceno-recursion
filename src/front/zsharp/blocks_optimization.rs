@@ -813,6 +813,77 @@ fn var_name_to_reg_id_expr<const MODE: usize>(
     }
 }
 
+// Convert a typed definition statement into assignee if LHS has been defined
+fn tydef_to_assignee_stmt<'ast>(
+    s: &Statement<'ast>,
+    mut gen_set: HashSet<String>, 
+) -> (Statement<'ast>, HashSet<String>) {
+    match s {
+        Statement::Return(_) => {
+            panic!("Blocks should not contain return statements.");
+        }
+        Statement::Assertion(_) => (s.clone(), gen_set),
+        Statement::Conditional(c) => {
+            let cond = c.condition.clone();
+            let mut new_ifbranch = Vec::new();
+            for s in &c.ifbranch {
+                let new_stmt: Statement;
+                (new_stmt, gen_set) = tydef_to_assignee_stmt(s, gen_set);
+                new_ifbranch.push(new_stmt);
+            }
+            let mut new_elsebranch = Vec::new();
+            for s in &c.elsebranch {
+                let new_stmt: Statement;
+                (new_stmt, gen_set) = tydef_to_assignee_stmt(s, gen_set);
+                new_elsebranch.push(new_stmt);
+            }
+            let new_stmt = ConditionalStatement {
+                condition: cond,
+                ifbranch: new_ifbranch,
+                dummy: Vec::new(),
+                elsebranch: new_elsebranch,
+                span: Span::new("", 0, 0).unwrap()
+            };
+            (Statement::Conditional(new_stmt), gen_set)
+        }
+        Statement::Iteration(_) => {
+            panic!("Blocks should not contain iteration statements.")
+        }
+        Statement::Definition(d) => {
+            let mut new_lhs: Vec<TypedIdentifierOrAssignee> = Vec::new();
+            for l in &d.lhs {
+                match l {
+                    TypedIdentifierOrAssignee::TypedIdentifier(tid) => {
+                        let v = tid.identifier.value.to_string();
+                        if gen_set.contains(&v) {
+                            new_lhs.push(TypedIdentifierOrAssignee::Assignee(Assignee {
+                                id: IdentifierExpression {
+                                    value: v,
+                                    span: Span::new("", 0, 0).unwrap()
+                                },
+                                accesses: Vec::new(),
+                                span: Span::new("", 0, 0).unwrap()
+                            }));
+                        } else {
+                            new_lhs.push(l.clone());
+                            gen_set.insert(v);
+                        }
+                    }
+                    TypedIdentifierOrAssignee::Assignee(_) => { new_lhs.push(l.clone()); }
+                }
+            }
+            // Reconstruct d as an assignee
+            let s = Statement::Definition(DefinitionStatement {
+                lhs: new_lhs,
+                expression: d.expression.clone(),
+                span: Span::new("", 0, 0).unwrap()
+            });
+            (s, gen_set)
+        }
+        Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
+    }
+}
+
 // --
 // END HELPER FUNCTION
 // --
@@ -2479,6 +2550,13 @@ impl<'ast> ZGen<'ast> {
             }
         }
 
+        // Convert Typed Defs back to Assignees
+        let bls = self.tydef_to_assignee::<MODE>(bls);
+        if VERBOSE {
+            println!("\n\n--\nTydef -> Assignee:");
+            print_bls(&bls, &entry_bl);
+        }
+
         // Bound # of Proofs and # of memory accesses
         let (total_num_proofs_bound, total_num_mem_accesses_bound, num_mem_accesses) =
             self.get_blocks_meta_info(&bls, &successor, entry_bl, &exit_bls_fn, &successor_fn, &predecessor_fn, &sorted_fns);
@@ -2848,6 +2926,46 @@ impl<'ast> ZGen<'ast> {
         }
         let witness_size = witness_map.len();
         (bls, transition_map_list, max_io_size, witness_map, witness_size, live_io)
+    }
+
+    // Revert typed identifiers back to assignees to avoid scoping confusion when translating to IR
+    // Forward (reaching definition) analysis within each block
+    // Assumption: 1. every assignment is illegal; 2. every variable only exists in one scope
+    //
+    // tydef_to_assignee takes in two modes:
+    //  MODE = 0 - Verification Mode, output registers are witnesses and checked using assertion
+    //  MODE = 1 - Compute Mode, output registers are assigned and not checked
+    fn tydef_to_assignee<const MODE: usize>(
+        &self,
+        mut bls: Vec<Block<'ast>>,
+    ) -> Vec<Block<'ast>> {
+        for i in 0..bls.len() {
+            // gen_set - all defined variables
+            let mut gen_set = HashSet::new();
+            let mut new_instr = Vec::new();
+            // Process inputs
+            for (name, _) in &bls[i].inputs {
+                gen_set.insert(name.to_string());
+            }
+            // Process outputs if we are in verification mode
+            if MODE == 0 {
+                for (name, _) in &bls[i].inputs {
+                    gen_set.insert(name.to_string());
+                }
+            }
+            // Process instructions
+            for i in &bls[i].instructions {
+                if let BlockContent::Stmt(s) = i {
+                    let new_s: Statement;
+                    (new_s, gen_set) = tydef_to_assignee_stmt(s, gen_set);
+                    new_instr.push(BlockContent::Stmt(new_s));
+                } else {
+                    new_instr.push(i.clone());
+                }
+            }
+            bls[i].instructions = new_instr;
+        }
+        bls
     }
 
     // Compute # of memory accesses for each block

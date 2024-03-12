@@ -812,7 +812,7 @@ fn main() {
     let benchmark_name = options.path.as_os_str().to_str().unwrap();
     let path = PathBuf::from(format!("../zok_tests/benchmarks/{}.zok", benchmark_name));
     let (ctk, live_io_list, prover_data_list) = 
-        get_compile_time_knowledge::<true>(path.clone());
+        get_compile_time_knowledge::<false>(path.clone());
 
     // --
     // Generate Witnesses

@@ -29,7 +29,6 @@ use zokrates_pest_ast as ast;
 
 use term::*;
 use zvisit::{ZConstLiteralRewriter, ZGenericInf, ZStatementWalker, ZVisitorMut};
-use crate::front::zsharp::ast::*;
 
 // garbage collection increment for adaptive GC threshold
 const GC_INC: usize = 32;
@@ -1339,46 +1338,15 @@ impl<'ast> ZGen<'ast> {
                         let cond = self.expr_impl_::<false>(&c.condition)?;
                         let cbool = bool(cond.clone())?;
                         self.circ_enter_condition(cbool.clone());
-                        let s = Statement::Definition(DefinitionStatement {
-                            lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
-                                id: IdentifierExpression {
-                                    value: "%w12".to_string(),
-                                    span: Span::new("", 0, 0).unwrap()
-                                },
-                                accesses: Vec::new(),
-                                span: Span::new("", 0, 0).unwrap()
-                            })],
-                            expression: Expression::Binary(BinaryExpression {
-                                op: BinaryOperator::Add,
-                                left: Box::new(Expression::Identifier(IdentifierExpression {
-                                    value: "%w12".to_string(),
-                                    span: Span::new("", 0, 0).unwrap()
-                                })),
-                                right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                                    value: DecimalNumber {
-                                        value: "1".to_string(),
-                                        span: Span::new("", 0, 0).unwrap()
-                                    },
-                                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                                        span: Span::new("", 0, 0).unwrap()
-                                    })),
-                                    span: Span::new("", 0, 0).unwrap()
-                                }))),
-                                span: Span::new("", 0, 0).unwrap()
-                            }),
-                            span: Span::new("", 0, 0).unwrap()
-                        });
-                        self.stmt_impl_::<IS_CNST>(&s)?;
-                        
-                        // for s in &c.ifbranch {
-                            // self.stmt_impl_::<IS_CNST>(s)?;
-                        // }
+                        for s in &c.ifbranch {
+                            self.stmt_impl_::<IS_CNST>(s)?;
+                        }
                         self.circ_exit_condition();
-                        // self.circ_enter_condition(term![NOT; cbool]);
-                        // for s in &c.elsebranch {
-                            // self.stmt_impl_::<IS_CNST>(s)?;
-                        // }
-                        // `self.circ_exit_condition();
+                        self.circ_enter_condition(term![NOT; cbool]);
+                        for s in &c.elsebranch {
+                            self.stmt_impl_::<IS_CNST>(s)?;
+                        }
+                        self.circ_exit_condition();
                     }
                 };
                 Ok(())

@@ -5,8 +5,8 @@
 //       Function within array index?
 //       Multi-file program not supported
 //       What would happen if we put function calls in loop to / from?
-//       If b@1 is dead, can we avoid pushing-in b@0?
 //       Can try eliminate ternaries with a constant condition
+//       What would happen if block 0 is a loop to itself? Many analyses would break down!!!
 
 use log::{debug, warn};
 
@@ -1249,7 +1249,7 @@ impl<'ast> ZGen<'ast> {
                         op: BinaryOperator::Add,
                         left: Box::new(Expression::Identifier(IdentifierExpression {
                             // %SP
-                            value: "%w1".to_string(),
+                            value: if ESTIMATE { "%SP".to_string() } else { "%w1".to_string() },
                             span: Span::new("", 0, 0).unwrap()
                         })),
                         right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
@@ -1306,7 +1306,7 @@ impl<'ast> ZGen<'ast> {
                         op: BinaryOperator::Add,
                         left: Box::new(Expression::Identifier(IdentifierExpression {
                             // %BP
-                            value: "%w2".to_string(),
+                            value: if ESTIMATE { "%BP".to_string() } else { "%w2".to_string() },
                             span: Span::new("", 0, 0).unwrap()
                         })),
                         right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {

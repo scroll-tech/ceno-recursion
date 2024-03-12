@@ -29,10 +29,11 @@ use zokrates_pest_ast as ast;
 
 use term::*;
 use zvisit::{ZConstLiteralRewriter, ZGenericInf, ZStatementWalker, ZVisitorMut};
+use crate::front::zsharp::ast::*;
 
 // garbage collection increment for adaptive GC threshold
 const GC_INC: usize = 32;
-const GEN_VERBOSE: bool = true;
+const GEN_VERBOSE: bool = false;
 const INTERPRET_VERBOSE: bool = false;
 
 /// Inputs to the Z# compiler
@@ -103,7 +104,7 @@ impl ZSharpFE {
         let (blks, entry_bl, io_size, _, _, _, _, _) = g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl, inputs);
         println!("\n\n--\nInterpretation:");
         let (ret, _, prog_reg_in, bl_exec_state, mem_list) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(entry_bl, entry_regs, &blks, io_size)
-        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+            .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
         // prover::print_state_list(&bl_exec_state);
         // let _ = prover::sort_by_block(&bl_exec_state);
         // let _ = prover::sort_by_mem(&bl_exec_state);
@@ -1333,9 +1334,51 @@ impl<'ast> ZGen<'ast> {
                         }
                         self.exit_scope_impl_::<IS_CNST>();
                     },
-                    None if IS_CNST => { return Err("if / else statement condition not const bool".to_string()); },
+                    None if IS_CNST => { return Err(format!("Conditional statement condition not constant bool",)); },
                     _ => {
-                        panic!("Conversion of conditional statement to IR not implemented!")
+                        let cond = self.expr_impl_::<false>(&c.condition)?;
+                        let cbool = bool(cond.clone())?;
+                        self.circ_enter_condition(cbool.clone());
+                        let s = Statement::Definition(DefinitionStatement {
+                            lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
+                                id: IdentifierExpression {
+                                    value: "%w12".to_string(),
+                                    span: Span::new("", 0, 0).unwrap()
+                                },
+                                accesses: Vec::new(),
+                                span: Span::new("", 0, 0).unwrap()
+                            })],
+                            expression: Expression::Binary(BinaryExpression {
+                                op: BinaryOperator::Add,
+                                left: Box::new(Expression::Identifier(IdentifierExpression {
+                                    value: "%w12".to_string(),
+                                    span: Span::new("", 0, 0).unwrap()
+                                })),
+                                right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                                    value: DecimalNumber {
+                                        value: "1".to_string(),
+                                        span: Span::new("", 0, 0).unwrap()
+                                    },
+                                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                        span: Span::new("", 0, 0).unwrap()
+                                    })),
+                                    span: Span::new("", 0, 0).unwrap()
+                                }))),
+                                span: Span::new("", 0, 0).unwrap()
+                            }),
+                            span: Span::new("", 0, 0).unwrap()
+                        });
+                        self.stmt_impl_::<IS_CNST>(&s)?;
+                        
+                        // for s in &c.ifbranch {
+                            // self.stmt_impl_::<IS_CNST>(s)?;
+                        // }
+                        self.circ_exit_condition();
+                        // self.circ_enter_condition(term![NOT; cbool]);
+                        // for s in &c.elsebranch {
+                            // self.stmt_impl_::<IS_CNST>(s)?;
+                        // }
+                        // `self.circ_exit_condition();
                     }
                 };
                 Ok(())
@@ -2009,15 +2052,15 @@ impl<'ast> ZGen<'ast> {
     /*** circify wrapper functions (hides RefCell) ***/
 
     fn circ_enter_condition(&self, cond: Term) {
-        if self.isolate_asserts {
+        // if self.isolate_asserts {
             self.circ.borrow_mut().enter_condition(cond).unwrap();
-        }
+        // }
     }
 
     fn circ_exit_condition(&self) {
-        if self.isolate_asserts {
+        // if self.isolate_asserts {
             self.circ.borrow_mut().exit_condition()
-        }
+        // }
     }
 
     fn circ_condition(&self) -> Term {

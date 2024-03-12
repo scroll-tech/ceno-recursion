@@ -18,7 +18,6 @@ use crate::target::r1cs::trans::to_r1cs;
 use crate::front::zsharp::cfg;
 
 use crate::front::zsharp::ZSharp;
-use crate::front::zsharp::pretty::*;
 
 const MIN_BLOCK_SIZE: usize = 1024;
 const CFG_VERBOSE: bool = false;
@@ -407,11 +406,30 @@ fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
             (kill_set, expr_find_val(&d.expression))
         }
         Statement::Assertion(a) => (HashSet::new(), expr_find_val(&a.expression)),
+        Statement::Conditional(c) => {
+            // KILL is empty
+            // GEN is the union of the two branches
+            // Iterate through if branch
+            let mut if_gen_set = HashSet::new();
+            for s in c.ifbranch.iter().rev() {
+                let (kill, gen) = stmt_find_val(&s);
+                if_gen_set = la_kill(if_gen_set, &kill);
+                if_gen_set = la_gen(if_gen_set, &gen);
+            }
+            let mut else_gen_set = HashSet::new();
+            for s in c.elsebranch.iter().rev() {
+                let (kill, gen) = stmt_find_val(&s);
+                else_gen_set = la_kill(else_gen_set, &kill);
+                else_gen_set = la_gen(else_gen_set, &gen);
+            }
+            let mut gen_set = HashSet::new();
+            gen_set.extend(if_gen_set);
+            gen_set.extend(else_gen_set);
+            gen_set.extend(expr_find_val(&c.condition));
+            (HashSet::new(), gen_set)
+        }
         Statement::Iteration(_) => {
             panic!("Blocks should not contain iteration statements.")
-        }
-        Statement::Conditional(_) => {
-            panic!("Blocks should not contain conditional statements.")
         }
         Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
     }
@@ -573,6 +591,109 @@ fn term_to_instr<'ast>(
             panic!("Terminator to instruction failed: cannot merge blocks terminating in %RP")
         }
         _ => { panic!("Terminator to instruction failed: terminator must be ternary, literal, or %RP") }
+    }
+}
+
+// Turn all variables in a statement to a register reference
+// Whenever we meet a variable X, if reg_map contains X and scope_map[X] = Y, update X to %Y
+// otherwise, update X to %<reg_size> and add X to reg_map
+// Returns the new statement and new reg_map
+fn var_to_reg_stmt<'ast>(
+    s: &Statement<'ast>, 
+    mut reg_map: HashMap<String, usize>, 
+) -> (Statement<'ast>, HashMap<String, usize>) {
+    match s {
+        Statement::Return(_) => {
+            panic!("Blocks should not contain return statements.");
+        }
+        Statement::Assertion(a) => {
+            let new_expr: Expression;
+            (new_expr, reg_map) = var_to_reg_expr(&a.expression, reg_map);
+            let new_stmt = AssertionStatement {
+                expression: new_expr,
+                message: a.message.clone(),
+                span: a.span
+            };
+            (Statement::Assertion(new_stmt), reg_map)
+        }
+        Statement::Conditional(c) => {
+            let new_cond: Expression;
+            (new_cond, reg_map) = var_to_reg_expr(&c.condition, reg_map);
+            let mut new_ifbranch = Vec::new();
+            for s in &c.ifbranch {
+                let new_stmt: Statement;
+                (new_stmt, reg_map) = var_to_reg_stmt(s, reg_map);
+                new_ifbranch.push(new_stmt);
+            }
+            let mut new_elsebranch = Vec::new();
+            for s in &c.elsebranch {
+                let new_stmt: Statement;
+                (new_stmt, reg_map) = var_to_reg_stmt(s, reg_map);
+                new_elsebranch.push(new_stmt);
+            }
+            let new_stmt = ConditionalStatement {
+                condition: new_cond,
+                ifbranch: new_ifbranch,
+                dummy: Vec::new(),
+                elsebranch: new_elsebranch,
+                span: Span::new("", 0, 0).unwrap()
+            };
+            (Statement::Conditional(new_stmt), reg_map)
+        }
+        Statement::Iteration(_) => {
+            panic!("Blocks should not contain iteration statements.")
+        }
+        Statement::Definition(d) => {
+            let mut new_lhs: Vec<TypedIdentifierOrAssignee> = Vec::new();
+            for l in &d.lhs {
+                match l {
+                    TypedIdentifierOrAssignee::TypedIdentifier(tid) => {
+                        let new_id_expr: IdentifierExpression;
+                        (new_id_expr, reg_map) = var_to_reg_id_expr(&tid.identifier, reg_map);
+                        new_lhs.push(TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier{
+                            ty: tid.ty.clone(),
+                            identifier: new_id_expr,
+                            span: tid.span
+                        }));
+                    }
+                    TypedIdentifierOrAssignee::Assignee(p) => {
+                        let new_id_expr: IdentifierExpression;
+                        (new_id_expr, reg_map) = var_to_reg_id_expr(&p.id, reg_map);
+                        let mut new_accesses: Vec<AssigneeAccess> = Vec::new();
+                        for aa in &p.accesses {
+                            if let AssigneeAccess::Select(a) = aa {
+                                if let RangeOrExpression::Expression(e) = &a.expression {
+                                    let new_expr: Expression;
+                                    (new_expr, reg_map) = var_to_reg_expr(&e, reg_map);
+                                    new_accesses.push(AssigneeAccess::Select(ArrayAccess {
+                                        expression: RangeOrExpression::Expression(new_expr),
+                                        span: a.span
+                                    }))
+                                } else {
+                                    panic!("Range access not supported.")
+                                }
+                            } else {
+                                panic!("Unsupported membership access.")
+                            }
+                        }
+                        new_lhs.push(TypedIdentifierOrAssignee::Assignee(Assignee{
+                            id: new_id_expr,
+                            accesses: new_accesses,
+                            span: p.span
+                        }));
+                    }
+                }
+            }
+            let new_expr: Expression;
+            (new_expr, reg_map) = var_to_reg_expr(&d.expression, reg_map);
+            let new_stmt = DefinitionStatement {
+                lhs: new_lhs,
+                expression: new_expr,
+                span: d.span
+            };
+            (Statement::Definition(new_stmt), reg_map)
+        }
+        Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
     }
 }
 
@@ -772,7 +893,7 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Resolve block merge
-        bls = self.resolve_block_merge(bls, &successor_fn, &predecessor_fn, &exit_bls_fn);
+        bls = self.resolve_block_merge(bls, &successor, &successor_fn, &predecessor_fn, &exit_bls_fn);
         // Reconstruct CFG
         let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
         self.construct_flow_graph(&bls, entry_bl);
@@ -789,7 +910,7 @@ impl<'ast> ZGen<'ast> {
         // Reconstruct CFG
         let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
         self.construct_flow_graph(&bls, entry_bl);
-        if VERBOSE {
+        if VERBOSE && CFG_VERBOSE {
             print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
         }
 
@@ -1282,7 +1403,7 @@ impl<'ast> ZGen<'ast> {
                 }
 
                 // KILL and GEN within the block
-                // We assume that liveness analysis has been performed, don't reason about usefulness of variables
+                // We assume that liveness analysis has been performed, don't reason about whether variables should actually be alive
                 for i in bls[cur_bl].instructions.iter().rev() {
                     match i {
                         BlockContent::MemPush((var, _, _)) => {
@@ -1368,7 +1489,9 @@ impl<'ast> ZGen<'ast> {
                 for i in bls[cur_bl].instructions.iter().rev() {
                     match i {
                         BlockContent::MemPush(_) => {}
-                        BlockContent::MemPop(_) => {}
+                        BlockContent::MemPop((id, ty, _)) => {
+                            state.insert(id.clone(), ty.clone());
+                        }
                         BlockContent::Stmt(s) => {
                             if let Statement::Definition(ds) = s {
                                 for d in &ds.lhs {
@@ -1450,6 +1573,7 @@ impl<'ast> ZGen<'ast> {
     fn resolve_block_merge(
         &self,
         mut bls: Vec<Block<'ast>>,
+        successor: &Vec<HashSet<usize>>,
         successor_fn: &Vec<HashSet<usize>>,
         predecessor_fn: &Vec<HashSet<usize>>,
         exit_bls_fn: &HashSet<usize>
@@ -1457,16 +1581,13 @@ impl<'ast> ZGen<'ast> {
         // Obtain number of constraints for all blocks
         let mut bl_num_cons = Vec::new();
         for b in &bls {
-            let num_cons = self.bl_count_num_cons(b);
-            println!("BLOCK: {}, NUM_CONS: {}", b.name, num_cons);
-            bl_num_cons.push(num_cons);
+            bl_num_cons.push(self.bl_count_num_cons(b));
         }
         // Reset self.circ
         self.circ.borrow_mut().reset(ZSharp::new());
 
         // Maximum # of constraints is max(MIN_BLOCK_SIZE, bl_num_cons.max().next_power_of_two())
         let max_num_cons = max(MIN_BLOCK_SIZE, bl_num_cons.iter().max().unwrap().next_power_of_two());
-        println!("MAX_NUM_CONS = {}", max_num_cons);
         
         // Backward analysis within each function: for each block, if there exists a potential merge component, record the size of constraints of that component
         let mut visited: Vec<bool> = vec![false; bls.len()];
@@ -1484,30 +1605,33 @@ impl<'ast> ZGen<'ast> {
             next_bls.push_back(*eb);
         }
         // Backward analysis!
-        // TODO: TAKE FUNCTION CALL INTO CONSIDERATION
         while !next_bls.is_empty() {
             let cur_bl = next_bls.pop_front().unwrap();
 
             let cur_scope = bls[cur_bl].scope;
             // Compute scope_state using bm_join
             let mut scope_state: Vec<Option<usize>> = vec![None; cur_scope + 1];
-            for succ in &successor_fn[cur_bl] {
-                // Only join if scope_list[succ] is not TOP
-                if scope_list[*succ].len() > 0 {
-                    let succ_scope = bls[*succ].scope;
-                    for i in 0..cur_scope + 1 {
-                        // If every scope < succ_scope, join scope_state of the successor with scope_state of the current block
-                        if i < succ_scope {
-                            let succ_state = scope_list[*succ][i];
-                            scope_state[i] = bm_join(scope_state[i], succ_state);
-                        }
-                        // Set succ_scope of scope_state to succ
-                        else if i == succ_scope {
-                            scope_state[i] = bm_join(scope_state[i], *succ);
-                        }
-                        // If succ_scope < cur_scope, every remaining scope in scope_state is BOT
-                        else {
-                            scope_state[i] = Some(0);
+
+            // if cur_bl calls another function, then no merge can be performed
+            if successor_fn[cur_bl].len() == 0 || successor_fn[cur_bl] == successor[cur_bl] {
+                for succ in &successor_fn[cur_bl] {
+                    // Only join if scope_list[succ] is not TOP
+                    if scope_list[*succ].len() > 0 {
+                        let succ_scope = bls[*succ].scope;
+                        for i in 0..cur_scope + 1 {
+                            // If every scope < succ_scope, join scope_state of the successor with scope_state of the current block
+                            if i < succ_scope {
+                                let succ_state = scope_list[*succ][i];
+                                scope_state[i] = bm_join(scope_state[i], succ_state);
+                            }
+                            // Set succ_scope of scope_state to succ
+                            else if i == succ_scope {
+                                scope_state[i] = bm_join(scope_state[i], *succ);
+                            }
+                            // If succ_scope < cur_scope, every remaining scope in scope_state is BOT
+                            else {
+                                scope_state[i] = Some(0);
+                            }
                         }
                     }
                 }
@@ -1546,10 +1670,6 @@ impl<'ast> ZGen<'ast> {
             }
         }
 
-        for i in 0..bls.len() {
-            println!("BLOCK: {}, COUNT: {}, AGG_COUNT: {}, SCOPE: {:?}", i, count_list[i], agg_count_list[i], scope_list[i]);
-        }
-
         // Iterate through the blocks to perform merge
         // This is a partial backward analysis on the component we want to merge
         // We want to merge the largest component possible, which means it will start at the block with the lowest label
@@ -1557,7 +1677,9 @@ impl<'ast> ZGen<'ast> {
         let mut changed = true;
         while changed {
             changed = false;
-            for i in 0..bls.len() {
+            // DO NOT MERGE BLOCK 0!!!
+            // This will be handled later by EBE
+            for i in 1..bls.len() {
                 if count_list[i] > 0 && count_list[i] < max_num_cons {
                     // Process a merge
                     let comp_head = i;
@@ -1608,17 +1730,6 @@ impl<'ast> ZGen<'ast> {
                     count_list[comp_head] = if count_list[comp_tail] == 0 { 0 } else { bl_num_cons[comp_head] + count_list[comp_tail] - bl_num_cons[comp_tail] };
                     scope_list[comp_head] = scope_list[comp_tail].clone();
                     count_list[comp_tail] = 0;
-
-                    println!("\n--\nHEAD: {}, TAIL: {}", comp_head, comp_tail);
-                    println!("NUM_CONS: {}, COUNT: {}", bl_num_cons[comp_head], count_list[comp_head]);
-                    println!("INSTRS:");
-                    for c in &instr_list[comp_head] {
-                        match c {
-                            BlockContent::MemPush((id, ty, offset)) => { println!("    %PHY[%SP + {offset}] = {} <{ty}>", pretty_name(id)) }
-                            BlockContent::MemPop((id, ty, offset)) => { println!("    {ty} {} = %PHY[%BP + {offset}]", pretty_name(id)) }
-                            BlockContent::Stmt(s) => { pretty_stmt(0, &s); }
-                        }
-                    }
 
                     bls[comp_head].instructions = instr_list[comp_head].clone();
                     bls[comp_head].terminator = bls[comp_tail].terminator.clone();
@@ -2607,76 +2718,11 @@ impl<'ast> ZGen<'ast> {
                         (var_name, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
                         new_instr.push(BlockContent::MemPop((var_name, ty.clone(), *offset)));
                     }
-                    BlockContent::Stmt(Statement::Return(_)) => {
-                        panic!("Blocks should not contain return statements.");
+                    BlockContent::Stmt(s) => {
+                        let new_stmt: Statement;
+                        (new_stmt, witness_map) = var_to_reg_stmt(&s, witness_map);
+                        new_instr.push(BlockContent::Stmt(new_stmt));
                     }
-                    BlockContent::Stmt(Statement::Assertion(a)) => {
-                        let new_expr: Expression;
-                        (new_expr, witness_map) = var_to_reg_expr(&a.expression, witness_map);
-                        let new_stmt = AssertionStatement {
-                            expression: new_expr,
-                            message: a.message.clone(),
-                            span: a.span
-                        };
-                        new_instr.push(BlockContent::Stmt(Statement::Assertion(new_stmt)));
-                    }
-                    BlockContent::Stmt(Statement::Iteration(_)) => {
-                        panic!("Blocks should not contain iteration statements.")
-                    }
-                    BlockContent::Stmt(Statement::Conditional(_)) => {
-                        panic!("Blocks should not contain if / else statements.")
-                    }
-                    BlockContent::Stmt(Statement::Definition(d)) => {
-                        let mut new_lhs: Vec<TypedIdentifierOrAssignee> = Vec::new();
-                        for l in &d.lhs {
-                            match l {
-                                TypedIdentifierOrAssignee::TypedIdentifier(tid) => {
-                                    let new_id_expr: IdentifierExpression;
-                                    (new_id_expr, witness_map) = var_to_reg_id_expr(&tid.identifier, witness_map);
-                                    new_lhs.push(TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier{
-                                        ty: tid.ty.clone(),
-                                        identifier: new_id_expr,
-                                        span: tid.span
-                                    }));
-                                }
-                                TypedIdentifierOrAssignee::Assignee(p) => {
-                                    let new_id_expr: IdentifierExpression;
-                                    (new_id_expr, witness_map) = var_to_reg_id_expr(&p.id, witness_map);
-                                    let mut new_accesses: Vec<AssigneeAccess> = Vec::new();
-                                    for aa in &p.accesses {
-                                        if let AssigneeAccess::Select(a) = aa {
-                                            if let RangeOrExpression::Expression(e) = &a.expression {
-                                                let new_expr: Expression;
-                                                (new_expr, witness_map) = var_to_reg_expr(&e, witness_map);
-                                                new_accesses.push(AssigneeAccess::Select(ArrayAccess {
-                                                    expression: RangeOrExpression::Expression(new_expr),
-                                                    span: a.span
-                                                }))
-                                            } else {
-                                                panic!("Range access not supported.")
-                                            }
-                                        } else {
-                                            panic!("Unsupported membership access.")
-                                        }
-                                    }
-                                    new_lhs.push(TypedIdentifierOrAssignee::Assignee(Assignee{
-                                        id: new_id_expr,
-                                        accesses: new_accesses,
-                                        span: p.span
-                                    }));
-                                }
-                            }
-                        }
-                        let new_expr: Expression;
-                        (new_expr, witness_map) = var_to_reg_expr(&d.expression, witness_map);
-                        let new_stmt = DefinitionStatement {
-                            lhs: new_lhs,
-                            expression: new_expr,
-                            span: d.span
-                        };
-                        new_instr.push(BlockContent::Stmt(Statement::Definition(new_stmt)));
-                    }
-                    BlockContent::Stmt(Statement::CondStore(_)) => { panic!("Blocks should not contain conditional store statements.") }
                 }
             }
 

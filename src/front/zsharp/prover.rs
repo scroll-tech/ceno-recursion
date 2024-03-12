@@ -331,76 +331,9 @@ impl<'ast> ZGen<'ast> {
                     }
                     mem_op.push(MemOp::new(bp + offset, self.usize_to_field(bp + offset)?, self.cvar_lookup(&var).unwrap()));         
                 }
-                BlockContent::Stmt(Statement::Return(_)) => {
-                    return Err(format!("Blocks should not contain return statements."));
+                BlockContent::Stmt(s) => {
+                    self.bl_eval_stmt_impl_(s)?;
                 }
-                // %PHY should never appear in an assertion statement
-                BlockContent::Stmt(Statement::Assertion(a)) => {
-                    match self.expr_impl_::<true>(&a.expression).and_then(|v| {
-                        const_bool(v)
-                            .ok_or_else(|| "interpreting expr as const bool failed".to_string())
-                    }) {
-                        Ok(true) => {},
-                        Ok(false) => return Err(format!(
-                            "Const assert failed: {} at\n{}",
-                            a.message
-                                .as_ref()
-                                .map(|m| m.value.as_ref())
-                                .unwrap_or("(no error message given)"),
-                            span_to_string(a.expression.span()),
-                        )),
-                        Err(err) => return Err(format!(
-                            "Const assert expression eval failed: {} at\n{}",
-                            err,
-                            span_to_string(a.expression.span()),
-                        ))
-                    }
-                }
-                BlockContent::Stmt(Statement::Iteration(_)) => {
-                    return Err(format!("Blocks should not contain iteration statements."));
-                }
-                BlockContent::Stmt(Statement::Conditional(_)) => {
-                    return Err(format!("Blocks should not contain if / else statements."));
-                }
-                BlockContent::Stmt(Statement::Definition(d)) => {
-                    // XXX(unimpl) multi-assignment unimplemented
-                    assert!(d.lhs.len() <= 1);
-
-                    self.set_lhs_ty_defn::<true>(&d)?;
-                    let e = self.expr_impl_::<true>(&d.expression)?;
-    
-                    if let Some(l) = d.lhs.first() {
-                        match l {
-                            TypedIdentifierOrAssignee::Assignee(l) => {
-                                let strict = match &d.expression {
-                                    Expression::Unary(u) => {
-                                        matches!(&u.op, UnaryOperator::Strict(_))
-                                    }
-                                    _ => false,
-                                };
-                                self.assign_impl_::<true>(&l.id.value, &l.accesses[..], e, strict)?;
-                            }
-                            TypedIdentifierOrAssignee::TypedIdentifier(l) => {
-                                let decl_ty = self.type_impl_::<true>(&l.ty)?;
-                                let ty = e.type_();
-                                if &decl_ty != ty {
-                                    return Err(format!(
-                                        "Assignment type mismatch: {} annotated vs {} actual",
-                                        decl_ty, ty,
-                                    ));
-                                }
-                                self.declare_init_impl_::<true>(
-                                    l.identifier.value.clone(),
-                                    decl_ty,
-                                    e,
-                                )?;
-                            }
-                        }
-                    } else {
-                        warn!("Statement with no LHS!");
-                    }
-                }
-                BlockContent::Stmt(Statement::CondStore(_)) => { panic!("Blocks should not contain conditional store statements.") }
             }
         };
 
@@ -414,6 +347,104 @@ impl<'ast> ZGen<'ast> {
             BlockTerminator::FuncCall(fc) => Err(format!("Evaluation failed: function call to {} needs to be converted to block label.", fc)),
             BlockTerminator::ProgTerm => Ok((0, phy_mem, true, mem_op))
         }
+    }
+
+    fn bl_eval_stmt_impl_(
+        &self,
+        s: &Statement,
+    ) -> Result<(), String> {
+        match s {
+            Statement::Return(_) => {
+                return Err(format!("Blocks should not contain return statements."));
+            }
+            // %PHY should never appear in an assertion statement
+            Statement::Assertion(a) => {
+                match self.expr_impl_::<true>(&a.expression).and_then(|v| {
+                    const_bool(v)
+                        .ok_or_else(|| "interpreting expr as const bool failed".to_string())
+                }) {
+                    Ok(true) => {},
+                    Ok(false) => return Err(format!(
+                        "Const assert failed: {} at\n{}",
+                        a.message
+                            .as_ref()
+                            .map(|m| m.value.as_ref())
+                            .unwrap_or("(no error message given)"),
+                        span_to_string(a.expression.span()),
+                    )),
+                    Err(err) => return Err(format!(
+                        "Const assert expression eval failed: {} at\n{}",
+                        err,
+                        span_to_string(a.expression.span()),
+                    ))
+                }
+            }
+            Statement::Iteration(_) => {
+                return Err(format!("Blocks should not contain iteration statements."));
+            }
+            Statement::Conditional(c) => {
+                match self.expr_impl_::<true>(&c.condition).and_then(|v| {
+                    const_bool(v)
+                        .ok_or_else(|| "interpreting expr as const bool failed".to_string())
+                }) {
+                    Ok(true) => {
+                        for s in &c.ifbranch {
+                            self.bl_eval_stmt_impl_(s)?;
+                        }
+                    },
+                    Ok(false) => {
+                        for s in &c.elsebranch {
+                            self.bl_eval_stmt_impl_(s)?;
+                        }
+                    },
+                    Err(err) => return Err(format!(
+                        "Const conditional expression eval failed: {} at\n{}",
+                        err,
+                        span_to_string(c.condition.span()),
+                    ))
+                }
+            }
+            Statement::Definition(d) => {
+                // XXX(unimpl) multi-assignment unimplemented
+                assert!(d.lhs.len() <= 1);
+
+                self.set_lhs_ty_defn::<true>(&d)?;
+                let e = self.expr_impl_::<true>(&d.expression)?;
+
+                if let Some(l) = d.lhs.first() {
+                    match l {
+                        TypedIdentifierOrAssignee::Assignee(l) => {
+                            let strict = match &d.expression {
+                                Expression::Unary(u) => {
+                                    matches!(&u.op, UnaryOperator::Strict(_))
+                                }
+                                _ => false,
+                            };
+                            self.assign_impl_::<true>(&l.id.value, &l.accesses[..], e, strict)?;
+                        }
+                        TypedIdentifierOrAssignee::TypedIdentifier(l) => {
+                            let decl_ty = self.type_impl_::<true>(&l.ty)?;
+                            let ty = e.type_();
+                            if &decl_ty != ty {
+                                return Err(format!(
+                                    "Assignment type mismatch: {} annotated vs {} actual",
+                                    decl_ty, ty,
+                                ));
+                            }
+                            self.declare_init_impl_::<true>(
+                                l.identifier.value.clone(),
+                                decl_ty,
+                                e,
+                            )?;
+                        }
+                    }
+                } else {
+                    warn!("Statement with no LHS!");
+                }
+            }
+            Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
+        };
+        Ok(())
     }
 }
 

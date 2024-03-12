@@ -1690,7 +1690,7 @@ impl<'ast> ZGen<'ast> {
                     if scope_list[*succ].len() > 0 {
                         let succ_scope = bls[*succ].scope;
                         for i in 0..cur_scope + 1 {
-                            // If every scope < succ_scope, join scope_state of the successor with scope_state of the current block
+                            // If scope < succ_scope, join scope_state of the successor with scope_state of the current block
                             if i < succ_scope {
                                 let succ_state = scope_list[*succ][i];
                                 scope_state[i] = bm_join(scope_state[i], succ_state);

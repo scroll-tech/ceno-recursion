@@ -21,7 +21,8 @@ use crate::front::zsharp::*;
 
 fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast>) -> Expression<'ast> {
     let ce = Expression::Binary(BinaryExpression {
-        op: BinaryOperator::Lt,
+        // op: BinaryOperator::Lt,
+        op: BinaryOperator::NotEq,
         left: Box::new(Expression::Identifier(ident.clone())),
         right: Box::new(condition.clone()),
         span: Span::new("", 0, 0).unwrap()

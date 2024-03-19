@@ -35,8 +35,9 @@ use circ::cfg::{
 use std::path::PathBuf;
 use core::cmp::Ordering;
 
-// How many reserved variables are in front of the actual input / output?
-const INPUT_OFFSET: usize = 6;
+// How many reserved variables (excluding V) are in front of the actual input / output?
+const INPUT_OFFSET: usize = 5;
+// Which index in the output (excluding V) denotes the output of the program?
 const OUTPUT_OFFSET: usize = 5;
 
 #[derive(Debug, Parser)]
@@ -499,10 +500,10 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     let max_num_cons = max_num_cons.next_power_of_two();
 
     // Convert R1CS into Spartan sparse format
-    // The final version will be of form: (v, i, _, o, wv, ma, mv, w), where
+    // The final version will be of form: (v, _, i, o, wv, ma, mv, w), where
     //   v is the valid bit
-    //   i are the inputs
     //   _ is a dummy
+    //   i are the inputs
     //   o are the outputs
     //  wv is the valid bit, but in witnesses
     //  ma are addresses of all memory accesses
@@ -510,9 +511,11 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     //   w are witnesses
     // According to the final io width, re-label all inputs and witnesses to the form (witness, input, output)
     let io_relabel = |b: usize, i: usize| -> usize {
-        if i < live_io_list[b].0.len() { 
-            live_io_list[b].0[i]
+        if i < live_io_list[b].0.len() {
+            // inputs, label starts at 1, index starts at 2
+            live_io_list[b].0[i] + 1
         } else {
+            // outputs, label starts at 1, index starts at num_inputs_unpadded + 1
             live_io_list[b].1[i - live_io_list[b].0.len()] + num_inputs_unpadded
         }
     };
@@ -677,7 +680,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         let reg_out = &bl_outputs_list[i + 1];
         for j in 0..reg_in.len() {
             if let Some(ri) = &reg_in[j] {
-                inputs[j] = ri.as_integer().unwrap();
+                inputs[j + 1] = ri.as_integer().unwrap();
             }
             if let Some(ro) = &reg_out[j] {
                 inputs[num_input_unpadded + j] = ro.as_integer().unwrap();
@@ -740,17 +743,18 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         block_inputs_matrix[slot].push(inputs_assignment);
     }
 
+    // Memory: valid, dummy, addr, val
     let mut addr_mems_list = Vec::new();
     let mut mem_last = vec![one.clone(); 4];
     for i in 0..mem_list.len() {
         let m = &mem_list[i];
         let mut mem: Vec<Integer> = vec![zero.clone(); 4];
         mem[0] = one.clone();
-        mem[1] = m.0.as_integer().unwrap();
-        mem[2] = m.1.as_integer().unwrap();
+        mem[2] = m.0.as_integer().unwrap();
+        mem[3] = m.1.as_integer().unwrap();
         // backend requires the 3rd entry to be v[k + 1] * (1 - addr[k + 1] + addr[k])
         if i != 0 {
-            mem_last[3] = mem[0].clone() * (one.clone() - mem[1].clone() + mem_last[1].clone());
+            mem_last[1] = mem[0].clone() * (one.clone() - mem[2].clone() + mem_last[2].clone());
             addr_mems_list.push(Assignment::new(mem_last.iter().map(|i| integer_to_bytes(i.clone())).collect()));
         }
         if i == mem_list.len() - 1 {

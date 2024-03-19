@@ -24,8 +24,7 @@ use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
 use circ::target::r1cs::ProverData;
 
 use std::fs::File;
-// use std::io::Read;
-use std::io::Write;
+use std::io::{BufReader, BufRead, Write};
 
 use circ::cfg::{
     cfg,
@@ -800,8 +799,6 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
 }
 
 fn main() {
-    let func_inputs: Vec<usize> = vec![5, 4, 3, 2, 1];
-
     env_logger::Builder::from_default_env()
         .format_level(false)
         .format_timestamp(None)
@@ -819,9 +816,28 @@ fn main() {
         get_compile_time_knowledge::<false>(path.clone());
 
     // --
+    // Obtain Inputs
+    // --
+    let input_file_name = format!("../zok_tests/benchmarks/{}.input", benchmark_name);
+    // Assume inputs are listed in the order of the parameters
+    let mut entry_regs: Vec<Integer> = Vec::new();
+    let f = File::open(input_file_name).unwrap();
+    let mut reader = BufReader::new(f);
+    let mut buffer = String::new();
+    reader.read_line(&mut buffer).unwrap();
+    let _ = buffer.trim();
+    while buffer != "END".to_string() {
+        let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
+        entry_regs.push(Integer::from(split[1].parse::<usize>().unwrap()));
+
+        buffer.clear();
+        reader.read_line(&mut buffer).unwrap();
+    }
+    println!("INPUT: {:?}", entry_regs);
+
+    // --
     // Generate Witnesses
     // --
-    let entry_regs: Vec<Integer> = func_inputs.iter().map(|i| Integer::from(*i)).collect();
     let rtk = get_run_time_knowledge::<false>(path.clone(), entry_regs, &ctk, live_io_list, prover_data_list);
 
     // --

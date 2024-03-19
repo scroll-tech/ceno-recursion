@@ -179,8 +179,13 @@ pub fn pretty_name(name: &str) -> String {
     }.to_string()
 }
 
-fn get_un_op(_op: &UnaryOperator) -> String {
-    panic!("Pretty print for unary operators has yet to be implemented.");
+fn get_un_op(op: &UnaryOperator) -> &str {
+    match op {
+        UnaryOperator::Pos(_) => "+",
+        UnaryOperator::Neg(_) => "-",
+        UnaryOperator::Not(_) => "!",
+        UnaryOperator::Strict(_) => "#"
+    }
 }
 
 fn get_bin_op(op: &BinaryOperator) -> &str {

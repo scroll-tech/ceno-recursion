@@ -175,6 +175,18 @@ impl<'ast> ZGen<'ast> {
                             Ty::Field => DecimalSuffix::Field(FieldSuffix {
                                 span: Span::new("", 0, 0).unwrap()
                             }),
+                            Ty::Uint(64) => DecimalSuffix::U64(U64Suffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            }),
+                            Ty::Uint(32) => DecimalSuffix::U32(U32Suffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            }),
+                            Ty::Uint(16) => DecimalSuffix::U16(U16Suffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            }),
+                            Ty::Uint(8) => DecimalSuffix::U8(U8Suffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            }),
                             _ => panic!("Unsupported input type: {:?}!", x)
                         }),
                         span: Span::new("", 0, 0).unwrap()
@@ -218,6 +230,18 @@ impl<'ast> ZGen<'ast> {
                                     },
                                     suffix: Some(match x {
                                         Ty::Field => DecimalSuffix::Field(FieldSuffix {
+                                            span: Span::new("", 0, 0).unwrap()
+                                        }),
+                                        Ty::Uint(64) => DecimalSuffix::U64(U64Suffix {
+                                            span: Span::new("", 0, 0).unwrap()
+                                        }),
+                                        Ty::Uint(32) => DecimalSuffix::U32(U32Suffix {
+                                            span: Span::new("", 0, 0).unwrap()
+                                        }),
+                                        Ty::Uint(16) => DecimalSuffix::U16(U16Suffix {
+                                            span: Span::new("", 0, 0).unwrap()
+                                        }),
+                                        Ty::Uint(8) => DecimalSuffix::U8(U8Suffix {
                                             span: Span::new("", 0, 0).unwrap()
                                         }),
                                         _ => panic!("Unsupported input type: {:?}!", x)

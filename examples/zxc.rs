@@ -828,7 +828,7 @@ fn main() {
     let _ = buffer.trim();
     while buffer != "END".to_string() {
         let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
-        entry_regs.push(Integer::from(split[1].parse::<usize>().unwrap()));
+        entry_regs.push(Integer::from(split[2].parse::<usize>().unwrap()));
 
         buffer.clear();
         reader.read_line(&mut buffer).unwrap();
@@ -838,7 +838,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<false>(path.clone(), entry_regs, &ctk, live_io_list, prover_data_list);
+    let rtk = get_run_time_knowledge::<true>(path.clone(), entry_regs, &ctk, live_io_list, prover_data_list);
 
     // --
     // Write CTK, RTK to file

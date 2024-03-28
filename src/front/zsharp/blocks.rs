@@ -139,6 +139,8 @@ pub struct Block<'ast> {
     pub terminator: BlockTerminator<'ast>,
     // The upper bound on the number of times a block is executed within one execution of the function
     pub fn_num_exec_bound: usize,
+    // Is this block the head of a while loop? If so, this block cannot be merged with any block before it
+    pub is_head_of_while_loop: bool,
     // Name of the function the block is in
     pub fn_name: String,
     // Depth of the scope of the function
@@ -177,6 +179,7 @@ impl<'ast> Block<'ast> {
             instructions: Vec::new(),
             terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1))),
             fn_num_exec_bound: num_exec_bound,
+            is_head_of_while_loop: false,
             fn_name,
             scope
         };
@@ -191,6 +194,7 @@ impl<'ast> Block<'ast> {
             instructions: old_bl.instructions.clone(),
             terminator: old_bl.terminator.clone(),
             fn_num_exec_bound: old_bl.fn_num_exec_bound,
+            is_head_of_while_loop: old_bl.is_head_of_while_loop,
             fn_name: old_bl.fn_name.clone(),
             scope: old_bl.scope
         };
@@ -211,7 +215,7 @@ impl<'ast> Block<'ast> {
     pub fn pretty(&self) {
         println!("\nBlock {}:", self.name);
         println!("Func: {}, Scope: {}", self.fn_name, self.scope);
-        println!("Execution Bound: {}", self.fn_num_exec_bound);
+        println!("Execution Bound: {}, Head of While Loop? {}", self.fn_num_exec_bound, self.is_head_of_while_loop);
         println!("Inputs:");
 
         for i in &self.inputs {
@@ -907,6 +911,43 @@ impl<'ast> ZGen<'ast> {
                 // Create new block
                 blks.push(Block::new(blks_len, num_exec_bound, f_name.to_string(), cur_scope));
                 blks_len += 1;
+            }
+            Statement::WhileLoop(w) => {
+                // Process function calls in the condition
+                let cond_expr: Expression;
+                (blks, blks_len, var_scope_info, cond_expr, _) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &w.condition, f_name, 0, var_scope_info)?;
+
+                // New Scope to enter LOOP BODY
+                cur_scope = self.bl_gen_enter_scope_(cur_scope)?;
+                // Create new Block. While loops cannot be unrolled.
+                blks.push(Block::new(blks_len, num_exec_bound, f_name.to_string(), cur_scope));
+                blks[blks_len].is_head_of_while_loop = true;
+                blks_len += 1;
+                let loop_header = blks_len - 1;
+                
+                // Iterate through Stmts. Stmts inside while loops can be merged.
+                for body in &w.statements {
+                    (blks, blks_len, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, body, ret_ty, f_name, var_scope_info, num_exec_bound, cur_scope)?;
+                }
+
+                // Exit scoping for LOOP TAIL
+                (var_scope_info, cur_scope) = self.bl_gen_exit_scope_(var_scope_info, f_name, cur_scope)?;
+                // Create new block
+                blks.push(Block::new(blks_len, num_exec_bound, f_name.to_string(), cur_scope));
+                blks_len += 1;
+
+                // Create and push TRANSITION statement towards header & tail
+                let loop_tail = blks_len - 1;
+                let term = BlockTerminator::Transition(
+                    bl_trans(
+                        cond_expr, 
+                        NextBlock::Label(loop_header), 
+                        NextBlock::Label(loop_tail)
+                    )
+                );
+                blks[loop_header - 1].terminator = term.clone();
+                blks[loop_tail - 1].terminator = term;
             }
             Statement::Conditional(c) => {
                 // Process function calls in the condition

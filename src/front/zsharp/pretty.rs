@@ -9,6 +9,7 @@ pub fn pretty_stmt(indent: usize, s: &Statement) {
         Statement::Definition(d) => { pretty_def_stmt(d); }
         Statement::Assertion(a) => { pretty_ass_stmt(a); }
         Statement::Iteration(i) => { pretty_ite_stmt(indent, i); }
+        Statement::WhileLoop(w) => { pretty_while_stmt(indent, w); }
         Statement::Conditional(c) => { pretty_cond_stmt(indent, c); }
         Statement::CondStore(_) => { panic!("Conditional store statements not supported.") }
     }
@@ -68,6 +69,16 @@ fn pretty_ite_stmt(indent: usize, i: &IterationStatement) {
         pretty_stmt(indent + 1, &s);
     }
 }
+
+fn pretty_while_stmt(indent: usize, w: &WhileLoopStatement) {
+    print!("while ");
+    pretty_expr::<false>(&w.condition);
+    println!(":");
+    for s in &w.statements {
+        pretty_stmt(indent + 1, &s);
+    }
+}
+
 
 fn pretty_cond_stmt(indent: usize, c: &ConditionalStatement) {
     print!("if ");

@@ -10,12 +10,12 @@ extern crate lazy_static;
 pub use ast::{
     Access, AnyString, Arguments, ArrayAccess, ArrayInitializerExpression, ArrayType,
     AssertionStatement, Assignee, AssigneeAccess, BasicOrStructType, BasicType, BinaryExpression,
-    BinaryOperator, BooleanLiteralExpression, BooleanType, CallAccess, CommittedVisibility,
+    BinaryOperator, BooleanLiteralExpression, BooleanType, CallAccess, CommittedVisibility, ConditionalStatement, 
     CondStoreStatement, ConstantDefinition, ConstantGenericValue, Curve, DecimalLiteralExpression,
     DecimalNumber, DecimalSuffix, DefinitionStatement, ExplicitGenerics, Expression, FieldSuffix,
     FieldType, File, FromExpression, FromImportDirective, FunctionDefinition, HexLiteralExpression,
     HexNumberExpression, IdentifierExpression, ImportDirective, ImportSymbol,
-    InlineArrayExpression, InlineStructExpression, InlineStructMember, IterationStatement, ConditionalStatement, 
+    InlineArrayExpression, InlineStructExpression, InlineStructMember, IterationStatement,
     LiteralExpression, MainImportDirective, MemberAccess, NegOperator, NotOperator, Parameter,
     PosOperator, PostfixExpression, Pragma, PrivateNumber, PrivateVisibility, PublicVisibility,
     Range, RangeOrExpression, ReturnStatement, Span, Spread, SpreadOrExpression, Statement,
@@ -23,7 +23,7 @@ pub use ast::{
     ToExpression, Type, TypeDefinition, TypedIdentifier, TypedIdentifierOrAssignee,
     U16NumberExpression, U16Suffix, U16Type, U32NumberExpression, U32Suffix, U32Type,
     U64NumberExpression, U64Suffix, U64Type, U8NumberExpression, U8Suffix, U8Type, UnaryExpression,
-    UnaryOperator, Underscore, Visibility, EOI,
+    UnaryOperator, Underscore, Visibility, WhileLoopStatement, EOI,
 };
 
 mod ast {
@@ -391,6 +391,7 @@ mod ast {
         Assertion(AssertionStatement<'ast>),
         CondStore(CondStoreStatement<'ast>),
         Iteration(IterationStatement<'ast>),
+        WhileLoop(WhileLoopStatement<'ast>),
         Conditional(ConditionalStatement<'ast>),
     }
 
@@ -402,6 +403,7 @@ mod ast {
                 Statement::Assertion(x) => &x.span,
                 Statement::CondStore(x) => &x.span,
                 Statement::Iteration(x) => &x.span,
+                Statement::WhileLoop(x) => &x.span,
                 Statement::Conditional(x) => &x.span,
             }
         }
@@ -443,6 +445,15 @@ mod ast {
         pub index: IdentifierExpression<'ast>,
         pub from: Expression<'ast>,
         pub to: Expression<'ast>,
+        pub statements: Vec<Statement<'ast>>,
+        #[pest_ast(outer())]
+        pub span: Span<'ast>,
+    }
+
+    #[derive(Debug, FromPest, PartialEq, Clone)]
+    #[pest_ast(rule(Rule::while_loop_statement))]
+    pub struct WhileLoopStatement<'ast> {
+        pub condition: Expression<'ast>,
         pub statements: Vec<Statement<'ast>>,
         #[pest_ast(outer())]
         pub span: Span<'ast>,

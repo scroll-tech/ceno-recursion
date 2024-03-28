@@ -428,9 +428,8 @@ fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
             gen_set.extend(expr_find_val(&c.condition));
             (HashSet::new(), gen_set)
         }
-        Statement::Iteration(_) => {
-            panic!("Blocks should not contain iteration statements.")
-        }
+        Statement::Iteration(_) => { panic!("Blocks should not contain iteration statements.") }
+        Statement::WhileLoop(_) => { panic!("Blocks should not contain while loop statements.") }
         Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
     }
 }
@@ -640,9 +639,8 @@ fn var_to_reg_stmt<'ast>(
             };
             (Statement::Conditional(new_stmt), reg_map)
         }
-        Statement::Iteration(_) => {
-            panic!("Blocks should not contain iteration statements.")
-        }
+        Statement::Iteration(_) => { panic!("Blocks should not contain iteration statements.") }
+        Statement::WhileLoop(_) => { panic!("Blocks should not contain while loop statements.") }
         Statement::Definition(d) => {
             let mut new_lhs: Vec<TypedIdentifierOrAssignee> = Vec::new();
             for l in &d.lhs {
@@ -846,9 +844,8 @@ fn tydef_to_assignee_stmt<'ast>(
             };
             (Statement::Conditional(new_stmt), gen_set)
         }
-        Statement::Iteration(_) => {
-            panic!("Blocks should not contain iteration statements.")
-        }
+        Statement::Iteration(_) => { panic!("Blocks should not contain iteration statements.") }
+        Statement::WhileLoop(_) => { panic!("Blocks should not contain while loop statements.") }
         Statement::Definition(d) => {
             let mut new_lhs: Vec<TypedIdentifierOrAssignee> = Vec::new();
             for l in &d.lhs {
@@ -1683,9 +1680,14 @@ impl<'ast> ZGen<'ast> {
             // Compute scope_state using bm_join
             let mut scope_state: Vec<Option<usize>> = vec![None; cur_scope + 1];
 
-            // if cur_bl is not in a while loop and does not call another function, then merge can be performed
-            if bls[cur_bl].fn_num_exec_bound > 0 && (successor_fn[cur_bl].len() == 0 || successor_fn[cur_bl] == successor[cur_bl]) {
+            // if cur_bl does not call another function, then merge can be performed
+            if successor_fn[cur_bl].len() == 0 || successor_fn[cur_bl] == successor[cur_bl] {
                 for succ in &successor_fn[cur_bl] {
+                    // if any successor is the head of a while loop, no merge can be performed
+                    if bls[*succ].is_head_of_while_loop {
+                        scope_state = vec![None; cur_scope + 1];
+                        break;
+                    }
                     // Only join if scope_list[succ] is not TOP
                     if scope_list[*succ].len() > 0 {
                         let succ_scope = bls[*succ].scope;
@@ -2974,12 +2976,12 @@ impl<'ast> ZGen<'ast> {
     fn get_blocks_meta_info(
         &self,
         bls: &Vec<Block>,
-        successor: &Vec<HashSet<usize>>,
-        entry_bl: usize,
-        exit_bls_fn: &HashSet<usize>,
-        successor_fn: &Vec<HashSet<usize>>,
-        predecessor_fn: &Vec<HashSet<usize>>,
-        sorted_fns: &Vec<String>
+        _successor: &Vec<HashSet<usize>>,
+        _entry_bl: usize,
+        _exit_bls_fn: &HashSet<usize>,
+        _successor_fn: &Vec<HashSet<usize>>,
+        _predecessor_fn: &Vec<HashSet<usize>>,
+        _sorted_fns: &Vec<String>
     ) -> Vec<usize> {
         // Compute the number of memory accesses 
         let mut num_mem_accesses = Vec::new();

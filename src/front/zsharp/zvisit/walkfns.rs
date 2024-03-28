@@ -711,6 +711,7 @@ pub fn walk_statement<'ast, Z: ZVisitorMut<'ast>>(
         Assertion(a) => visitor.visit_assertion_statement(a),
         CondStore(a) => visitor.visit_cond_store_statement(a),
         Iteration(i) => visitor.visit_iteration_statement(i),
+        WhileLoop(w) => visitor.visit_while_loop_statement(w),
         Conditional(c) => visitor.visit_conditional_statement(c),
     }
 }
@@ -812,6 +813,17 @@ pub fn walk_iteration_statement<'ast, Z: ZVisitorMut<'ast>>(
         .iter_mut()
         .try_for_each(|s| visitor.visit_statement(s))?;
     visitor.visit_span(&mut iter.span)
+}
+
+pub fn walk_while_loop_statement<'ast, Z: ZVisitorMut<'ast>>(
+    visitor: &mut Z,
+    wl: &mut ast::WhileLoopStatement<'ast>,
+) -> ZVisitorResult {
+    visitor.visit_expression(&mut wl.condition)?;
+    wl.statements
+        .iter_mut()
+        .try_for_each(|s| visitor.visit_statement(s))?;
+    visitor.visit_span(&mut wl.span)
 }
 
 pub fn walk_conditional_statement<'ast, Z: ZVisitorMut<'ast>>(

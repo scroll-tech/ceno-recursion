@@ -1317,6 +1317,9 @@ impl<'ast> ZGen<'ast> {
                 self.exit_scope_impl_::<IS_CNST>();
                 Ok(())
             }
+            ast::Statement::WhileLoop(_) => {
+                panic!("Direct processing of while loops are unsupported. Convert them to blocks first.")
+            }
             ast::Statement::Conditional(c) => {
                 match self.expr_impl_::<true>(&c.condition).ok().and_then(const_bool) {
                     Some(true) => {

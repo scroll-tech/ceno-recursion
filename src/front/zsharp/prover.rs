@@ -406,6 +406,9 @@ impl<'ast> ZGen<'ast> {
             Statement::Iteration(_) => {
                 return Err(format!("Blocks should not contain iteration statements."));
             }
+            Statement::WhileLoop(_) => {
+                return Err(format!("Blocks should not contain while loop statements."));
+            }
             Statement::Conditional(c) => {
                 match self.expr_impl_::<true>(&c.condition).and_then(|v| {
                     const_bool(v)

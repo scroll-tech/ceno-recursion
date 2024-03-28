@@ -471,6 +471,13 @@ pub trait ZVisitorMut<'ast>: Sized {
         walk_iteration_statement(self, iter)
     }
 
+    fn visit_while_loop_statement(
+        &mut self,
+        wl: &mut ast::WhileLoopStatement<'ast>,
+    ) -> ZVisitorResult {
+        walk_while_loop_statement(self, wl)
+    }
+
     fn visit_conditional_statement(
         &mut self,
         cond: &mut ast::ConditionalStatement<'ast>,

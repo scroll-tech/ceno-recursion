@@ -790,6 +790,25 @@ impl<'ast, 'ret> ZVisitorMut<'ast> for ZStatementWalker<'ast, 'ret> {
         self.visit_span(&mut iter.span)
     }
 
+    fn visit_while_loop_statement(
+        &mut self,
+        wl: &mut ast::WhileLoopStatement<'ast>,
+    ) -> ZVisitorResult {
+        // type check for condition
+        let bool_ty = ast::Type::Basic(ast::BasicType::Boolean(ast::BooleanType {
+            span: wl.span,
+        }));
+        self.unify(Some(bool_ty), &mut wl.condition)?;
+
+        self.push_scope(); // {
+        wl.statements
+            .iter_mut()
+            .try_for_each(|s| self.visit_statement(s))?;
+        self.pop_scope(); // }
+
+        self.visit_span(&mut wl.span)
+    }
+
     fn visit_conditional_statement(
         &mut self,
         cond: &mut ast::ConditionalStatement<'ast>,

@@ -1683,8 +1683,8 @@ impl<'ast> ZGen<'ast> {
             // Compute scope_state using bm_join
             let mut scope_state: Vec<Option<usize>> = vec![None; cur_scope + 1];
 
-            // if cur_bl calls another function, then no merge can be performed
-            if successor_fn[cur_bl].len() == 0 || successor_fn[cur_bl] == successor[cur_bl] {
+            // if cur_bl is not in a while loop and does not call another function, then merge can be performed
+            if bls[cur_bl].fn_num_exec_bound > 0 && (successor_fn[cur_bl].len() == 0 || successor_fn[cur_bl] == successor[cur_bl]) {
                 for succ in &successor_fn[cur_bl] {
                     // Only join if scope_list[succ] is not TOP
                     if scope_list[*succ].len() > 0 {
@@ -2516,7 +2516,7 @@ impl<'ast> ZGen<'ast> {
         bls: Vec<Block<'ast>>,
         entry_bl: usize,
         inputs: Vec<(String, Ty)>
-    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, usize, usize, Vec<usize>) {
+    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<usize>) {
         println!("\n\n--\nPost-Processing:");
         // Construct a new CFG for the program
         // Note that this is the CFG after DBE, and might be different from the previous CFG
@@ -2558,11 +2558,11 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Bound # of Proofs and # of memory accesses
-        let (total_num_proofs_bound, total_num_mem_accesses_bound, num_mem_accesses) =
+        let num_mem_accesses =
             self.get_blocks_meta_info(&bls, &successor, entry_bl, &exit_bls_fn, &successor_fn, &predecessor_fn, &sorted_fns);
 
         print_bls(&bls, &entry_bl);
-        (bls, entry_bl, io_size, witness_size, live_io, total_num_proofs_bound, total_num_mem_accesses_bound, num_mem_accesses)
+        (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses)
     }
 
     // Convert all mentionings of variables to registers
@@ -2980,7 +2980,7 @@ impl<'ast> ZGen<'ast> {
         successor_fn: &Vec<HashSet<usize>>,
         predecessor_fn: &Vec<HashSet<usize>>,
         sorted_fns: &Vec<String>
-    ) -> (usize, usize, Vec<usize>) {
+    ) -> Vec<usize> {
         // Compute the number of memory accesses 
         let mut num_mem_accesses = Vec::new();
         for b in bls {
@@ -2999,91 +2999,97 @@ impl<'ast> ZGen<'ast> {
             num_mem_accesses.push(mem_accesses_count);
         }
 
-        // Eliminate all loops
-        let mut predecessor_fn_no_loop = predecessor_fn.clone();
-        let mut successor_fn_no_loop = successor_fn.clone();
-        // Note: cannot use a recursive DFS to eliminate backedges, because depending on traverse route, backedges might not be the same as loops
-        // Instead, for every block, remove any successor with smaller block label
-        for i in 0..bls.len() {
-            for j in predecessor_fn_no_loop[i].clone() {
-                if j >= i {
-                    predecessor_fn_no_loop[i].remove(&j);
-                }
-            }
-            for j in successor_fn_no_loop[i].clone() {
-                if j <= i {
-                    successor_fn_no_loop[i].remove(&j);
-                }
-            }
-        }
-
-        // Starting from the front-most function in top sort, analyze all blocks within the function
-        let mut total_num_proofs = vec![0; bls.len()];
-        let mut total_num_mem_accesses = vec![0; bls.len()];
-        for f_name in sorted_fns.iter().rev() {
-            // A DP algorithm to find total_num_proofs_bound & total_num_mem_accesses_bound
-            // Note that we have eliminated all loops
-            // For each block, record the maximum number of block executions from the block to the end of the function
-            // And the maximum number of memory accesses
-            // Start from exit block
-            let mut next_bls: VecDeque<usize> = VecDeque::new();
-            for eb in exit_bls_fn {
-                if &bls[*eb].fn_name == f_name {
-                    next_bls.push_back(*eb);
-                }
-            }
-            while !next_bls.is_empty() {
-                let cur_bl = next_bls.pop_front().unwrap();
-
-                let mut max_successor_num_proofs = bls[cur_bl].fn_num_exec_bound;
-                let mut max_successor_num_mem_accesses = bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
-
-                // if cur_bl is the exit block of a function, do not reason about successors
-                if successor_fn[cur_bl].len() == 0 {} 
-                // if cur_bl is a caller of a function, need to process both the function head block and the return block
-                else if successor_fn[cur_bl] != successor[cur_bl] {
-                    assert_eq!(successor[cur_bl].len(), 1);
-                    assert_eq!(successor_fn[cur_bl].len(), 1);
-                    let func_header = Vec::from_iter(successor[cur_bl].clone())[0];
-                    let return_bl = Vec::from_iter(successor_fn[cur_bl].clone())[0];
-                    assert!(total_num_proofs[func_header] != 0);
-                    max_successor_num_proofs += bls[cur_bl].fn_num_exec_bound * total_num_proofs[func_header] + total_num_proofs[return_bl];
-                    max_successor_num_mem_accesses += bls[cur_bl].fn_num_exec_bound * total_num_mem_accesses[func_header] + total_num_mem_accesses[return_bl];
-                }
-                // otherwise, process all the successors
-                else {
-                    for succ in &successor_fn_no_loop[cur_bl] {
-                        // num_proofs
-                        let succ_num_proofs = total_num_proofs[*succ] + bls[cur_bl].fn_num_exec_bound;
-                        if max_successor_num_proofs < succ_num_proofs {
-                            max_successor_num_proofs = succ_num_proofs;
-                        }
-                        // num_mem_accesses
-                        let succ_num_mem_accesses = total_num_mem_accesses[*succ] + bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
-                        if max_successor_num_mem_accesses < succ_num_mem_accesses {
-                            max_successor_num_mem_accesses = succ_num_mem_accesses;
-                        }
+        /*
+        // Static bound on number of block executions & memory accesses
+        let (total_num_proofs_bound, total_num_mem_accesses_bound) = {
+            // Eliminate all loops
+            let mut predecessor_fn_no_loop = predecessor_fn.clone();
+            let mut successor_fn_no_loop = successor_fn.clone();
+            // Note: cannot use a recursive DFS to eliminate backedges, because depending on traverse route, backedges might not be the same as loops
+            // Instead, for every block, remove any successor with smaller block label
+            for i in 0..bls.len() {
+                for j in predecessor_fn_no_loop[i].clone() {
+                    if j >= i {
+                        predecessor_fn_no_loop[i].remove(&j);
                     }
                 }
-
-                // If any value changes, process all non-loop predecessors
-                if max_successor_num_proofs != total_num_proofs[cur_bl] || max_successor_num_mem_accesses != total_num_mem_accesses[cur_bl] {
-                    for pred in &predecessor_fn_no_loop[cur_bl] {
-                        if !next_bls.contains(pred) {
-                            next_bls.push_back(*pred);
-                        }
+                for j in successor_fn_no_loop[i].clone() {
+                    if j <= i {
+                        successor_fn_no_loop[i].remove(&j);
                     }
                 }
-                // Update values
-                if max_successor_num_proofs != total_num_proofs[cur_bl] {
-                    total_num_proofs[cur_bl] = max_successor_num_proofs;
+            }
+
+            // Starting from the front-most function in top sort, analyze all blocks within the function
+            let mut total_num_proofs = vec![0; bls.len()];
+            let mut total_num_mem_accesses = vec![0; bls.len()];
+            for f_name in sorted_fns.iter().rev() {
+                // A DP algorithm to find total_num_proofs_bound & total_num_mem_accesses_bound
+                // Note that we have eliminated all loops
+                // For each block, record the maximum number of block executions from the block to the end of the function
+                // And the maximum number of memory accesses
+                // Start from exit block
+                let mut next_bls: VecDeque<usize> = VecDeque::new();
+                for eb in exit_bls_fn {
+                    if &bls[*eb].fn_name == f_name {
+                        next_bls.push_back(*eb);
+                    }
                 }
-                if max_successor_num_mem_accesses != total_num_mem_accesses[cur_bl] {
-                    total_num_mem_accesses[cur_bl] = max_successor_num_mem_accesses;
+                while !next_bls.is_empty() {
+                    let cur_bl = next_bls.pop_front().unwrap();
+
+                    let mut max_successor_num_proofs = bls[cur_bl].fn_num_exec_bound;
+                    let mut max_successor_num_mem_accesses = bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
+
+                    // if cur_bl is the exit block of a function, do not reason about successors
+                    if successor_fn[cur_bl].len() == 0 {} 
+                    // if cur_bl is a caller of a function, need to process both the function head block and the return block
+                    else if successor_fn[cur_bl] != successor[cur_bl] {
+                        assert_eq!(successor[cur_bl].len(), 1);
+                        assert_eq!(successor_fn[cur_bl].len(), 1);
+                        let func_header = Vec::from_iter(successor[cur_bl].clone())[0];
+                        let return_bl = Vec::from_iter(successor_fn[cur_bl].clone())[0];
+                        assert!(total_num_proofs[func_header] != 0);
+                        max_successor_num_proofs += bls[cur_bl].fn_num_exec_bound * total_num_proofs[func_header] + total_num_proofs[return_bl];
+                        max_successor_num_mem_accesses += bls[cur_bl].fn_num_exec_bound * total_num_mem_accesses[func_header] + total_num_mem_accesses[return_bl];
+                    }
+                    // otherwise, process all the successors
+                    else {
+                        for succ in &successor_fn_no_loop[cur_bl] {
+                            // num_proofs
+                            let succ_num_proofs = total_num_proofs[*succ] + bls[cur_bl].fn_num_exec_bound;
+                            if max_successor_num_proofs < succ_num_proofs {
+                                max_successor_num_proofs = succ_num_proofs;
+                            }
+                            // num_mem_accesses
+                            let succ_num_mem_accesses = total_num_mem_accesses[*succ] + bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
+                            if max_successor_num_mem_accesses < succ_num_mem_accesses {
+                                max_successor_num_mem_accesses = succ_num_mem_accesses;
+                            }
+                        }
+                    }
+
+                    // If any value changes, process all non-loop predecessors
+                    if max_successor_num_proofs != total_num_proofs[cur_bl] || max_successor_num_mem_accesses != total_num_mem_accesses[cur_bl] {
+                        for pred in &predecessor_fn_no_loop[cur_bl] {
+                            if !next_bls.contains(pred) {
+                                next_bls.push_back(*pred);
+                            }
+                        }
+                    }
+                    // Update values
+                    if max_successor_num_proofs != total_num_proofs[cur_bl] {
+                        total_num_proofs[cur_bl] = max_successor_num_proofs;
+                    }
+                    if max_successor_num_mem_accesses != total_num_mem_accesses[cur_bl] {
+                        total_num_mem_accesses[cur_bl] = max_successor_num_mem_accesses;
+                    }
                 }
             }
-        }
+            (total_num_proofs[entry_bl], total_num_mem_accesses[entry_bl])
+        };
+        */
 
-        (total_num_proofs[entry_bl], total_num_mem_accesses[entry_bl], num_mem_accesses)
+        num_mem_accesses
     }
 }

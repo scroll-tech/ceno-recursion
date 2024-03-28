@@ -187,9 +187,7 @@ struct CompileTimeKnowledge {
     num_vars: usize,
     num_inputs_unpadded: usize,
     num_vars_per_block: Vec<usize>,
-    total_num_proofs_bound: usize,
     block_num_mem_accesses: Vec<usize>,
-    total_num_mem_accesses_bound: usize,
   
     args: Vec<Vec<(Vec<(usize, Integer)>, Vec<(usize, Integer)>, Vec<(usize, Integer)>)>>,
   
@@ -211,12 +209,10 @@ impl CompileTimeKnowledge {
             write!(&mut f, "{} ", i)?;
         }
         writeln!(&mut f, "")?;
-        writeln!(&mut f, "{}", self.total_num_proofs_bound)?;
         for i in &self.block_num_mem_accesses {
             write!(&mut f, "{} ", i)?;
         }
         writeln!(&mut f, "")?;
-        writeln!(&mut f, "{}", self.total_num_mem_accesses_bound)?;
 
         // Instances
         let mut counter = 0;
@@ -392,8 +388,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 ) -> (CompileTimeKnowledge, Vec<(Vec<usize>, Vec<usize>)>, Vec<ProverData>) {
     println!("Generating Compiler Time Data...");
 
-    let (cs, func_input_width, io_size, live_io_list, block_num_mem_accesses,
-        total_num_proofs_bound, total_num_mem_accesses_bound) = {
+    let (cs, func_input_width, io_size, live_io_list, block_num_mem_accesses) = {
         let inputs = zsharp::Inputs {
             file: path.clone(),
             mode: Mode::Proof
@@ -570,9 +565,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         num_vars,
         num_inputs_unpadded,
         num_vars_per_block,
-        total_num_proofs_bound,
         block_num_mem_accesses,
-        total_num_mem_accesses_bound,
         args,
         func_input_width,
         input_offset: INPUT_OFFSET,

@@ -1292,6 +1292,9 @@ impl<'ast> ZGen<'ast> {
                             state.remove(var);
                             state.insert("%BP".to_string());
                         }
+                        BlockContent::ArrayInit(_) => { panic!("Arrays not supported!") }
+                        BlockContent::Store(_) => { panic!("Arrays not supported!") }
+                        BlockContent::Load(_) => { panic!("Arrays not supported!") }
                         BlockContent::Stmt(s) => {
                             let (kill, gen) = stmt_find_val(s);
                             state = la_kill(state, &kill);
@@ -1358,6 +1361,9 @@ impl<'ast> ZGen<'ast> {
                             state.remove(var);
                             state.insert("%BP".to_string());
                         }
+                        BlockContent::ArrayInit(_) => { panic!("Arrays not supported!") }
+                        BlockContent::Store(_) => { panic!("Arrays not supported!") }
+                        BlockContent::Load(_) => { panic!("Arrays not supported!") }
                         BlockContent::Stmt(s) => {
                             let (kill, gen) = stmt_find_val(s);
                             // If it's not a definition or the defined variable is alive,
@@ -1482,6 +1488,9 @@ impl<'ast> ZGen<'ast> {
                             state.remove(&var.to_string());
                             state.insert("%BP".to_string());
                         }
+                        BlockContent::ArrayInit(_) => { panic!("Arrays not supported!") }
+                        BlockContent::Store(_) => { panic!("Arrays not supported!") }
+                        BlockContent::Load(_) => { panic!("Arrays not supported!") }
                         BlockContent::Stmt(s) => {
                             let (kill, gen) = stmt_find_val(&s);
                             for k in kill {
@@ -1560,6 +1569,9 @@ impl<'ast> ZGen<'ast> {
                         BlockContent::MemPop((id, ty, _)) => {
                             state.insert(id.clone(), ty.clone());
                         }
+                        BlockContent::ArrayInit(_) => { panic!("Arrays not supported!") }
+                        BlockContent::Store(_) => { panic!("Arrays not supported!") }
+                        BlockContent::Load(_) => { panic!("Arrays not supported!") }
                         BlockContent::Stmt(s) => {
                             if let Statement::Definition(ds) = s {
                                 for d in &ds.lhs {
@@ -2404,6 +2416,26 @@ impl<'ast> ZGen<'ast> {
         while !next_bls.is_empty() {
             let cur_bl = next_bls.pop_front().unwrap();
 
+            // If the block only has one predecessor and the predecessor only has one successor
+            // And the transition does not involve function calls / returns, merge the two blocks
+            if !entry_bls_fn.contains(&cur_bl) && predecessor[cur_bl].len() == 1 {
+                let p = Vec::from_iter(predecessor[cur_bl].clone())[0];
+                if !exit_bls_fn.contains(&p) && successor[p].len() == 1 {
+                    // Add all instructions in cur_bl to p
+                    let bc = bls[cur_bl].instructions.clone();
+                    bls[p].instructions.extend(bc);
+                    // Set terminator of p to terminator of cur_bl
+                    bls[p].terminator = bls[cur_bl].terminator.clone();
+                    // Update CFG
+                    successor[p].remove(&cur_bl);
+                    predecessor[cur_bl].remove(&p);
+                    for i in successor[cur_bl].clone() {
+                        successor[p].insert(i);
+                        predecessor[i].insert(p);
+                    }
+                }
+            }
+
             // Update the terminator of all predecessor
             for tmp_bl in predecessor[cur_bl].clone() {
                 // The only cases we need to continue is
@@ -2411,26 +2443,6 @@ impl<'ast> ZGen<'ast> {
                 // or cur_bl is empty so predecessors will be changed
                 if !visited[tmp_bl] || bls[cur_bl].instructions.len() == 0 {
                     visited[tmp_bl] = true;
-                    
-                    // If the block only has one predecessor and the predecessor only has one successor
-                    // And the transition does not involve function calls / returns, merge the two blocks
-                    if !entry_bls_fn.contains(&cur_bl) && predecessor[cur_bl].len() == 1 {
-                        let p = Vec::from_iter(predecessor[cur_bl].clone())[0];
-                        if !exit_bls_fn.contains(&p) && successor[p].len() == 1 {
-                            // Add all instructions in cur_bl to p
-                            let bc = bls[cur_bl].instructions.clone();
-                            bls[p].instructions.extend(bc);
-                            // Set terminator of p to terminator of cur_bl
-                            bls[p].terminator = bls[cur_bl].terminator.clone();
-                            // Update CFG
-                            successor[p].remove(&cur_bl);
-                            predecessor[cur_bl].remove(&p);
-                            for i in successor[cur_bl].clone() {
-                                successor[p].insert(i);
-                                predecessor[i].insert(p);
-                            }
-                        }
-                    }
 
                     if bls[cur_bl].instructions.len() == 0 {
                         if let BlockTerminator::Transition(cur_e) = &bls[cur_bl].terminator {
@@ -2798,6 +2810,9 @@ impl<'ast> ZGen<'ast> {
                         (var_name, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
                         new_instr.push(BlockContent::MemPop((var_name, ty.clone(), *offset)));
                     }
+                    BlockContent::ArrayInit(_) => { panic!("Arrays not supported!") }
+                    BlockContent::Store(_) => { panic!("Arrays not supported!") }
+                    BlockContent::Load(_) => { panic!("Arrays not supported!") }
                     BlockContent::Stmt(s) => {
                         let new_stmt: Statement;
                         (new_stmt, witness_map) = var_to_reg_stmt(&s, witness_map);

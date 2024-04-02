@@ -355,6 +355,9 @@ impl<'ast> ZGen<'ast> {
                     }
                     mem_op.push(MemOp::new(bp + offset, self.usize_to_field(bp + offset)?, self.cvar_lookup(&var).unwrap()));         
                 }
+                BlockContent::ArrayInit(_) => { panic!("Arrays not supported!") }
+                BlockContent::Store(_) => { panic!("Arrays not supported!") }
+                BlockContent::Load(_) => { panic!("Arrays not supported!") }
                 BlockContent::Stmt(s) => {
                     self.bl_eval_stmt_impl_(s)?;
                 }

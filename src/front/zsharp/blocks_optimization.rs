@@ -1292,13 +1292,37 @@ impl<'ast> ZGen<'ast> {
                             state.remove(var);
                             state.insert("%BP".to_string());
                         }
-                        BlockContent::ArrayInit(_) => { panic!("Arrays not supported!") }
-                        BlockContent::Store(_) => { panic!("Arrays not supported!") }
-                        BlockContent::Load(_) => { panic!("Arrays not supported!") }
+                        // If there is an array initialization, then the array is dead
+                        BlockContent::ArrayInit((arr, _, _)) => {
+                            state.remove(arr);
+                        }
+                        // If there is a store, then index and value are alive if array is alive
+                        BlockContent::Store((val_expr, _, arr, id_expr)) => {
+                            if is_alive(&state, arr) {
+                                let gen = expr_find_val(val_expr);
+                                state = la_gen(state, &gen);
+                                let gen = expr_find_val(id_expr);
+                                state = la_gen(state, &gen);
+                            }
+                        }
+                        // If there is a store, then kill val
+                        // If val was alive, make array & index alive
+                        BlockContent::Load((val, _, arr, id_expr)) => {
+                            if is_alive(&state, val) {
+                                state.remove(val);
+                                state.insert(arr.to_string());
+                                let gen = expr_find_val(id_expr);
+                                state = la_gen(state, &gen);
+                            }
+                        }
                         BlockContent::Stmt(s) => {
                             let (kill, gen) = stmt_find_val(s);
-                            state = la_kill(state, &kill);
-                            state = la_gen(state, &gen);
+                            // Mark gens alive only if not a definition or the defined variable is alive,
+                            // Kill all defined variables
+                            if kill.is_empty() || kill.iter().fold(false, |c, x| c || is_alive(&state, x)) {
+                                state = la_kill(state, &kill);
+                                state = la_gen(state, &gen);
+                            }
                         }
                     }
                 }
@@ -1361,9 +1385,34 @@ impl<'ast> ZGen<'ast> {
                             state.remove(var);
                             state.insert("%BP".to_string());
                         }
-                        BlockContent::ArrayInit(_) => { panic!("Arrays not supported!") }
-                        BlockContent::Store(_) => { panic!("Arrays not supported!") }
-                        BlockContent::Load(_) => { panic!("Arrays not supported!") }
+                        // If there is an array initialization, then the array is dead
+                        BlockContent::ArrayInit((arr, _, _)) => {
+                            // if the array is alive, keep the initialization statement
+                            if is_alive(&state, arr) {
+                                new_instructions.insert(0, i.clone());
+                            }
+                            state.remove(arr);
+                        }
+                        // If there is a store, then keep the statement if array is alive
+                        BlockContent::Store((val_expr, _, arr, id_expr)) => {
+                            if is_alive(&state, arr) {
+                                new_instructions.insert(0, i.clone());
+                                let gen = expr_find_val(val_expr);
+                                state = la_gen(state, &gen);
+                                let gen = expr_find_val(id_expr);
+                                state = la_gen(state, &gen);
+                            }
+                        }
+                        // If there is a store, then keep the statement if val is alive
+                        BlockContent::Load((val, _, arr, id_expr)) => {
+                            if is_alive(&state, val) {
+                                new_instructions.insert(0, i.clone());
+                                state.remove(val);
+                                state.insert(arr.to_string());
+                                let gen = expr_find_val(id_expr);
+                                state = la_gen(state, &gen);
+                            }
+                        }
                         BlockContent::Stmt(s) => {
                             let (kill, gen) = stmt_find_val(s);
                             // If it's not a definition or the defined variable is alive,
@@ -1488,9 +1537,19 @@ impl<'ast> ZGen<'ast> {
                             state.remove(&var.to_string());
                             state.insert("%BP".to_string());
                         }
-                        BlockContent::ArrayInit(_) => { panic!("Arrays not supported!") }
-                        BlockContent::Store(_) => { panic!("Arrays not supported!") }
-                        BlockContent::Load(_) => { panic!("Arrays not supported!") }
+                        // Arrays are not part of block IOs, don't reason about array liveness
+                        BlockContent::ArrayInit(_) => {}
+                        BlockContent::Store((val_expr, _, _, id_expr)) => {
+                            let gen = expr_find_val(val_expr);
+                            state.extend(gen);
+                            let gen = expr_find_val(id_expr);
+                            state.extend(gen);
+                        }
+                        BlockContent::Load((val, _, _, id_expr)) => {
+                            state.remove(val);
+                            let gen = expr_find_val(id_expr);
+                            state.extend(gen);
+                        }
                         BlockContent::Stmt(s) => {
                             let (kill, gen) = stmt_find_val(&s);
                             for k in kill {
@@ -1569,9 +1628,11 @@ impl<'ast> ZGen<'ast> {
                         BlockContent::MemPop((id, ty, _)) => {
                             state.insert(id.clone(), ty.clone());
                         }
-                        BlockContent::ArrayInit(_) => { panic!("Arrays not supported!") }
-                        BlockContent::Store(_) => { panic!("Arrays not supported!") }
-                        BlockContent::Load(_) => { panic!("Arrays not supported!") }
+                        BlockContent::ArrayInit(_) => {}
+                        BlockContent::Store(_) => {}
+                        BlockContent::Load((val, ty, _, _)) => {
+                            state.insert(val.clone(), ty.clone());
+                        }
                         BlockContent::Stmt(s) => {
                             if let Statement::Definition(ds) = s {
                                 for d in &ds.lhs {

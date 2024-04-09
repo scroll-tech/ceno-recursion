@@ -142,6 +142,9 @@ pub struct Block<'ast> {
     pub fn_num_exec_bound: usize,
     // Is this block the head of a while loop? If so, this block cannot be merged with any block before it
     pub is_head_of_while_loop: bool,
+    // Difference in timestamp between the beginning of the block till the end of the block
+    // Measures the total number of non-scoping-related memory accesses
+    pub ts_diff: usize,
     // Name of the function the block is in
     pub fn_name: String,
     // Depth of the scope of the function
@@ -155,8 +158,9 @@ pub enum BlockContent<'ast> {
     MemPop((String, Ty, usize)),  // val = %PHY[%BP + offset]
     //          arr   type  size, assume only one dimensional
     ArrayInit((String, Ty, usize)),   
-    //      val     type   arr    id
+    //     val_expr         type   arr   id_expr
     Store((Expression<'ast>, Ty, String, Expression<'ast>)), // arr[id] = val
+    //    val    type   arr   id_expr
     Load((String, Ty, String, Expression<'ast>)),  // val = arr[id]
     Stmt(Statement<'ast>) // other statements
 }
@@ -187,6 +191,7 @@ impl<'ast> Block<'ast> {
             terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1))),
             fn_num_exec_bound: num_exec_bound,
             is_head_of_while_loop: false,
+            ts_diff: 0,
             fn_name,
             scope
         };
@@ -202,6 +207,7 @@ impl<'ast> Block<'ast> {
             terminator: old_bl.terminator.clone(),
             fn_num_exec_bound: old_bl.fn_num_exec_bound,
             is_head_of_while_loop: old_bl.is_head_of_while_loop,
+            ts_diff: old_bl.ts_diff,
             fn_name: old_bl.fn_name.clone(),
             scope: old_bl.scope
         };
@@ -222,7 +228,7 @@ impl<'ast> Block<'ast> {
     pub fn pretty(&self) {
         println!("\nBlock {}:", self.name);
         println!("Func: {}, Scope: {}", self.fn_name, self.scope);
-        println!("Execution Bound: {}, Head of While Loop? {}", self.fn_num_exec_bound, self.is_head_of_while_loop);
+        println!("Exec Bound: {}, While Loop: {}, TS Diff: {}", self.fn_num_exec_bound, self.is_head_of_while_loop, self.ts_diff);
         println!("Inputs:");
 
         for i in &self.inputs {
@@ -1102,6 +1108,7 @@ impl<'ast> ZGen<'ast> {
                                     if let AssigneeAccess::Select(a) = &l.accesses[0] {
                                         if let RangeOrExpression::Expression(e) = &a.expression {
                                             blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), *entry_ty.clone(), new_l, e.clone())));
+                                            blks[blks_len - 1].ts_diff += 1;
                                         } else {
                                             return Err(format!("Array range access not implemented!"));
                                         }
@@ -1285,6 +1292,7 @@ impl<'ast> ZGen<'ast> {
                             let cur_scope = blks[blks_len - 1].scope;
                             let load_extended_name = var_scope_info.declare_var(&load_name, &f_name, cur_scope);
                             blks[blks_len - 1].instructions.push(BlockContent::Load((load_extended_name.clone(), load_ty, arr_extended_name.clone(), e.clone())));
+                            blks[blks_len - 1].ts_diff += 1;
                             load_count += 1;
                             ret_e = Expression::Identifier(IdentifierExpression {
                                 value: load_extended_name,
@@ -1384,6 +1392,7 @@ impl<'ast> ZGen<'ast> {
                 span: Span::new("", 0, 0).unwrap()
             }));
             blks[blks_len - 1].instructions.push(BlockContent::Store((entry, entry_ty.clone(), arr_extended_name.clone(), index_expr)));
+            blks[blks_len - 1].ts_diff += 1;
             index += 1;
         }
         Ok((blks, blks_len))
@@ -1582,9 +1591,28 @@ impl<'ast> ZGen<'ast> {
                     ).unwrap();
                     mem_op_count += 1;  
                 }
-                BlockContent::ArrayInit(_) => { panic!("Arrays not supported!") }
-                BlockContent::Store(_) => { panic!("Arrays not supported!") }
-                BlockContent::Load(_) => { panic!("Arrays not supported!") }
+                BlockContent::ArrayInit(_) => {}
+                BlockContent::Store(_) => {
+                    if ESTIMATE {}
+                    else {
+                        panic!("Arrays not supported!")
+                    }
+                }
+                BlockContent::Load((val, ty, _, _)) => {
+                    if ESTIMATE {
+                        let r = self.circ_declare_input(
+                            &f,
+                            val.clone(),
+                            ty,
+                            ZVis::Public,
+                            None,
+                            true,
+                        );
+                        r.unwrap();
+                    } else {
+                        panic!("Arrays not supported!")
+                    }
+                }
                 BlockContent::Stmt(stmt) => { self.stmt_impl_::<false>(&stmt).unwrap(); }
             }
         }

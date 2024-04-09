@@ -1756,8 +1756,10 @@ impl<'ast> ZGen<'ast> {
             // if cur_bl does not call another function, then merge can be performed
             if successor_fn[cur_bl].len() == 0 || successor_fn[cur_bl] == successor[cur_bl] {
                 for succ in &successor_fn[cur_bl] {
-                    // if any successor is the head of a while loop, no merge can be performed
-                    if bls[*succ].is_head_of_while_loop {
+                    // if any successor is the head of a while loop, 
+                    // or if any successor contains memory operations
+                    // no merge can be performed
+                    if bls[*succ].is_head_of_while_loop || bls[*succ].ts_diff > 0 {
                         scope_state = vec![None; cur_scope + 1];
                         break;
                     }
@@ -2339,6 +2341,18 @@ impl<'ast> ZGen<'ast> {
                                 new_instructions.push(i.clone());
                             }
                         },
+                        BlockContent::ArrayInit(_) => {
+                            // Do not reason about memory operations
+                            new_instructions.push(i.clone());
+                        }
+                        BlockContent::Store(_) => {
+                            // Do not reason about memory operations
+                            new_instructions.push(i.clone());
+                        }
+                        BlockContent::Load(_) => {
+                            // Do not reason about memory operations
+                            new_instructions.push(i.clone());
+                        }
                         _ => {}
                     }
                 }
@@ -2600,6 +2614,7 @@ impl<'ast> ZGen<'ast> {
             print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
         }
 
+        /*
         // Perform topological sort on functions
         let sorted_fns = fn_top_sort(&bls, &successor, &successor_fn);
         if VERBOSE {
@@ -2609,6 +2624,7 @@ impl<'ast> ZGen<'ast> {
             }
             println!();
         }
+        */
 
         // VtR
         let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) = self.var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl, inputs);
@@ -2632,9 +2648,12 @@ impl<'ast> ZGen<'ast> {
             print_bls(&bls, &entry_bl);
         }
 
-        // Bound # of Proofs and # of memory accesses
-        let num_mem_accesses =
-            self.get_blocks_meta_info(&bls, &successor, entry_bl, &exit_bls_fn, &successor_fn, &predecessor_fn, &sorted_fns);
+        // Obtain # of scoping memory accesses per block & offset of each array in memory
+        let (num_mem_accesses, mem_offset_map) = self.get_blocks_memory_info(&bls);
+        if VERBOSE {
+            println!("\n\n--\nMemory Info:");
+            println!("Memory Offset Map: {:?}", mem_offset_map);
+        }
 
         print_bls(&bls, &entry_bl);
         (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses)
@@ -2862,18 +2881,32 @@ impl<'ast> ZGen<'ast> {
             for s in &bls[i].instructions {
                 match s {
                     BlockContent::MemPush((var, ty, offset)) => {
-                        let var_name: String;
-                        (var_name, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
-                        new_instr.push(BlockContent::MemPush((var_name, ty.clone(), *offset)));
+                        let new_var: String;
+                        (new_var, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
+                        new_instr.push(BlockContent::MemPush((new_var, ty.clone(), *offset)));
                     }
                     BlockContent::MemPop((var, ty, offset)) => {
-                        let var_name: String;
-                        (var_name, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
-                        new_instr.push(BlockContent::MemPop((var_name, ty.clone(), *offset)));
+                        let new_var: String;
+                        (new_var, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
+                        new_instr.push(BlockContent::MemPop((new_var, ty.clone(), *offset)));
                     }
-                    BlockContent::ArrayInit(_) => { panic!("Arrays not supported!") }
-                    BlockContent::Store(_) => { panic!("Arrays not supported!") }
-                    BlockContent::Load(_) => { panic!("Arrays not supported!") }
+                    BlockContent::ArrayInit(_) => {
+                        new_instr.push(s.clone())
+                    }
+                    BlockContent::Store((val_expr, ty, arr, id_expr)) => {
+                        let new_val_expr: Expression;
+                        let new_id_expr: Expression;
+                        (new_val_expr, witness_map) = var_to_reg_expr(&val_expr, witness_map);
+                        (new_id_expr, witness_map) = var_to_reg_expr(&id_expr, witness_map);
+                        new_instr.push(BlockContent::Store((new_val_expr, ty.clone(), arr.to_string(), new_id_expr)))
+                    }
+                    BlockContent::Load((val, ty, arr, id_expr)) => {
+                        let new_val: String;
+                        let new_id_expr: Expression;
+                        (new_val, witness_map, _) = var_name_to_reg_id_expr::<0>(val.to_string(), witness_map);
+                        (new_id_expr, witness_map) = var_to_reg_expr(&id_expr, witness_map);
+                        new_instr.push(BlockContent::Load((new_val, ty.clone(), arr.to_string(), new_id_expr)))
+                    }
                     BlockContent::Stmt(s) => {
                         let new_stmt: Statement;
                         (new_stmt, witness_map) = var_to_reg_stmt(&s, witness_map);
@@ -3046,21 +3079,18 @@ impl<'ast> ZGen<'ast> {
         bls
     }
 
-    // Compute # of memory accesses for each block
-    // Then bound the total # of block executions & the total # of memory accesses
-    // We do so through a DP algorithm starting from the exit block
-    fn get_blocks_meta_info(
+    // Construct a view of memory from the blocks, returns
+    // 0. # of physical (scoping) memory accesses for each block
+    // 1. Memory partition for each array
+    fn get_blocks_memory_info(
         &self,
         bls: &Vec<Block>,
-        _successor: &Vec<HashSet<usize>>,
-        _entry_bl: usize,
-        _exit_bls_fn: &HashSet<usize>,
-        _successor_fn: &Vec<HashSet<usize>>,
-        _predecessor_fn: &Vec<HashSet<usize>>,
-        _sorted_fns: &Vec<String>
-    ) -> Vec<usize> {
-        // Compute the number of memory accesses 
+    ) -> (Vec<usize>, HashMap<String, usize>) {
+        // Number of scoping memory accesses per block
         let mut num_mem_accesses = Vec::new();
+        // Map between each array to a memory offset, starting at zero
+        let mut mem_offset_map = HashMap::new();
+        let mut next_mem_offset = 0;
         for b in bls {
             let mut mem_accesses_count = 0;
             for i in &b.instructions {
@@ -3071,13 +3101,32 @@ impl<'ast> ZGen<'ast> {
                     BlockContent::MemPush(_) => {
                         mem_accesses_count += 1;
                     }
+                    BlockContent::ArrayInit((arr, _, size)) => {
+                        if mem_offset_map.contains_key(arr) { panic!("Get Block Mem Info Failed: Multiple declaration of the same array: {}", arr) }
+                        mem_offset_map.insert(arr.to_string(), next_mem_offset);
+                        next_mem_offset += size;
+                    }
                     _ => {}
                 }
             }
             num_mem_accesses.push(mem_accesses_count);
         }
+        (num_mem_accesses, mem_offset_map)
+    }
 
-        /*
+    // Bound the total # of block executions & the total # of memory accesses
+    // We do so through a DP algorithm starting from the exit block
+    fn _get_blocks_static_bound(
+        &self,
+        bls: &Vec<Block>,
+        num_mem_accesses: &Vec<usize>,
+        successor: &Vec<HashSet<usize>>,
+        entry_bl: usize,
+        exit_bls_fn: &HashSet<usize>,
+        successor_fn: &Vec<HashSet<usize>>,
+        predecessor_fn: &Vec<HashSet<usize>>,
+        sorted_fns: &Vec<String>
+    ) -> (usize, usize) {
         // Static bound on number of block executions & memory accesses
         let (total_num_proofs_bound, total_num_mem_accesses_bound) = {
             // Eliminate all loops
@@ -3166,8 +3215,7 @@ impl<'ast> ZGen<'ast> {
             }
             (total_num_proofs[entry_bl], total_num_mem_accesses[entry_bl])
         };
-        */
 
-        num_mem_accesses
+        (total_num_proofs_bound, total_num_mem_accesses_bound)
     }
 }

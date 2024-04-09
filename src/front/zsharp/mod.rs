@@ -67,12 +67,12 @@ impl FrontEnd for ZSharpFE {
             println!("");
         }
         let (blks, entry_bl) = g.optimize_block::<GEN_VERBOSE>(blks, entry_bl, inputs.clone());
-        let (blks, _, io_size, _, live_io_list, num_mem_accesses) = 
+        let (blks, _, io_size, _, live_io_list, num_mem_accesses, mem_offset_map) = 
             g.process_block::<GEN_VERBOSE, 0>(blks, entry_bl, inputs);
         // NOTE: The input of block 0 includes %BN, which should be removed when reasoning about function input
         let func_input_width = blks[0].get_num_inputs() - 1;
         println!("\n\n--\nCirc IR:");
-        g.bls_to_circ(&blks);
+        g.bls_to_circ(&blks, &mem_offset_map);
 
         g.generics_stack_pop();
         g.file_stack_pop();
@@ -100,7 +100,7 @@ impl ZSharpFE {
         
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
         let (blks, entry_bl) = g.optimize_block::<INTERPRET_VERBOSE>(blks, entry_bl, inputs.clone());
-        let (blks, entry_bl, io_size, _, _, _) = g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl, inputs);
+        let (blks, entry_bl, io_size, _, _, _, mem_offset_map) = g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl, inputs);
         println!("\n\n--\nInterpretation:");
         let (ret, _, prog_reg_in, bl_exec_state, mem_list) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(entry_bl, entry_regs, &blks, io_size)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
@@ -112,7 +112,7 @@ impl ZSharpFE {
         let mut block_id_list = Vec::new();
         // Convert bl_exec_state to list of String -> Value hashmaps
         // Variables should be named Block_X_fX_lex0_%XX_v0
-        // Memory accesses should be named Block_X_fX_lex0_%mXv / %mXa
+        // Memory accesses should be named Block_X_fX_lex0_%pmXv / %pmXa
         let mut block_io_map_list = Vec::new();
         let suffix = format!("_v0");
         for i in 0..bl_exec_state.len() {
@@ -157,10 +157,10 @@ impl ZSharpFE {
             for j in 0..state.mem_op.len() {
                 let addr = to_const_value(state.mem_op[j].addr_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                inputs.insert(format!("{}%m{:06}a{}", prefix, j, suffix), addr);
+                inputs.insert(format!("{}%pm{:06}a{}", prefix, j, suffix), addr);
                 let data = to_const_value(state.mem_op[j].data_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                inputs.insert(format!("{}%m{:06}v{}", prefix, j, suffix), data);
+                inputs.insert(format!("{}%pm{:06}v{}", prefix, j, suffix), data);
             }
             block_io_map_list.push(inputs);
         }

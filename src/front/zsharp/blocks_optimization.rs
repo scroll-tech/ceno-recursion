@@ -1753,7 +1753,7 @@ impl<'ast> ZGen<'ast> {
     ) -> usize {
         let block_name = &format!("Pseudo_Block_{}", bl.name);
         self.circ_init_block(block_name);
-        self.bl_to_circ::<true>(bl, block_name);
+        self.bl_to_circ::<true>(bl, block_name, &HashMap::new());
 
         let mut cs = Computations::new();
         cs.comps = self.circ.borrow().cir_ctx().cs.borrow_mut().clone();
@@ -1819,7 +1819,7 @@ impl<'ast> ZGen<'ast> {
                     // if any successor is the head of a while loop, 
                     // or if any successor contains memory operations
                     // no merge can be performed
-                    if bls[*succ].is_head_of_while_loop || bls[*succ].ts_diff > 0 {
+                    if bls[*succ].is_head_of_while_loop || bls[*succ].mem_op_by_ty.len() > 0 {
                         scope_state = vec![None; cur_scope + 1];
                         break;
                     }
@@ -2665,7 +2665,7 @@ impl<'ast> ZGen<'ast> {
         bls: Vec<Block<'ast>>,
         entry_bl: usize,
         inputs: Vec<(String, Ty)>
-    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<usize>) {
+    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<usize>, HashMap<String, usize>) {
         println!("\n\n--\nPost-Processing:");
         // Construct a new CFG for the program
         // Note that this is the CFG after DBE, and might be different from the previous CFG
@@ -2716,7 +2716,7 @@ impl<'ast> ZGen<'ast> {
         }
 
         print_bls(&bls, &entry_bl);
-        (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses)
+        (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses, mem_offset_map)
     }
 
     // Convert all mentionings of variables to registers

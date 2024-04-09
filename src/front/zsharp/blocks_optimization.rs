@@ -593,6 +593,34 @@ fn term_to_instr<'ast>(
     }
 }
 
+// New io map with only reserved registers
+// Reserve registers 0 - 6 for %V, %NB, %RET, %TS, %RP, %SP, and %BP
+fn new_io_map() -> HashMap<String, usize> {
+    let mut io_map: HashMap<String, usize> = HashMap::new();
+    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%V".to_string(), io_map);
+    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%NB".to_string(), io_map);
+    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RET".to_string(), io_map);
+    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%TS".to_string(), io_map);
+    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RP".to_string(), io_map);
+    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%SP".to_string(), io_map);
+    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%BP".to_string(), io_map);
+
+    io_map
+}
+
+// New witness map with only reserved registers
+// Reserve registers 0 - 4 for %RET, %TS, %RP, %SP, and %BP
+fn new_witness_map() -> HashMap<String, usize> {
+    let mut witness_map: HashMap<String, usize> = HashMap::new();
+    (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%RET".to_string(), witness_map);
+    (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%TS".to_string(), witness_map);
+    (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%RP".to_string(), witness_map);
+    (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%SP".to_string(), witness_map);
+    (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%BP".to_string(), witness_map);
+
+    witness_map
+}
+
 // Turn all variables in a statement to a register reference
 // Whenever we meet a variable X, if reg_map contains X and scope_map[X] = Y, update X to %Y
 // otherwise, update X to %<reg_size> and add X to reg_map
@@ -2665,11 +2693,11 @@ impl<'ast> ZGen<'ast> {
     // However, we won't know the size of witnesses until circuit generation,
     // hence need to record inputs, outputs, and witnesses separately
     // Structure for input / output
-    // reg  0   1   2   3   4   5   6   7  ...
-    //      V  BN  RP  SP  BP  RET i6  i7
+    // reg  0   1   2   3   4   5   6   7   8
+    //      V  BN  RET TS  RP  SP  BP  i7  i8
     // Structure for witness
     // reg  0   1   2   3   4   5   6   7  ...
-    //     w0  w1  w2  w3  w4  w5  w6  w7
+    //     RET TS  RP  SP  BP  w5  w6  w7
     //
     // When the io map and witness map is determined, update the block such that
     // 1. The first and last values of each variable in io should be assigned an io register
@@ -2694,7 +2722,7 @@ impl<'ast> ZGen<'ast> {
     ) -> (Vec<Block<'ast>>, Vec<HashMap<String, usize>>, usize, HashMap<String, usize>, usize, Vec<(Vec<usize>, Vec<usize>)>) {    
         // reg_map is consisted of two Var -> Reg Maps: TRANSITION_MAP_LIST & WITNESS_MAP
         // TRANSITION_MAP_LIST is a list of maps corresponding to each transition state
-        // Reserve registers 0 - 5 for %V, %NB, %RP, %SP, %BP, and %RET
+        // Reserve registers 0 - 6 for %V, %NB, %RET, %TS, %RP, %SP, and %BP
         let mut transition_map_list = Vec::new();
         // MAX_IO_SIZE is the size of the largest maps among TRANSITION_MAP_LIST
         let mut max_io_size = 0;
@@ -2705,14 +2733,7 @@ impl<'ast> ZGen<'ast> {
 
         // Process program inputs
         let input_map = {
-            let mut io_map: HashMap<String, usize> = HashMap::new();
-            // Reserved registers
-            (_, io_map, _) = var_name_to_reg_id_expr::<1>("%V".to_string(), io_map);
-            (_, io_map, _) = var_name_to_reg_id_expr::<1>("%NB".to_string(), io_map);
-            (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RP".to_string(), io_map);
-            (_, io_map, _) = var_name_to_reg_id_expr::<1>("%SP".to_string(), io_map);
-            (_, io_map, _) = var_name_to_reg_id_expr::<1>("%BP".to_string(), io_map);
-            (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RET".to_string(), io_map);
+            let mut io_map: HashMap<String, usize> = new_io_map();
             // inputs
             for (v, _) in &inputs {
                 (_, io_map, _) = var_name_to_reg_id_expr::<1>(v.to_string(), io_map);
@@ -2730,17 +2751,7 @@ impl<'ast> ZGen<'ast> {
                 let trans_size = transition_map_list.len();
 
                 // Initialize register map
-                let mut io_map = {
-                    let mut io_map: HashMap<String, usize> = HashMap::new();
-                    // Reserved registers
-                    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%V".to_string(), io_map);
-                    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%NB".to_string(), io_map);
-                    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RP".to_string(), io_map);
-                    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%SP".to_string(), io_map);
-                    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%BP".to_string(), io_map);
-                    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RET".to_string(), io_map);
-                    io_map
-                };
+                let mut io_map = new_io_map();
 
                 // Add all live variables to register map
                 // As well as set bl_in and bl_out
@@ -2796,13 +2807,8 @@ impl<'ast> ZGen<'ast> {
         
         // --
         // WITNESS_MAP is one single map to describe all block witnesses
-        // Reserve registers 0 - 3 for %RP, %SP, %BP, and %RET
-        let mut witness_map: HashMap<String, usize> = HashMap::new();
-        (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%RP".to_string(), witness_map);
-        (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%SP".to_string(), witness_map);
-        (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%BP".to_string(), witness_map);
-        (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%RET".to_string(), witness_map);
-
+        // Reserve registers 0 - 4 for %RET, %TS, %RP, %SP, and %BP
+        let mut witness_map: HashMap<String, usize> = new_witness_map();
 
         // Record down labels of all live inputs / outputs of each block
         let mut live_io: Vec<(Vec<usize>, Vec<usize>)> = Vec::new();

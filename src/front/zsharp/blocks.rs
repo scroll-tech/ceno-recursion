@@ -1501,7 +1501,7 @@ impl<'ast> ZGen<'ast> {
                         op: BinaryOperator::Add,
                         left: Box::new(Expression::Identifier(IdentifierExpression {
                             // %SP
-                            value: if ESTIMATE { "%SP".to_string() } else { "%w1".to_string() },
+                            value: if ESTIMATE { "%SP".to_string() } else { "%w3".to_string() },
                             span: Span::new("", 0, 0).unwrap()
                         })),
                         right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
@@ -1558,7 +1558,7 @@ impl<'ast> ZGen<'ast> {
                         op: BinaryOperator::Add,
                         left: Box::new(Expression::Identifier(IdentifierExpression {
                             // %BP
-                            value: if ESTIMATE { "%BP".to_string() } else { "%w2".to_string() },
+                            value: if ESTIMATE { "%BP".to_string() } else { "%w4".to_string() },
                             span: Span::new("", 0, 0).unwrap()
                         })),
                         right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {

@@ -166,6 +166,12 @@ fn pretty_ident_expr(i: &IdentifierExpression) {
     print!("{}", pretty_name(&i.value));
 }
 
+// Structure for input / output
+// reg  0   1   2   3   4   5   6   7   8
+//      V  BN  RET TS  RP  SP  BP  i7  i8
+// Structure for witness
+// reg  0   1   2   3   4   5   6   7  ...
+//     RET TS  RP  SP  BP  w5  w6  w7
 pub fn pretty_name(name: &str) -> String {
     // Strip the 0s from the name
     let mut name = name.to_string();
@@ -173,19 +179,22 @@ pub fn pretty_name(name: &str) -> String {
     match name.as_str() {
         "%i0" => "%0(V)",
         "%i1" => "%i1(BN)",
-        "%i2" => "%i2(RP)",
-        "%i3" => "%i3(SP)",
-        "%i4" => "%i4(BP)",
-        "%i5" => "%i5(RET)",
+        "%i2" => "%i2(RET)",
+        "%i3" => "%i3(TS)",
+        "%i4" => "%i4(RP)",
+        "%i5" => "%i5(SP)",
+        "%i6" => "%i6(BP)",
         "%o1" => "%o1(BN)",
-        "%o2" => "%o2(RP)",
-        "%o3" => "%o3(SP)",
-        "%o4" => "%o4(BP)",
-        "%o5" => "%o5(RET)",
-        "%w0" => "%w0(RP)",
-        "%w1" => "%w1(SP)",
-        "%w2" => "%w2(BP)",
-        "%w3" => "%w3(RET)",
+        "%o2" => "%o2(RET)",
+        "%o3" => "%o3(TS)",
+        "%o4" => "%o4(RP)",
+        "%o5" => "%o5(SP)",
+        "%o6" => "%o6(BP)",
+        "%w0" => "%w0(RET)",
+        "%w1" => "%w1(TS)",
+        "%w2" => "%w2(RP)",
+        "%w3" => "%w3(SP)",
+        "%w4" => "%w4(BP)",
         _ => name.as_str()
     }.to_string()
 }

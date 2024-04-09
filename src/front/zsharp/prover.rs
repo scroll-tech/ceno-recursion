@@ -291,9 +291,9 @@ impl<'ast> ZGen<'ast> {
         for i in 1..io_size {
             bl_exec_state[tr_size - 1].reg_out[i] = self.cvar_lookup(&format!("%o{:06}", i));
         }
-        // Return value is just the value of the variable called "%RET", which is %o5
+        // Return value is just the value of the variable called "%RET", which is %o2
         // Type of return value is checked during assignment
-        let ret = self.cvar_lookup(&format!("%o{:06}", 5usize)).ok_or(format!(
+        let ret = self.cvar_lookup(&format!("%o{:06}", 2usize)).ok_or(format!(
             "Missing return value for one or more functions."
         ));
 
@@ -334,7 +334,7 @@ impl<'ast> ZGen<'ast> {
         for s in &bl.instructions {
             match s {
                 BlockContent::MemPush((var, _, offset)) => {
-                    let sp_t = self.cvar_lookup("%w1").ok_or(format!("Push to %PHY failed: %SP is uninitialized."))?;
+                    let sp_t = self.cvar_lookup("%w3").ok_or(format!("Push to %PHY failed: %SP is uninitialized."))?;
                     let sp = self.t_to_usize(sp_t)?;
                     if sp + offset != phy_mem.len() {
                         return Err(format!("Error processing %PHY push: index {sp} + {offset} does not match with stack size."));
@@ -345,7 +345,7 @@ impl<'ast> ZGen<'ast> {
                     mem_op.push(MemOp::new(sp + offset, self.usize_to_field(sp + offset)?, self.cvar_lookup(&var).unwrap()));
                 }
                 BlockContent::MemPop((var, _, offset)) => {
-                    let bp_t = self.cvar_lookup("%w2").ok_or(format!("Pop from %PHY failed: %BP is uninitialized."))?;
+                    let bp_t = self.cvar_lookup("%w4").ok_or(format!("Pop from %PHY failed: %BP is uninitialized."))?;
                     let bp = self.t_to_usize(bp_t)?;
                     if bp + offset >= phy_mem.len() {
                         return Err(format!("Error processing %PHY pop: index out of bound."));

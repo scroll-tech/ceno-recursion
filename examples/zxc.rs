@@ -35,9 +35,9 @@ use std::path::PathBuf;
 use core::cmp::Ordering;
 
 // How many reserved variables (excluding V) are in front of the actual input / output?
-const INPUT_OFFSET: usize = 5;
-// Which index in the output (excluding V) denotes the output of the program?
-const OUTPUT_OFFSET: usize = 5;
+const NUM_RESERVED_VARS: usize = 6;
+// Which index in the output (INCLUDING V) denotes %RET?
+const OUTPUT_OFFSET: usize = 2;
 
 #[derive(Debug, Parser)]
 #[command(name = "zxc", about = "CirC: the circuit compiler")]
@@ -568,7 +568,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         block_num_mem_accesses,
         args,
         func_input_width,
-        input_offset: INPUT_OFFSET,
+        input_offset: NUM_RESERVED_VARS,
         input_block_num,
         output_offset: OUTPUT_OFFSET,
         output_block_num
@@ -687,7 +687,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             vars[k + 1] = eval[j].as_integer().unwrap();
         }
         if i == block_id_list.len() - 1 {
-            func_outputs = inputs[num_input_unpadded + 5].clone();
+            func_outputs = inputs[num_input_unpadded + OUTPUT_OFFSET].clone();
         }
         if VERBOSE {
             let print_width = min(num_input_unpadded, 32);

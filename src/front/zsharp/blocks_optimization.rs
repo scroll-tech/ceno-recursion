@@ -1567,16 +1567,19 @@ impl<'ast> ZGen<'ast> {
                         }
                         // Arrays are not part of block IOs, don't reason about array liveness
                         BlockContent::ArrayInit(_) => {}
+                        // If there is an array access, then %TS is alive
                         BlockContent::Store((val_expr, _, _, id_expr)) => {
                             let gen = expr_find_val(val_expr);
                             state.extend(gen);
                             let gen = expr_find_val(id_expr);
                             state.extend(gen);
+                            state.insert("%TS".to_string());
                         }
                         BlockContent::Load((val, _, _, id_expr)) => {
                             state.remove(val);
                             let gen = expr_find_val(id_expr);
                             state.extend(gen);
+                            state.insert("%TS".to_string());
                         }
                         BlockContent::Stmt(s) => {
                             let (kill, gen) = stmt_find_val(&s);
@@ -1635,10 +1638,39 @@ impl<'ast> ZGen<'ast> {
                     }
                 }
             }
-            // If we are at entry block, state also includes *live* program parameters
+            // If we are at entry block, state also includes *live* program parameters & %TS
             if cur_bl == *entry_bl {
                 for (var, ty) in &inputs {
                     state.insert(var.clone(), ty.clone());
+                }
+                // If %TS is alive, also initialize it to 0
+                if output_lst[cur_bl].contains("%TS") {
+                    state.insert("%TS".to_string(), Ty::Field);
+
+                    let ts_init_stmt = Statement::Definition(DefinitionStatement {
+                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                            ty: Type::Basic(BasicType::Field(FieldType {
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            identifier: IdentifierExpression {
+                                value: "%TS".to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            span: Span::new("", 0, 0).unwrap()
+                        })],
+                        expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                            value: DecimalNumber {
+                                value: "0".to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        span: Span::new("", 0, 0).unwrap()
+                    });
+                    bls[cur_bl].instructions.push(BlockContent::Stmt(ts_init_stmt));
                 }
             }
 
@@ -2151,9 +2183,9 @@ impl<'ast> ZGen<'ast> {
                 }
             }
         }
+        let mut entry_bl_instructions = Vec::new();
         // If size of spills is not zero, need to add %BP and %SP to block 0
         if spills.len() > 0 {
-            let mut new_instructions = Vec::new();
             // Initialize %SP
             let sp_init_stmt = Statement::Definition(DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
@@ -2178,7 +2210,7 @@ impl<'ast> ZGen<'ast> {
                 })),
                 span: Span::new("", 0, 0).unwrap()
             });
-            new_instructions.push(BlockContent::Stmt(sp_init_stmt));
+            entry_bl_instructions.push(BlockContent::Stmt(sp_init_stmt));
             // Initialize %BP
             let bp_init_stmt = Statement::Definition(DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
@@ -2203,9 +2235,9 @@ impl<'ast> ZGen<'ast> {
                 })),
                 span: Span::new("", 0, 0).unwrap()
             });
-            new_instructions.push(BlockContent::Stmt(bp_init_stmt));
-            bls[0].instructions = new_instructions;
+            entry_bl_instructions.push(BlockContent::Stmt(bp_init_stmt));
         }
+        bls[entry_bl].instructions = entry_bl_instructions;
 
         // Iterate through the blocks FUNCTION BY FUNCTION, add push and pop statements if variable is in SPILLS
         // STATE, GEN, KILL follows above

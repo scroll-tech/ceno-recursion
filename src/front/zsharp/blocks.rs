@@ -159,7 +159,7 @@ pub enum BlockContent<'ast> {
     ArrayInit((String, Ty, usize)),   
     //     val_expr         type   arr   id_expr
     Store((Expression<'ast>, Ty, String, Expression<'ast>)), // arr[id] = val
-    //    val    type   arr   id_expr
+    //    var    type   arr   id_expr
     Load((String, Ty, String, Expression<'ast>)),  // val = arr[id]
     // DummyLoad(Ty),
     // Branch((Expression<'ast>, Vec<BlockContent>, Vec<BlockContent>)),
@@ -362,12 +362,16 @@ impl VarScopeInfo {
 }
 
 impl<'ast> ZGen<'ast> {
-    fn cvar_lookup_type(&self, name: &str) -> Option<Ty> {
+    fn circ_lookup_type(&self, name: &str) -> Option<Ty> {
         match name {
             "%BP" => Some(Ty::Field),
             "%SP" => Some(Ty::Field),
             "%RP" => Some(Ty::Field),
-            _ => Some(self.cvar_lookup(name)?.ty)
+            _ => match self.circ_get_value(Loc::local(name.to_string())).map_err(|e| format!("{e}")).ok()?
+                {
+                    Val::Term(t) => Some(t.type_().clone()),
+                    _ => None,
+                },
         }
     }
 
@@ -517,12 +521,13 @@ impl<'ast> ZGen<'ast> {
             }
 
             // Get the return type because we need to convert it into a variable
-            let ret_ty = f
+            let ret_type = f
                 .returns
                 .first().ok_or("No return type provided for one or more function")?;
+            let ret_ty = self.type_impl_::<false>(&ret_type)?;
 
             // Use cvar to identify variable scoping for push and pull
-            self.cvar_enter_function();
+            self.circ_enter_fn(f_name.to_string(), Some(ret_ty.clone()));
 
             // Create new Block, initial scope is 0
             blks.push(Block::new(blks_len, 1, f_name.to_string(), 0));
@@ -534,15 +539,15 @@ impl<'ast> ZGen<'ast> {
             for p in f.parameters.clone().into_iter() {
                 let p_id = p.id.value.clone();
                 var_scope_info.declare_var(&p_id, &f_name, 0);
-                let p_ty = self.type_impl_::<true>(&p.ty)?;
-                self.decl_impl_::<true>(p_id.clone(), &p_ty)?;
+                let p_ty = self.type_impl_::<false>(&p.ty)?;
+                self.decl_impl_::<false>(p_id.clone(), &p_ty)?;
                 inputs.push((var_scope_info.reference_var(&p_id, &f_name)?, p_ty.clone()));     
             }
 
             // Iterate through Stmts
             for s in &f.statements {
                 // All statements at function level have scope 0
-                (blks, blks_len, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, s, ret_ty, &f_name, var_scope_info, 1, 0)?;
+                (blks, blks_len, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, s, ret_type, &f_name, var_scope_info, 1, 0)?;
             }
 
             // Set terminator to ProgTerm if in main, point to %RP otherwise
@@ -552,7 +557,7 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].terminator = BlockTerminator::Transition(bl_coda(NextBlock::Rp));
             }
 
-            self.cvar_exit_function();
+            self.circ_exit_fn();
             self.maybe_garbage_collect();
         }
 
@@ -602,7 +607,7 @@ impl<'ast> ZGen<'ast> {
             }
 
             // Enter Scope
-            self.enter_scope_impl_::<true>();
+            self.enter_scope_impl_::<false>();
 
             // Push %RP onto the stack if not in main
             if !IS_MAIN {
@@ -690,7 +695,7 @@ impl<'ast> ZGen<'ast> {
             blks_len += 1; 
             
             // Exit scope & POP local variables out
-            self.exit_scope_impl_::<true>();
+            self.exit_scope_impl_::<false>();
             if !IS_MAIN {
                 blks[blks_len - 1].instructions.push(BlockContent::MemPop(("%RP".to_string(), Ty::Field, 1)));
                 blks[blks_len - 1].instructions.push(BlockContent::MemPop(("%BP".to_string(), Ty::Field, 0)));
@@ -707,7 +712,7 @@ impl<'ast> ZGen<'ast> {
             .first().ok_or("No return type provided for one or more function")?;
 
             let ret_name = format!("ret@{}", func_count);
-            self.decl_impl_::<true>(ret_name.clone(), &self.type_impl_::<true>(ret_ty)?)?;
+            self.decl_impl_::<false>(ret_name.clone(), &self.type_impl_::<false>(ret_ty)?)?;
             let ret_extended_name = var_scope_info.declare_var(&ret_name, &caller_name, caller_scope);
             let update_ret_stmt = Statement::Definition(DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
@@ -812,8 +817,8 @@ impl<'ast> ZGen<'ast> {
 
                 // Initialize the scoped iterator
                 let v_name = it.index.value.clone();
-                let ty = self.type_impl_::<true>(&it.ty)?;
-                self.decl_impl_::<true>(v_name.clone(), &ty)?;
+                let ty = self.type_impl_::<false>(&it.ty)?;
+                self.decl_impl_::<false>(v_name.clone(), &ty)?;
                 let new_v_name = var_scope_info.declare_var(&v_name, f_name, cur_scope);
 
                 let from_expr: Expression;
@@ -1042,15 +1047,15 @@ impl<'ast> ZGen<'ast> {
                 (blks, blks_len, var_scope_info, rhs_expr, _, _, array_init_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &d.expression, f_name, 0, 0, var_scope_info)?;
                 
-                self.set_lhs_ty_defn::<true>(d)?;
-                let e = self.expr_impl_::<true>(&d.expression)?;
+                self.set_lhs_ty_defn::<false>(d)?;
+                let e = self.expr_impl_::<false>(&d.expression)?;
                 // Array declaration
                 // If array_init_info is defined, then the RHS must be the same array
                 if array_init_info.len() > 0 {
                     if let Some(l) = d.lhs.first() {
                         let lhs_id = match l {
                             TypedIdentifierOrAssignee::TypedIdentifier(l) => {
-                                let decl_ty = self.type_impl_::<true>(&l.ty)?;
+                                let decl_ty = self.type_impl_::<false>(&l.ty)?;
                                 let ty = e.type_();
                                 if &decl_ty != ty {
                                     return Err(format!(
@@ -1062,7 +1067,7 @@ impl<'ast> ZGen<'ast> {
                                 // Unroll scoping on LHS
                                 let arr_name = &l.identifier.value;
                                 // Add the identifier to current scope
-                                self.declare_init_impl_::<true>(
+                                self.declare_init_impl_::<false>(
                                     arr_name.clone(),
                                     decl_ty.clone(),
                                     e,
@@ -1102,7 +1107,7 @@ impl<'ast> ZGen<'ast> {
                                 };
 
                                 // if the LHS is an array member, convert the assignee to a store
-                                let lhs_ty = self.cvar_lookup_type(&l.id.value).ok_or_else(|| format!("Assignment failed: no variable {}", &new_l))?;
+                                let lhs_ty = self.circ_lookup_type(&l.id.value).ok_or_else(|| format!("Assignment failed: no variable {}", &new_l))?;
                                 if let Ty::Array(_, entry_ty) = lhs_ty.clone() {
                                     assignee_is_store = true;
                                     if l.accesses.len() != 1 { return Err(format!("Assignment to multiple array entries unsupported")); }
@@ -1133,7 +1138,7 @@ impl<'ast> ZGen<'ast> {
                                 }
                             }
                             TypedIdentifierOrAssignee::TypedIdentifier(l) => {
-                                let decl_ty = self.type_impl_::<true>(&l.ty)?;
+                                let decl_ty = self.type_impl_::<false>(&l.ty)?;
                                 let ty = e.type_();
                                 if &decl_ty != ty {
                                     return Err(format!(
@@ -1147,7 +1152,7 @@ impl<'ast> ZGen<'ast> {
                                 let new_l = var_scope_info.declare_var(id, f_name, cur_scope);
 
                                 // Add the identifier to current scope
-                                self.declare_init_impl_::<true>(
+                                self.declare_init_impl_::<false>(
                                     id.clone(),
                                     decl_ty.clone(),
                                     e,
@@ -1295,7 +1300,7 @@ impl<'ast> ZGen<'ast> {
                             let arr_name = &p.id.value;
                             let arr_extended_name = var_scope_info.reference_var(&arr_name, f_name)?;
                             let load_ty = var_scope_info.arr_map.get(&arr_extended_name).ok_or_else(|| format!("Load failed: no array {}", &arr_extended_name))?.clone();
-                            self.decl_impl_::<true>(load_name.clone(), &load_ty)?;
+                            self.decl_impl_::<false>(load_name.clone(), &load_ty)?;
                             let cur_scope = blks[blks_len - 1].scope;
                             let load_extended_name = var_scope_info.declare_var(&load_name, &f_name, cur_scope);
                             
@@ -1329,13 +1334,13 @@ impl<'ast> ZGen<'ast> {
             }
             Expression::Literal(_) => {}
             Expression::ArrayInitializer(ai) => {
-                let init_ty = self.expr_impl_::<true>(&ai.value)?.type_().clone();
+                let init_ty = self.expr_impl_::<false>(&ai.value)?.type_().clone();
                 let new_ai_value: Expression;
                 (blks, blks_len, var_scope_info, new_ai_value, func_count, load_count, _) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &ai.value, f_name, func_count, load_count, var_scope_info)?;
                 // Create a temporary variable to store the shared expression
                 let init_name = "init@0".to_string();
-                self.decl_impl_::<true>(init_name.clone(), &init_ty)?;
+                self.decl_impl_::<false>(init_name.clone(), &init_ty)?;
                 let cur_scope = blks[blks_len - 1].scope;
                 let init_extended_name = var_scope_info.declare_var(&init_name, &f_name, cur_scope);
                 let init_ty = ty_to_type(&init_ty)?;
@@ -1360,7 +1365,7 @@ impl<'ast> ZGen<'ast> {
                     span: Span::new("", 0, 0).unwrap()
                 });
                 // Size of array
-                let arr_size: usize = const_int(self.expr_impl_::<true>(&ai.count)?)?.try_into().unwrap();
+                let arr_size: usize = const_int(self.expr_impl_::<false>(&ai.count)?)?.try_into().unwrap();
                 array_init_info = vec![array_init_expr.clone(); arr_size];
             }
             Expression::InlineArray(ia) => {
@@ -1420,7 +1425,7 @@ impl<'ast> ZGen<'ast> {
         cur_scope: usize,
     ) -> Result<usize, String> {
         // New Scoping
-        self.enter_scope_impl_::<true>();
+        self.enter_scope_impl_::<false>();
 
         Ok(cur_scope + 1)
     }
@@ -1432,7 +1437,7 @@ impl<'ast> ZGen<'ast> {
         cur_scope: usize,
     ) -> Result<(VarScopeInfo, usize), String> {
         // Exit Scoping
-        self.exit_scope_impl_::<true>();
+        self.exit_scope_impl_::<false>();
 
         var_scope_info.exit_scope(fn_name, cur_scope);
         Ok((var_scope_info, cur_scope - 1))

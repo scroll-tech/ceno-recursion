@@ -7,7 +7,7 @@ use crate::front::zsharp::const_bool;
 use crate::front::zsharp::const_val;
 use crate::front::zsharp::span_to_string;
 use crate::front::zsharp::Op;
-use std::collections::BTreeMap;
+use std::collections::{HashMap, BTreeMap};
 use crate::front::zsharp::blocks::*;
 use log::warn;
 use log::debug;
@@ -99,24 +99,27 @@ impl<'ast> ZGen<'ast> {
 
     fn t_to_usize(&self, a: T) -> Result<usize, String> {
         let t = const_val(a)?;
-        match t.ty {
-            Ty::Field => {
-                match &t.term.op() {
-                    Op::Const(val) => {
-                        match val {
-                            Value::Field(f) => {
-                                let intg = f.i().to_usize().ok_or("Stack Overflow: %SP or %BP exceeds usize limit.")?;
-                                return Ok(intg);
-                            }
-                            _ => {
-                                return Err(format!("This line should not be triggered unless const_val has been modified. Const_val needs to return Op::Const for Term."));
-                            }
-                        }
+        match &t.term.op() {
+            Op::Const(val) => {
+                match val {
+                    Value::Field(f) => {
+                        let intg = f.i().to_usize().ok_or("Stack Overflow: array index exceeds usize limit.")?;
+                        return Ok(intg);
                     }
-                    _ => { return Err(format!("This line should not be triggered unless const_val has been modified. Const_val needs to return Op::Const for Term.")) }
+                    Value::BitVector(bv) => {
+                        let intg = bv.uint().to_usize().ok_or("Stack Overflow: array index exceeds usize limit.")?;
+                        return Ok(intg);
+                    }
+                    Value::Int(i) => {
+                        let intg = i.to_usize().ok_or("Stack Overflow: array index exceeds usize limit.")?;
+                        return Ok(intg);
+                    }
+                    _ => {
+                        return Err(format!("Fail to evaluate array index: index is not a number."));
+                    }
                 }
             }
-            _ => { return Err(format!("Fail to evaluate %BP or %SP: %BP and %SP should be stored as Field type.")) }
+            _ => { return Err(format!("This line should not be triggered unless const_val has been modified. Const_val needs to return Op::Const for Term.")) }
         }
     }
 
@@ -153,6 +156,7 @@ impl<'ast> ZGen<'ast> {
         self.cvar_enter_function();
         let mut nb = entry_bl;
         let mut phy_mem: Vec<T> = Vec::new();
+        let mut vir_mem_map: HashMap<String, Vec<Option<T>>> = HashMap::new();
         let mut terminated = false;
         let mut mem_op: Vec<MemOp>;
         
@@ -278,7 +282,7 @@ impl<'ast> ZGen<'ast> {
                 let _ = &bls[nb].pretty();
                 println!();
             }
-            (nb, phy_mem, terminated, mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem)?;
+            (nb, phy_mem, vir_mem_map, terminated, mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem, vir_mem_map)?;
 
             // Update successor block ID
             bl_exec_state[tr_size].succ_id = nb;
@@ -322,13 +326,15 @@ impl<'ast> ZGen<'ast> {
     // Return type:
     // ret[0]: Index of next block,
     // ret[1]: Physical memory arrangement,
-    // ret[2]: Has the program terminated?
-    // ret[3]: Pair of [addr, data] for all memory operations in the block
+    // ret[2]: Virtual memory map,
+    // ret[3]: Has the program terminated?
+    // ret[4]: Pair of [addr, data] for all memory operations in the block
     fn bl_eval_impl_(
         &self, 
         bl: &Block<'ast>,
-        mut phy_mem: Vec<T>
-    ) -> Result<(usize, Vec<T>, bool, Vec<MemOp>), String> {
+        mut phy_mem: Vec<T>,
+        mut vir_mem_map: HashMap<String, Vec<Option<T>>>,
+    ) -> Result<(usize, Vec<T>, HashMap<String, Vec<Option<T>>>, bool, Vec<MemOp>), String> {
         let mut mem_op: Vec<MemOp> = Vec::new();
 
         for s in &bl.instructions {
@@ -355,9 +361,29 @@ impl<'ast> ZGen<'ast> {
                     }
                     mem_op.push(MemOp::new(bp + offset, self.usize_to_field(bp + offset)?, self.cvar_lookup(&var).unwrap()));         
                 }
-                BlockContent::ArrayInit(_) => { panic!("Arrays not supported!") }
-                BlockContent::Store(_) => { panic!("Arrays not supported!") }
-                BlockContent::Load(_) => { panic!("Arrays not supported!") }
+                BlockContent::ArrayInit((arr, _, size)) => {
+                    assert!(!vir_mem_map.contains_key(arr));
+                    vir_mem_map.insert(arr.clone(), vec![None; *size]);
+                }
+                BlockContent::Store((val_expr, _, arr, id_expr)) => {
+                    let val_t = self.expr_impl_::<true>(&val_expr)?;
+                    let id = self.t_to_usize(self.expr_impl_::<true>(&id_expr)?)?;
+                    vir_mem_map.get_mut(arr).ok_or(format!("LOAD failed: array {} does not exist.", arr))?[id] = Some(val_t);
+                }
+                BlockContent::Load((var, ty, arr, id_expr)) => {
+                    let id = self.t_to_usize(self.expr_impl_::<true>(&id_expr)?)?;
+                    let t = vir_mem_map.get(arr).ok_or(format!("LOAD failed: array {} does not exist.", arr))?
+                        [id].clone().ok_or(format!("LOAD from {} failed: entry {} is uninitialized.", arr, id))?;
+
+                    let entry_ty = t.type_();
+                    if ty != entry_ty {
+                        return Err(format!(
+                            "Assignment type mismatch: {} annotated vs {} actual",
+                            ty, entry_ty,
+                        ));
+                    }
+                    self.cvar_declare_init(var.clone(), ty, t)?;
+                }
                 BlockContent::Stmt(s) => {
                     self.bl_eval_stmt_impl_(s)?;
                 }
@@ -367,12 +393,12 @@ impl<'ast> ZGen<'ast> {
         match &bl.terminator {
             BlockTerminator::Transition(e) => {
                 match self.t_to_usize(self.expr_impl_::<true>(&e)?) {
-                    Ok(nb) => { return Ok((nb, phy_mem, false, mem_op)); }, 
+                    Ok(nb) => { return Ok((nb, phy_mem, vir_mem_map, false, mem_op)); }, 
                     _ => { return Err("Evaluation failed: block transition evaluated to an invalid block label".to_string()); }
                 }
             }
             BlockTerminator::FuncCall(fc) => Err(format!("Evaluation failed: function call to {} needs to be converted to block label.", fc)),
-            BlockTerminator::ProgTerm => Ok((0, phy_mem, true, mem_op))
+            BlockTerminator::ProgTerm => Ok((0, phy_mem, vir_mem_map, true, mem_op))
         }
     }
 

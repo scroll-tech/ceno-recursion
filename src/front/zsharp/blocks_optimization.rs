@@ -296,7 +296,7 @@ fn top_sort_helper(
     return (chain, visited);
 }
 
-fn fn_top_sort(
+fn _fn_top_sort(
     bls: &Vec<Block>,
     successor: &Vec<HashSet<usize>>,
     successor_fn: &Vec<HashSet<usize>>,

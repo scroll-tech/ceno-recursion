@@ -1108,7 +1108,12 @@ impl<'ast> ZGen<'ast> {
                                     if l.accesses.len() != 1 { return Err(format!("Assignment to multiple array entries unsupported")); }
                                     if let AssigneeAccess::Select(a) = &l.accesses[0] {
                                         if let RangeOrExpression::Expression(e) = &a.expression {
-                                            blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), *entry_ty.clone(), new_l, e.clone())));
+                                            let new_e: Expression;
+                                            let tmp_arr_info: Vec<Expression>;
+                                            (blks, blks_len, var_scope_info, new_e, _, _, tmp_arr_info) = 
+                                                self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, var_scope_info)?;
+                                            if tmp_arr_info.len() > 0 { panic!("Currently do not support array initialization inside array indices") }
+                                            blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), *entry_ty.clone(), new_l, new_e)));
                                             let ty_mem_op_count = *blks[blks_len - 1].mem_op_by_ty.get(&entry_ty).unwrap_or(&0);
                                             blks[blks_len - 1].mem_op_by_ty.insert(*entry_ty.clone(), ty_mem_op_count + 1);
                                         } else {
@@ -1293,7 +1298,14 @@ impl<'ast> ZGen<'ast> {
                             self.decl_impl_::<true>(load_name.clone(), &load_ty)?;
                             let cur_scope = blks[blks_len - 1].scope;
                             let load_extended_name = var_scope_info.declare_var(&load_name, &f_name, cur_scope);
-                            blks[blks_len - 1].instructions.push(BlockContent::Load((load_extended_name.clone(), load_ty.clone(), arr_extended_name.clone(), e.clone())));
+                            
+                            // Preprocess the indices
+                            let new_e: Expression;
+                            let tmp_arr_info: Vec<Expression>;
+                            (blks, blks_len, var_scope_info, new_e, _, _, tmp_arr_info) = 
+                                self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, var_scope_info)?;
+                            if tmp_arr_info.len() > 0 { panic!("Currently do not support array initialization inside array indices") }
+                            blks[blks_len - 1].instructions.push(BlockContent::Load((load_extended_name.clone(), load_ty.clone(), arr_extended_name.clone(), new_e)));
                             let ty_mem_op_count = *blks[blks_len - 1].mem_op_by_ty.get(&load_ty).unwrap_or(&0);
                             blks[blks_len - 1].mem_op_by_ty.insert(load_ty.clone(), ty_mem_op_count + 1);
                             load_count += 1;
@@ -1437,14 +1449,19 @@ impl<'ast> ZGen<'ast> {
 
     // Convert a virtual memory operation to circ_ir
     pub fn vir_mem_to_circ(
-        &'ast self, 
+        &'ast self,
+        b: &Block,
+        f: &str,
         mut alloc_vir_mem_op_count: usize,
-        mut ty_mem_op_offset: HashMap<String, usize>,
+        mut ty_mem_op_offset: HashMap<Ty, usize>,
+        array_offset_map: &HashMap<String, usize>,
         ty: &Ty,
         arr: Option<&String>,
         id_expr: Option<&Expression<'ast>>,
-        val_expr: Option<&Expression<'ast>>,
-    ) -> (usize, HashMap<String, usize>) {
+        is_read: bool,
+    ) -> (usize, HashMap<Ty, usize>, usize) {
+        println!("TY: {:?}", ty);
+        println!("B: {}", b.name);
         // If memory operations of ty have not been allocated, allocate all of them
         // Note that we allocate all of them to resolve issues in branching
         // And we do not iterate through the HashMap to ensure memory partition is deterministic
@@ -1453,16 +1470,16 @@ impl<'ast> ZGen<'ast> {
             for i in alloc_vir_mem_op_count..alloc_vir_mem_op_count + count {
                 // Non-deterministically supply ADDR
                 self.circ_declare_input(
-                    &f,
+                    f,
                     format!("%vm{:06}a", i),
-                    ty,
+                    &Ty::Field,
                     ZVis::Private(0),
                     None,
                     true,
                 ).unwrap();
                 // Non-deterministically supply VAL, denote as 'b' so it is before 'i'
                 self.circ_declare_input(
-                    &f,
+                    f,
                     format!("%vm{:06}b", i),
                     ty,
                     ZVis::Private(0),
@@ -1471,18 +1488,18 @@ impl<'ast> ZGen<'ast> {
                 ).unwrap();
                 // Non-deterministically supply IO
                 self.circ_declare_input(
-                    &f,
+                    f,
                     format!("%vm{:06}i", i),
-                    ty,
+                    &Ty::Uint(8),
                     ZVis::Private(0),
                     None,
                     true,
                 ).unwrap();
                 // Non-deterministically supply TS
                 self.circ_declare_input(
-                    &f,
+                    f,
                     format!("%vm{:06}t", i),
-                    ty,
+                    &Ty::Field,
                     ZVis::Private(0),
                     None,
                     true,
@@ -1493,22 +1510,77 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Obtain the label for the memory operation
-        let next_label = ty_mem_op_offset.get(&ty).unwrap();
+        let next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
         // Assert correctness of ADDR, VAL, IO, and TS
-        // TODO...
+        // ADDR if exist
+        if let Some(addr_expr) = id_expr {
+            // lhs_t + offset_t == rhs_t
+            let mut lhs_t = self.expr_impl_::<false>(&addr_expr).unwrap();
+            // if lhs_t is not a field, cast it to a field
+            if lhs_t.type_() != &Ty::Field {
+                lhs_t = uint_to_field(lhs_t).unwrap();
+            }
+            let offset_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: array_offset_map.get(arr.unwrap()).unwrap().to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            }))).unwrap();
+            let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                value: format!("%vm{:06}a", next_label),
+                span: Span::new("", 0, 0).unwrap()
+            })).unwrap();
+            let b = bool(eq(add(lhs_t, offset_t).unwrap(), rhs_t).unwrap()).unwrap();
+            self.assert(b);
+        }
+        // VAL is handled individually depending on LOAD & STORE
+        // IO
+        const READ: usize = 0;
+        const WRITE: usize = 1;
+        let lhs_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+            value: DecimalNumber {
+                value: if is_read { READ } else { WRITE }.to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            },
+            suffix: Some(DecimalSuffix::U8(U8Suffix {
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            span: Span::new("", 0, 0).unwrap()
+        }))).unwrap();
+        let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+            value: format!("%vm{:06}i", next_label),
+            span: Span::new("", 0, 0).unwrap()
+        })).unwrap();
+        let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+        self.assert(b);
+        // TS
+        let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+            value: "%w1".to_string(),
+            span: Span::new("", 0, 0).unwrap()
+        })).unwrap();
+        let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+            value: format!("%vm{:06}t", next_label),
+            span: Span::new("", 0, 0).unwrap()
+        })).unwrap();
+        let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+        self.assert(b);
 
         // %TS = %TS + 1
         self.stmt_impl_::<false>(&bl_gen_increment_stmt("%w1", 1)).unwrap();
         // Increment label
         ty_mem_op_offset.insert(ty.clone(), next_label + 1);
 
-        (alloc_vir_mem_op_count, ty_mem_op_offset)
+        (alloc_vir_mem_op_count, ty_mem_op_offset, next_label)
     }
 
     // Convert a block to circ_ir
     // This can be done to either produce the constraints, or to estimate the size of constraints
     // In estimation mode, we rename all output variable from X -> oX, add assertion, and process the terminator
-    pub fn bl_to_circ<const ESTIMATE: bool>(&self, b: &Block, f: &str, mem_offset_map: &HashMap<String, usize>) {
+    pub fn bl_to_circ<const ESTIMATE: bool>(&self, b: &Block, f: &str, array_offset_map: &HashMap<String, usize>) {
         // setup stack frame for entry function
         // returns the next block, so return type is Field
         let ret_ty = Some(Ty::Field);
@@ -1673,10 +1745,30 @@ impl<'ast> ZGen<'ast> {
                 BlockContent::Store((val_expr, ty, arr, id_expr)) => {
                     if ESTIMATE {}
                     else {
-                        panic!("Arrays not supported!")
+                        let next_label: usize;
+                        // ADDR, IO, & TS
+                        (alloc_vir_mem_op_count, ty_mem_op_offset, next_label) = self.vir_mem_to_circ(
+                            b,
+                            f,
+                            alloc_vir_mem_op_count,
+                            ty_mem_op_offset,
+                            array_offset_map,
+                            &ty,
+                            Some(&arr),
+                            Some(&id_expr),
+                            false
+                        );
+                        // Assert correctness of VAL
+                        let lhs_t = self.expr_impl_::<false>(&val_expr).unwrap();
+                        let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                            value: format!("%vm{:06}b", next_label),
+                            span: Span::new("", 0, 0).unwrap()
+                        })).unwrap();
+                        let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                        self.assert(b);
                     }
                 }
-                BlockContent::Load((val, ty, arr, id)) => {
+                BlockContent::Load((val, ty, arr, id_expr)) => {
                     if ESTIMATE {
                         let r = self.circ_declare_input(
                             &f,
@@ -1688,7 +1780,29 @@ impl<'ast> ZGen<'ast> {
                         );
                         r.unwrap();
                     } else {
-                        panic!("Arrays not supported!")
+                        let next_label: usize;
+                        // ADDR, IO, & TS
+                        (alloc_vir_mem_op_count, ty_mem_op_offset, next_label) = self.vir_mem_to_circ(
+                            b,
+                            f,
+                            alloc_vir_mem_op_count,
+                            ty_mem_op_offset,
+                            array_offset_map,
+                            &ty,
+                            Some(&arr),
+                            Some(&id_expr),
+                            true
+                        );
+                        // Assign LOAD value to val
+                        let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                            value: format!("%vm{:06}b", next_label),
+                            span: Span::new("", 0, 0).unwrap()
+                        })).unwrap();
+                        self.declare_init_impl_::<false>(
+                            val.clone(),
+                            ty.clone(),
+                            e,
+                        ).unwrap();
                     }
                 }
                 BlockContent::Stmt(stmt) => { self.stmt_impl_::<false>(&stmt).unwrap(); }

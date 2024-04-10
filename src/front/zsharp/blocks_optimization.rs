@@ -2561,6 +2561,8 @@ impl<'ast> ZGen<'ast> {
                     bls[p].instructions.extend(bc);
                     // Set terminator of p to terminator of cur_bl
                     bls[p].terminator = bls[cur_bl].terminator.clone();
+                    // Set MEM_OP_BY_TY of p to that of cur_bl
+                    bls[p].mem_op_by_ty = bls[cur_bl].mem_op_by_ty.clone();
                     // Update CFG
                     successor[p].remove(&cur_bl);
                     predecessor[cur_bl].remove(&p);
@@ -2709,14 +2711,14 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Obtain # of scoping memory accesses per block & offset of each array in memory
-        let (num_mem_accesses, mem_offset_map) = self.get_blocks_memory_info(&bls);
+        let (num_mem_accesses, array_offset_map) = self.get_blocks_memory_info(&bls);
         if VERBOSE {
             println!("\n\n--\nMemory Info:");
-            println!("Memory Offset Map: {:?}", mem_offset_map);
+            println!("Array Offset Map: {:?}", array_offset_map);
         }
 
         print_bls(&bls, &entry_bl);
-        (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses, mem_offset_map)
+        (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses, array_offset_map)
     }
 
     // Convert all mentionings of variables to registers
@@ -3127,7 +3129,7 @@ impl<'ast> ZGen<'ast> {
         // Number of scoping memory accesses per block
         let mut num_mem_accesses = Vec::new();
         // Map between each array to a memory offset, starting at zero
-        let mut mem_offset_map = HashMap::new();
+        let mut array_offset_map = HashMap::new();
         let mut next_mem_offset = 0;
         for b in bls {
             let mut mem_accesses_count = 0;
@@ -3140,8 +3142,8 @@ impl<'ast> ZGen<'ast> {
                         mem_accesses_count += 1;
                     }
                     BlockContent::ArrayInit((arr, _, size)) => {
-                        if mem_offset_map.contains_key(arr) { panic!("Get Block Mem Info Failed: Multiple declaration of the same array: {}", arr) }
-                        mem_offset_map.insert(arr.to_string(), next_mem_offset);
+                        if array_offset_map.contains_key(arr) { panic!("Get Block Mem Info Failed: Multiple declaration of the same array: {}", arr) }
+                        array_offset_map.insert(arr.to_string(), next_mem_offset);
                         next_mem_offset += size;
                     }
                     _ => {}
@@ -3149,7 +3151,7 @@ impl<'ast> ZGen<'ast> {
             }
             num_mem_accesses.push(mem_accesses_count);
         }
-        (num_mem_accesses, mem_offset_map)
+        (num_mem_accesses, array_offset_map)
     }
 
     // Bound the total # of block executions & the total # of memory accesses

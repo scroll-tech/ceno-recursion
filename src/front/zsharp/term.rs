@@ -10,7 +10,7 @@ use crate::front::field_list::FieldList;
 use crate::ir::opt::cfold::fold as constant_fold;
 use crate::ir::term::*;
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum Ty {
     Uint(usize),
     Bool,

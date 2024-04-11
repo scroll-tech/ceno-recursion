@@ -96,7 +96,7 @@ pub fn bl_trans<'ast>(cond: Expression<'ast>, tval: NextBlock, fval: NextBlock) 
 }
 
 // Generate the statement: var = var + offset
-fn bl_gen_increment_stmt<'ast>(var: &str, offset: usize) -> Statement<'ast> {
+pub fn bl_gen_increment_stmt<'ast>(var: &str, offset: usize) -> Statement<'ast> {
     let sp_update_stmt = Statement::Definition(DefinitionStatement {
         lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
             ty: Type::Basic(BasicType::Field(FieldType {
@@ -143,7 +143,7 @@ pub struct Block<'ast> {
     // Is this block the head of a while loop? If so, this block cannot be merged with any block before it
     pub is_head_of_while_loop: bool,
     // Number of non-scoping-related memory accesses per each variable type
-    pub mem_op_by_ty: HashMap<Ty, usize>,
+    pub mem_op_by_ty: BTreeMap<Ty, usize>,
     // Name of the function the block is in
     pub fn_name: String,
     // Depth of the scope of the function
@@ -192,7 +192,7 @@ impl<'ast> Block<'ast> {
             terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1))),
             fn_num_exec_bound: num_exec_bound,
             is_head_of_while_loop: false,
-            mem_op_by_ty: HashMap::new(),
+            mem_op_by_ty: BTreeMap::new(),
             fn_name,
             scope
         };
@@ -1455,67 +1455,55 @@ impl<'ast> ZGen<'ast> {
     // Convert a virtual memory operation to circ_ir
     pub fn vir_mem_to_circ(
         &'ast self,
-        b: &Block,
         f: &str,
-        mut alloc_vir_mem_op_count: usize,
-        mut ty_mem_op_offset: HashMap<Ty, usize>,
+        mut ty_mem_op_offset: BTreeMap<Ty, usize>,
         array_offset_map: &HashMap<String, usize>,
         ty: &Ty,
         arr: Option<&String>,
         id_expr: Option<&Expression<'ast>>,
         is_read: bool,
-    ) -> (usize, HashMap<Ty, usize>, usize) {
-        println!("TY: {:?}", ty);
-        println!("B: {}", b.name);
-        // If memory operations of ty have not been allocated, allocate all of them
-        // Note that we allocate all of them to resolve issues in branching
-        // And we do not iterate through the HashMap to ensure memory partition is deterministic
-        if !ty_mem_op_offset.contains_key(ty) {
-            let count = b.mem_op_by_ty.get(ty).unwrap();
-            for i in alloc_vir_mem_op_count..alloc_vir_mem_op_count + count {
-                // Non-deterministically supply ADDR
-                self.circ_declare_input(
-                    f,
-                    format!("%vm{:06}a", i),
-                    &Ty::Field,
-                    ZVis::Private(0),
-                    None,
-                    true,
-                ).unwrap();
-                // Non-deterministically supply VAL, denote as 'b' so it is before 'i'
-                self.circ_declare_input(
-                    f,
-                    format!("%vm{:06}b", i),
-                    ty,
-                    ZVis::Private(0),
-                    None,
-                    true,
-                ).unwrap();
-                // Non-deterministically supply IO
-                self.circ_declare_input(
-                    f,
-                    format!("%vm{:06}i", i),
-                    &Ty::Uint(8),
-                    ZVis::Private(0),
-                    None,
-                    true,
-                ).unwrap();
-                // Non-deterministically supply TS
-                self.circ_declare_input(
-                    f,
-                    format!("%vm{:06}t", i),
-                    &Ty::Field,
-                    ZVis::Private(0),
-                    None,
-                    true,
-                ).unwrap();
-            }
-            ty_mem_op_offset.insert(ty.clone(), alloc_vir_mem_op_count);
-            alloc_vir_mem_op_count += count;
-        }
-
+    ) -> (BTreeMap<Ty, usize>, usize) {
         // Obtain the label for the memory operation
         let next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
+
+        // Declare the next ADDR, VAL, IO, and TS
+        // Non-deterministically supply ADDR
+        self.circ_declare_input(
+            f,
+            format!("%vm{:06}a", next_label),
+            &Ty::Field,
+            ZVis::Private(0),
+            None,
+            true,
+        ).unwrap();
+        // Non-deterministically supply VAL, denote as 'b' so it is before 'i'
+        self.circ_declare_input(
+            f,
+            format!("%vm{:06}b", next_label),
+            ty,
+            ZVis::Private(0),
+            None,
+            true,
+        ).unwrap();
+        // Non-deterministically supply IO
+        self.circ_declare_input(
+            f,
+            format!("%vm{:06}i", next_label),
+            &Ty::Uint(8),
+            ZVis::Private(0),
+            None,
+            true,
+        ).unwrap();
+        // Non-deterministically supply TS
+        self.circ_declare_input(
+            f,
+            format!("%vm{:06}t", next_label),
+            &Ty::Field,
+            ZVis::Private(0),
+            None,
+            true,
+        ).unwrap();
+
         // Assert correctness of ADDR, VAL, IO, and TS
         // ADDR if exist
         if let Some(addr_expr) = id_expr {
@@ -1579,7 +1567,7 @@ impl<'ast> ZGen<'ast> {
         // Increment label
         ty_mem_op_offset.insert(ty.clone(), next_label + 1);
 
-        (alloc_vir_mem_op_count, ty_mem_op_offset, next_label)
+        (ty_mem_op_offset, next_label)
     }
 
     // Convert a block to circ_ir
@@ -1624,10 +1612,13 @@ impl<'ast> ZGen<'ast> {
 
         // How many scoping memory operations have we encountered?
         let mut phy_mem_op_count = 0;
-        // How many non-scoping memory operations have we allocated?
-        let mut alloc_vir_mem_op_count = 0;
         // The label of the next memory operation on the specific type
-        let mut ty_mem_op_offset = HashMap::new();
+        let mut ty_mem_op_offset = BTreeMap::new();
+        let mut alloc_vir_mem_op_count = 0;
+        for (ty, count) in &b.mem_op_by_ty {
+            ty_mem_op_offset.insert(ty.clone(), alloc_vir_mem_op_count);
+            alloc_vir_mem_op_count += count;
+        }
         
         // Iterate over instructions, convert memory accesses into statements and then IR
         for i in &b.instructions {
@@ -1752,10 +1743,8 @@ impl<'ast> ZGen<'ast> {
                     else {
                         let next_label: usize;
                         // ADDR, IO, & TS
-                        (alloc_vir_mem_op_count, ty_mem_op_offset, next_label) = self.vir_mem_to_circ(
-                            b,
+                        (ty_mem_op_offset, next_label) = self.vir_mem_to_circ(
                             f,
-                            alloc_vir_mem_op_count,
                             ty_mem_op_offset,
                             array_offset_map,
                             &ty,
@@ -1787,10 +1776,8 @@ impl<'ast> ZGen<'ast> {
                     } else {
                         let next_label: usize;
                         // ADDR, IO, & TS
-                        (alloc_vir_mem_op_count, ty_mem_op_offset, next_label) = self.vir_mem_to_circ(
-                            b,
+                        (ty_mem_op_offset, next_label) = self.vir_mem_to_circ(
                             f,
-                            alloc_vir_mem_op_count,
                             ty_mem_op_offset,
                             array_offset_map,
                             &ty,

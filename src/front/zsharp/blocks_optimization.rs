@@ -2667,7 +2667,7 @@ impl<'ast> ZGen<'ast> {
         bls: Vec<Block<'ast>>,
         entry_bl: usize,
         inputs: Vec<(String, Ty)>
-    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<usize>, HashMap<String, usize>) {
+    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>, HashMap<String, usize>) {
         println!("\n\n--\nPost-Processing:");
         // Construct a new CFG for the program
         // Note that this is the CFG after DBE, and might be different from the previous CFG
@@ -3120,36 +3120,43 @@ impl<'ast> ZGen<'ast> {
     }
 
     // Construct a view of memory from the blocks, returns
-    // 0. # of physical (scoping) memory accesses for each block
+    // 0. # of (physical (scoping) memory, virtual memory accesses) accesses for each block
     // 1. Memory partition for each array
     fn get_blocks_memory_info(
         &self,
         bls: &Vec<Block>,
-    ) -> (Vec<usize>, HashMap<String, usize>) {
-        // Number of scoping memory accesses per block
+    ) -> (Vec<(usize, usize)>, HashMap<String, usize>) {
+        // Number of memory accesses per block
         let mut num_mem_accesses = Vec::new();
         // Map between each array to a memory offset, starting at zero
         let mut array_offset_map = HashMap::new();
         let mut next_mem_offset = 0;
         for b in bls {
-            let mut mem_accesses_count = 0;
+            let mut phy_mem_accesses_count = 0;
+            let mut vir_mem_accesses_count = 0;
             for i in &b.instructions {
                 match i {
                     BlockContent::MemPop(_) => {
-                        mem_accesses_count += 1;
+                        phy_mem_accesses_count += 1;
                     }
                     BlockContent::MemPush(_) => {
-                        mem_accesses_count += 1;
+                        phy_mem_accesses_count += 1;
                     }
                     BlockContent::ArrayInit((arr, _, size)) => {
                         if array_offset_map.contains_key(arr) { panic!("Get Block Mem Info Failed: Multiple declaration of the same array: {}", arr) }
                         array_offset_map.insert(arr.to_string(), next_mem_offset);
                         next_mem_offset += size;
                     }
+                    BlockContent::Load(_) => {
+                        vir_mem_accesses_count += 1;
+                    }
+                    BlockContent::Store(_) => {
+                        vir_mem_accesses_count += 1;
+                    }
                     _ => {}
                 }
             }
-            num_mem_accesses.push(mem_accesses_count);
+            num_mem_accesses.push((phy_mem_accesses_count, vir_mem_accesses_count));
         }
         (num_mem_accesses, array_offset_map)
     }

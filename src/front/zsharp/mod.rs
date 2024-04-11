@@ -48,7 +48,7 @@ pub struct ZSharpFE;
 
 impl FrontEnd for ZSharpFE {
     type Inputs<'ast> = Inputs;
-    fn gen(i: Inputs) -> (Computations, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<usize>) {
+    fn gen(i: Inputs) -> (Computations, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>) {
         debug!(
             "Starting Z# front-end, field: {}",
             Sort::Field(cfg().field().clone())

@@ -1489,7 +1489,7 @@ impl<'ast> ZGen<'ast> {
         self.circ_declare_input(
             f,
             format!("%vm{:06}i", next_label),
-            &Ty::Uint(8),
+            &Ty::Field,
             ZVis::Private(0),
             None,
             true,
@@ -1539,7 +1539,7 @@ impl<'ast> ZGen<'ast> {
                 value: if is_read { READ } else { WRITE }.to_string(),
                 span: Span::new("", 0, 0).unwrap()
             },
-            suffix: Some(DecimalSuffix::U8(U8Suffix {
+            suffix: Some(DecimalSuffix::Field(FieldSuffix {
                 span: Span::new("", 0, 0).unwrap()
             })),
             span: Span::new("", 0, 0).unwrap()

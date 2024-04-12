@@ -13,12 +13,19 @@ And check:
 4. `if addr[i] != addr[i+1] then io[i+1] == WRITE` [~3]
 
 ## Write-Once Approach
-THe write-once memory operations are denoted as a quintuple:
-- `(phy_addr, val, vir_addr, io, ts)`
+The write-once memory operations are denoted as a quadruple:
+- `(phy_addr, val, vir_addr, ts)`
+During constraint generation, 
+- Virtual address 0 is skipped, AND
+for every WRITE:
+- Invalidate the previous physical address
+- Allocate a new physical address
+- Increment the timestamp
 For consistency check, permutate:
 - First by physical address
 - Then by timestamp
 And check:
 1. `phy_addr[i] == phy_addr[i+1] || phy_addr[i] + 1 == phy_addr[i+1]`
-2. `if addr[i] == addr[i+1] then val[i] == val[i+1]`
-3. 
+2. `phy_addr[i] == phy_addr[i+1] => val[i] == val[i+1]`
+3. `phy_addr[i] == phy_addr[i+1] => vir_addr[i] == vir_addr[i+1] || vir_addr[i+1] == 0`
+4. `phy_addr[i] == phy_addr[i+1] => ts[i] <= ts[i+1]`

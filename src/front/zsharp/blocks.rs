@@ -20,6 +20,10 @@ use std::collections::BTreeMap;
 use std::convert::TryInto;
 use crate::front::zsharp::*;
 
+const LOAD: usize = 0;
+const STORE: usize = 1;
+const DUMMY_LOAD: usize = 2;
+
 fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast>) -> Expression<'ast> {
     let ce = Expression::Binary(BinaryExpression {
         // op: BinaryOperator::Lt,
@@ -1452,8 +1456,43 @@ impl<'ast> ZGen<'ast> {
         }
     }
 
+    // asserts var == cnst
+    fn bl_gen_assert_const(&'ast self, var: &str, cnst: usize) {
+        let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+            value: var.to_string(),
+            span: Span::new("", 0, 0).unwrap()
+        })).unwrap();
+        let rhs_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+            value: DecimalNumber {
+                value: cnst.to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            },
+            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            span: Span::new("", 0, 0).unwrap()
+        }))).unwrap();
+        let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+        self.assert(b);
+    }
+
+    // asserts var1 == var2
+    fn bl_gen_assert_eq(&'ast self, var1: &str, var2: &str) {
+        let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+            value: var1.to_string(),
+            span: Span::new("", 0, 0).unwrap()
+        })).unwrap();
+        let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+            value: var2.to_string(),
+            span: Span::new("", 0, 0).unwrap()
+        })).unwrap();
+        let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+        self.assert(b);
+    }
+
     // Convert a virtual memory operation to circ_ir
-    pub fn vir_mem_to_circ(
+    // MODE: LOAD, STORE, DUMMY_LOAD
+    fn vir_mem_to_circ<const MODE: usize>(
         &'ast self,
         f: &str,
         mut ty_mem_op_offset: BTreeMap<Ty, usize>,
@@ -1461,13 +1500,18 @@ impl<'ast> ZGen<'ast> {
         ty: &Ty,
         arr: Option<&String>,
         id_expr: Option<&Expression<'ast>>,
-        is_read: bool,
     ) -> (BTreeMap<Ty, usize>, usize) {
         // Obtain the label for the memory operation
-        let next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
+        let mut next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
 
-        // Declare the next ADDR, VAL, IO, and TS
-        // Non-deterministically supply ADDR
+        // Declare the next PHY_ADDR, VIR_ADDR, VAL, L/S, and TS
+        // For simplicity, call them a, b, c, l, t
+
+        // INIT_ACCESS
+        // For LOAD, this is to obtain the value
+        // For STORE, this is to obtain the physical memory
+        // For DUMMY_LOAD, this does nothing
+        // PHY_ADDR as 'a'
         self.circ_declare_input(
             f,
             format!("%vm{:06}a", next_label),
@@ -1476,7 +1520,7 @@ impl<'ast> ZGen<'ast> {
             None,
             true,
         ).unwrap();
-        // Non-deterministically supply VAL, denote as 'b' so it is before 'i'
+        // VIR_ADDR as 'b'
         self.circ_declare_input(
             f,
             format!("%vm{:06}b", next_label),
@@ -1485,16 +1529,25 @@ impl<'ast> ZGen<'ast> {
             None,
             true,
         ).unwrap();
-        // Non-deterministically supply IO
+        // VAL as 'c'
         self.circ_declare_input(
             f,
-            format!("%vm{:06}i", next_label),
+            format!("%vm{:06}c", next_label),
+            ty,
+            ZVis::Private(0),
+            None,
+            true,
+        ).unwrap();
+        // LS as 'l'
+        self.circ_declare_input(
+            f,
+            format!("%vm{:06}l", next_label),
             &Ty::Field,
             ZVis::Private(0),
             None,
             true,
         ).unwrap();
-        // Non-deterministically supply TS
+        // TS as 't'
         self.circ_declare_input(
             f,
             format!("%vm{:06}t", next_label),
@@ -1503,9 +1556,7 @@ impl<'ast> ZGen<'ast> {
             None,
             true,
         ).unwrap();
-
-        // Assert correctness of ADDR, VAL, IO, and TS
-        // ADDR if exist
+        // VIR_ADDR if exist
         if let Some(addr_expr) = id_expr {
             // lhs_t + offset_t == rhs_t
             let mut lhs_t = self.expr_impl_::<false>(&addr_expr).unwrap();
@@ -1524,47 +1575,177 @@ impl<'ast> ZGen<'ast> {
                 span: Span::new("", 0, 0).unwrap()
             }))).unwrap();
             let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                value: format!("%vm{:06}a", next_label),
+                value: format!("%vm{:06}b", next_label),
                 span: Span::new("", 0, 0).unwrap()
             })).unwrap();
             let b = bool(eq(add(lhs_t, offset_t).unwrap(), rhs_t).unwrap()).unwrap();
             self.assert(b);
         }
-        // VAL is handled individually depending on LOAD & STORE
-        // IO
-        const READ: usize = 0;
-        const WRITE: usize = 1;
-        let lhs_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-            value: DecimalNumber {
-                value: if is_read { READ } else { WRITE }.to_string(),
-                span: Span::new("", 0, 0).unwrap()
-            },
-            suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                span: Span::new("", 0, 0).unwrap()
-            })),
-            span: Span::new("", 0, 0).unwrap()
-        }))).unwrap();
-        let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-            value: format!("%vm{:06}i", next_label),
-            span: Span::new("", 0, 0).unwrap()
-        })).unwrap();
-        let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-        self.assert(b);
-        // TS
-        let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-            value: "%w1".to_string(),
-            span: Span::new("", 0, 0).unwrap()
-        })).unwrap();
-        let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-            value: format!("%vm{:06}t", next_label),
-            span: Span::new("", 0, 0).unwrap()
-        })).unwrap();
-        let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-        self.assert(b);
 
-        // %TS = %TS + 1
-        self.stmt_impl_::<false>(&bl_gen_increment_stmt("%w1", 1)).unwrap();
-        // Increment label
+        // LS
+        self.bl_gen_assert_const(&format!("%vm{:06}l", next_label), LOAD);
+        // TS
+        self.bl_gen_assert_eq(&format!("%w1"), &format!("%vm{:06}t", next_label));
+
+        // if STORE or DUMMY_LOAD, additional entries for 
+        // 1. physical address retrieval / dummy retrieval
+        // 2. nullification / dummy nullification
+        if MODE == STORE || MODE == DUMMY_LOAD {
+            // Increment label
+            next_label += 1;
+
+            // If STORE, increment timestamp
+            if MODE == STORE {
+                self.stmt_impl_::<false>(&bl_gen_increment_stmt("%w1", 1)).unwrap();
+            }
+
+            // NULLIFICATION
+            // PHY_ADDR as 'a'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}a", next_label),
+                &Ty::Field,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+            // VIR_ADDR as 'b'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}b", next_label),
+                ty,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+            // VAL as 'c'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}c", next_label),
+                ty,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+            // LS as 'l'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}l", next_label),
+                &Ty::Field,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+            // TS as 't'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}t", next_label),
+                &Ty::Field,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+
+
+            // If STORE, PHY_ADDR matches with previous LOAD and VIR_ADDR & VAL are simply 0
+            if MODE == STORE {
+                self.bl_gen_assert_eq(&format!("%vm{:06}a", next_label - 1), &format!("%vm{:06}a", next_label));
+                self.bl_gen_assert_const(&format!("%vm{:06}b", next_label), 0);
+                self.bl_gen_assert_const(&format!("%vm{:06}c", next_label), 0);
+            }
+            // LS
+            self.bl_gen_assert_const(&format!("%vm{:06}l", next_label), if MODE == STORE { STORE } else { LOAD });
+            // TS
+            self.bl_gen_assert_eq(&format!("%w1"), &format!("%vm{:06}t", next_label));
+
+            // Increment next_label
+            next_label += 1;
+
+            // ALLOCATION
+            // PHY_ADDR as 'a'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}a", next_label),
+                &Ty::Field,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+            // VIR_ADDR as 'b'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}b", next_label),
+                ty,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+            // VAL as 'c'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}c", next_label),
+                ty,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+            // LS as 'l'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}l", next_label),
+                &Ty::Field,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+            // TS as 't'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}t", next_label),
+                &Ty::Field,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+
+            // If STORE, PHY_ADDR matches with TS
+            if MODE == STORE {
+                self.bl_gen_assert_eq(&format!("%w1"), &format!("%vm{:06}a", next_label));    
+            }
+
+            // VIR_ADDR
+            if let Some(addr_expr) = id_expr {
+                // lhs_t + offset_t == rhs_t
+                let mut lhs_t = self.expr_impl_::<false>(&addr_expr).unwrap();
+                // if lhs_t is not a field, cast it to a field
+                if lhs_t.type_() != &Ty::Field {
+                    lhs_t = uint_to_field(lhs_t).unwrap();
+                }
+                let offset_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                    value: DecimalNumber {
+                        value: array_offset_map.get(arr.unwrap()).unwrap().to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    span: Span::new("", 0, 0).unwrap()
+                }))).unwrap();
+                let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                    value: format!("%vm{:06}b", next_label),
+                    span: Span::new("", 0, 0).unwrap()
+                })).unwrap();
+                let b = bool(eq(add(lhs_t, offset_t).unwrap(), rhs_t).unwrap()).unwrap();
+                self.assert(b);
+            }
+            // LS
+            self.bl_gen_assert_const(&format!("%vm{:06}l", next_label), if MODE == STORE { STORE } else { LOAD });
+            // TS
+            self.bl_gen_assert_eq(&format!("%w1"), &format!("%vm{:06}t", next_label));
+        }
+        // VAL is handled individually depending on LOAD & STORE
+
+        // Update label
         ty_mem_op_offset.insert(ty.clone(), next_label + 1);
 
         (ty_mem_op_offset, next_label)
@@ -1743,19 +1924,18 @@ impl<'ast> ZGen<'ast> {
                     else {
                         let next_label: usize;
                         // ADDR, IO, & TS
-                        (ty_mem_op_offset, next_label) = self.vir_mem_to_circ(
+                        (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<STORE>(
                             f,
                             ty_mem_op_offset,
                             array_offset_map,
                             &ty,
                             Some(&arr),
-                            Some(&id_expr),
-                            false
+                            Some(&id_expr)
                         );
                         // Assert correctness of VAL
                         let lhs_t = self.expr_impl_::<false>(&val_expr).unwrap();
                         let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                            value: format!("%vm{:06}b", next_label),
+                            value: format!("%vm{:06}c", next_label),
                             span: Span::new("", 0, 0).unwrap()
                         })).unwrap();
                         let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
@@ -1776,18 +1956,17 @@ impl<'ast> ZGen<'ast> {
                     } else {
                         let next_label: usize;
                         // ADDR, IO, & TS
-                        (ty_mem_op_offset, next_label) = self.vir_mem_to_circ(
+                        (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<LOAD>(
                             f,
                             ty_mem_op_offset,
                             array_offset_map,
                             &ty,
                             Some(&arr),
-                            Some(&id_expr),
-                            true
+                            Some(&id_expr)
                         );
                         // Assign LOAD value to val
                         let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                            value: format!("%vm{:06}b", next_label),
+                            value: format!("%vm{:06}c", next_label),
                             span: Span::new("", 0, 0).unwrap()
                         })).unwrap();
                         self.declare_init_impl_::<false>(

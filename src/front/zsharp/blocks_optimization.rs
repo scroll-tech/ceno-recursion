@@ -3150,8 +3150,9 @@ impl<'ast> ZGen<'ast> {
                     BlockContent::Load(_) => {
                         vir_mem_accesses_count += 1;
                     }
+                    // Store includes nullification
                     BlockContent::Store(_) => {
-                        vir_mem_accesses_count += 1;
+                        vir_mem_accesses_count += 2;
                     }
                     _ => {}
                 }

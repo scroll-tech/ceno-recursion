@@ -432,7 +432,7 @@ impl<'ast> ZGen<'ast> {
                     let old_data_t = vir_mem[old_phy_addr].clone();
                     let new_data_t = self.expr_impl_::<true>(&val_expr)?;
 
-                    // INIT_ACCESS
+                    // RETRIEVAL
                     // Update vir_mem_op
                     let mut next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
                     let ts_t = self.cvar_lookup("%w1").ok_or(format!("STORE failed: %TS is uninitialized."))?;

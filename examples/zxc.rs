@@ -388,7 +388,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 ) -> (CompileTimeKnowledge, Vec<(Vec<usize>, Vec<usize>)>, Vec<ProverData>) {
     println!("Generating Compiler Time Data...");
 
-    let (cs, func_input_width, io_size, live_io_list, block_num_mem_accesses) = {
+    let (cs, func_input_width, io_size, live_io_list, block_num_mem_accesses, live_vm_list) = {
         let inputs = zsharp::Inputs {
             file: path.clone(),
             mode: Mode::Proof
@@ -831,7 +831,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<true>(path.clone(), entry_regs, &ctk, live_io_list, prover_data_list);
+    let rtk = get_run_time_knowledge::<false>(path.clone(), entry_regs, &ctk, live_io_list, prover_data_list);
 
     // --
     // Write CTK, RTK to file

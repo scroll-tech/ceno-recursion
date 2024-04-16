@@ -1,12 +1,12 @@
 // TODO: Recursion is not supported.
 //       Generics are not supported.
 //       Loop breaks are not supported.
-//       Arrays & structs are not supported.
-//       Function within array index?
+//       Structs are not supported.
 //       Multi-file program not supported
-//       What would happen if we put function calls in loop to / from?
 //       Can try eliminate ternaries with a constant condition
 //       What would happen if block 0 is a loop to itself? Many analyses would break down!!!
+
+// TODO: Should not count # of virtual addresses here b/c liveness analysis might remove some of them
 
 use log::{debug, warn};
 
@@ -1507,7 +1507,7 @@ impl<'ast> ZGen<'ast> {
         // Declare the next PHY_ADDR, VIR_ADDR, VAL, L/S, and TS
         // For simplicity, call them a, b, c, l, t
 
-        // INIT_ACCESS
+        // RETRIEVAL
         // For LOAD, this is to obtain the value
         // For STORE, this is to obtain the physical memory
         // For DUMMY_LOAD, this does nothing
@@ -1647,11 +1647,10 @@ impl<'ast> ZGen<'ast> {
             ).unwrap();
 
 
-            // If STORE, PHY_ADDR matches with previous LOAD and VIR_ADDR & VAL are simply 0
+            // If STORE, PHY_ADDR matches with previous LOAD and VIR_ADDR is 0
             if MODE == STORE {
                 self.bl_gen_assert_eq(&format!("%vm{:06}a", next_label - 1), &format!("%vm{:06}a", next_label));
                 self.bl_gen_assert_const(&format!("%vm{:06}b", next_label), 0);
-                self.bl_gen_assert_const(&format!("%vm{:06}c", next_label), 0);
             }
             // LS
             self.bl_gen_assert_const(&format!("%vm{:06}l", next_label), if MODE == STORE { STORE } else { LOAD });

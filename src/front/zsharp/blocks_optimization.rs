@@ -2667,7 +2667,7 @@ impl<'ast> ZGen<'ast> {
         bls: Vec<Block<'ast>>,
         entry_bl: usize,
         inputs: Vec<(String, Ty)>
-    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>, HashMap<String, usize>) {
+    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>, HashMap<String, usize>, Vec<Vec<usize>>) {
         println!("\n\n--\nPost-Processing:");
         // Construct a new CFG for the program
         // Note that this is the CFG after DBE, and might be different from the previous CFG
@@ -2711,14 +2711,14 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Obtain # of scoping memory accesses per block & offset of each array in memory
-        let (num_mem_accesses, array_offset_map) = self.get_blocks_memory_info(&bls);
+        let (num_mem_accesses, array_offset_map, live_vm) = self.get_blocks_memory_info(&bls);
         if VERBOSE {
             println!("\n\n--\nMemory Info:");
             println!("Array Offset Map: {:?}", array_offset_map);
         }
 
         print_bls(&bls, &entry_bl);
-        (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses, array_offset_map)
+        (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses, array_offset_map, live_vm)
     }
 
     // Convert all mentionings of variables to registers
@@ -3122,18 +3122,25 @@ impl<'ast> ZGen<'ast> {
     // Construct a view of memory from the blocks, returns
     // 0. # of (physical (scoping) memory, virtual memory accesses) accesses for each block
     // 1. Memory partition for each array
+    // 2. Liveness of each virtual memory variable
+    //    * We need all variables present for permutation check, but some are not referenced in the constraints and will be killed in R1CS
+    //    * For every _live_ virtual memory variable, record its overall ordering in all virtual memory variables 
     fn get_blocks_memory_info(
         &self,
         bls: &Vec<Block>,
-    ) -> (Vec<(usize, usize)>, HashMap<String, usize>) {
+    ) -> (Vec<(usize, usize)>, HashMap<String, usize>, Vec<Vec<usize>>) {
         // Number of memory accesses per block
         let mut num_mem_accesses = Vec::new();
         // Map between each array to a memory offset, starting at zero
         let mut array_offset_map = HashMap::new();
         let mut next_mem_offset = 0;
+        // Map of each _live_ vm variables to its overall ordering
+        let mut live_vm_list = Vec::new();
         for b in bls {
             let mut phy_mem_accesses_count = 0;
             let mut vir_mem_accesses_count = 0;
+            // List of bools of whether each vm variable is alive, useful for branch merge
+            let mut vm_liveness: Vec<bool> = Vec::new();
             for i in &b.instructions {
                 match i {
                     BlockContent::MemPop(_) => {
@@ -3149,17 +3156,30 @@ impl<'ast> ZGen<'ast> {
                     }
                     BlockContent::Load(_) => {
                         vir_mem_accesses_count += 1;
+                        //                      phy_addr  vir_addr  data      ls        ts
+                        vm_liveness.extend(vec![false,    true,     true,     true,     true]);
                     }
                     // Store includes init, invalidate, & store
                     BlockContent::Store(_) => {
                         vir_mem_accesses_count += 3;
+                        //                      phy_addr  vir_addr  data      ls        ts
+                        vm_liveness.extend(vec![true,     true,     false,    true,     true,    // retrieval
+                                                true,     true,     false,    true,     true,    // invalidation
+                                                true,     true,     true,     true,     true,]); // allocation
                     }
-                    _ => {}
+                    BlockContent::Stmt(_) => {}
                 }
             }
             num_mem_accesses.push((phy_mem_accesses_count, vir_mem_accesses_count));
+            let mut live_vm = Vec::new();
+            for i in 0..vm_liveness.len() {
+                if vm_liveness[i] {
+                    live_vm.push(i);
+                }
+            }
+            live_vm_list.push(live_vm);
         }
-        (num_mem_accesses, array_offset_map)
+        (num_mem_accesses, array_offset_map, live_vm_list)
     }
 
     // Bound the total # of block executions & the total # of memory accesses

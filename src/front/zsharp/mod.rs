@@ -15,6 +15,7 @@ use crate::circify::{CircError, Circify, Loc, Val};
 use crate::front::proof::PROVER_ID;
 use crate::ir::proof::ConstraintMetadata;
 use crate::ir::term::*;
+use crate::front::zsharp::prover::MemOp;
 
 use log::{debug, trace, warn};
 use rug::Integer;
@@ -87,7 +88,8 @@ impl ZSharpFE {
     pub fn interpret(i: Inputs, entry_regs: &Vec<Integer>) -> (
         T, // Return Value
         Vec<usize>, // Block IDs
-        Vec<Vec<Option<Value>>>, // Prog Input + Block Outputs
+        Vec<Vec<Option<Value>>>, // Prog Input | Block Outputs
+        Vec<Vec<Option<Value>>>, // (PM Vars + VM Vars) per block
         Vec<HashMap<String, Value, BuildHasherDefault<fxhash::FxHasher>>>, // Map of IO name -> IO value, for witness generation
         Vec<(Value, Value)> // Memory accesses, sorted by address
     ) {
@@ -211,7 +213,40 @@ impl ZSharpFE {
                 } else { None }
             ).collect()).collect()
         ].concat();
-        return (ret, block_id_list, block_outputs_list, block_io_map_list, phy_mem_list);
+        let block_mems_list = bl_exec_state.iter().map(|i| [
+            i.phy_mem_op.iter().flat_map(|pm: &MemOp| [
+                // addr
+                Some(to_const_value(pm.phy_addr_t.clone())
+                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))),
+                // data
+                Some(to_const_value(pm.data_t.clone())
+                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))),
+            ]).collect::<Vec<Option<Value>>>(),
+            i.vir_mem_op.iter().flat_map(|vm: &MemOp| [
+                // phy_addr
+                Some(to_const_value(vm.phy_addr_t.clone())
+                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))),
+                // vir_addr
+                if let Some(vir_addr) = &vm.vir_addr_t {
+                    Some(to_const_value(vir_addr.clone())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)))
+                } else { None },
+                // data
+                Some(to_const_value(vm.data_t.clone())
+                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))),
+                // ls
+                if let Some(ls) = &vm.ls_t {
+                    Some(to_const_value(ls.clone())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)))
+                } else { None },
+                // ts
+                if let Some(ts) = &vm.ts_t {
+                    Some(to_const_value(ts.clone())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)))
+                } else { None },
+            ]).collect::<Vec<Option<Value>>>(),
+        ].concat()).collect();
+        return (ret, block_id_list, block_outputs_list, block_mems_list, block_io_map_list, phy_mem_list);
     }
 }
 

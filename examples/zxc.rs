@@ -385,7 +385,7 @@ impl Ord for InstanceSortHelper {
 // --
 fn get_compile_time_knowledge<const VERBOSE: bool>(
     path: PathBuf
-) -> (CompileTimeKnowledge, Vec<(Vec<usize>, Vec<usize>)>, Vec<ProverData>) {
+) -> (CompileTimeKnowledge, Vec<usize>, Vec<usize>, Vec<ProverData>) {
     println!("Generating Compiler Time Data...");
 
     let (cs, func_input_width, io_size, live_io_list, block_num_mem_accesses, live_vm_list) = {
@@ -477,8 +477,10 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
             reduce_linearities(r1cs, cfg())
         };
         */
-        // Add W to witness, but remove all inputs / outputs
-        let num_witnesses = r1cs.num_vars() + 1 - live_io_list[block_num].0.len() - live_io_list[block_num].1.len();
+        let num_witnesses = 
+            r1cs.num_vars() + 1 // add W to witness
+            + 5 * block_num_mem_accesses[block_num].1 - live_vm_list[block_num].len() // remove live vm vars, add all vm vars
+            - live_io_list[block_num].0.len() - live_io_list[block_num].1.len(); // remove all inputs / outputs
         num_vars_per_block.push(num_witnesses.next_power_of_two());
         // Include V * V = V and 0 = W - V
         let num_cons = r1cs.constraints().len() + 2;
@@ -514,7 +516,23 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         }
     };
     // Add all IOs and WV in front
-    let witness_relabel = |i: usize| max_num_witnesses + 1 + i;
+    let witness_relabel = |b: usize, i: usize|  -> usize {
+        let num_pm_vars = 2 * block_num_mem_accesses[b].0;
+        let num_live_vm_vars = live_vm_list[b].len();
+        let num_vm_vars = 5 * block_num_mem_accesses[b].1;
+        // physical memory accesses
+        if i < num_pm_vars {
+            max_num_witnesses + 1 + i
+        }
+        // virtual memory accesses
+        else if i < num_pm_vars + num_live_vm_vars {
+            max_num_witnesses + 1 + num_pm_vars + live_vm_list[b][i - num_pm_vars]
+        }
+        // other witneses
+        else {
+            max_num_witnesses + 1 + num_vm_vars + (i - num_live_vm_vars)
+        }
+    };
     // 0th entry is constant
     let v_cnst = 0;
     let mut sparse_mat_entry: Vec<Vec<SparseMatEntry>> = Vec::new();
@@ -531,7 +549,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         sparse_mat_entry[b].push(SparseMatEntry { args_a, args_b, args_c });
         // Iterate
         for c in r1cs.constraints() {
-            sparse_mat_entry[b].push(get_sparse_cons_with_v_check(c, v_cnst, |i| io_relabel(b, i), witness_relabel));
+            sparse_mat_entry[b].push(get_sparse_cons_with_v_check(c, v_cnst, |i| io_relabel(b, i), |i| witness_relabel(b, i)));
         }
     }
 
@@ -559,6 +577,9 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         sparse_mat_entry.iter().map(|v| v.iter().map(|i| (i.args_a.clone(), i.args_b.clone(), i.args_c.clone())).collect()).collect();
     let input_block_num = 0;
     let output_block_num = block_num_instances;
+
+    let live_io_size = live_io_list.iter().map(|i| i.0.len() + i.1.len()).collect();
+    let live_mem_size = (0..live_vm_list.len()).map(|i| 2 * block_num_mem_accesses[i].0 + live_vm_list[i].len()).collect();
     
     (CompileTimeKnowledge {
         block_num_instances,
@@ -573,7 +594,8 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         output_offset: OUTPUT_OFFSET,
         output_block_num
       },
-      live_io_list,
+      live_io_size,
+      live_mem_size,
       prover_data_list
     )
 }
@@ -585,7 +607,8 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     path: PathBuf,
     entry_regs: Vec<Integer>,
     ctk: &CompileTimeKnowledge,
-    live_io_list: Vec<(Vec<usize>, Vec<usize>)>,
+    live_io_size: Vec<usize>,
+    live_mem_size: Vec<usize>,
     prover_data_list: Vec<ProverData>
 ) -> RunTimeKnowledge {
     let num_blocks = ctk.block_num_instances;
@@ -595,7 +618,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     // bl_io_map maps name of io variables to their values
     // bl_outputs are used to fill in io part of vars
     // bl_io_map is used to compute witness part of vars
-    let (_, block_id_list, bl_outputs_list, bl_io_map_list, mem_list) = {
+    let (_, block_id_list, bl_outputs_list, bl_mems_list, bl_io_map_list, phy_mem_list) = {
         let inputs = zsharp::Inputs {
             file: path,
             mode: Mode::Proof
@@ -618,7 +641,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         }
         consis_num_proofs += 1;
     }
-    let total_num_mem_accesses = mem_list.len();
+    let total_num_mem_accesses = phy_mem_list.len();
     let output_exec_num = block_id_list.len() - 1;
 
     // num_blocks_live is # of non-zero entries in block_num_proofs
@@ -678,13 +701,20 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
                 inputs[num_input_unpadded + j] = ro.as_integer().unwrap();
             }
         }
+        // Use bl_mems_list to assign all memory operations
+        let reg_mem = &bl_mems_list[i];
+        for j in 0..reg_mem.len() {
+            if let Some(rm) = &reg_mem[j] {
+                vars[j + 1] = rm.as_integer().unwrap();
+            }
+        }
 
         // Use eval to assign witnesses
-        let live_io_len = live_io_list[id].0.len() + live_io_list[id].1.len();
-        for j in live_io_len..eval.len() {
+        let wit_offset = live_io_size[id] + live_mem_size[id];
+        for j in wit_offset..eval.len() {
             // witnesses, skip the 0th entry for the valid bit
-            let k = j - live_io_len;
-            vars[k + 1] = eval[j].as_integer().unwrap();
+            let k = 1 + j - wit_offset + reg_mem.len();
+            vars[k] = eval[j].as_integer().unwrap();
         }
         if i == block_id_list.len() - 1 {
             func_outputs = inputs[num_input_unpadded + OUTPUT_OFFSET].clone();
@@ -738,8 +768,8 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     // Memory: valid, dummy, addr, val
     let mut addr_mems_list = Vec::new();
     let mut mem_last = vec![one.clone(); 4];
-    for i in 0..mem_list.len() {
-        let m = &mem_list[i];
+    for i in 0..phy_mem_list.len() {
+        let m = &phy_mem_list[i];
         let mut mem: Vec<Integer> = vec![zero.clone(); 4];
         mem[0] = one.clone();
         mem[2] = m.0.as_integer().unwrap();
@@ -749,7 +779,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             mem_last[1] = mem[0].clone() * (one.clone() - mem[2].clone() + mem_last[2].clone());
             addr_mems_list.push(Assignment::new(mem_last.iter().map(|i| integer_to_bytes(i.clone())).collect()));
         }
-        if i == mem_list.len() - 1 {
+        if i == phy_mem_list.len() - 1 {
             addr_mems_list.push(Assignment::new(mem.iter().map(|i| integer_to_bytes(i.clone())).collect()));
         } else {
             mem_last = mem;
@@ -805,7 +835,7 @@ fn main() {
     // --
     let benchmark_name = options.path.as_os_str().to_str().unwrap();
     let path = PathBuf::from(format!("../zok_tests/benchmarks/{}.zok", benchmark_name));
-    let (ctk, live_io_list, prover_data_list) = 
+    let (ctk, live_io_size, live_mem_size, prover_data_list) = 
         get_compile_time_knowledge::<true>(path.clone());
 
     // --
@@ -831,7 +861,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<false>(path.clone(), entry_regs, &ctk, live_io_list, prover_data_list);
+    let rtk = get_run_time_knowledge::<false>(path.clone(), entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
 
     // --
     // Write CTK, RTK to file

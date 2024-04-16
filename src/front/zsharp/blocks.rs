@@ -1124,7 +1124,7 @@ impl<'ast> ZGen<'ast> {
                                             if tmp_arr_info.len() > 0 { panic!("Currently do not support array initialization inside array indices") }
                                             blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), *entry_ty.clone(), new_l, new_e)));
                                             let ty_mem_op_count = *blks[blks_len - 1].mem_op_by_ty.get(&entry_ty).unwrap_or(&0);
-                                            blks[blks_len - 1].mem_op_by_ty.insert(*entry_ty.clone(), ty_mem_op_count + 1);
+                                            blks[blks_len - 1].mem_op_by_ty.insert(*entry_ty.clone(), ty_mem_op_count + 3);
                                         } else {
                                             return Err(format!("Array range access not implemented!"));
                                         }
@@ -1417,7 +1417,7 @@ impl<'ast> ZGen<'ast> {
             }));
             blks[blks_len - 1].instructions.push(BlockContent::Store((entry, entry_ty.clone(), arr_extended_name.clone(), index_expr)));
             let ty_mem_op_count = *blks[blks_len - 1].mem_op_by_ty.get(&entry_ty).unwrap_or(&0);
-            blks[blks_len - 1].mem_op_by_ty.insert(entry_ty.clone(), ty_mem_op_count + 1);
+            blks[blks_len - 1].mem_op_by_ty.insert(entry_ty.clone(), ty_mem_op_count + 3);
             index += 1;
         }
         Ok((blks, blks_len))
@@ -1589,7 +1589,7 @@ impl<'ast> ZGen<'ast> {
 
         // if STORE or DUMMY_LOAD, additional entries for 
         // 1. physical address retrieval / dummy retrieval
-        // 2. nullification / dummy nullification
+        // 2. invalidation / dummy invalidation
         if MODE == STORE || MODE == DUMMY_LOAD {
             // Increment label
             next_label += 1;
@@ -1599,7 +1599,7 @@ impl<'ast> ZGen<'ast> {
                 self.stmt_impl_::<false>(&bl_gen_increment_stmt("%w1", 1)).unwrap();
             }
 
-            // NULLIFICATION
+            // INVALIDATION
             // PHY_ADDR as 'a'
             self.circ_declare_input(
                 f,

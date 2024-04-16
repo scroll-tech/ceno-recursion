@@ -155,24 +155,34 @@ impl ZSharpFE {
             }
             // Process physical mems
             for j in 0..state.phy_mem_op.len() {
-                let addr = to_const_value(state.phy_mem_op[j].addr_t.clone())
+                // addr
+                let addr = to_const_value(state.phy_mem_op[j].phy_addr_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 inputs.insert(format!("{}%pm{:06}a{}", prefix, j, suffix), addr);
+                // data
                 let data = to_const_value(state.phy_mem_op[j].data_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 inputs.insert(format!("{}%pm{:06}v{}", prefix, j, suffix), data);
             }
             // Process virtual mems
             for j in 0..state.vir_mem_op.len() {
-                let addr = to_const_value(state.vir_mem_op[j].addr_t.clone())
+                // phy_addr
+                let phy_addr = to_const_value(state.vir_mem_op[j].phy_addr_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                inputs.insert(format!("{}%vm{:06}a{}", prefix, j, suffix), addr);
+                inputs.insert(format!("{}%vm{:06}a{}", prefix, j, suffix), phy_addr);
+                // vir_addr
+                let vir_addr = to_const_value(state.vir_mem_op[j].vir_addr_t.clone().unwrap())
+                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                inputs.insert(format!("{}%vm{:06}b{}", prefix, j, suffix), vir_addr);
+                // data
                 let data = to_const_value(state.vir_mem_op[j].data_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                inputs.insert(format!("{}%vm{:06}b{}", prefix, j, suffix), data);
-                let io = to_const_value(state.vir_mem_op[j].io_t.clone().unwrap())
+                inputs.insert(format!("{}%vm{:06}c{}", prefix, j, suffix), data);
+                // ls
+                let ls = to_const_value(state.vir_mem_op[j].ls_t.clone().unwrap())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                inputs.insert(format!("{}%vm{:06}i{}", prefix, j, suffix), io);
+                inputs.insert(format!("{}%vm{:06}l{}", prefix, j, suffix), ls);
+                // ts
                 let ts = to_const_value(state.vir_mem_op[j].ts_t.clone().unwrap())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 inputs.insert(format!("{}%vm{:06}t{}", prefix, j, suffix), ts);
@@ -181,7 +191,7 @@ impl ZSharpFE {
         }
         let phy_mem_list = phy_mem_list.iter().map(|i|
             (
-                to_const_value(i.addr_t.clone())
+                to_const_value(i.phy_addr_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
                 to_const_value(i.data_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),

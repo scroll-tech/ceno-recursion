@@ -14,15 +14,17 @@ And check:
 
 ## Write-Once Approach
 The write-once memory operations are denoted as a quadruple:
-- `(phy_addr, val, vir_addr, ts)`
+- `(phy_addr, val, vir_addr, ls, ts)`
 During constraint generation, 
 - Virtual address 0 is skipped, AND
 for every STORE:
-- Perform a LOAD to obtain the previous physical address: `phy_addr, val = 0, vir_addr, ts`
+- Perform a LOAD to obtain the previous physical address: `phy_addr, val = 0, vir_addr, ls = LOAD, ts`
 - Increment the timestamp
-- Invalidate the previous physical address: `phy_addr, val = 0, vir_addr = 0, ts`
-- Allocate a new physical address: `phy_addr, val, vir_addr, ts`
-For consistency check, permutate `(phy_addr, val, vir_addr, ts)`:
+- Invalidate the previous physical address: `phy_addr, val = 0, vir_addr = 0, ls = STORE, ts`
+  - Assert that the two `phy_addr` are the same
+- Allocate a new physical address: `phy_addr, val, vir_addr, ls = STORE, ts`
+  - Assert that `phy_addr == ts`
+For consistency check, permutate `(phy_addr, val, vir_addr, ls, ts)`:
 - First by physical address
 - Then by timestamp
 And check:
@@ -30,10 +32,11 @@ And check:
 2. `phy_addr[i] == phy_addr[i+1] => val[i] == val[i+1]`
 3. `phy_addr[i] == phy_addr[i+1] => vir_addr[i] == vir_addr[i+1] || vir_addr[i+1] == 0`
 4. `phy_addr[i] == phy_addr[i+1] => ts[i] <= ts[i+1]`
+5. `phy_addr[i] + 1 == phy_addr[i+1] => ls[i+1] == STORE`
 
 > Note 1: since timestamp is only incremented at STORE, timestamp is the same as the size of the allocated memory
 
-> Note 2: `phy_addr` does not need to be in execution order and does not need to be in the permutation
+> Note 2: `phy_addr[i] == phy_addr[i+1] => ls[i+1] == LOAD` is unsound for step 5, because the prover can allocate a new physical address for every READ
 
 ## Lazy Approach
 For every memory operation at execution time, introduce the following triple:

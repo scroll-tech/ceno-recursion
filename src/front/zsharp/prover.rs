@@ -168,7 +168,8 @@ impl<'ast> ZGen<'ast> {
         Vec<usize>, // Block ID
         Vec<Option<T>>, // Program input state
         Vec<ExecState>, // Block output states
-        Vec<MemOp> // Memory operations
+        Vec<MemOp>, // Physical Memory operations
+        Vec<MemOp> // Virtual Memory operations
     ), String> {
         if bls.len() < entry_bl {
             return Err(format!("Invalid entry_bl: entry_bl exceeds block size."));
@@ -338,7 +339,7 @@ impl<'ast> ZGen<'ast> {
         ));
 
         let (phy_mem_list, vir_mem_list) = sort_by_mem(&bl_exec_state);
-        Ok((ret?, bl_exec_count, prog_reg_in, bl_exec_state, phy_mem_list))
+        Ok((ret?, bl_exec_count, prog_reg_in, bl_exec_state, phy_mem_list, vir_mem_list))
     }
 
     // Convert a usize into a Field value
@@ -459,7 +460,7 @@ impl<'ast> ZGen<'ast> {
                         old_phy_addr,
                         old_phy_addr_t,
                         self.usize_to_field(0)?,
-                        old_data_t, // value of data_t doesn't matter
+                        old_data_t, // keep value of data_t the same
                         self.usize_to_field(STORE)?,
                         ts,
                         ts_t.clone()

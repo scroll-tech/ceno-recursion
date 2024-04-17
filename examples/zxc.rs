@@ -10,6 +10,7 @@ use bellman::Circuit;
 use bls12_381::{Bls12, Scalar};
 */
 use core::cmp::min;
+use std::char::MAX;
 use rug::Integer;
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
@@ -38,6 +39,8 @@ use core::cmp::Ordering;
 const NUM_RESERVED_VARS: usize = 6;
 // Which index in the output (INCLUDING V) denotes %RET?
 const OUTPUT_OFFSET: usize = 2;
+// What is the maximum width (# of bits) of %TS?
+const MAX_TS_WIDTH: usize = 12;
 
 #[derive(Debug, Parser)]
 #[command(name = "zxc", about = "CirC: the circuit compiler")]
@@ -187,7 +190,9 @@ struct CompileTimeKnowledge {
     num_vars: usize,
     num_inputs_unpadded: usize,
     num_vars_per_block: Vec<usize>,
-    block_num_mem_accesses: Vec<(usize, usize)>,
+    block_num_phy_mem_accesses: Vec<usize>,
+    block_num_vir_mem_accesses: Vec<usize>,
+    max_ts_width: usize,
   
     args: Vec<Vec<(Vec<(usize, Integer)>, Vec<(usize, Integer)>, Vec<(usize, Integer)>)>>,
   
@@ -209,10 +214,15 @@ impl CompileTimeKnowledge {
             write!(&mut f, "{} ", i)?;
         }
         writeln!(&mut f, "")?;
-        for i in &self.block_num_mem_accesses {
-            write!(&mut f, "{} ", i.0)?;
+        for i in &self.block_num_phy_mem_accesses {
+            write!(&mut f, "{} ", i)?;
         }
         writeln!(&mut f, "")?;
+        for i in &self.block_num_vir_mem_accesses {
+            write!(&mut f, "{} ", i)?;
+        }
+        writeln!(&mut f, "")?;
+        writeln!(&mut f, "{}", self.max_ts_width)?;
 
         // Instances
         let mut counter = 0;
@@ -275,12 +285,14 @@ struct RunTimeKnowledge {
     block_max_num_proofs: usize,
     block_num_proofs: Vec<usize>,
     consis_num_proofs: usize,
-    total_num_mem_accesses: usize,
+    total_num_phy_mem_accesses: usize,
+    total_num_vir_mem_accesses: usize,
   
     block_vars_matrix: Vec<Vec<VarsAssignment>>,
     block_inputs_matrix: Vec<Vec<InputsAssignment>>,
     exec_inputs: Vec<InputsAssignment>,
-    addr_mems_list: Vec<MemsAssignment>,
+    addr_phy_mems_list: Vec<MemsAssignment>,
+    addr_vir_mems_list: Vec<MemsAssignment>,
   
     input: Assignment,
     // Output can only have one entry
@@ -298,7 +310,8 @@ impl RunTimeKnowledge {
         }
         writeln!(&mut f, "")?;
         writeln!(&mut f, "{}", self.consis_num_proofs)?;
-        writeln!(&mut f, "{}", self.total_num_mem_accesses)?;
+        writeln!(&mut f, "{}", self.total_num_phy_mem_accesses)?;
+        writeln!(&mut f, "{}", self.total_num_vir_mem_accesses)?;
 
         writeln!(&mut f, "BLOCK_VARS")?;
         let mut block_counter = 0;
@@ -331,9 +344,16 @@ impl RunTimeKnowledge {
             exec.write(&mut f)?;
             exec_counter += 1;
         }
-        writeln!(&mut f, "ADDR_MEMS")?;
+        writeln!(&mut f, "ADDR_PHY_MEMS")?;
         let mut addr_counter = 0;
-        for addr in &self.addr_mems_list {
+        for addr in &self.addr_phy_mems_list {
+            writeln!(&mut f, "ACCESS {}", addr_counter)?;
+            addr.write(&mut f)?;
+            addr_counter += 1;
+        }
+        writeln!(&mut f, "ADDR_VIR_MEMS")?;
+        let mut addr_counter = 0;
+        for addr in &self.addr_vir_mems_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
             addr.write(&mut f)?;
             addr_counter += 1;
@@ -586,7 +606,9 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         num_vars,
         num_inputs_unpadded,
         num_vars_per_block,
-        block_num_mem_accesses,
+        block_num_phy_mem_accesses: block_num_mem_accesses.iter().map(|i| i.0).collect(),
+        block_num_vir_mem_accesses: block_num_mem_accesses.iter().map(|i| i.1).collect(),
+        max_ts_width: MAX_TS_WIDTH,
         args,
         func_input_width,
         input_offset: NUM_RESERVED_VARS,
@@ -618,7 +640,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     // bl_io_map maps name of io variables to their values
     // bl_outputs are used to fill in io part of vars
     // bl_io_map is used to compute witness part of vars
-    let (_, block_id_list, bl_outputs_list, bl_mems_list, bl_io_map_list, phy_mem_list) = {
+    let (_, block_id_list, bl_outputs_list, bl_mems_list, bl_io_map_list, phy_mem_list, vir_mem_list) = {
         let inputs = zsharp::Inputs {
             file: path,
             mode: Mode::Proof
@@ -641,7 +663,8 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         }
         consis_num_proofs += 1;
     }
-    let total_num_mem_accesses = phy_mem_list.len();
+    let total_num_phy_mem_accesses = phy_mem_list.len();
+    let total_num_vir_mem_accesses = vir_mem_list.len();
     let output_exec_num = block_id_list.len() - 1;
 
     // num_blocks_live is # of non-zero entries in block_num_proofs
@@ -765,24 +788,48 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         block_inputs_matrix[slot].push(inputs_assignment);
     }
 
-    // Memory: valid, dummy, addr, val
-    let mut addr_mems_list = Vec::new();
-    let mut mem_last = vec![one.clone(); 4];
+    // Physical Memory: valid, D, addr, data
+    let mut addr_phy_mems_list = Vec::new();
+    let mut phy_mem_last = vec![one.clone(); 4];
     for i in 0..phy_mem_list.len() {
         let m = &phy_mem_list[i];
         let mut mem: Vec<Integer> = vec![zero.clone(); 4];
         mem[0] = one.clone();
         mem[2] = m.0.as_integer().unwrap();
         mem[3] = m.1.as_integer().unwrap();
-        // backend requires the 3rd entry to be v[k + 1] * (1 - addr[k + 1] + addr[k])
+        // backend requires the 1st entry to be v[k + 1] * (1 - addr[k + 1] + addr[k])
         if i != 0 {
-            mem_last[1] = mem[0].clone() * (one.clone() - mem[2].clone() + mem_last[2].clone());
-            addr_mems_list.push(Assignment::new(mem_last.iter().map(|i| integer_to_bytes(i.clone())).collect()));
+            phy_mem_last[1] = mem[0].clone() * (one.clone() - mem[2].clone() + phy_mem_last[2].clone());
+            addr_phy_mems_list.push(Assignment::new(phy_mem_last.iter().map(|i| integer_to_bytes(i.clone())).collect()));
         }
         if i == phy_mem_list.len() - 1 {
-            addr_mems_list.push(Assignment::new(mem.iter().map(|i| integer_to_bytes(i.clone())).collect()));
+            addr_phy_mems_list.push(Assignment::new(mem.iter().map(|i| integer_to_bytes(i.clone())).collect()));
         } else {
-            mem_last = mem;
+            phy_mem_last = mem;
+        }
+    }
+
+    // Virtual Memory: valid, D1, phy_addr, vir_addr, data, ls, ts, _
+    let mut addr_vir_mems_list = Vec::new();
+    let mut vir_mem_last = vec![one.clone(); 8];
+    for i in 0..vir_mem_list.len() {
+        let m = &vir_mem_list[i];
+        let mut mem: Vec<Integer> = vec![zero.clone(); 8];
+        mem[0] = one.clone();
+        mem[2] = m[0].as_integer().unwrap();
+        mem[3] = m[1].as_integer().unwrap();
+        mem[4] = m[2].as_integer().unwrap();
+        mem[5] = m[3].as_integer().unwrap();
+        mem[6] = m[4].as_integer().unwrap();
+        // backend requires the 1st entry to be v[k + 1] * (1 - phy_addr[k + 1] + phy_addr[k])
+        if i != 0 {
+            vir_mem_last[1] = mem[0].clone() * (one.clone() - mem[2].clone() + vir_mem_last[2].clone());
+            addr_vir_mems_list.push(Assignment::new(vir_mem_last.iter().map(|i| integer_to_bytes(i.clone())).collect()));
+        }
+        if i == vir_mem_list.len() - 1 {
+            addr_vir_mems_list.push(Assignment::new(mem.iter().map(|i| integer_to_bytes(i.clone())).collect()));
+        } else {
+            vir_mem_last = mem;
         }
     }
 
@@ -808,12 +855,14 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         block_max_num_proofs,
         block_num_proofs,
         consis_num_proofs,
-        total_num_mem_accesses,
+        total_num_phy_mem_accesses,
+        total_num_vir_mem_accesses,
       
         block_vars_matrix,
         block_inputs_matrix,
         exec_inputs,
-        addr_mems_list,
+        addr_phy_mems_list,
+        addr_vir_mems_list,
       
         input: func_inputs,
         output: func_outputs,

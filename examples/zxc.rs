@@ -11,6 +11,7 @@ use bls12_381::{Bls12, Scalar};
 */
 use core::cmp::min;
 use std::char::MAX;
+use core::cmp::max;
 use rug::Integer;
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
@@ -40,7 +41,7 @@ const NUM_RESERVED_VARS: usize = 6;
 // Which index in the output (INCLUDING V) denotes %RET?
 const OUTPUT_OFFSET: usize = 2;
 // What is the maximum width (# of bits) of %TS?
-const MAX_TS_WIDTH: usize = 12;
+const MAX_TS_WIDTH: usize = 4;
 
 #[derive(Debug, Parser)]
 #[command(name = "zxc", about = "CirC: the circuit compiler")]
@@ -293,6 +294,7 @@ struct RunTimeKnowledge {
     exec_inputs: Vec<InputsAssignment>,
     addr_phy_mems_list: Vec<MemsAssignment>,
     addr_vir_mems_list: Vec<MemsAssignment>,
+    addr_ts_bits_list: Vec<MemsAssignment>,
   
     input: Assignment,
     // Output can only have one entry
@@ -354,6 +356,13 @@ impl RunTimeKnowledge {
         writeln!(&mut f, "ADDR_VIR_MEMS")?;
         let mut addr_counter = 0;
         for addr in &self.addr_vir_mems_list {
+            writeln!(&mut f, "ACCESS {}", addr_counter)?;
+            addr.write(&mut f)?;
+            addr_counter += 1;
+        }
+        writeln!(&mut f, "ADDR_VM_BITS")?;
+        let mut addr_counter = 0;
+        for addr in &self.addr_ts_bits_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
             addr.write(&mut f)?;
             addr_counter += 1;
@@ -809,28 +818,59 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         }
     }
 
+    let vm_width = max(2 * 8, (MAX_TS_WIDTH + 4).next_power_of_two()) / 2;
     // Virtual Memory: valid, D1, phy_addr, vir_addr, data, ls, ts, _
     let mut addr_vir_mems_list = Vec::new();
-    let mut vir_mem_last = vec![one.clone(); 8];
+    let mut vir_mem_last: Vec<Integer> = Vec::new();
+    // TS Bits: D2, D3, D4, EQ, B0, B1, ...
+    let mut addr_ts_bits_list = Vec::new();
+    let mut ts_bits_last: Vec<Integer> = Vec::new();
     for i in 0..vir_mem_list.len() {
         let m = &vir_mem_list[i];
-        let mut mem: Vec<Integer> = vec![zero.clone(); 8];
+        
+        let mut mem: Vec<Integer> = vec![zero.clone(); vm_width];
         mem[0] = one.clone();
         mem[2] = m[0].as_integer().unwrap();
         mem[3] = m[1].as_integer().unwrap();
         mem[4] = m[2].as_integer().unwrap();
         mem[5] = m[3].as_integer().unwrap();
         mem[6] = m[4].as_integer().unwrap();
-        // backend requires the 1st entry to be v[k + 1] * (1 - phy_addr[k + 1] + phy_addr[k])
+        
+        let ts_bits: Vec<Integer> = vec![zero.clone(); 2 * vm_width];
+        // D1, D2, D3, D4
         if i != 0 {
+            // D1[k] = v[k + 1] * (1 - phy_addr[k + 1] + phy_addr[k])
             vir_mem_last[1] = mem[0].clone() * (one.clone() - mem[2].clone() + vir_mem_last[2].clone());
+            // D2[k] = v[k + 1] * (pa[k + 1] - pa[k])
+            ts_bits_last[0] = mem[0].clone() * (mem[2].clone() - vir_mem_last[2].clone());
+            // D3[k] = D1[k] * (vir_addr[k + 1] - vir_addr[k])
+            ts_bits_last[1] = vir_mem_last[1].clone() * (mem[3].clone() - vir_mem_last[3].clone());
+            // D4[k] = D1[k] * (ts[k + 1] - ts[k])
+            let mut d4 = vir_mem_last[1].clone() * (mem[6].clone() - vir_mem_last[6].clone());
+            ts_bits_last[2] = d4.clone();
+            // Bits for ts_bits_last[3..]
+            if d4 != 0 {
+                // EQ = 1
+                ts_bits_last[3] = Integer::from(1);
+                // Use bits to assemble D4 - 1
+                d4 -= 1;
+                for i in 0..MAX_TS_WIDTH {
+                    ts_bits_last[4 + i] = d4.clone() % 2;
+                    d4 /= 2;
+                }
+            }
             addr_vir_mems_list.push(Assignment::new(vir_mem_last.iter().map(|i| integer_to_bytes(i.clone())).collect()));
+            addr_ts_bits_list.push(Assignment::new(ts_bits_last.iter().map(|i| integer_to_bytes(i.clone())).collect()));
         }
         if i == vir_mem_list.len() - 1 {
             addr_vir_mems_list.push(Assignment::new(mem.iter().map(|i| integer_to_bytes(i.clone())).collect()));
+            addr_ts_bits_list.push(Assignment::new(ts_bits.iter().map(|i| integer_to_bytes(i.clone())).collect()));
         } else {
             vir_mem_last = mem;
+            ts_bits_last = ts_bits;
         }
+
+        
     }
 
     if VERBOSE {
@@ -863,6 +903,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         exec_inputs,
         addr_phy_mems_list,
         addr_vir_mems_list,
+        addr_ts_bits_list,
       
         input: func_inputs,
         output: func_outputs,

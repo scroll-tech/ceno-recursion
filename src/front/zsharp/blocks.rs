@@ -23,6 +23,7 @@ use crate::front::zsharp::*;
 const LOAD: usize = 0;
 const STORE: usize = 1;
 const DUMMY_LOAD: usize = 2;
+const INIT_STORE: usize = 3;
 
 fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast>) -> Expression<'ast> {
     let ce = Expression::Binary(BinaryExpression {
@@ -161,8 +162,8 @@ pub enum BlockContent<'ast> {
     MemPop((String, Ty, usize)),  // val = %PHY[%BP + offset]
     //          arr   type  size, assume only one dimensional
     ArrayInit((String, Ty, usize)),   
-    //     val_expr         type   arr   id_expr
-    Store((Expression<'ast>, Ty, String, Expression<'ast>)), // arr[id] = val
+    //     val_expr         type   arr   id_expr           init?
+    Store((Expression<'ast>, Ty, String, Expression<'ast>, bool)), // arr[id] = val
     //    var    type   arr   id_expr
     Load((String, Ty, String, Expression<'ast>)),  // val = arr[id]
     // DummyLoad(Ty),
@@ -255,7 +256,14 @@ impl<'ast> Block<'ast> {
                 BlockContent::MemPush((val, ty, offset)) => { println!("    %PHY[%SP + {offset}] = {} <{ty}>", pretty_name(val)) }
                 BlockContent::MemPop((val, ty, offset)) => { println!("    {ty} {} = %PHY[%BP + {offset}]", pretty_name(val)) }
                 BlockContent::ArrayInit((arr, ty, size)) => { println!("    {ty}[{size}] {arr}") }
-                BlockContent::Store((val, ty, arr, id)) => { print!("    {arr}["); pretty_expr::<false>(&id); print!("] = "); pretty_expr::<false>(&val); println!(" <{ty}>"); }
+                BlockContent::Store((val, ty, arr, id, init)) => { 
+                    print!("    {arr}["); 
+                    pretty_expr::<false>(&id); print!("] = "); 
+                    pretty_expr::<false>(&val); 
+                    print!(" <{ty}>");
+                    if *init { print!(", init"); }
+                    println!(); 
+                }
                 BlockContent::Load((val, ty, arr, id)) => { print!("    {ty} {} = {arr}[", pretty_name(val)); pretty_expr::<false>(&id); println!("]"); }
                 BlockContent::Stmt(s) => { pretty_stmt(1, &s); }
             }
@@ -1057,7 +1065,7 @@ impl<'ast> ZGen<'ast> {
                 // If array_init_info is defined, then the RHS must be the same array
                 if array_init_info.len() > 0 {
                     if let Some(l) = d.lhs.first() {
-                        let lhs_id = match l {
+                        let (lhs_id, is_declare) = match l {
                             TypedIdentifierOrAssignee::TypedIdentifier(l) => {
                                 let decl_ty = self.type_impl_::<false>(&l.ty)?;
                                 let ty = e.type_();
@@ -1080,17 +1088,19 @@ impl<'ast> ZGen<'ast> {
                                 // Declare array
                                 if let Ty::Array(size, entry_ty) = decl_ty {
                                     blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name.clone(), *entry_ty.clone(), size)));
+                                    // Cannot shadow an array (for now)
+                                    assert!(!var_scope_info.arr_map.contains_key(&arr_extended_name));
                                     var_scope_info.arr_map.insert(arr_extended_name.clone(), *entry_ty.clone());
                                 }
-                                arr_extended_name
+                                (arr_extended_name, true)
                             }
                             TypedIdentifierOrAssignee::Assignee(l) => {
                                 // Array is already declared
                                 let arr_extended_name = var_scope_info.reference_var(&l.id.value.clone(), f_name)?;
-                                arr_extended_name
+                                (arr_extended_name, false)
                             }
                         };
-                        (blks, blks_len) = self.bl_gen_array_init_(blks, blks_len, lhs_id, array_init_info, &var_scope_info)?;
+                        (blks, blks_len) = self.bl_gen_array_init_(blks, blks_len, lhs_id, array_init_info, &var_scope_info, is_declare)?;
                     } else {
                         warn!("Statement with no LHS!");
                     }
@@ -1122,7 +1132,7 @@ impl<'ast> ZGen<'ast> {
                                             (blks, blks_len, var_scope_info, new_e, _, _, tmp_arr_info) = 
                                                 self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, var_scope_info)?;
                                             if tmp_arr_info.len() > 0 { panic!("Currently do not support array initialization inside array indices") }
-                                            blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), *entry_ty.clone(), new_l, new_e)));
+                                            blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), *entry_ty.clone(), new_l, new_e, false)));
                                             let ty_mem_op_count = *blks[blks_len - 1].mem_op_by_ty.get(&entry_ty).unwrap_or(&0);
                                             blks[blks_len - 1].mem_op_by_ty.insert(*entry_ty.clone(), ty_mem_op_count + 3);
                                         } else {
@@ -1400,7 +1410,8 @@ impl<'ast> ZGen<'ast> {
         blks_len: usize,
         arr_extended_name: String,
         array_init_info: Vec<Expression<'ast>>,
-        var_scope_info: &VarScopeInfo
+        var_scope_info: &VarScopeInfo,
+        is_declare: bool // if is_declare, then array is being initialized
     ) -> Result<(Vec<Block>, usize), String> {
         let mut index = 0;
         let entry_ty = var_scope_info.arr_map.get(&arr_extended_name).ok_or_else(|| format!("Assignment failed: no array {}", &arr_extended_name))?;
@@ -1415,9 +1426,9 @@ impl<'ast> ZGen<'ast> {
                 })),
                 span: Span::new("", 0, 0).unwrap()
             }));
-            blks[blks_len - 1].instructions.push(BlockContent::Store((entry, entry_ty.clone(), arr_extended_name.clone(), index_expr)));
+            blks[blks_len - 1].instructions.push(BlockContent::Store((entry, entry_ty.clone(), arr_extended_name.clone(), index_expr, is_declare)));
             let ty_mem_op_count = *blks[blks_len - 1].mem_op_by_ty.get(&entry_ty).unwrap_or(&0);
-            blks[blks_len - 1].mem_op_by_ty.insert(entry_ty.clone(), ty_mem_op_count + 3);
+            blks[blks_len - 1].mem_op_by_ty.insert(entry_ty.clone(), ty_mem_op_count + if is_declare {1} else {3});
             index += 1;
         }
         Ok((blks, blks_len))
@@ -1491,7 +1502,7 @@ impl<'ast> ZGen<'ast> {
     }
 
     // Convert a virtual memory operation to circ_ir
-    // MODE: LOAD, STORE, DUMMY_LOAD
+    // MODE: LOAD, STORE, DUMMY_LOAD, INIT_STORE
     fn vir_mem_to_circ<const MODE: usize>(
         &'ast self,
         f: &str,
@@ -1511,95 +1522,95 @@ impl<'ast> ZGen<'ast> {
         // For LOAD, this is to obtain the value
         // For STORE, this is to obtain the physical memory
         // For DUMMY_LOAD, this does nothing
-        // PHY_ADDR as 'a'
-        self.circ_declare_input(
-            f,
-            format!("%vm{:06}a", next_label),
-            &Ty::Field,
-            ZVis::Private(0),
-            None,
-            true,
-        ).unwrap();
-        // VIR_ADDR as 'b'
-        self.circ_declare_input(
-            f,
-            format!("%vm{:06}b", next_label),
-            ty,
-            ZVis::Private(0),
-            None,
-            true,
-        ).unwrap();
-        // VAL as 'c'
-        self.circ_declare_input(
-            f,
-            format!("%vm{:06}c", next_label),
-            ty,
-            ZVis::Private(0),
-            None,
-            true,
-        ).unwrap();
-        // LS as 'l'
-        self.circ_declare_input(
-            f,
-            format!("%vm{:06}l", next_label),
-            &Ty::Field,
-            ZVis::Private(0),
-            None,
-            true,
-        ).unwrap();
-        // TS as 't'
-        self.circ_declare_input(
-            f,
-            format!("%vm{:06}t", next_label),
-            &Ty::Field,
-            ZVis::Private(0),
-            None,
-            true,
-        ).unwrap();
-        // VIR_ADDR if exist
-        if let Some(addr_expr) = id_expr {
-            // lhs_t + offset_t == rhs_t
-            let mut lhs_t = self.expr_impl_::<false>(&addr_expr).unwrap();
-            // if lhs_t is not a field, cast it to a field
-            if lhs_t.type_() != &Ty::Field {
-                lhs_t = uint_to_field(lhs_t).unwrap();
+        // For INIT_STORE, skip
+        if MODE == LOAD || MODE == STORE || MODE == DUMMY_LOAD {
+            // PHY_ADDR as 'a'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}a", next_label),
+                &Ty::Field,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+            // VIR_ADDR as 'b'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}b", next_label),
+                ty,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+            // VAL as 'c'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}c", next_label),
+                ty,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+            // LS as 'l'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}l", next_label),
+                &Ty::Field,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+            // TS as 't'
+            self.circ_declare_input(
+                f,
+                format!("%vm{:06}t", next_label),
+                &Ty::Field,
+                ZVis::Private(0),
+                None,
+                true,
+            ).unwrap();
+            // VIR_ADDR if exist
+            if let Some(addr_expr) = id_expr {
+                // lhs_t + offset_t == rhs_t
+                let mut lhs_t = self.expr_impl_::<false>(&addr_expr).unwrap();
+                // if lhs_t is not a field, cast it to a field
+                if lhs_t.type_() != &Ty::Field {
+                    lhs_t = uint_to_field(lhs_t).unwrap();
+                }
+                let offset_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                    value: DecimalNumber {
+                        value: array_offset_map.get(arr.unwrap()).unwrap().to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    span: Span::new("", 0, 0).unwrap()
+                }))).unwrap();
+                let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                    value: format!("%vm{:06}b", next_label),
+                    span: Span::new("", 0, 0).unwrap()
+                })).unwrap();
+                let b = bool(eq(add(lhs_t, offset_t).unwrap(), rhs_t).unwrap()).unwrap();
+                self.assert(b);
             }
-            let offset_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: array_offset_map.get(arr.unwrap()).unwrap().to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            }))).unwrap();
-            let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                value: format!("%vm{:06}b", next_label),
-                span: Span::new("", 0, 0).unwrap()
-            })).unwrap();
-            let b = bool(eq(add(lhs_t, offset_t).unwrap(), rhs_t).unwrap()).unwrap();
-            self.assert(b);
+
+            // LS
+            self.bl_gen_assert_const(&format!("%vm{:06}l", next_label), LOAD);
+            // TS
+            self.bl_gen_assert_eq(&format!("%w1"), &format!("%vm{:06}t", next_label));
         }
 
-        // LS
-        self.bl_gen_assert_const(&format!("%vm{:06}l", next_label), LOAD);
-        // TS
-        self.bl_gen_assert_eq(&format!("%w1"), &format!("%vm{:06}t", next_label));
+        // INCREMENT TIMESTAMP
+        if MODE == STORE || MODE == INIT_STORE {
+            self.stmt_impl_::<false>(&bl_gen_increment_stmt("%w1", 1)).unwrap();
+        }
 
-        // if STORE or DUMMY_LOAD, additional entries for 
-        // 1. physical address retrieval / dummy retrieval
-        // 2. invalidation / dummy invalidation
+        // INVALIDATION
         if MODE == STORE || MODE == DUMMY_LOAD {
             // Increment label
             next_label += 1;
 
-            // If STORE, increment timestamp
-            if MODE == STORE {
-                self.stmt_impl_::<false>(&bl_gen_increment_stmt("%w1", 1)).unwrap();
-            }
-
-            // INVALIDATION
             // PHY_ADDR as 'a'
             self.circ_declare_input(
                 f,
@@ -1659,8 +1670,10 @@ impl<'ast> ZGen<'ast> {
 
             // Increment next_label
             next_label += 1;
-
-            // ALLOCATION
+        }
+        
+        // ALLOCATION
+        if MODE == STORE || MODE == DUMMY_LOAD || MODE == INIT_STORE {
             // PHY_ADDR as 'a'
             self.circ_declare_input(
                 f,
@@ -1707,8 +1720,8 @@ impl<'ast> ZGen<'ast> {
                 true,
             ).unwrap();
 
-            // If STORE, PHY_ADDR matches with TS
-            if MODE == STORE {
+            // If STORE or INIT_STORE, PHY_ADDR matches with TS
+            if MODE == STORE || MODE == INIT_STORE {
                 self.bl_gen_assert_eq(&format!("%w1"), &format!("%vm{:06}a", next_label));    
             }
 
@@ -1738,7 +1751,7 @@ impl<'ast> ZGen<'ast> {
                 self.assert(b);
             }
             // LS
-            self.bl_gen_assert_const(&format!("%vm{:06}l", next_label), if MODE == STORE { STORE } else { LOAD });
+            self.bl_gen_assert_const(&format!("%vm{:06}l", next_label), if MODE == STORE || MODE == INIT_STORE { STORE } else { LOAD });
             // TS
             self.bl_gen_assert_eq(&format!("%w1"), &format!("%vm{:06}t", next_label));
         }
@@ -1918,19 +1931,30 @@ impl<'ast> ZGen<'ast> {
                     phy_mem_op_count += 1;  
                 }
                 BlockContent::ArrayInit(_) => {}
-                BlockContent::Store((val_expr, ty, arr, id_expr)) => {
+                BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
                     if ESTIMATE {}
                     else {
                         let next_label: usize;
                         // ADDR, IO, & TS
-                        (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<STORE>(
-                            f,
-                            ty_mem_op_offset,
-                            array_offset_map,
-                            &ty,
-                            Some(&arr),
-                            Some(&id_expr)
-                        );
+                        if *init {
+                            (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<INIT_STORE>(
+                                f,
+                                ty_mem_op_offset,
+                                array_offset_map,
+                                &ty,
+                                Some(&arr),
+                                Some(&id_expr)
+                            );
+                        } else {
+                            (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<STORE>(
+                                f,
+                                ty_mem_op_offset,
+                                array_offset_map,
+                                &ty,
+                                Some(&arr),
+                                Some(&id_expr)
+                            );
+                        }
                         // Assert correctness of VAL
                         let lhs_t = self.expr_impl_::<false>(&val_expr).unwrap();
                         let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {

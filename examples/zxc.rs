@@ -818,7 +818,6 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         }
     }
 
-    let vm_width = max(2 * 8, (MAX_TS_WIDTH + 4).next_power_of_two()) / 2;
     // Virtual Memory: valid, D1, phy_addr, vir_addr, data, ls, ts, _
     let mut addr_vir_mems_list = Vec::new();
     let mut vir_mem_last: Vec<Integer> = Vec::new();
@@ -828,7 +827,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     for i in 0..vir_mem_list.len() {
         let m = &vir_mem_list[i];
         
-        let mut mem: Vec<Integer> = vec![zero.clone(); vm_width];
+        let mut mem: Vec<Integer> = vec![zero.clone(); 8];
         mem[0] = one.clone();
         mem[2] = m[0].as_integer().unwrap();
         mem[3] = m[1].as_integer().unwrap();
@@ -836,7 +835,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         mem[5] = m[3].as_integer().unwrap();
         mem[6] = m[4].as_integer().unwrap();
         
-        let ts_bits: Vec<Integer> = vec![zero.clone(); 2 * vm_width];
+        let ts_bits: Vec<Integer> = vec![zero.clone(); (MAX_TS_WIDTH + 4).next_power_of_two()];
         // D1, D2, D3, D4
         if i != 0 {
             // D1[k] = v[k + 1] * (1 - phy_addr[k + 1] + phy_addr[k])
@@ -869,8 +868,6 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             vir_mem_last = mem;
             ts_bits_last = ts_bits;
         }
-
-        
     }
 
     if VERBOSE {

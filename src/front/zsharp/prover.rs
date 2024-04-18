@@ -414,14 +414,11 @@ impl<'ast> ZGen<'ast> {
                     assert!(!vir_mem_tlb.contains_key(arr));
                     vir_mem_tlb.insert(arr.clone(), vec![None; *size]);
                 }
-                BlockContent::Store((val_expr, ty, arr, id_expr)) => {
+                BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
+                    let mut next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
                     // index
                     let mut id_t = self.expr_impl_::<true>(&id_expr)?;
                     let id = self.t_to_usize(id_t.clone())?;
-                    // old physical address
-                    // If the cell is never initialized, set old physical address to 0
-                    let old_phy_addr = if let Some(a) = vir_mem_tlb.get_mut(arr).ok_or(format!("STORE failed: array {} does not exist.", arr))?[id] { a } else { 0 };
-                    let old_phy_addr_t = self.usize_to_field(old_phy_addr)?;
                     // virtual address
                     let offset = array_offset_map.get(arr).unwrap();
                     let offset_t = self.usize_to_field(*offset)?;
@@ -429,45 +426,58 @@ impl<'ast> ZGen<'ast> {
                         id_t = uint_to_field(id_t).unwrap();
                     }
                     let vir_addr_t = add(id_t, offset_t).unwrap();
-                    // data
-                    let old_data_t = vir_mem[old_phy_addr].clone();
+                    // new data
                     let new_data_t = self.expr_impl_::<true>(&val_expr)?;
 
-                    // RETRIEVAL
-                    // Update vir_mem_op
-                    let mut next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
-                    let ts_t = self.cvar_lookup("%w1").ok_or(format!("STORE failed: %TS is uninitialized."))?;
-                    let ts = self.t_to_usize(ts_t.clone())?;
-                    vir_mem_op[next_label] = Some(MemOp::new_vir(
-                        old_phy_addr,
-                        old_phy_addr_t.clone(),
-                        vir_addr_t.clone(),
-                        old_data_t.clone(),
-                        self.usize_to_field(LOAD)?,
-                        ts,
-                        ts_t
-                    ));
+                    if !init {
+                        // old physical address
+                        // If the cell is never initialized, set old physical address to 0
+                        let old_phy_addr = vir_mem_tlb.get_mut(arr).ok_or(format!("STORE failed: array {} does not exist.", arr))?[id].unwrap();
+                        let old_phy_addr_t = self.usize_to_field(old_phy_addr)?;
+                        // old data
+                        let old_data_t = vir_mem[old_phy_addr].clone();
+                        // ts
+                        let ts_t = self.cvar_lookup("%w1").ok_or(format!("STORE failed: %TS is uninitialized."))?;
+                        let ts = self.t_to_usize(ts_t.clone())?;
 
-                    // %TS = %TS + 1
-                    self.bl_eval_stmt_impl_(&bl_gen_increment_stmt("%w1", 1)).unwrap();
+                        // RETRIEVAL
+                        // Update vir_mem_op
+                        vir_mem_op[next_label] = Some(MemOp::new_vir(
+                            old_phy_addr,
+                            old_phy_addr_t.clone(),
+                            vir_addr_t.clone(),
+                            old_data_t.clone(),
+                            self.usize_to_field(LOAD)?,
+                            ts,
+                            ts_t
+                        ));
+                        next_label = next_label + 1;
 
-                    // INVALIDATE
-                    // Update vir_mem_op
-                    next_label = next_label + 1;
-                    let ts_t = self.cvar_lookup("%w1").ok_or(format!("STORE failed: %TS is uninitialized."))?;
-                    let ts = self.t_to_usize(ts_t.clone())?;
-                    vir_mem_op[next_label] = Some(MemOp::new_vir(
-                        old_phy_addr,
-                        old_phy_addr_t,
-                        self.usize_to_field(0)?,
-                        old_data_t, // keep value of data_t the same
-                        self.usize_to_field(STORE)?,
-                        ts,
-                        ts_t.clone()
-                    ));
+                        // %TS = %TS + 1
+                        self.bl_eval_stmt_impl_(&bl_gen_increment_stmt("%w1", 1)).unwrap();
+                        let ts_t = self.cvar_lookup("%w1").ok_or(format!("STORE failed: %TS is uninitialized."))?;
+                        let ts = self.t_to_usize(ts_t.clone())?;
+
+                        // INVALIDATE
+                        // Update vir_mem_op
+                        vir_mem_op[next_label] = Some(MemOp::new_vir(
+                            old_phy_addr,
+                            old_phy_addr_t,
+                            self.usize_to_field(0)?,
+                            old_data_t, // keep value of data_t the same
+                            self.usize_to_field(STORE)?,
+                            ts,
+                            ts_t
+                        ));
+                        next_label = next_label + 1;
+                    } else {
+                        // %TS = %TS + 1
+                        self.bl_eval_stmt_impl_(&bl_gen_increment_stmt("%w1", 1)).unwrap();
+                    }
 
                     // ALLOCATE
-                    next_label = next_label + 1;
+                    let ts_t = self.cvar_lookup("%w1").ok_or(format!("STORE failed: %TS is uninitialized."))?;
+                    let ts = self.t_to_usize(ts_t.clone())?;
                     // the next physical address is the same as the timestamp
                     let new_phy_addr = ts;
                     let new_phy_addr_t = ts_t.clone();

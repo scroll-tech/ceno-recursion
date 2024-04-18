@@ -1325,7 +1325,7 @@ impl<'ast> ZGen<'ast> {
                             state.remove(arr);
                         }
                         // If there is a store, then index and value are alive if array is alive
-                        BlockContent::Store((val_expr, _, arr, id_expr)) => {
+                        BlockContent::Store((val_expr, _, arr, id_expr, _)) => {
                             if is_alive(&state, arr) {
                                 let gen = expr_find_val(val_expr);
                                 state = la_gen(state, &gen);
@@ -1422,7 +1422,7 @@ impl<'ast> ZGen<'ast> {
                             state.remove(arr);
                         }
                         // If there is a store, then keep the statement if array is alive
-                        BlockContent::Store((val_expr, _, arr, id_expr)) => {
+                        BlockContent::Store((val_expr, _, arr, id_expr, _)) => {
                             if is_alive(&state, arr) {
                                 new_instructions.insert(0, i.clone());
                                 let gen = expr_find_val(val_expr);
@@ -1568,7 +1568,7 @@ impl<'ast> ZGen<'ast> {
                         // Arrays are not part of block IOs, don't reason about array liveness
                         BlockContent::ArrayInit(_) => {}
                         // If there is an array access, then %TS is alive
-                        BlockContent::Store((val_expr, _, _, id_expr)) => {
+                        BlockContent::Store((val_expr, _, _, id_expr, _)) => {
                             let gen = expr_find_val(val_expr);
                             state.extend(gen);
                             let gen = expr_find_val(id_expr);
@@ -2933,12 +2933,12 @@ impl<'ast> ZGen<'ast> {
                     BlockContent::ArrayInit(_) => {
                         new_instr.push(s.clone())
                     }
-                    BlockContent::Store((val_expr, ty, arr, id_expr)) => {
+                    BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
                         let new_val_expr: Expression;
                         let new_id_expr: Expression;
                         (new_val_expr, witness_map) = var_to_reg_expr(&val_expr, witness_map);
                         (new_id_expr, witness_map) = var_to_reg_expr(&id_expr, witness_map);
-                        new_instr.push(BlockContent::Store((new_val_expr, ty.clone(), arr.to_string(), new_id_expr)))
+                        new_instr.push(BlockContent::Store((new_val_expr, ty.clone(), arr.to_string(), new_id_expr, *init)))
                     }
                     BlockContent::Load((val, ty, arr, id_expr)) => {
                         let new_val: String;
@@ -3160,12 +3160,19 @@ impl<'ast> ZGen<'ast> {
                         vm_liveness.extend(vec![false,    true,     true,     true,     true]);
                     }
                     // Store includes init, invalidate, & store
-                    BlockContent::Store(_) => {
-                        vir_mem_accesses_count += 3;
-                        //                      phy_addr  vir_addr  data      ls        ts
-                        vm_liveness.extend(vec![true,     true,     false,    true,     true,    // retrieval
-                                                true,     true,     false,    true,     true,    // invalidation
-                                                true,     true,     true,     true,     true,]); // allocation
+                    BlockContent::Store((_, _, _, _, init)) => {
+                        if *init {
+                            vir_mem_accesses_count += 1;
+                            //                      phy_addr  vir_addr  data      ls        ts
+                            vm_liveness.extend(vec![true,     true,     true,     true,     true]);
+                        } else {
+                            vir_mem_accesses_count += 3;
+                            //                      phy_addr  vir_addr  data      ls        ts
+                            vm_liveness.extend(vec![true,     true,     false,    true,     true,    // retrieval
+                                                    true,     true,     false,    true,     true,    // invalidation
+                                                    true,     true,     true,     true,     true,]); // allocation
+                        }
+
                     }
                     BlockContent::Stmt(_) => {}
                 }

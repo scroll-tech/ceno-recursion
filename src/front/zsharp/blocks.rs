@@ -100,9 +100,37 @@ pub fn bl_trans<'ast>(cond: Expression<'ast>, tval: NextBlock, fval: NextBlock) 
     })
 }
 
+// Generate the statement: var = 0 (Field)
+pub fn bl_gen_init_stmt<'ast>(var: &str) -> Statement<'ast> {
+    let var_init_stmt = Statement::Definition(DefinitionStatement {
+        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+            ty: Type::Basic(BasicType::Field(FieldType {
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            identifier: IdentifierExpression {
+                value: var.to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            },
+            span: Span::new("", 0, 0).unwrap()
+        })],
+        expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+            value: DecimalNumber {
+                value: "0".to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            },
+            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                span: Span::new("", 0, 0).unwrap()
+            })),
+            span: Span::new("", 0, 0).unwrap()
+        })),
+        span: Span::new("", 0, 0).unwrap()
+    });
+    var_init_stmt
+}
+
 // Generate the statement: var = var + offset
 pub fn bl_gen_increment_stmt<'ast>(var: &str, offset: usize) -> Statement<'ast> {
-    let sp_update_stmt = Statement::Definition(DefinitionStatement {
+    let var_update_stmt = Statement::Definition(DefinitionStatement {
         lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
             ty: Type::Basic(BasicType::Field(FieldType {
                 span: Span::new("", 0, 0).unwrap()
@@ -133,7 +161,7 @@ pub fn bl_gen_increment_stmt<'ast>(var: &str, offset: usize) -> Statement<'ast> 
         }),
         span: Span::new("", 0, 0).unwrap()
     });     
-    sp_update_stmt   
+    var_update_stmt   
 }
 
 // #[derive(Clone)]
@@ -410,55 +438,9 @@ impl<'ast> ZGen<'ast> {
         blks.push(Block::new(0, 1, f_name.to_string(), 0));
         blks_len += 1;
         // Initialize %SP
-        let sp_init_stmt = Statement::Definition(DefinitionStatement {
-            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                ty: Type::Basic(BasicType::Field(FieldType {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                identifier: IdentifierExpression {
-                    value: "%SP".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                span: Span::new("", 0, 0).unwrap()
-            })],
-            expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: "0".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            })),
-            span: Span::new("", 0, 0).unwrap()
-        });
-        blks[blks_len - 1].instructions.push(BlockContent::Stmt(sp_init_stmt));
+        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%SP")));
         // Initialize %BP
-        let bp_init_stmt = Statement::Definition(DefinitionStatement {
-            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                ty: Type::Basic(BasicType::Field(FieldType {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                identifier: IdentifierExpression {
-                    value: "%BP".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                span: Span::new("", 0, 0).unwrap()
-            })],
-            expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: "0".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            })),
-            span: Span::new("", 0, 0).unwrap()
-        });
-        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_init_stmt));
+        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%BP")));
 
         let inputs: Vec<(String, Ty)>;
         (blks, blks_len, inputs) = self.bl_gen_function_init_::<true>(blks, blks_len, f_file.clone(), f_name)

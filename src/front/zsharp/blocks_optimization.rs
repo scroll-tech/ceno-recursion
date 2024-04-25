@@ -1646,31 +1646,7 @@ impl<'ast> ZGen<'ast> {
                 // If %TS is alive, initialize %TS to 0
                 if output_lst[cur_bl].contains("%TS") {
                     state.insert("%TS".to_string(), Ty::Field);
-
-                    let ts_init_stmt = Statement::Definition(DefinitionStatement {
-                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                            ty: Type::Basic(BasicType::Field(FieldType {
-                                span: Span::new("", 0, 0).unwrap()
-                            })),
-                            identifier: IdentifierExpression {
-                                value: "%TS".to_string(),
-                                span: Span::new("", 0, 0).unwrap()
-                            },
-                            span: Span::new("", 0, 0).unwrap()
-                        })],
-                        expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                            value: DecimalNumber {
-                                value: "0".to_string(),
-                                span: Span::new("", 0, 0).unwrap()
-                            },
-                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                                span: Span::new("", 0, 0).unwrap()
-                            })),
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
-                    });
-                    bls[cur_bl].instructions.push(BlockContent::Stmt(ts_init_stmt));
+                    bls[cur_bl].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%TS")));
                 }
             }
 
@@ -2187,55 +2163,9 @@ impl<'ast> ZGen<'ast> {
         // If size of spills is not zero, need to add %BP and %SP to block 0
         if spills.len() > 0 {
             // Initialize %SP
-            let sp_init_stmt = Statement::Definition(DefinitionStatement {
-                lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                    ty: Type::Basic(BasicType::Field(FieldType {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    identifier: IdentifierExpression {
-                        value: "%SP".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    span: Span::new("", 0, 0).unwrap()
-                })],
-                expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                    value: DecimalNumber {
-                        value: "0".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            });
-            entry_bl_instructions.push(BlockContent::Stmt(sp_init_stmt));
+            entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%SP")));
             // Initialize %BP
-            let bp_init_stmt = Statement::Definition(DefinitionStatement {
-                lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                    ty: Type::Basic(BasicType::Field(FieldType {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    identifier: IdentifierExpression {
-                        value: "%BP".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    span: Span::new("", 0, 0).unwrap()
-                })],
-                expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                    value: DecimalNumber {
-                        value: "0".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                span: Span::new("", 0, 0).unwrap()
-            });
-            entry_bl_instructions.push(BlockContent::Stmt(bp_init_stmt));
+            entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%BP")));
         }
         bls[entry_bl].instructions = entry_bl_instructions;
 
@@ -2259,37 +2189,6 @@ impl<'ast> ZGen<'ast> {
             }),
             span: Span::new("", 0, 0).unwrap()
         });
-        let sp_update_stmt = |sp_offset: usize | Statement::Definition(DefinitionStatement {
-            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                ty: Type::Basic(BasicType::Field(FieldType {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                identifier: IdentifierExpression {
-                    value: "%SP".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                span: Span::new("", 0, 0).unwrap()
-            })],
-            expression: Expression::Binary(BinaryExpression {
-                op: BinaryOperator::Add,
-                left: Box::new(Expression::Identifier(IdentifierExpression {
-                    value: "%SP".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                    value: DecimalNumber {
-                        value: sp_offset.to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    span: Span::new("", 0, 0).unwrap()
-                }))),
-                span: Span::new("", 0, 0).unwrap()
-            }),
-            span: Span::new("", 0, 0).unwrap()
-        }); 
         // OOS: Out-of-Scope
         let mut oos_in: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
         let mut oos_out: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
@@ -2445,7 +2344,7 @@ impl<'ast> ZGen<'ast> {
 
                     // %SP = %SP + ?
                     if sp_offset > 0 {
-                        new_instructions.push(BlockContent::Stmt(sp_update_stmt(sp_offset)));   
+                        new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset)));   
                         sp_offset = 0;                         
                     }
 
@@ -2497,7 +2396,7 @@ impl<'ast> ZGen<'ast> {
                 }
                 // %SP = %SP + ?
                 if sp_offset > 0 {
-                    new_instructions.push(BlockContent::Stmt(sp_update_stmt(sp_offset)));                        
+                    new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset)));                        
                 }
 
                 bls[cur_bl].instructions = new_instructions;

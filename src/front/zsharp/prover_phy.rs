@@ -22,10 +22,11 @@ const LOAD: usize = 1;
 
 #[derive(Debug, Clone)]
 pub struct MemOp {
-    // Address in usize for sorting
-    pub addr: usize,
-    // Address in T for witness generation
-    pub addr_t: T,
+    // Physical address in usize for sorting
+    pub phy_addr: usize,
+    // Physical address in T for witness generation
+    pub phy_addr_t: T,
+    pub vir_addr_t: Option<T>,
     pub data_t: T,
 
     pub ls_t: Option<T>,
@@ -36,10 +37,11 @@ pub struct MemOp {
 }
 
 impl MemOp {
-    fn new_phy(addr: usize, addr_t: T, data_t: T) -> Self {
+    fn new_phy(phy_addr: usize, phy_addr_t: T, data_t: T) -> Self {
         let input = Self {
-            addr,
-            addr_t,
+            phy_addr,
+            phy_addr_t,
+            vir_addr_t: None,
             data_t,
             ls_t: None,
             ts: None,
@@ -48,10 +50,11 @@ impl MemOp {
         input
     }
 
-    fn new_vir(addr: usize, addr_t: T, data_t: T, ls_t: T, ts: usize, ts_t: T) -> Self {
+    fn new_vir(phy_addr: usize, phy_addr_t: T, vir_addr_t: T, data_t: T, ls_t: T, ts: usize, ts_t: T) -> Self {
         let input = Self {
-            addr,
-            addr_t,
+            phy_addr,
+            phy_addr_t,
+            vir_addr_t: Some(vir_addr_t),
             data_t,
             ls_t: Some(ls_t),
             ts: Some(ts),
@@ -63,7 +66,7 @@ impl MemOp {
 // Ordering of MemOp solely by address
 impl Ord for MemOp {
     fn cmp(&self, other: &Self) -> Ordering {
-        (self.addr, self.ts).cmp(&(other.addr, other.ts))
+        (self.phy_addr, self.ts).cmp(&(other.phy_addr, other.ts))
     }
 }
 impl PartialOrd for MemOp {
@@ -73,7 +76,7 @@ impl PartialOrd for MemOp {
 }
 impl PartialEq for MemOp {
     fn eq(&self, other: &Self) -> bool {
-        self.addr == other.addr && self.ts == other.ts
+        self.phy_addr == other.phy_addr && self.ts == other.ts
     }
 }
 impl Eq for MemOp {}
@@ -185,7 +188,9 @@ impl<'ast> ZGen<'ast> {
         self.cvar_enter_function();
         let mut nb = entry_bl;
         let mut phy_mem: Vec<T> = Vec::new();
-        let mut vir_mem_map: HashMap<String, Vec<Option<T>>> = HashMap::new();
+        let mut vir_mem_tlb: HashMap<String, Vec<Option<usize>>> = HashMap::new();
+        // 0th entry of vir_mem serves as dummy
+        let mut vir_mem: Vec<T> = vec![self.usize_to_field(0)?];
         let mut terminated = false;
         let mut phy_mem_op: Vec<MemOp>;
         let mut vir_mem_op: Vec<MemOp>;
@@ -312,7 +317,8 @@ impl<'ast> ZGen<'ast> {
                 let _ = &bls[nb].pretty();
                 println!();
             }
-            (nb, phy_mem, vir_mem_map, terminated, phy_mem_op, vir_mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem, vir_mem_map, array_offset_map)?;
+            (nb, phy_mem, vir_mem_tlb, vir_mem, terminated, phy_mem_op, vir_mem_op) = 
+                self.bl_eval_impl_(&bls[nb], phy_mem, vir_mem_tlb, vir_mem, array_offset_map)?;
 
             // Update successor block ID
             bl_exec_state[tr_size].succ_id = nb;
@@ -365,9 +371,10 @@ impl<'ast> ZGen<'ast> {
         &self, 
         bl: &Block<'ast>,
         mut phy_mem: Vec<T>,
-        mut vir_mem_map: HashMap<String, Vec<Option<T>>>,
+        mut vir_mem_tlb: HashMap<String, Vec<Option<usize>>>,
+        mut vir_mem: Vec<T>,
         array_offset_map: &HashMap<String, usize>
-    ) -> Result<(usize, Vec<T>, HashMap<String, Vec<Option<T>>>, bool, Vec<MemOp>, Vec<MemOp>), String> {
+    ) -> Result<(usize, Vec<T>, HashMap<String, Vec<Option<usize>>>, Vec<T>, bool, Vec<MemOp>, Vec<MemOp>), String> {
         let mut phy_mem_op: Vec<MemOp> = Vec::new();
 
         // The label of the next memory operation on the specific type
@@ -404,124 +411,137 @@ impl<'ast> ZGen<'ast> {
                     phy_mem_op.push(MemOp::new_phy(bp + offset, self.usize_to_field(bp + offset)?, self.cvar_lookup(&var).unwrap()));         
                 }
                 BlockContent::ArrayInit((arr, _, size)) => {
-                    assert!(!vir_mem_map.contains_key(arr));
-                    vir_mem_map.insert(arr.clone(), vec![None; *size]);
+                    assert!(!vir_mem_tlb.contains_key(arr));
+                    vir_mem_tlb.insert(arr.clone(), vec![None; *size]);
                 }
                 BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
-                    // Update vir_mem_map
-                    let val_t = self.expr_impl_::<true>(&val_expr)?;
+                    let mut next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
+                    // index
                     let mut id_t = self.expr_impl_::<true>(&id_expr)?;
                     let id = self.t_to_usize(id_t.clone())?;
-                    vir_mem_map.get_mut(arr).ok_or(format!("STORE failed: array {} does not exist.", arr))?[id] = Some(val_t.clone());
-
-                    // Add array offset to obtain address
+                    // virtual address
                     let offset = array_offset_map.get(arr).unwrap();
-                    let offset_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: offset.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
-                    }))).unwrap();
+                    let offset_t = self.usize_to_field(*offset)?;
                     if id_t.type_() != &Ty::Field {
                         id_t = uint_to_field(id_t).unwrap();
                     }
-                    let addr_t = add(id_t, offset_t).unwrap();
-                    let addr = id + offset;
+                    let vir_addr_t = add(id_t, offset_t).unwrap();
+                    // new data
+                    let new_data_t = self.expr_impl_::<true>(&val_expr)?;
 
-                    // Update vir_mem_op
-                    let next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
-                    let ls_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: STORE.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        suffix: Some(DecimalSuffix::U8(U8Suffix {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
-                    }))).unwrap();
-
-                    // %TS = %TS + 1
                     if !init {
+                        // old physical address
+                        // If the cell is never initialized, set old physical address to 0
+                        let old_phy_addr = vir_mem_tlb.get_mut(arr).ok_or(format!("STORE failed: array {} does not exist.", arr))?[id].unwrap();
+                        let old_phy_addr_t = self.usize_to_field(old_phy_addr)?;
+                        // old data
+                        let old_data_t = vir_mem[old_phy_addr].clone();
+                        // ts
+                        let ts_t = self.cvar_lookup("%w1").ok_or(format!("STORE failed: %TS is uninitialized."))?;
+                        let ts = self.t_to_usize(ts_t.clone())?;
+
+                        // RETRIEVAL
+                        // Update vir_mem_op
+                        vir_mem_op[next_label] = Some(MemOp::new_vir(
+                            old_phy_addr,
+                            old_phy_addr_t.clone(),
+                            vir_addr_t.clone(),
+                            old_data_t.clone(),
+                            self.usize_to_field(LOAD)?,
+                            ts,
+                            ts_t
+                        ));
+                        next_label = next_label + 1;
+
+                        // %TS = %TS + 1
+                        self.bl_eval_stmt_impl_(&bl_gen_increment_stmt("%w1", 1)).unwrap();
+                        let ts_t = self.cvar_lookup("%w1").ok_or(format!("STORE failed: %TS is uninitialized."))?;
+                        let ts = self.t_to_usize(ts_t.clone())?;
+
+                        // INVALIDATE
+                        // Update vir_mem_op
+                        vir_mem_op[next_label] = Some(MemOp::new_vir(
+                            old_phy_addr,
+                            old_phy_addr_t,
+                            self.usize_to_field(0)?,
+                            old_data_t, // keep value of data_t the same
+                            self.usize_to_field(STORE)?,
+                            ts,
+                            ts_t
+                        ));
+                        next_label = next_label + 1;
+                    } else {
+                        // %TS = %TS + 1
                         self.bl_eval_stmt_impl_(&bl_gen_increment_stmt("%w1", 1)).unwrap();
                     }
+
+                    // ALLOCATE
                     let ts_t = self.cvar_lookup("%w1").ok_or(format!("STORE failed: %TS is uninitialized."))?;
                     let ts = self.t_to_usize(ts_t.clone())?;
+                    // the next physical address is the same as the timestamp
+                    let new_phy_addr = ts;
+                    let new_phy_addr_t = ts_t.clone();
                     vir_mem_op[next_label] = Some(MemOp::new_vir(
-                        addr,
-                        addr_t,
-                        val_t,
-                        ls_t,
+                        new_phy_addr, 
+                        new_phy_addr_t,
+                        vir_addr_t,
+                        new_data_t.clone(),
+                        self.usize_to_field(STORE)?,
                         ts,
                         ts_t
                     ));
 
-                    // Increment label
+                    // Update vir_mem_tlb and vir_mem
+                    vir_mem_tlb.get_mut(arr).unwrap()[id] = Some(new_phy_addr);
+                    vir_mem.push(new_data_t);
+                    // Update label
                     ty_mem_op_offset.insert(ty.clone(), next_label + 1);
                 }
                 BlockContent::Load((var, ty, arr, id_expr)) => {
-                    // Update vir_mem_map
+                    // index
                     let mut id_t = self.expr_impl_::<true>(&id_expr)?;
                     let id = self.t_to_usize(id_t.clone())?;
-                    let val_t = vir_mem_map.get(arr).ok_or(format!("LOAD failed: array {} does not exist.", arr))?
-                        [id].clone().ok_or(format!("LOAD from {} failed: entry {} is uninitialized.", arr, id))?;
+                    // physical address
+                    // If the cell is never initialized, throw an error
+                    let phy_addr = vir_mem_tlb.get_mut(arr).ok_or(format!("STORE failed: array {} does not exist.", arr))?
+                        [id].ok_or(format!("STORE failed: cell {}[{}] is not initialized.", arr, id))?;
+                    let phy_addr_t = self.usize_to_field(phy_addr)?;
+                    // virtual address
+                    let offset = array_offset_map.get(arr).unwrap();
+                    let offset_t = self.usize_to_field(*offset)?;
+                    if id_t.type_() != &Ty::Field {
+                        id_t = uint_to_field(id_t).unwrap();
+                    }
+                    let vir_addr_t = add(id_t, offset_t).unwrap();
+                    // data
+                    let data_t = vir_mem[phy_addr].clone();
+
+                    // INIT_ACCESS
+                    // Update vir_mem_op
+                    let next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
+                    let ts_t = self.cvar_lookup("%w1").ok_or(format!("STORE failed: %TS is uninitialized."))?;
+                    let ts = self.t_to_usize(ts_t.clone())?;
+                    vir_mem_op[next_label] = Some(MemOp::new_vir(
+                        phy_addr,
+                        phy_addr_t,
+                        vir_addr_t,
+                        data_t.clone(),
+                        self.usize_to_field(LOAD)?,
+                        ts,
+                        ts_t
+                    ));
 
                     // Declare the variable
-                    let entry_ty = val_t.type_();
+                    let entry_ty = data_t.type_();
                     if ty != entry_ty {
                         return Err(format!(
                             "Assignment type mismatch: {} annotated vs {} actual",
                             ty, entry_ty,
                         ));
                     }
-                    self.cvar_declare_init(var.clone(), ty, val_t.clone())?;
+                    self.cvar_declare_init(var.clone(), ty, data_t.clone())?;
 
-                    // Add array offset to obtain address
-                    let offset = array_offset_map.get(arr).unwrap();
-                    let offset_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: offset.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
-                    }))).unwrap();
-                    if id_t.type_() != &Ty::Field {
-                        id_t = uint_to_field(id_t).unwrap();
-                    }
-                    let addr_t = add(id_t, offset_t).unwrap();
-                    let addr = id + offset;
-
-                    // Update vir_mem_op
-                    let next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
-                    let ls_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: LOAD.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        suffix: Some(DecimalSuffix::U8(U8Suffix {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
-                    }))).unwrap();
-                    let ts_t = self.cvar_lookup("%w1").ok_or(format!("STORE failed: %TS is uninitialized."))?;
-                    let ts = self.t_to_usize(ts_t.clone())?;
-                    vir_mem_op[next_label] = Some(MemOp::new_vir(
-                        addr,
-                        addr_t,
-                        val_t,
-                        ls_t,
-                        ts,
-                        ts_t
-                    ));
-
-                    // Increment label
+                    // Update label
                     ty_mem_op_offset.insert(ty.clone(), next_label + 1);
                 }
                 BlockContent::Stmt(s) => {
@@ -535,12 +555,12 @@ impl<'ast> ZGen<'ast> {
         match &bl.terminator {
             BlockTerminator::Transition(e) => {
                 match self.t_to_usize(self.expr_impl_::<true>(&e)?) {
-                    Ok(nb) => { return Ok((nb, phy_mem, vir_mem_map, false, phy_mem_op, vir_mem_op)); }, 
+                    Ok(nb) => { return Ok((nb, phy_mem, vir_mem_tlb, vir_mem, false, phy_mem_op, vir_mem_op)); }, 
                     _ => { return Err("Evaluation failed: block transition evaluated to an invalid block label".to_string()); }
                 }
             }
             BlockTerminator::FuncCall(fc) => Err(format!("Evaluation failed: function call to {} needs to be converted to block label.", fc)),
-            BlockTerminator::ProgTerm => Ok((0, phy_mem, vir_mem_map, true, phy_mem_op, vir_mem_op))
+            BlockTerminator::ProgTerm => Ok((0, phy_mem, vir_mem_tlb, vir_mem, true, phy_mem_op, vir_mem_op))
         }
     }
 

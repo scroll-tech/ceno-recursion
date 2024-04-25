@@ -92,7 +92,7 @@ impl ZSharpFE {
         Vec<Vec<Option<Value>>>, // (PM Vars + VM Vars) per block
         Vec<HashMap<String, Value, BuildHasherDefault<fxhash::FxHasher>>>, // Map of IO name -> IO value, for witness generation
         Vec<(Value, Value)>, // Physical memory accesses, sorted by address
-        Vec<[Value; 5]> // Virtual memory accesses, sorted by address
+        Vec<[Value; 4]> // Virtual memory accesses, sorted by address
     ) {
         let loader = parser::ZLoad::new();
         let asts = loader.load(&i.file);
@@ -159,7 +159,7 @@ impl ZSharpFE {
             // Process physical mems
             for j in 0..state.phy_mem_op.len() {
                 // addr
-                let addr = to_const_value(state.phy_mem_op[j].phy_addr_t.clone())
+                let addr = to_const_value(state.phy_mem_op[j].addr_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 inputs.insert(format!("{}%pm{:06}a{}", prefix, j, suffix), addr);
                 // data
@@ -169,18 +169,14 @@ impl ZSharpFE {
             }
             // Process virtual mems
             for j in 0..state.vir_mem_op.len() {
-                // phy_addr
-                let phy_addr = to_const_value(state.vir_mem_op[j].phy_addr_t.clone())
+                // addr
+                let addr = to_const_value(state.vir_mem_op[j].addr_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                inputs.insert(format!("{}%vm{:06}a{}", prefix, j, suffix), phy_addr);
-                // vir_addr
-                let vir_addr = to_const_value(state.vir_mem_op[j].vir_addr_t.clone().unwrap())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                inputs.insert(format!("{}%vm{:06}b{}", prefix, j, suffix), vir_addr);
+                inputs.insert(format!("{}%vm{:06}a{}", prefix, j, suffix), addr);
                 // data
                 let data = to_const_value(state.vir_mem_op[j].data_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-                inputs.insert(format!("{}%vm{:06}c{}", prefix, j, suffix), data);
+                inputs.insert(format!("{}%vm{:06}d{}", prefix, j, suffix), data);
                 // ls
                 let ls = to_const_value(state.vir_mem_op[j].ls_t.clone().unwrap())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
@@ -194,7 +190,7 @@ impl ZSharpFE {
         }
         let phy_mem_list = phy_mem_list.iter().map(|i|
             (
-                to_const_value(i.phy_addr_t.clone())
+                to_const_value(i.addr_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
                 to_const_value(i.data_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
@@ -202,9 +198,7 @@ impl ZSharpFE {
         ).collect();
         let vir_mem_list = vir_mem_list.iter().map(|i|
             [
-                to_const_value(i.phy_addr_t.clone())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
-                to_const_value(i.vir_addr_t.clone().unwrap())
+                to_const_value(i.addr_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
                 to_const_value(i.data_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
@@ -231,21 +225,16 @@ impl ZSharpFE {
         let block_mems_list = bl_exec_state.iter().map(|i| [
             i.phy_mem_op.iter().flat_map(|pm: &MemOp| [
                 // addr
-                Some(to_const_value(pm.phy_addr_t.clone())
+                Some(to_const_value(pm.addr_t.clone())
                     .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))),
                 // data
                 Some(to_const_value(pm.data_t.clone())
                     .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))),
             ]).collect::<Vec<Option<Value>>>(),
             i.vir_mem_op.iter().flat_map(|vm: &MemOp| [
-                // phy_addr
-                Some(to_const_value(vm.phy_addr_t.clone())
+                // addr
+                Some(to_const_value(vm.addr_t.clone())
                     .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))),
-                // vir_addr
-                if let Some(vir_addr) = &vm.vir_addr_t {
-                    Some(to_const_value(vir_addr.clone())
-                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)))
-                } else { None },
                 // data
                 Some(to_const_value(vm.data_t.clone())
                     .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))),

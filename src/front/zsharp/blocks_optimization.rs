@@ -1643,7 +1643,7 @@ impl<'ast> ZGen<'ast> {
                 for (var, ty) in &inputs {
                     state.insert(var.clone(), ty.clone());
                 }
-                // If %TS is alive, also initialize it to 0
+                // If %TS is alive, initialize %TS to 0
                 if output_lst[cur_bl].contains("%TS") {
                     state.insert("%TS".to_string(), Ty::Field);
 
@@ -3156,6 +3156,18 @@ impl<'ast> ZGen<'ast> {
                     }
                     BlockContent::Load(_) => {
                         vir_mem_accesses_count += 1;
+                        //                      addr  data  ls    ts
+                        vm_liveness.extend(vec![true, true, true, true]);
+                    }
+                    // Store includes init, invalidate, & store
+                    BlockContent::Store(_) => {
+                        vir_mem_accesses_count += 1;
+                        //                      addr  data  ls    ts
+                        vm_liveness.extend(vec![true, true, true, true]);
+                    }
+                    /*
+                    BlockContent::Load(_) => {
+                        vir_mem_accesses_count += 1;
                         //                      phy_addr  vir_addr  data      ls        ts
                         vm_liveness.extend(vec![false,    true,     true,     true,     true]);
                     }
@@ -3172,8 +3184,8 @@ impl<'ast> ZGen<'ast> {
                                                     true,     true,     false,    true,     true,    // invalidation
                                                     true,     true,     true,     true,     true,]); // allocation
                         }
-
                     }
+                    */
                     BlockContent::Stmt(_) => {}
                 }
             }

@@ -41,7 +41,7 @@ const NUM_RESERVED_VARS: usize = 6;
 // Which index in the output (INCLUDING V) denotes %RET?
 const OUTPUT_OFFSET: usize = 2;
 // What is the maximum width (# of bits) of %TS?
-const MAX_TS_WIDTH: usize = 4;
+const MAX_TS_WIDTH: usize = 6;
 
 #[derive(Debug, Parser)]
 #[command(name = "zxc", about = "CirC: the circuit compiler")]
@@ -818,10 +818,10 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         }
     }
 
-    // Virtual Memory: valid, D1, phy_addr, vir_addr, data, ls, ts, _
+    // Virtual Memory: valid, D1, addr, data, ls, ts, _, _
     let mut addr_vir_mems_list = Vec::new();
     let mut vir_mem_last: Vec<Integer> = Vec::new();
-    // TS Bits: D2, D3, D4, EQ, B0, B1, ...
+    // TS Bits: D2, EQ, B0, B1, B2 ...
     let mut addr_ts_bits_list = Vec::new();
     let mut ts_bits_last: Vec<Integer> = Vec::new();
     for i in 0..vir_mem_list.len() {
@@ -833,28 +833,23 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         mem[3] = m[1].as_integer().unwrap();
         mem[4] = m[2].as_integer().unwrap();
         mem[5] = m[3].as_integer().unwrap();
-        mem[6] = m[4].as_integer().unwrap();
         
-        let ts_bits: Vec<Integer> = vec![zero.clone(); (MAX_TS_WIDTH + 4).next_power_of_two()];
+        let ts_bits: Vec<Integer> = vec![zero.clone(); (MAX_TS_WIDTH + 2).next_power_of_two()];
         // D1, D2, D3, D4
         if i != 0 {
-            // D1[k] = v[k + 1] * (1 - phy_addr[k + 1] + phy_addr[k])
+            // D1[k] = v[k + 1] * (1 - addr[k + 1] + addr[k])
             vir_mem_last[1] = mem[0].clone() * (one.clone() - mem[2].clone() + vir_mem_last[2].clone());
-            // D2[k] = v[k + 1] * (pa[k + 1] - pa[k])
-            ts_bits_last[0] = mem[0].clone() * (mem[2].clone() - vir_mem_last[2].clone());
-            // D3[k] = D1[k] * (vir_addr[k + 1] - vir_addr[k])
-            ts_bits_last[1] = vir_mem_last[1].clone() * (mem[3].clone() - vir_mem_last[3].clone());
-            // D4[k] = D1[k] * (ts[k + 1] - ts[k])
-            let mut d4 = vir_mem_last[1].clone() * (mem[6].clone() - vir_mem_last[6].clone());
-            ts_bits_last[2] = d4.clone();
-            // Bits for ts_bits_last[3..]
+            // D2[k] = D1[k] * (ls[k + 1] - STORE), where STORE = 0
+            ts_bits_last[0] = vir_mem_last[1].clone() * mem[4].clone();
+            // Bits of D1[k] * (ts[k + 1] - ts[k]) in ts_bits_last[2..]
+            let mut d4 = vir_mem_last[1].clone() * (mem[5].clone() - vir_mem_last[5].clone());
             if d4 != 0 {
                 // EQ = 1
-                ts_bits_last[3] = Integer::from(1);
+                ts_bits_last[1] = Integer::from(1);
                 // Use bits to assemble D4 - 1
                 d4 -= 1;
                 for i in 0..MAX_TS_WIDTH {
-                    ts_bits_last[4 + i] = d4.clone() % 2;
+                    ts_bits_last[2 + i] = d4.clone() % 2;
                     d4 /= 2;
                 }
             }

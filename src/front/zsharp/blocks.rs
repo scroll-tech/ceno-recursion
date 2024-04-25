@@ -20,10 +20,10 @@ use std::collections::BTreeMap;
 use std::convert::TryInto;
 use crate::front::zsharp::*;
 
-const LOAD: usize = 0;
-const STORE: usize = 1;
-const DUMMY_LOAD: usize = 2;
-const INIT_STORE: usize = 3;
+const STORE: usize = 0;
+const LOAD: usize = 1;
+const INIT_STORE: usize = 2;
+const DUMMY_LOAD: usize = 3;
 
 fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast>) -> Expression<'ast> {
     let ce = Expression::Binary(BinaryExpression {
@@ -1134,7 +1134,7 @@ impl<'ast> ZGen<'ast> {
                                             if tmp_arr_info.len() > 0 { panic!("Currently do not support array initialization inside array indices") }
                                             blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), *entry_ty.clone(), new_l, new_e, false)));
                                             let ty_mem_op_count = *blks[blks_len - 1].mem_op_by_ty.get(&entry_ty).unwrap_or(&0);
-                                            blks[blks_len - 1].mem_op_by_ty.insert(*entry_ty.clone(), ty_mem_op_count + 3);
+                                            blks[blks_len - 1].mem_op_by_ty.insert(*entry_ty.clone(), ty_mem_op_count + 1);
                                         } else {
                                             return Err(format!("Array range access not implemented!"));
                                         }
@@ -1428,7 +1428,7 @@ impl<'ast> ZGen<'ast> {
             }));
             blks[blks_len - 1].instructions.push(BlockContent::Store((entry, entry_ty.clone(), arr_extended_name.clone(), index_expr, is_declare)));
             let ty_mem_op_count = *blks[blks_len - 1].mem_op_by_ty.get(&entry_ty).unwrap_or(&0);
-            blks[blks_len - 1].mem_op_by_ty.insert(entry_ty.clone(), ty_mem_op_count + if is_declare {1} else {3});
+            blks[blks_len - 1].mem_op_by_ty.insert(entry_ty.clone(), ty_mem_op_count + 1);
             index += 1;
         }
         Ok((blks, blks_len))
@@ -1501,6 +1501,7 @@ impl<'ast> ZGen<'ast> {
         self.assert(b);
     }
 
+    /*
     // Convert a virtual memory operation to circ_ir
     // MODE: LOAD, STORE, DUMMY_LOAD, INIT_STORE
     fn vir_mem_to_circ<const MODE: usize>(
@@ -1762,6 +1763,100 @@ impl<'ast> ZGen<'ast> {
 
         (ty_mem_op_offset, next_label)
     }
+    */
+
+        // Convert a virtual memory operation to circ_ir
+    // MODE: LOAD, STORE, DUMMY_LOAD, INIT_STORE
+    fn vir_mem_to_circ<const MODE: usize>(
+        &'ast self,
+        f: &str,
+        mut ty_mem_op_offset: BTreeMap<Ty, usize>,
+        array_offset_map: &HashMap<String, usize>,
+        ty: &Ty,
+        arr: Option<&String>,
+        id_expr: Option<&Expression<'ast>>,
+    ) -> (BTreeMap<Ty, usize>, usize) {
+        // Obtain the label for the memory operation
+        let next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
+
+        // Declare the next ADDR, DATA, L/S, and TS
+        // VIR_ADDR as 'a'
+        self.circ_declare_input(
+            f,
+            format!("%vm{:06}a", next_label),
+            ty,
+            ZVis::Private(0),
+            None,
+            true,
+        ).unwrap();
+        // VAL as 'd'
+        self.circ_declare_input(
+            f,
+            format!("%vm{:06}d", next_label),
+            ty,
+            ZVis::Private(0),
+            None,
+            true,
+        ).unwrap();
+        // LS as 'l'
+        self.circ_declare_input(
+            f,
+            format!("%vm{:06}l", next_label),
+            &Ty::Field,
+            ZVis::Private(0),
+            None,
+            true,
+        ).unwrap();
+        // TS as 't'
+        self.circ_declare_input(
+            f,
+            format!("%vm{:06}t", next_label),
+            &Ty::Field,
+            ZVis::Private(0),
+            None,
+            true,
+        ).unwrap();
+
+        // ADDR if exist
+        if let Some(addr_expr) = id_expr {
+            // lhs_t + offset_t == rhs_t
+            let mut lhs_t = self.expr_impl_::<false>(&addr_expr).unwrap();
+            // if lhs_t is not a field, cast it to a field
+            if lhs_t.type_() != &Ty::Field {
+                lhs_t = uint_to_field(lhs_t).unwrap();
+            }
+            let offset_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: array_offset_map.get(arr.unwrap()).unwrap().to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                    span: Span::new("", 0, 0).unwrap()
+                })),
+                span: Span::new("", 0, 0).unwrap()
+            }))).unwrap();
+            let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                value: format!("%vm{:06}a", next_label),
+                span: Span::new("", 0, 0).unwrap()
+            })).unwrap();
+            let b = bool(eq(add(lhs_t, offset_t).unwrap(), rhs_t).unwrap()).unwrap();
+            self.assert(b);
+        }
+        // LS
+        let ls = if MODE == STORE || MODE == INIT_STORE { STORE } else { LOAD };
+        self.bl_gen_assert_const(&format!("%vm{:06}l", next_label), ls);
+        // TS, increment if STORE
+        if MODE == STORE {
+            self.stmt_impl_::<false>(&bl_gen_increment_stmt("%w1", 1)).unwrap();
+        }
+        self.bl_gen_assert_eq(&format!("%w1"), &format!("%vm{:06}t", next_label));
+        // DATA is updated individually by LOAD or STORE
+
+        // Update label
+        ty_mem_op_offset.insert(ty.clone(), next_label + 1);
+
+        (ty_mem_op_offset, next_label)
+    }
 
     // Convert a block to circ_ir
     // This can be done to either produce the constraints, or to estimate the size of constraints
@@ -1935,7 +2030,7 @@ impl<'ast> ZGen<'ast> {
                     if ESTIMATE {}
                     else {
                         let next_label: usize;
-                        // ADDR, IO, & TS
+                        // ADDR, LS, & TS
                         if *init {
                             (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<INIT_STORE>(
                                 f,
@@ -1955,10 +2050,10 @@ impl<'ast> ZGen<'ast> {
                                 Some(&id_expr)
                             );
                         }
-                        // Assert correctness of VAL
+                        // Assert correctness of DATA
                         let lhs_t = self.expr_impl_::<false>(&val_expr).unwrap();
                         let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                            value: format!("%vm{:06}c", next_label),
+                            value: format!("%vm{:06}d", next_label),
                             span: Span::new("", 0, 0).unwrap()
                         })).unwrap();
                         let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
@@ -1978,7 +2073,7 @@ impl<'ast> ZGen<'ast> {
                         r.unwrap();
                     } else {
                         let next_label: usize;
-                        // ADDR, IO, & TS
+                        // ADDR, LS, & TS
                         (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<LOAD>(
                             f,
                             ty_mem_op_offset,
@@ -1987,9 +2082,9 @@ impl<'ast> ZGen<'ast> {
                             Some(&arr),
                             Some(&id_expr)
                         );
-                        // Assign LOAD value to val
+                        // Assign LOAD value to data
                         let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                            value: format!("%vm{:06}c", next_label),
+                            value: format!("%vm{:06}d", next_label),
                             span: Span::new("", 0, 0).unwrap()
                         })).unwrap();
                         self.declare_init_impl_::<false>(

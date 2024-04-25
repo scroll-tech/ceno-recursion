@@ -189,7 +189,7 @@ pub enum BlockContent<'ast> {
     MemPush((String, Ty, usize)), // %PHY[%SP + offset] = val
     MemPop((String, Ty, usize)),  // val = %PHY[%BP + offset]
     //          arr   type  size, assume only one dimensional
-    ArrayInit((String, Ty, usize)),   
+    ArrayInit((String, Ty, usize)), 
     //     val_expr         type   arr   id_expr           init?
     Store((Expression<'ast>, Ty, String, Expression<'ast>, bool)), // arr[id] = val
     //    var    type   arr   id_expr
@@ -406,6 +406,7 @@ impl<'ast> ZGen<'ast> {
         match name {
             "%BP" => Some(Ty::Field),
             "%SP" => Some(Ty::Field),
+            "%AS" => Some(Ty::Field),
             "%RP" => Some(Ty::Field),
             _ => match self.circ_get_value(Loc::local(name.to_string())).map_err(|e| format!("{e}")).ok()?
                 {
@@ -441,6 +442,8 @@ impl<'ast> ZGen<'ast> {
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%SP")));
         // Initialize %BP
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%BP")));
+        // Initialize %AS for allocating arrays
+        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS")));
 
         let inputs: Vec<(String, Ty)>;
         (blks, blks_len, inputs) = self.bl_gen_function_init_::<true>(blks, blks_len, f_file.clone(), f_name)
@@ -1070,10 +1073,9 @@ impl<'ast> ZGen<'ast> {
                                 // Declare array
                                 if let Ty::Array(size, entry_ty) = decl_ty {
                                     blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name.clone(), *entry_ty.clone(), size)));
-                                    // Cannot shadow an array (for now)
-                                    assert!(!var_scope_info.arr_map.contains_key(&arr_extended_name));
                                     var_scope_info.arr_map.insert(arr_extended_name.clone(), *entry_ty.clone());
                                 }
+
                                 (arr_extended_name, true)
                             }
                             TypedIdentifierOrAssignee::Assignee(l) => {
@@ -1441,11 +1443,11 @@ impl<'ast> ZGen<'ast> {
     }
 
     // Convert a list of blocks to circ_ir
-    pub fn bls_to_circ(&'ast self, blks: &Vec<Block>, mem_offset_map: &HashMap<String, usize>) {
+    pub fn bls_to_circ(&'ast self, blks: &Vec<Block>) {
         for b in blks {
             let f = &format!("Block_{}", b.name);
             self.circ_init_block(f);
-            self.bl_to_circ::<false>(&b, f, mem_offset_map);
+            self.bl_to_circ::<false>(&b, f);
         }
     }
 
@@ -1747,13 +1749,12 @@ impl<'ast> ZGen<'ast> {
     }
     */
 
-        // Convert a virtual memory operation to circ_ir
+    // Convert a virtual memory operation to circ_ir
     // MODE: LOAD, STORE, DUMMY_LOAD, INIT_STORE
     fn vir_mem_to_circ<const MODE: usize>(
         &'ast self,
         f: &str,
         mut ty_mem_op_offset: BTreeMap<Ty, usize>,
-        array_offset_map: &HashMap<String, usize>,
         ty: &Ty,
         arr: Option<&String>,
         id_expr: Option<&Expression<'ast>>,
@@ -1807,16 +1808,10 @@ impl<'ast> ZGen<'ast> {
             if lhs_t.type_() != &Ty::Field {
                 lhs_t = uint_to_field(lhs_t).unwrap();
             }
-            let offset_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: array_offset_map.get(arr.unwrap()).unwrap().to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
+            let offset_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                value: arr.unwrap().to_string(),
                 span: Span::new("", 0, 0).unwrap()
-            }))).unwrap();
+            })).unwrap();
             let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
                 value: format!("%vm{:06}a", next_label),
                 span: Span::new("", 0, 0).unwrap()
@@ -1843,7 +1838,7 @@ impl<'ast> ZGen<'ast> {
     // Convert a block to circ_ir
     // This can be done to either produce the constraints, or to estimate the size of constraints
     // In estimation mode, we rename all output variable from X -> oX, add assertion, and process the terminator
-    pub fn bl_to_circ<const ESTIMATE: bool>(&self, b: &Block, f: &str, array_offset_map: &HashMap<String, usize>) {
+    pub fn bl_to_circ<const ESTIMATE: bool>(&self, b: &Block, f: &str) {
         // setup stack frame for entry function
         // returns the next block, so return type is Field
         let ret_ty = Some(Ty::Field);
@@ -2007,7 +2002,18 @@ impl<'ast> ZGen<'ast> {
                     ).unwrap();
                     phy_mem_op_count += 1;  
                 }
-                BlockContent::ArrayInit(_) => {}
+                BlockContent::ArrayInit((arr, _, _)) => {
+                    if ESTIMATE {
+                        self.circ_declare_input(
+                            &f,
+                            arr.to_string(),
+                            &Ty::Field,
+                            ZVis::Private(0),
+                            None,
+                            true,
+                        ).unwrap();
+                    }
+                }
                 BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
                     if ESTIMATE {}
                     else {
@@ -2017,7 +2023,6 @@ impl<'ast> ZGen<'ast> {
                             (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<INIT_STORE>(
                                 f,
                                 ty_mem_op_offset,
-                                array_offset_map,
                                 &ty,
                                 Some(&arr),
                                 Some(&id_expr)
@@ -2026,7 +2031,6 @@ impl<'ast> ZGen<'ast> {
                             (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<STORE>(
                                 f,
                                 ty_mem_op_offset,
-                                array_offset_map,
                                 &ty,
                                 Some(&arr),
                                 Some(&id_expr)
@@ -2059,7 +2063,6 @@ impl<'ast> ZGen<'ast> {
                         (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<LOAD>(
                             f,
                             ty_mem_op_offset,
-                            array_offset_map,
                             &ty,
                             Some(&arr),
                             Some(&id_expr)

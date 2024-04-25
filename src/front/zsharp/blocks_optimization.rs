@@ -1320,9 +1320,12 @@ impl<'ast> ZGen<'ast> {
                             state.remove(var);
                             state.insert("%BP".to_string());
                         }
-                        // If there is an array initialization, then the array is dead
+                        // If there is an array initialization, then the array is dead but %AS is alive
                         BlockContent::ArrayInit((arr, _, _)) => {
-                            state.remove(arr);
+                            if is_alive(&state, arr) {
+                                state.remove(arr);
+                                state.insert("%AS".to_string());
+                            }
                         }
                         // If there is a store, then index and value are alive if array is alive
                         BlockContent::Store((val_expr, _, arr, id_expr, _)) => {
@@ -1333,7 +1336,6 @@ impl<'ast> ZGen<'ast> {
                                 state = la_gen(state, &gen);
                             }
                         }
-                        // If there is a store, then kill val
                         // If val was alive, make array & index alive
                         BlockContent::Load((val, _, arr, id_expr)) => {
                             if is_alive(&state, val) {
@@ -1413,13 +1415,13 @@ impl<'ast> ZGen<'ast> {
                             state.remove(var);
                             state.insert("%BP".to_string());
                         }
-                        // If there is an array initialization, then the array is dead
+                        // If there is an array initialization, then the array is dead but %AS is alive
                         BlockContent::ArrayInit((arr, _, _)) => {
-                            // if the array is alive, keep the initialization statement
                             if is_alive(&state, arr) {
                                 new_instructions.insert(0, i.clone());
+                                state.remove(arr);
+                                state.insert("%AS".to_string());
                             }
-                            state.remove(arr);
                         }
                         // If there is a store, then keep the statement if array is alive
                         BlockContent::Store((val_expr, _, arr, id_expr, _)) => {
@@ -1565,9 +1567,12 @@ impl<'ast> ZGen<'ast> {
                             state.remove(&var.to_string());
                             state.insert("%BP".to_string());
                         }
-                        // Arrays are not part of block IOs, don't reason about array liveness
-                        BlockContent::ArrayInit(_) => {}
-                        // If there is an array access, then %TS is alive
+                        // If there is an array init, then arr is dead and %AS is alive
+                        BlockContent::ArrayInit((arr, _, _)) => {
+                            state.remove(&arr.to_string());
+                            state.insert("%AS".to_string());
+                        }
+                        // If there is a store, then %TS is alive
                         BlockContent::Store((val_expr, _, _, id_expr, _)) => {
                             let gen = expr_find_val(val_expr);
                             state.extend(gen);
@@ -1575,11 +1580,13 @@ impl<'ast> ZGen<'ast> {
                             state.extend(gen);
                             state.insert("%TS".to_string());
                         }
-                        BlockContent::Load((val, _, _, id_expr)) => {
+                        // If there is a load, then arr and %TS is alive
+                        BlockContent::Load((val, _, arr, id_expr)) => {
                             state.remove(val);
                             let gen = expr_find_val(id_expr);
                             state.extend(gen);
                             state.insert("%TS".to_string());
+                            state.insert(arr.to_string());
                         }
                         BlockContent::Stmt(s) => {
                             let (kill, gen) = stmt_find_val(&s);
@@ -1648,6 +1655,11 @@ impl<'ast> ZGen<'ast> {
                     state.insert("%TS".to_string(), Ty::Field);
                     bls[cur_bl].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%TS")));
                 }
+                // If %AS is alive, initialize %AS to 0
+                if output_lst[cur_bl].contains("%AS") {
+                    state.insert("%AS".to_string(), Ty::Field);
+                    bls[cur_bl].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS")));
+                }
             }
 
             // Only analyze if never visited before or OUT changes
@@ -1664,7 +1676,9 @@ impl<'ast> ZGen<'ast> {
                         BlockContent::MemPop((id, ty, _)) => {
                             state.insert(id.clone(), ty.clone());
                         }
-                        BlockContent::ArrayInit(_) => {}
+                        BlockContent::ArrayInit((arr, _, _)) => {
+                            state.insert(arr.clone(), Ty::Field);
+                        }
                         BlockContent::Store(_) => {}
                         BlockContent::Load((val, ty, _, _)) => {
                             state.insert(val.clone(), ty.clone());
@@ -1729,7 +1743,7 @@ impl<'ast> ZGen<'ast> {
     ) -> usize {
         let block_name = &format!("Pseudo_Block_{}", bl.name);
         self.circ_init_block(block_name);
-        self.bl_to_circ::<true>(bl, block_name, &HashMap::new());
+        self.bl_to_circ::<true>(bl, block_name);
 
         let mut cs = Computations::new();
         cs.comps = self.circ.borrow().cir_ctx().cs.borrow_mut().clone();
@@ -2300,16 +2314,14 @@ impl<'ast> ZGen<'ast> {
                                 new_instructions.push(i.clone());
                             }
                         },
+                        // Do not reason about memory operations
                         BlockContent::ArrayInit(_) => {
-                            // Do not reason about memory operations
                             new_instructions.push(i.clone());
                         }
                         BlockContent::Store(_) => {
-                            // Do not reason about memory operations
                             new_instructions.push(i.clone());
                         }
                         BlockContent::Load(_) => {
-                            // Do not reason about memory operations
                             new_instructions.push(i.clone());
                         }
                         _ => {}
@@ -2566,7 +2578,7 @@ impl<'ast> ZGen<'ast> {
         bls: Vec<Block<'ast>>,
         entry_bl: usize,
         inputs: Vec<(String, Ty)>
-    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>, HashMap<String, usize>, Vec<Vec<usize>>) {
+    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>, Vec<Vec<usize>>) {
         println!("\n\n--\nPost-Processing:");
         // Construct a new CFG for the program
         // Note that this is the CFG after DBE, and might be different from the previous CFG
@@ -2609,18 +2621,15 @@ impl<'ast> ZGen<'ast> {
             print_bls(&bls, &entry_bl);
         }
 
-        // Obtain # of scoping memory accesses per block & offset of each array in memory
-        let (num_mem_accesses, array_offset_map, live_vm) = self.get_blocks_memory_info(&bls);
-        if VERBOSE {
-            println!("\n\n--\nMemory Info:");
-            println!("Array Offset Map: {:?}", array_offset_map);
-        }
+        // Obtain # of scoping memory accesses per block
+        let (num_mem_accesses, live_vm) = self.get_blocks_memory_info(&bls);
 
         print_bls(&bls, &entry_bl);
-        (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses, array_offset_map, live_vm)
+        (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses, live_vm)
     }
 
     // Convert all mentionings of variables to registers
+    // Also convert array initializers to pointer definition
     // Registers are divided into three categories: inputs, outputs, and witnesses
     // size of inputs = size of outputs && 2 * (size of inputs + 1) = size of witnesses
     // However, we won't know the size of witnesses until circuit generation,
@@ -2829,22 +2838,51 @@ impl<'ast> ZGen<'ast> {
                         (new_var, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
                         new_instr.push(BlockContent::MemPop((new_var, ty.clone(), *offset)));
                     }
-                    BlockContent::ArrayInit(_) => {
-                        new_instr.push(s.clone())
+                    BlockContent::ArrayInit((arr, _, size)) => {
+                        let new_arr_name: String;
+                        let new_alloc_size_name: String;
+                        (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
+                        (new_alloc_size_name, witness_map, _) = var_name_to_reg_id_expr::<0>("%AS".to_string(), witness_map);
+
+                        // Declare the array as a pointer (field), set to %AS
+                        let pointer_init_stmt = Statement::Definition(DefinitionStatement {
+                            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                ty: Type::Basic(BasicType::Field(FieldType {
+                                    span: Span::new("", 0, 0).unwrap()
+                                })),
+                                identifier: IdentifierExpression {
+                                    value: new_arr_name.to_string(),
+                                    span: Span::new("", 0, 0).unwrap()
+                                },
+                                span: Span::new("", 0, 0).unwrap()
+                            })],
+                            expression: Expression::Identifier(IdentifierExpression {
+                                value: new_alloc_size_name.to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            }),
+                            span: Span::new("", 0, 0).unwrap()
+                        });
+                        new_instr.push(BlockContent::Stmt(pointer_init_stmt));
+                        // Increment %AS by size of array
+                        new_instr.push(BlockContent::Stmt(bl_gen_increment_stmt(&new_alloc_size_name, *size)));
                     }
                     BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
                         let new_val_expr: Expression;
                         let new_id_expr: Expression;
+                        let new_arr_name: String;
                         (new_val_expr, witness_map) = var_to_reg_expr(&val_expr, witness_map);
                         (new_id_expr, witness_map) = var_to_reg_expr(&id_expr, witness_map);
-                        new_instr.push(BlockContent::Store((new_val_expr, ty.clone(), arr.to_string(), new_id_expr, *init)))
+                        (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
+                        new_instr.push(BlockContent::Store((new_val_expr, ty.clone(), new_arr_name, new_id_expr, *init)))
                     }
                     BlockContent::Load((val, ty, arr, id_expr)) => {
                         let new_val: String;
                         let new_id_expr: Expression;
+                        let new_arr_name: String;
                         (new_val, witness_map, _) = var_name_to_reg_id_expr::<0>(val.to_string(), witness_map);
                         (new_id_expr, witness_map) = var_to_reg_expr(&id_expr, witness_map);
-                        new_instr.push(BlockContent::Load((new_val, ty.clone(), arr.to_string(), new_id_expr)))
+                        (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
+                        new_instr.push(BlockContent::Load((new_val, ty.clone(), new_arr_name, new_id_expr)))
                     }
                     BlockContent::Stmt(s) => {
                         let new_stmt: Statement;
@@ -3005,12 +3043,13 @@ impl<'ast> ZGen<'ast> {
             }
             // Process instructions
             for i in &bls[i].instructions {
-                if let BlockContent::Stmt(s) = i {
-                    let new_s: Statement;
-                    (new_s, gen_set) = tydef_to_assignee_stmt(s, gen_set);
-                    new_instr.push(BlockContent::Stmt(new_s));
-                } else {
-                    new_instr.push(i.clone());
+                match i {
+                    BlockContent::Stmt(s) => {
+                        let new_s: Statement;
+                        (new_s, gen_set) = tydef_to_assignee_stmt(s, gen_set);
+                        new_instr.push(BlockContent::Stmt(new_s));
+                    }
+                    _ => { new_instr.push(i.clone()); }
                 }
             }
             bls[i].instructions = new_instr;
@@ -3018,21 +3057,19 @@ impl<'ast> ZGen<'ast> {
         bls
     }
 
-    // Construct a view of memory from the blocks, returns
+    // Construct a view of memory from the blocks.
+    // Converts array initializers to pointer definition
+    // Returns:
     // 0. # of (physical (scoping) memory, virtual memory accesses) accesses for each block
-    // 1. Memory partition for each array
-    // 2. Liveness of each virtual memory variable
+    // 1. Liveness of each virtual memory variable
     //    * We need all variables present for permutation check, but some are not referenced in the constraints and will be killed in R1CS
     //    * For every _live_ virtual memory variable, record its overall ordering in all virtual memory variables 
     fn get_blocks_memory_info(
         &self,
         bls: &Vec<Block>,
-    ) -> (Vec<(usize, usize)>, HashMap<String, usize>, Vec<Vec<usize>>) {
+    ) -> (Vec<(usize, usize)>, Vec<Vec<usize>>) {
         // Number of memory accesses per block
         let mut num_mem_accesses = Vec::new();
-        // Map between each array to a memory offset, starting at zero
-        let mut array_offset_map = HashMap::new();
-        let mut next_mem_offset = 0;
         // Map of each _live_ vm variables to its overall ordering
         let mut live_vm_list = Vec::new();
         for b in bls {
@@ -3048,11 +3085,7 @@ impl<'ast> ZGen<'ast> {
                     BlockContent::MemPush(_) => {
                         phy_mem_accesses_count += 1;
                     }
-                    BlockContent::ArrayInit((arr, _, size)) => {
-                        if array_offset_map.contains_key(arr) { panic!("Get Block Mem Info Failed: Multiple declaration of the same array: {}", arr) }
-                        array_offset_map.insert(arr.to_string(), next_mem_offset);
-                        next_mem_offset += size;
-                    }
+                    BlockContent::ArrayInit(_) => {}
                     BlockContent::Load(_) => {
                         vir_mem_accesses_count += 1;
                         //                      addr  data  ls    ts
@@ -3097,7 +3130,7 @@ impl<'ast> ZGen<'ast> {
             }
             live_vm_list.push(live_vm);
         }
-        (num_mem_accesses, array_offset_map, live_vm_list)
+        (num_mem_accesses, live_vm_list)
     }
 
     // Bound the total # of block executions & the total # of memory accesses

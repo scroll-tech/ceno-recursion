@@ -7,7 +7,7 @@ use crate::front::zsharp::const_bool;
 use crate::front::zsharp::const_val;
 use crate::front::zsharp::span_to_string;
 use crate::front::zsharp::Op;
-use std::collections::{HashMap, BTreeMap};
+use std::collections::BTreeMap;
 use crate::front::zsharp::blocks::*;
 use crate::front::zsharp::*;
 use log::warn;
@@ -158,8 +158,7 @@ impl<'ast> ZGen<'ast> {
         entry_bl: usize,
         entry_regs: &Vec<Integer>, // Entry regs should match the input of the entry block
         bls: &Vec<Block<'ast>>,
-        io_size: usize,
-        array_offset_map: &HashMap<String, usize>
+        io_size: usize
     ) -> Result<(
         T, // Return value
         Vec<usize>, // Block ID
@@ -185,7 +184,7 @@ impl<'ast> ZGen<'ast> {
         self.cvar_enter_function();
         let mut nb = entry_bl;
         let mut phy_mem: Vec<T> = Vec::new();
-        let mut vir_mem_map: HashMap<String, Vec<Option<T>>> = HashMap::new();
+        let mut vir_mem: Vec<Option<T>> = Vec::new();
         let mut terminated = false;
         let mut phy_mem_op: Vec<MemOp>;
         let mut vir_mem_op: Vec<MemOp>;
@@ -312,7 +311,7 @@ impl<'ast> ZGen<'ast> {
                 let _ = &bls[nb].pretty();
                 println!();
             }
-            (nb, phy_mem, vir_mem_map, terminated, phy_mem_op, vir_mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem, vir_mem_map, array_offset_map)?;
+            (nb, phy_mem, vir_mem, terminated, phy_mem_op, vir_mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem, vir_mem)?;
 
             // Update successor block ID
             bl_exec_state[tr_size].succ_id = nb;
@@ -365,9 +364,8 @@ impl<'ast> ZGen<'ast> {
         &self, 
         bl: &Block<'ast>,
         mut phy_mem: Vec<T>,
-        mut vir_mem_map: HashMap<String, Vec<Option<T>>>,
-        array_offset_map: &HashMap<String, usize>
-    ) -> Result<(usize, Vec<T>, HashMap<String, Vec<Option<T>>>, bool, Vec<MemOp>, Vec<MemOp>), String> {
+        mut vir_mem: Vec<Option<T>>
+    ) -> Result<(usize, Vec<T>, Vec<Option<T>>, bool, Vec<MemOp>, Vec<MemOp>), String> {
         let mut phy_mem_op: Vec<MemOp> = Vec::new();
 
         // The label of the next memory operation on the specific type
@@ -403,34 +401,21 @@ impl<'ast> ZGen<'ast> {
                     }
                     phy_mem_op.push(MemOp::new_phy(bp + offset, self.usize_to_field(bp + offset)?, self.cvar_lookup(&var).unwrap()));         
                 }
-                BlockContent::ArrayInit((arr, _, size)) => {
-                    assert!(!vir_mem_map.contains_key(arr));
-                    vir_mem_map.insert(arr.clone(), vec![None; *size]);
-                }
+                BlockContent::ArrayInit(_) => { return Err(format!("Blocks should not contain array initializations.")); }
                 BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
-                    // Update vir_mem_map
                     let val_t = self.expr_impl_::<true>(&val_expr)?;
                     let mut id_t = self.expr_impl_::<true>(&id_expr)?;
-                    let id = self.t_to_usize(id_t.clone())?;
-                    vir_mem_map.get_mut(arr).ok_or(format!("STORE failed: array {} does not exist.", arr))?[id] = Some(val_t.clone());
 
                     // Add array offset to obtain address
-                    let offset = array_offset_map.get(arr).unwrap();
-                    let offset_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: offset.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
-                    }))).unwrap();
+                    let offset_t = self.cvar_lookup(arr).ok_or(format!("Store failed: array {} is uninitialized.", arr))?;
                     if id_t.type_() != &Ty::Field {
                         id_t = uint_to_field(id_t).unwrap();
                     }
                     let addr_t = add(id_t, offset_t).unwrap();
-                    let addr = id + offset;
+                    let addr = self.t_to_usize(addr_t.clone())?;
+                    // update vir_mem, pad if necessary
+                    if addr >= vir_mem.len() { vir_mem.extend(vec![None; addr + 1 - vir_mem.len()]); }
+                    vir_mem[addr] = Some(val_t.clone());
 
                     // Update vir_mem_op
                     let next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
@@ -464,13 +449,18 @@ impl<'ast> ZGen<'ast> {
                     ty_mem_op_offset.insert(ty.clone(), next_label + 1);
                 }
                 BlockContent::Load((var, ty, arr, id_expr)) => {
-                    // Update vir_mem_map
                     let mut id_t = self.expr_impl_::<true>(&id_expr)?;
-                    let id = self.t_to_usize(id_t.clone())?;
-                    let val_t = vir_mem_map.get(arr).ok_or(format!("LOAD failed: array {} does not exist.", arr))?
-                        [id].clone().ok_or(format!("LOAD from {} failed: entry {} is uninitialized.", arr, id))?;
+
+                    // Add array offset to obtain address
+                    let offset_t = self.cvar_lookup(arr).ok_or(format!("Store failed: array {} is uninitialized.", arr))?;
+                    if id_t.type_() != &Ty::Field {
+                        id_t = uint_to_field(id_t).unwrap();
+                    }
+                    let addr_t = add(id_t, offset_t).unwrap();
+                    let addr = self.t_to_usize(addr_t.clone())?;
 
                     // Declare the variable
+                    let val_t = vir_mem[addr].clone().ok_or(format!("LOAD failed: entry {} is uninitialized.", addr))?;
                     let entry_ty = val_t.type_();
                     if ty != entry_ty {
                         return Err(format!(
@@ -479,24 +469,6 @@ impl<'ast> ZGen<'ast> {
                         ));
                     }
                     self.cvar_declare_init(var.clone(), ty, val_t.clone())?;
-
-                    // Add array offset to obtain address
-                    let offset = array_offset_map.get(arr).unwrap();
-                    let offset_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: offset.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
-                    }))).unwrap();
-                    if id_t.type_() != &Ty::Field {
-                        id_t = uint_to_field(id_t).unwrap();
-                    }
-                    let addr_t = add(id_t, offset_t).unwrap();
-                    let addr = id + offset;
 
                     // Update vir_mem_op
                     let next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
@@ -535,12 +507,12 @@ impl<'ast> ZGen<'ast> {
         match &bl.terminator {
             BlockTerminator::Transition(e) => {
                 match self.t_to_usize(self.expr_impl_::<true>(&e)?) {
-                    Ok(nb) => { return Ok((nb, phy_mem, vir_mem_map, false, phy_mem_op, vir_mem_op)); }, 
+                    Ok(nb) => { return Ok((nb, phy_mem, vir_mem, false, phy_mem_op, vir_mem_op)); }, 
                     _ => { return Err("Evaluation failed: block transition evaluated to an invalid block label".to_string()); }
                 }
             }
             BlockTerminator::FuncCall(fc) => Err(format!("Evaluation failed: function call to {} needs to be converted to block label.", fc)),
-            BlockTerminator::ProgTerm => Ok((0, phy_mem, vir_mem_map, true, phy_mem_op, vir_mem_op))
+            BlockTerminator::ProgTerm => Ok((0, phy_mem, vir_mem, true, phy_mem_op, vir_mem_op))
         }
     }
 

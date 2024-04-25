@@ -68,12 +68,12 @@ impl FrontEnd for ZSharpFE {
             println!("");
         }
         let (blks, entry_bl) = g.optimize_block::<GEN_VERBOSE>(blks, entry_bl, inputs.clone());
-        let (blks, _, io_size, _, live_io_list, num_mem_accesses, array_offset_map, live_vm_list) = 
+        let (blks, _, io_size, _, live_io_list, num_mem_accesses, live_vm_list) = 
             g.process_block::<GEN_VERBOSE, 0>(blks, entry_bl, inputs);
         // NOTE: The input of block 0 includes %BN, which should be removed when reasoning about function input
         let func_input_width = blks[0].get_num_inputs() - 1;
         println!("\n\n--\nCirc IR:");
-        g.bls_to_circ(&blks, &array_offset_map);
+        g.bls_to_circ(&blks);
 
         g.generics_stack_pop();
         g.file_stack_pop();
@@ -103,9 +103,9 @@ impl ZSharpFE {
         
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
         let (blks, entry_bl) = g.optimize_block::<INTERPRET_VERBOSE>(blks, entry_bl, inputs.clone());
-        let (blks, entry_bl, io_size, _, _, _, array_offset_map, _) = g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl, inputs);
+        let (blks, entry_bl, io_size, _, _, _, _) = g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl, inputs);
         println!("\n\n--\nInterpretation:");
-        let (ret, _, prog_reg_in, bl_exec_state, phy_mem_list, vir_mem_list) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(entry_bl, entry_regs, &blks, io_size, &array_offset_map)
+        let (ret, _, prog_reg_in, bl_exec_state, phy_mem_list, vir_mem_list) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(entry_bl, entry_regs, &blks, io_size)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
         // prover::print_state_list(&bl_exec_state);
         // let _ = prover::sort_by_block(&bl_exec_state);

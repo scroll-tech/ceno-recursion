@@ -41,7 +41,7 @@ const NUM_RESERVED_VARS: usize = 7;
 // Which index in the output (INCLUDING V) denotes %RET?
 const OUTPUT_OFFSET: usize = 2;
 // What is the maximum width (# of bits) of %TS?
-const MAX_TS_WIDTH: usize = 6;
+const MAX_TS_WIDTH: usize = 10;
 
 const VARS_PER_ST_ACCESS: usize = 2;
 const VARS_PER_VM_ACCESS: usize = 4;

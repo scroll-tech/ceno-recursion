@@ -168,7 +168,7 @@ pub fn bl_gen_increment_stmt<'ast>(var: &str, offset: usize) -> Statement<'ast> 
     var_update_stmt   
 }
 
-// #[derive(Clone)]
+#[derive(Clone)]
 pub struct Block<'ast> {
     pub name: usize,
     pub inputs: Vec<(String, Option<Ty>)>,
@@ -263,10 +263,23 @@ impl<'ast> Block<'ast> {
         return count;
     }
 
+    // Concatentate blocks together
+    pub fn concat(&mut self, succ: Block<'ast>) {
+        // Instructions
+        self.instructions.extend(succ.instructions);
+        // Terminator
+        self.terminator = succ.terminator;
+        // Concatenate memory operators
+        for (ty, succ_count) in succ.mem_op_by_ty.into_iter() {
+            let total_count = if let Some(count) = self.mem_op_by_ty.get(&ty) { count + succ_count } else { succ_count };
+            self.mem_op_by_ty.insert(ty, total_count);
+        }
+    }
+
     pub fn pretty(&self) {
         println!("\nBlock {}:", self.name);
         println!("Func: {}, Scope: {}", self.fn_name, self.scope);
-        println!("Exec Bound: {}, While Loop: {}, TS Diff: {:?}", self.fn_num_exec_bound, self.is_head_of_while_loop, self.mem_op_by_ty);
+        println!("Exec Bound: {}, While Loop: {}, VM Ops: {:?}", self.fn_num_exec_bound, self.is_head_of_while_loop, self.mem_op_by_ty);
         println!("Inputs:");
 
         for i in &self.inputs {
@@ -1424,7 +1437,6 @@ impl<'ast> ZGen<'ast> {
         }
         Ok((blks, blks_len))
     }
-
 
     fn bl_gen_enter_scope_(
         &'ast self,

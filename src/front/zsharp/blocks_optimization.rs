@@ -2471,13 +2471,9 @@ impl<'ast> ZGen<'ast> {
             if !entry_bls_fn.contains(&cur_bl) && predecessor[cur_bl].len() == 1 {
                 let p = Vec::from_iter(predecessor[cur_bl].clone())[0];
                 if !exit_bls_fn.contains(&p) && successor[p].len() == 1 {
-                    // Add all instructions in cur_bl to p
-                    let bc = bls[cur_bl].instructions.clone();
-                    bls[p].instructions.extend(bc);
-                    // Set terminator of p to terminator of cur_bl
-                    bls[p].terminator = bls[cur_bl].terminator.clone();
-                    // Set MEM_OP_BY_TY of p to that of cur_bl
-                    bls[p].mem_op_by_ty = bls[cur_bl].mem_op_by_ty.clone();
+                    // Append cur_bl to p
+                    let succ = bls[cur_bl].clone();
+                    bls[p].concat(succ);
                     // Update CFG
                     successor[p].remove(&cur_bl);
                     predecessor[cur_bl].remove(&p);

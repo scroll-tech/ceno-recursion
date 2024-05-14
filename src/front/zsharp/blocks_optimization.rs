@@ -6,7 +6,7 @@
 use std::collections::VecDeque;
 use zokrates_pest_ast::*;
 use crate::front::zsharp::blocks::*;
-use std::collections::{HashMap, HashSet, BTreeMap};
+use std::collections::{HashMap, HashSet, BTreeMap, BTreeSet};
 use crate::front::zsharp::Ty;
 use itertools::Itertools;
 use std::cmp::max;
@@ -598,7 +598,7 @@ fn term_to_instr<'ast>(
 fn new_io_map() -> HashMap<String, usize> {
     let mut io_map: HashMap<String, usize> = HashMap::new();
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("%V".to_string(), io_map);
-    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%NB".to_string(), io_map);
+    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%BN".to_string(), io_map);
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RET".to_string(), io_map);
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("%TS".to_string(), io_map);
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("%AS".to_string(), io_map);
@@ -2131,7 +2131,7 @@ impl<'ast> ZGen<'ast> {
         }
         // As long as any block has spill_size > 0, keep vote out the candidate that can reduce the most total_spill_size
         let mut total_spill_size = spill_size.iter().fold(0, |a, b| a + b);
-        let mut spills: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut spills: HashMap<String, BTreeSet<String>> = HashMap::new();
         while total_spill_size > 0 {
             // Compute vote score for each candidate, use BTreeMap to make ranking deterministic
             // Scores records all blocks where the spilling of the candidate can affect spill_size
@@ -2154,7 +2154,7 @@ impl<'ast> ZGen<'ast> {
             // Pick the #0 candidate
             let ((shadower, var, _, _), _) = &scores[0];
             // Add the candidate to spills
-            let mut vars = if let Some(vars) = spills.get(shadower) { vars.clone() } else { HashSet::new() };
+            let mut vars = if let Some(vars) = spills.get(shadower) { vars.clone() } else { BTreeSet::new() };
             vars.insert(var.to_string());
             spills.insert(shadower.to_string(), vars);
             // Remove the candidate from stack_in
@@ -2664,7 +2664,7 @@ impl<'ast> ZGen<'ast> {
     ) -> (Vec<Block<'ast>>, Vec<HashMap<String, usize>>, usize, HashMap<String, usize>, usize, Vec<(Vec<usize>, Vec<usize>)>) {    
         // reg_map is consisted of two Var -> Reg Maps: TRANSITION_MAP_LIST & WITNESS_MAP
         // TRANSITION_MAP_LIST is a list of maps corresponding to each transition state
-        // Reserve registers 0 - 7 for %V, %NB, %RET, %TS, %AS, %RP, %SP, and %BP
+        // Reserve registers 0 - 7 for %V, %BN, %RET, %TS, %AS, %RP, %SP, and %BP
         let mut transition_map_list = Vec::new();
         // MAX_IO_SIZE is the size of the largest maps among TRANSITION_MAP_LIST
         let mut max_io_size = 0;

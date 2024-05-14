@@ -35,8 +35,9 @@ use circ::cfg::{
 use std::path::PathBuf;
 use core::cmp::Ordering;
 
-// How many reserved variables (excluding V) are in front of the actual input / output?
-const NUM_RESERVED_VARS: usize = 6;
+// How many reserved variables (EXCLUDING V) are in front of the actual input / output?
+// %BN, %RET, %TS, %AS, %RP, %SP, %BP
+const NUM_RESERVED_VARS: usize = 7;
 // Which index in the output (INCLUDING V) denotes %RET?
 const OUTPUT_OFFSET: usize = 2;
 // What is the maximum width (# of bits) of %TS?
@@ -751,26 +752,26 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             func_outputs = inputs[num_input_unpadded + OUTPUT_OFFSET].clone();
         }
         if VERBOSE {
-            let print_width = min(num_input_unpadded, 32);
+            let print_width = min(num_input_unpadded - 1, 32);
             print!("{:3} ", " ");
-            for i in 0..print_width {
+            for i in 0..2 + print_width {
                 print!("{:3} ", i);
             }
             println!();
             print!("{:3} ", "I");
-            for i in 0..print_width {
+            for i in 0..2 + print_width {
                 print!("{:3} ", inputs[i]);
             }
-            if num_input_unpadded > print_width {
+            if num_input_unpadded - 1 > print_width {
                 println!("...");
             } else {
                 println!();
             }
-            print!("{:3} ", "O");
-            for i in num_input_unpadded..num_input_unpadded + print_width {
+            print!("{:3} {:3} {:3} ", "O", " ", " ");
+            for i in num_input_unpadded + 1..num_input_unpadded + 1 + print_width {
                 print!("{:3} ", inputs[i]);
             }
-            if num_input_unpadded > print_width {
+            if num_input_unpadded - 1 > print_width {
                 println!("...");
             } else {
                 println!();
@@ -942,7 +943,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<false>(path.clone(), entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
+    let rtk = get_run_time_knowledge::<true>(path.clone(), entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
 
     // --
     // Write CTK, RTK to file

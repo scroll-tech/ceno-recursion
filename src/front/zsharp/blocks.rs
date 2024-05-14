@@ -25,6 +25,10 @@ const LOAD: usize = 1;
 const INIT_STORE: usize = 2;
 const DUMMY_LOAD: usize = 3;
 
+const W_TS: &str = "%w1";
+const W_SP: &str = "%w4";
+const W_BP: &str = "%w5";
+
 fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast>) -> Expression<'ast> {
     let ce = Expression::Binary(BinaryExpression {
         // op: BinaryOperator::Lt,
@@ -406,6 +410,7 @@ impl<'ast> ZGen<'ast> {
         match name {
             "%BP" => Some(Ty::Field),
             "%SP" => Some(Ty::Field),
+            "%TS" => Some(Ty::Field),
             "%AS" => Some(Ty::Field),
             "%RP" => Some(Ty::Field),
             _ => match self.circ_get_value(Loc::local(name.to_string())).map_err(|e| format!("{e}")).ok()?
@@ -442,6 +447,8 @@ impl<'ast> ZGen<'ast> {
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%SP")));
         // Initialize %BP
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%BP")));
+        // Initialize %TS for memory timestamp
+        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%TS")));
         // Initialize %AS for allocating arrays
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS")));
 
@@ -1824,9 +1831,9 @@ impl<'ast> ZGen<'ast> {
         self.bl_gen_assert_const(&format!("%vm{:06}l", next_label), ls);
         // TS, increment if STORE
         if MODE == STORE {
-            self.stmt_impl_::<false>(&bl_gen_increment_stmt("%w1", 1)).unwrap();
+            self.stmt_impl_::<false>(&bl_gen_increment_stmt(W_TS, 1)).unwrap();
         }
-        self.bl_gen_assert_eq(&format!("%w1"), &format!("%vm{:06}t", next_label));
+        self.bl_gen_assert_eq(&W_TS, &format!("%vm{:06}t", next_label));
         // DATA is updated individually by LOAD or STORE
 
         // Update label
@@ -1912,7 +1919,7 @@ impl<'ast> ZGen<'ast> {
                         op: BinaryOperator::Add,
                         left: Box::new(Expression::Identifier(IdentifierExpression {
                             // %SP
-                            value: if ESTIMATE { "%SP".to_string() } else { "%w3".to_string() },
+                            value: if ESTIMATE { "%SP".to_string() } else { W_SP.to_string() },
                             span: Span::new("", 0, 0).unwrap()
                         })),
                         right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
@@ -1969,7 +1976,7 @@ impl<'ast> ZGen<'ast> {
                         op: BinaryOperator::Add,
                         left: Box::new(Expression::Identifier(IdentifierExpression {
                             // %BP
-                            value: if ESTIMATE { "%BP".to_string() } else { "%w4".to_string() },
+                            value: if ESTIMATE { "%BP".to_string() } else { W_BP.to_string() },
                             span: Span::new("", 0, 0).unwrap()
                         })),
                         right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {

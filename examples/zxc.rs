@@ -43,6 +43,9 @@ const OUTPUT_OFFSET: usize = 2;
 // What is the maximum width (# of bits) of %TS?
 const MAX_TS_WIDTH: usize = 6;
 
+const VARS_PER_ST_ACCESS: usize = 2;
+const VARS_PER_VM_ACCESS: usize = 4;
+
 #[derive(Debug, Parser)]
 #[command(name = "zxc", about = "CirC: the circuit compiler")]
 struct Options {
@@ -508,7 +511,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         */
         let num_witnesses = 
             r1cs.num_vars() + 1 // add W to witness
-            + 5 * block_num_mem_accesses[block_num].1 - live_vm_list[block_num].len() // remove live vm vars, add all vm vars
+            + VARS_PER_VM_ACCESS * block_num_mem_accesses[block_num].1 - live_vm_list[block_num].len() // remove live vm vars, add all vm vars
             - live_io_list[block_num].0.len() - live_io_list[block_num].1.len(); // remove all inputs / outputs
         num_vars_per_block.push(num_witnesses.next_power_of_two());
         // Include V * V = V and 0 = W - V
@@ -546,9 +549,9 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     };
     // Add all IOs and WV in front
     let witness_relabel = |b: usize, i: usize|  -> usize {
-        let num_pm_vars = 2 * block_num_mem_accesses[b].0;
+        let num_pm_vars = VARS_PER_ST_ACCESS * block_num_mem_accesses[b].0;
         let num_live_vm_vars = live_vm_list[b].len();
-        let num_vm_vars = 5 * block_num_mem_accesses[b].1;
+        let num_vm_vars = VARS_PER_VM_ACCESS * block_num_mem_accesses[b].1;
         // physical memory accesses
         if i < num_pm_vars {
             max_num_witnesses + 1 + i
@@ -608,7 +611,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     let output_block_num = block_num_instances;
 
     let live_io_size = live_io_list.iter().map(|i| i.0.len() + i.1.len()).collect();
-    let live_mem_size = (0..live_vm_list.len()).map(|i| 2 * block_num_mem_accesses[i].0 + live_vm_list[i].len()).collect();
+    let live_mem_size = (0..live_vm_list.len()).map(|i| VARS_PER_ST_ACCESS * block_num_mem_accesses[i].0 + live_vm_list[i].len()).collect();
     
     (CompileTimeKnowledge {
         block_num_instances,

@@ -1774,7 +1774,7 @@ impl<'ast> ZGen<'ast> {
         self.circ_declare_input(
             f,
             format!("%vm{:06}a", next_label),
-            ty,
+            &Ty::Field,
             ZVis::Private(0),
             None,
             true,

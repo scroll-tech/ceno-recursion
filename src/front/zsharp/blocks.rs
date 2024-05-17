@@ -584,10 +584,12 @@ impl<'ast> ZGen<'ast> {
             let ret_type = f
                 .returns
                 .first().ok_or("No return type provided for one or more function")?;
-            let ret_ty = self.type_impl_::<false>(&ret_type)?;
-
-            // Use cvar to identify variable scoping for push and pull
-            self.circ_enter_fn(f_name.to_string(), Some(ret_ty.clone()));
+            let mut ret_ty = self.type_impl_::<false>(&ret_type)?;
+            // If return type is an array, convert it to a pointer
+            if let Ty::Array(_, _) = ret_ty {
+                ret_ty = Ty::Field;
+            }
+            let ret_type = ty_to_type(&ret_ty)?;
 
             // Create new Block, initial scope is 0
             blks.push(Block::new(blks_len, 1, f_name.to_string(), 0));
@@ -612,7 +614,7 @@ impl<'ast> ZGen<'ast> {
             // Iterate through Stmts
             for s in &f.statements {
                 // All statements at function level have scope 0
-                (blks, blks_len, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, s, ret_type, &f_name, var_scope_info, 1, 0)?;
+                (blks, blks_len, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, s, &ret_type, &f_name, var_scope_info, 1, 0)?;
             }
 
             // Set terminator to ProgTerm if in main, point to %RP otherwise
@@ -621,9 +623,6 @@ impl<'ast> ZGen<'ast> {
             } else {
                 blks[blks_len - 1].terminator = BlockTerminator::Transition(bl_coda(NextBlock::Rp));
             }
-
-            self.circ_exit_fn();
-            self.maybe_garbage_collect();
         }
 
         Ok((blks, blks_len, inputs))
@@ -769,7 +768,7 @@ impl<'ast> ZGen<'ast> {
             }
 
             // Store Return value to a temporary variable "ret@X"
-            let ret_ty = self
+            let ret_type = self
                 .functions
                 .get(&f_path)
                 .ok_or_else(|| format!("No file '{:?}' attempting fn call", &f_path))?
@@ -777,12 +776,17 @@ impl<'ast> ZGen<'ast> {
                 .ok_or_else(|| format!("No function '{}' attempting fn call", &f_name))?
                 .returns
                 .first().ok_or("No return type provided for one or more function")?;
+            let mut ret_ty = self.type_impl_::<false>(&ret_type)?;
+            // If return type is an array, convert it to a pointer
+            if let Ty::Array(_, _) = ret_ty {
+                ret_ty = Ty::Field;
+            }
 
             let ret_name = format!("ret@{}", func_count);
-            let ret_extended_name = var_scope_info.declare_var(&ret_name, &caller_name, caller_scope, self.type_impl_::<false>(&ret_ty)?);
+            let ret_extended_name = var_scope_info.declare_var(&ret_name, &caller_name, caller_scope, ret_ty.clone());
             let update_ret_stmt = Statement::Definition(DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                    ty: ret_ty.clone(),
+                    ty: ty_to_type(&ret_ty)?,
                     identifier: IdentifierExpression {
                         value: ret_extended_name,
                         span: Span::new("", 0, 0).unwrap()
@@ -813,7 +817,7 @@ impl<'ast> ZGen<'ast> {
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
         s: &'ast Statement<'ast>,
-        ret_ty: &'ast Type<'ast>,
+        ret_ty: &Type<'ast>,
         // function name
         f_name: &str,
         // Records the version number of each (var_name, fn_name) at each scope
@@ -1112,8 +1116,7 @@ impl<'ast> ZGen<'ast> {
                 (blks, blks_len, var_scope_info, rhs_expr, _, _, array_init_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &d.expression, f_name, 0, 0, var_scope_info)?;
                 
-                // Array declaration
-                // If array_init_info is defined, then the RHS must be the same array
+                // RHS is array, if array_init_info is defined
                 if !array_init_info.is_empty() {
                     if let Some(l) = d.lhs.first() {
                         let (lhs_id, is_declare) = match l {
@@ -1190,11 +1193,23 @@ impl<'ast> ZGen<'ast> {
                                 }
                             }
                             TypedIdentifierOrAssignee::TypedIdentifier(l) => {
-                                let decl_ty = self.type_impl_::<false>(&l.ty)?;
-
-                                // Unroll scoping on LHS
+                                let mut decl_ty = self.type_impl_::<false>(&l.ty)?;
                                 let id = &l.identifier.value;
-                                let new_l = var_scope_info.declare_var(id, f_name, cur_scope, decl_ty.clone());
+
+                                // If LHS is an array declaration but RHS is not an array, 
+                                // first declare LHS as an array
+                                // then convert LHS to a pointer
+                                let new_l = {
+                                    if let Ty::Array(_, entry_ty) = decl_ty {
+                                        let new_l = var_scope_info.declare_var(id, f_name, cur_scope, Ty::Field);
+                                        var_scope_info.arr_map.insert(new_l.clone(), *entry_ty.clone());
+                                        decl_ty = Ty::Field;
+                                        new_l
+                                    } else {
+                                        // Unroll scoping on LHS
+                                        var_scope_info.declare_var(id, f_name, cur_scope, decl_ty.clone())
+                                    }
+                                };
 
                                 let new_id = IdentifierExpression {
                                     value: new_l,
@@ -1203,7 +1218,7 @@ impl<'ast> ZGen<'ast> {
 
                                 // Convert the assignee to a declaration
                                 lhs_expr = vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                                    ty: l.ty.clone(),
+                                    ty: ty_to_type(&decl_ty)?,
                                     identifier: new_id.clone(),
                                     span: Span::new("", 0, 0).unwrap()
                                 })];
@@ -1933,7 +1948,7 @@ impl<'ast> ZGen<'ast> {
                     self.circ_declare_input(
                         &f,
                         format!("%pm{:06}a", phy_mem_op_count),
-                        ty,
+                        &Ty::Field,
                         ZVis::Private(0),
                         None,
                         true,
@@ -1991,7 +2006,7 @@ impl<'ast> ZGen<'ast> {
                     self.circ_declare_input(
                         &f,
                         format!("%pm{:06}a", phy_mem_op_count),
-                        ty,
+                        &Ty::Field,
                         ZVis::Private(0),
                         None,
                         true,

@@ -309,7 +309,18 @@ impl<'ast> ZGen<'ast> {
                 print!("%PHY: [");
                 for c in &phy_mem {
                     c.pretty(&mut std::io::stdout().lock())
-                    .expect("error pretty-printing value");
+                    .expect("error pretty-printcaring value");
+                    print!(", ");
+                }
+                println!("]");
+                print!("%VIR: [");
+                for c in &vir_mem {
+                    if let Some(c) = c { 
+                        c.pretty(&mut std::io::stdout().lock())
+                        .expect("error pretty-printing value");
+                    } else {
+                        print!("_");
+                    }
                     print!(", ");
                 }
                 println!("]");

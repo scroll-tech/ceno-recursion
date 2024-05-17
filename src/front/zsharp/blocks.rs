@@ -599,7 +599,13 @@ impl<'ast> ZGen<'ast> {
             for p in f.parameters.clone().into_iter() {
                 let p_id = p.id.value.clone();
                 let p_ty = self.type_impl_::<false>(&p.ty)?;
-                var_scope_info.declare_var(&p_id, &f_name, 0, p_ty);
+                // if p_ty is an array, convert p_ty to a field (pointer)
+                if let Ty::Array(_, entry_ty) = p_ty {
+                    let p_extended_id = var_scope_info.declare_var(&p_id, &f_name, 0, Ty::Field);
+                    var_scope_info.arr_map.insert(p_extended_id.clone(), *entry_ty.clone());
+                } else {
+                    var_scope_info.declare_var(&p_id, &f_name, 0, p_ty);
+                }
                 inputs.push(var_scope_info.reference_var(&p_id, &f_name)?.clone());     
             }
 
@@ -699,10 +705,13 @@ impl<'ast> ZGen<'ast> {
             // Assign p@0 to a
             for (p, a) in f.parameters.clone().into_iter().zip(args) {
                 let p_id = p.id.value.clone();
-                let p_ty = self.type_impl_::<false>(&p.ty)?;
+                let mut p_ty = self.type_impl_::<false>(&p.ty)?;
+                if let Ty::Array(_, _) = p_ty {
+                    p_ty = Ty::Field;
+                }
                 let param_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                        ty: p.ty,
+                        ty: ty_to_type(&p_ty)?,
                         identifier: IdentifierExpression {
                             value: var_scope_info.declare_var(&p_id, &f_name, 0, p_ty),
                             span: Span::new("", 0, 0).unwrap()

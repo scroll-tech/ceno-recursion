@@ -23,14 +23,6 @@ const MIN_BLOCK_SIZE: usize = 1024;
 const CFG_VERBOSE: bool = false;
 
 fn type_to_ty(t: Type) -> Result<Ty, String> {
-    /*
-    fn lift(t: BasicOrStructType) -> Type {
-        match t {
-            BasicOrStructType::Basic(b) => Type::Basic(b.clone()),
-            BasicOrStructType::Struct(b) => Type::Struct(b.clone()),
-        }
-    }
-    */
     match t {
         Type::Basic(BasicType::U8(_)) => Ok(Ty::Uint(8)),
         Type::Basic(BasicType::U16(_)) => Ok(Ty::Uint(16)),

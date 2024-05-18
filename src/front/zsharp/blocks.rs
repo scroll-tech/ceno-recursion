@@ -199,7 +199,7 @@ pub enum BlockContent<'ast> {
     //    var    type   arr   id_expr
     Load((String, Ty, String, Expression<'ast>)),  // val = arr[id]
     // DummyLoad(Ty),
-    // Branch((Expression<'ast>, Vec<BlockContent>, Vec<BlockContent>)),
+    Branch((Expression<'ast>, Vec<BlockContent<'ast>>, Vec<BlockContent<'ast>>)),
     Stmt(Statement<'ast>) // other statements
 }
 
@@ -297,21 +297,7 @@ impl<'ast> Block<'ast> {
         }
         println!("Instructions:");
         for c in &self.instructions {
-            match c {
-                BlockContent::MemPush((val, ty, offset)) => { println!("    %PHY[%SP + {offset}] = {} <{ty}>", pretty_name(val)) }
-                BlockContent::MemPop((val, ty, offset)) => { println!("    {ty} {} = %PHY[%BP + {offset}]", pretty_name(val)) }
-                BlockContent::ArrayInit((arr, ty, size)) => { println!("    {ty}[{size}] {arr}") }
-                BlockContent::Store((val, ty, arr, id, init)) => { 
-                    print!("    {arr}["); 
-                    pretty_expr::<false>(&id); print!("] = "); 
-                    pretty_expr::<false>(&val); 
-                    print!(" <{ty}>");
-                    if *init { print!(", init"); }
-                    println!(); 
-                }
-                BlockContent::Load((val, ty, arr, id)) => { print!("    {ty} {} = {arr}[", pretty_name(val)); pretty_expr::<false>(&id); println!("]"); }
-                BlockContent::Stmt(s) => { pretty_stmt(1, &s); }
-            }
+            pretty_block_content(0, c);
         }
         match &self.terminator {
             BlockTerminator::Transition(e) => {
@@ -1890,6 +1876,224 @@ impl<'ast> ZGen<'ast> {
         (ty_mem_op_offset, next_label)
     }
 
+    pub fn inst_to_circ<const ESTIMATE: bool>(&self, 
+        i: &BlockContent, 
+        f: &str,
+        mut phy_mem_op_count: usize,
+        mut alloc_vir_mem_op_count: usize,
+        mut ty_mem_op_offset: BTreeMap<Ty, usize>,
+    ) -> (usize, usize, BTreeMap<Ty, usize>) {
+        match i {
+            BlockContent::MemPush((var, ty, offset)) => {
+                // Non-deterministically supply ADDR
+                self.circ_declare_input(
+                    &f,
+                    format!("%pm{:06}a", phy_mem_op_count),
+                    &Ty::Field,
+                    ZVis::Private(0),
+                    None,
+                    true,
+                ).unwrap();
+                // Non-deterministically supply VAL
+                self.circ_declare_input(
+                    &f,
+                    format!("%pm{:06}v", phy_mem_op_count),
+                    ty,
+                    ZVis::Private(0),
+                    None,
+                    true,
+                ).unwrap();
+                // Assert correctness of address
+                let lhs_t = self.expr_impl_::<false>(&Expression::Binary(BinaryExpression {
+                    op: BinaryOperator::Add,
+                    left: Box::new(Expression::Identifier(IdentifierExpression {
+                        // %SP
+                        value: if ESTIMATE { "%SP".to_string() } else { W_SP.to_string() },
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                        value: DecimalNumber {
+                            value: offset.to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        span: Span::new("", 0, 0).unwrap()
+                    }))),
+                    span: Span::new("", 0, 0).unwrap()
+                })).unwrap();
+                let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                    value: format!("%pm{:06}a", phy_mem_op_count),
+                    span: Span::new("", 0, 0).unwrap()
+                })).unwrap();
+                let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                self.assert(b);
+                // Assert correctness of value
+                let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                    value: var.to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                })).unwrap();
+                let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                    value: format!("%pm{:06}v", phy_mem_op_count),
+                    span: Span::new("", 0, 0).unwrap()
+                })).unwrap();
+                let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                self.assert(b);
+                phy_mem_op_count += 1;
+            }
+            BlockContent::MemPop((var, ty, offset)) => {
+                // Non-deterministically supply ADDR and VAL in memory
+                self.circ_declare_input(
+                    &f,
+                    format!("%pm{:06}a", phy_mem_op_count),
+                    &Ty::Field,
+                    ZVis::Private(0),
+                    None,
+                    true,
+                ).unwrap();
+                self.circ_declare_input(
+                    &f,
+                    format!("%pm{:06}v", phy_mem_op_count),
+                    ty,
+                    ZVis::Private(0),
+                    None,
+                    true,
+                ).unwrap();
+                // Assert correctness of address
+                let lhs_t = self.expr_impl_::<false>(&Expression::Binary(BinaryExpression {
+                    op: BinaryOperator::Add,
+                    left: Box::new(Expression::Identifier(IdentifierExpression {
+                        // %BP
+                        value: if ESTIMATE { "%BP".to_string() } else { W_BP.to_string() },
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                        value: DecimalNumber {
+                            value: offset.to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        span: Span::new("", 0, 0).unwrap()
+                    }))),
+                    span: Span::new("", 0, 0).unwrap()
+                })).unwrap();
+                let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                    value: format!("%pm{:06}a", phy_mem_op_count),
+                    span: Span::new("", 0, 0).unwrap()
+                })).unwrap();
+                let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                self.assert(b);
+                // Assign POP value to val
+                let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                    value: format!("%pm{:06}v", phy_mem_op_count),
+                    span: Span::new("", 0, 0).unwrap()
+                })).unwrap();
+                self.declare_init_impl_::<false>(
+                    var.clone(),
+                    ty.clone(),
+                    e,
+                ).unwrap();
+                phy_mem_op_count += 1;  
+            }
+            BlockContent::ArrayInit((arr, _, _)) => {
+                if ESTIMATE {
+                    self.circ_declare_input(
+                        &f,
+                        arr.to_string(),
+                        &Ty::Field,
+                        ZVis::Private(0),
+                        None,
+                        true,
+                    ).unwrap();
+                }
+            }
+            BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
+                if ESTIMATE {}
+                else {
+                    let next_label: usize;
+                    // ADDR, LS, & TS
+                    if *init {
+                        (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<INIT_STORE>(
+                            f,
+                            ty_mem_op_offset,
+                            &ty,
+                            Some(&arr),
+                            Some(&id_expr)
+                        );
+                    } else {
+                        (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<STORE>(
+                            f,
+                            ty_mem_op_offset,
+                            &ty,
+                            Some(&arr),
+                            Some(&id_expr)
+                        );
+                    }
+                    // Assert correctness of DATA
+                    let lhs_t = self.expr_impl_::<false>(&val_expr).unwrap();
+                    let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: format!("%vm{:06}d", next_label),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
+                    self.assert(b);
+                }
+            }
+            BlockContent::Load((val, ty, arr, id_expr)) => {
+                if ESTIMATE {
+                    let r = self.circ_declare_input(
+                        &f,
+                        val.clone(),
+                        ty,
+                        ZVis::Public,
+                        None,
+                        true,
+                    );
+                    r.unwrap();
+                } else {
+                    let next_label: usize;
+                    // ADDR, LS, & TS
+                    (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<LOAD>(
+                        f,
+                        ty_mem_op_offset,
+                        &ty,
+                        Some(&arr),
+                        Some(&id_expr)
+                    );
+                    // Assign LOAD value to data
+                    let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: format!("%vm{:06}d", next_label),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    self.declare_init_impl_::<false>(
+                        val.clone(),
+                        ty.clone(),
+                        e,
+                    ).unwrap();
+                }
+            }
+            BlockContent::Branch((cond, if_insts, else_insts)) => {
+                let cond = self.expr_impl_::<false>(&cond).unwrap();
+                let cbool = bool(cond.clone()).unwrap();
+                self.circ_enter_condition(cbool.clone());
+                for i in if_insts {
+                    (phy_mem_op_count, alloc_vir_mem_op_count, ty_mem_op_offset) = self.inst_to_circ::<ESTIMATE>(i, f, phy_mem_op_count, alloc_vir_mem_op_count, ty_mem_op_offset);
+                }
+                self.circ_exit_condition();
+                self.circ_enter_condition(term![NOT; cbool]);
+                for i in else_insts {
+                    (phy_mem_op_count, alloc_vir_mem_op_count, ty_mem_op_offset) = self.inst_to_circ::<ESTIMATE>(i, f, phy_mem_op_count, alloc_vir_mem_op_count, ty_mem_op_offset);
+                }
+                self.circ_exit_condition();
+            }
+            BlockContent::Stmt(stmt) => { self.stmt_impl_::<false>(&stmt).unwrap(); }
+        }
+        (phy_mem_op_count, alloc_vir_mem_op_count, ty_mem_op_offset)
+    }
+
     // Convert a block to circ_ir
     // This can be done to either produce the constraints, or to estimate the size of constraints
     // In estimation mode, we rename all output variable from X -> oX, add assertion, and process the terminator
@@ -1942,200 +2146,7 @@ impl<'ast> ZGen<'ast> {
         
         // Iterate over instructions, convert memory accesses into statements and then IR
         for i in &b.instructions {
-            match i {
-                BlockContent::MemPush((var, ty, offset)) => {
-                    // Non-deterministically supply ADDR
-                    self.circ_declare_input(
-                        &f,
-                        format!("%pm{:06}a", phy_mem_op_count),
-                        &Ty::Field,
-                        ZVis::Private(0),
-                        None,
-                        true,
-                    ).unwrap();
-                    // Non-deterministically supply VAL
-                    self.circ_declare_input(
-                        &f,
-                        format!("%pm{:06}v", phy_mem_op_count),
-                        ty,
-                        ZVis::Private(0),
-                        None,
-                        true,
-                    ).unwrap();
-                    // Assert correctness of address
-                    let lhs_t = self.expr_impl_::<false>(&Expression::Binary(BinaryExpression {
-                        op: BinaryOperator::Add,
-                        left: Box::new(Expression::Identifier(IdentifierExpression {
-                            // %SP
-                            value: if ESTIMATE { "%SP".to_string() } else { W_SP.to_string() },
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                            value: DecimalNumber {
-                                value: offset.to_string(),
-                                span: Span::new("", 0, 0).unwrap()
-                            },
-                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                                span: Span::new("", 0, 0).unwrap()
-                            })),
-                            span: Span::new("", 0, 0).unwrap()
-                        }))),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%pm{:06}a", phy_mem_op_count),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-                    self.assert(b);
-                    // Assert correctness of value
-                    let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: var.to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%pm{:06}v", phy_mem_op_count),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-                    self.assert(b);
-                    phy_mem_op_count += 1;
-                }
-                BlockContent::MemPop((var, ty, offset)) => {
-                    // Non-deterministically supply ADDR and VAL in memory
-                    self.circ_declare_input(
-                        &f,
-                        format!("%pm{:06}a", phy_mem_op_count),
-                        &Ty::Field,
-                        ZVis::Private(0),
-                        None,
-                        true,
-                    ).unwrap();
-                    self.circ_declare_input(
-                        &f,
-                        format!("%pm{:06}v", phy_mem_op_count),
-                        ty,
-                        ZVis::Private(0),
-                        None,
-                        true,
-                    ).unwrap();
-                    // Assert correctness of address
-                    let lhs_t = self.expr_impl_::<false>(&Expression::Binary(BinaryExpression {
-                        op: BinaryOperator::Add,
-                        left: Box::new(Expression::Identifier(IdentifierExpression {
-                            // %BP
-                            value: if ESTIMATE { "%BP".to_string() } else { W_BP.to_string() },
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                            value: DecimalNumber {
-                                value: offset.to_string(),
-                                span: Span::new("", 0, 0).unwrap()
-                            },
-                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                                span: Span::new("", 0, 0).unwrap()
-                            })),
-                            span: Span::new("", 0, 0).unwrap()
-                        }))),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%pm{:06}a", phy_mem_op_count),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-                    self.assert(b);
-                    // Assign POP value to val
-                    let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%pm{:06}v", phy_mem_op_count),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
-                    self.declare_init_impl_::<false>(
-                        var.clone(),
-                        ty.clone(),
-                        e,
-                    ).unwrap();
-                    phy_mem_op_count += 1;  
-                }
-                BlockContent::ArrayInit((arr, _, _)) => {
-                    if ESTIMATE {
-                        self.circ_declare_input(
-                            &f,
-                            arr.to_string(),
-                            &Ty::Field,
-                            ZVis::Private(0),
-                            None,
-                            true,
-                        ).unwrap();
-                    }
-                }
-                BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
-                    if ESTIMATE {}
-                    else {
-                        let next_label: usize;
-                        // ADDR, LS, & TS
-                        if *init {
-                            (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<INIT_STORE>(
-                                f,
-                                ty_mem_op_offset,
-                                &ty,
-                                Some(&arr),
-                                Some(&id_expr)
-                            );
-                        } else {
-                            (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<STORE>(
-                                f,
-                                ty_mem_op_offset,
-                                &ty,
-                                Some(&arr),
-                                Some(&id_expr)
-                            );
-                        }
-                        // Assert correctness of DATA
-                        let lhs_t = self.expr_impl_::<false>(&val_expr).unwrap();
-                        let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                            value: format!("%vm{:06}d", next_label),
-                            span: Span::new("", 0, 0).unwrap()
-                        })).unwrap();
-                        let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-                        self.assert(b);
-                    }
-                }
-                BlockContent::Load((val, ty, arr, id_expr)) => {
-                    if ESTIMATE {
-                        let r = self.circ_declare_input(
-                            &f,
-                            val.clone(),
-                            ty,
-                            ZVis::Public,
-                            None,
-                            true,
-                        );
-                        r.unwrap();
-                    } else {
-                        let next_label: usize;
-                        // ADDR, LS, & TS
-                        (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<LOAD>(
-                            f,
-                            ty_mem_op_offset,
-                            &ty,
-                            Some(&arr),
-                            Some(&id_expr)
-                        );
-                        // Assign LOAD value to data
-                        let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                            value: format!("%vm{:06}d", next_label),
-                            span: Span::new("", 0, 0).unwrap()
-                        })).unwrap();
-                        self.declare_init_impl_::<false>(
-                            val.clone(),
-                            ty.clone(),
-                            e,
-                        ).unwrap();
-                    }
-                }
-                BlockContent::Stmt(stmt) => { self.stmt_impl_::<false>(&stmt).unwrap(); }
-            }
+            (phy_mem_op_count, alloc_vir_mem_op_count, ty_mem_op_offset) = self.inst_to_circ::<ESTIMATE>(i, f, phy_mem_op_count, alloc_vir_mem_op_count, ty_mem_op_offset);
         }
         
         // If in estimation mode, declare and assert all outputs of the block

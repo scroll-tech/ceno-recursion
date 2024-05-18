@@ -1,4 +1,41 @@
 use zokrates_pest_ast::*;
+use crate::front::zsharp::blocks::BlockContent;
+
+pub fn pretty_block_content(indent: usize, bc: &BlockContent) {
+    for _ in 0..indent * 4 {
+        print!(" ");
+    }
+    match bc {
+        BlockContent::MemPush((val, ty, offset)) => { println!("%PHY[%SP + {offset}] = {} <{ty}>", pretty_name(val)) }
+        BlockContent::MemPop((val, ty, offset)) => { println!("{ty} {} = %PHY[%BP + {offset}]", pretty_name(val)) }
+        BlockContent::ArrayInit((arr, ty, size)) => { println!("{ty}[{size}] {arr}") }
+        BlockContent::Store((val, ty, arr, id, init)) => { 
+            print!("{arr}["); 
+            pretty_expr::<false>(&id); print!("] = "); 
+            pretty_expr::<false>(&val); 
+            print!(" <{ty}>");
+            if *init { print!(", init"); }
+            println!(); 
+        }
+        BlockContent::Load((val, ty, arr, id)) => { print!("{ty} {} = {arr}[", pretty_name(val)); pretty_expr::<false>(&id); println!("]"); }
+        BlockContent::Branch((cond, if_insts, else_insts)) => { 
+            print!("if ");
+            pretty_expr::<false>(cond);
+            println!(":");
+            for i in if_insts {
+                pretty_block_content(indent + 1, i);
+            }
+            for _ in 0..indent * 4 {
+                print!(" ");
+            }
+            println!("else:");
+            for i in else_insts {
+                pretty_block_content(indent + 1, i);
+            }
+         }
+        BlockContent::Stmt(s) => { pretty_stmt(1, &s); }
+    }
+}
 
 pub fn pretty_stmt(indent: usize, s: &Statement) {
     for _ in 0..indent * 4 {

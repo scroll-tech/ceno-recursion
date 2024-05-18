@@ -512,6 +512,7 @@ impl<'ast> ZGen<'ast> {
                     // Increment label
                     ty_mem_op_offset.insert(ty.clone(), next_label + 1);
                 }
+                BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
                 BlockContent::Stmt(s) => {
                     self.bl_eval_stmt_impl_(s)?;
                 }

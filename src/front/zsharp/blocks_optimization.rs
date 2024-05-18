@@ -1341,6 +1341,7 @@ impl<'ast> ZGen<'ast> {
                                 state.insert("%TS".to_string());
                             }
                         }
+                        BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
                         BlockContent::Stmt(s) => {
                             let (kill, gen) = stmt_find_val(s);
                             // Mark gens alive only if not a definition or the defined variable is alive,
@@ -1441,6 +1442,7 @@ impl<'ast> ZGen<'ast> {
                                 state.insert("%TS".to_string());
                             }
                         }
+                        BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
                         BlockContent::Stmt(s) => {
                             let (kill, gen) = stmt_find_val(s);
                             // If it's not a definition or the defined variable is alive,
@@ -1586,6 +1588,7 @@ impl<'ast> ZGen<'ast> {
                             state.insert("%TS".to_string());
                             state.insert(arr.to_string());
                         }
+                        BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
                         BlockContent::Stmt(s) => {
                             let (kill, gen) = stmt_find_val(&s);
                             for k in kill {
@@ -1671,6 +1674,7 @@ impl<'ast> ZGen<'ast> {
                         BlockContent::Load((val, ty, _, _)) => {
                             state.insert(val.clone(), ty.clone());
                         }
+                        BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
                         BlockContent::Stmt(s) => {
                             if let Statement::Definition(ds) = s {
                                 for d in &ds.lhs {
@@ -2876,6 +2880,7 @@ impl<'ast> ZGen<'ast> {
                         (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
                         new_instr.push(BlockContent::Load((new_val, ty.clone(), new_arr_name, new_id_expr)))
                     }
+                    BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
                     BlockContent::Stmt(s) => {
                         let new_stmt: Statement;
                         (new_stmt, witness_map) = var_to_reg_stmt(&s, witness_map);
@@ -3110,6 +3115,7 @@ impl<'ast> ZGen<'ast> {
                         }
                     }
                     */
+                    BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
                     BlockContent::Stmt(_) => {}
                 }
             }

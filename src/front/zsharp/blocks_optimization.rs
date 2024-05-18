@@ -1012,6 +1012,81 @@ fn ty_inst<'ast>(
     state
 }
 
+// Var -> Reg
+fn vtr_inst<'ast>(
+    mut witness_map: HashMap<String, usize>,
+    inst: &Vec<BlockContent<'ast>>,
+    mut new_instr: Vec<BlockContent<'ast>>,
+) -> (HashMap<String, usize>, Vec<BlockContent<'ast>>) {
+    for s in inst {
+        match s {
+            BlockContent::MemPush((var, ty, offset)) => {
+                let new_var: String;
+                (new_var, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
+                new_instr.push(BlockContent::MemPush((new_var, ty.clone(), *offset)));
+            }
+            BlockContent::MemPop((var, ty, offset)) => {
+                let new_var: String;
+                (new_var, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
+                new_instr.push(BlockContent::MemPop((new_var, ty.clone(), *offset)));
+            }
+            BlockContent::ArrayInit((arr, _, size)) => {
+                let new_arr_name: String;
+                let new_alloc_size_name: String;
+                (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
+                (new_alloc_size_name, witness_map, _) = var_name_to_reg_id_expr::<0>("%AS".to_string(), witness_map);
+
+                // Declare the array as a pointer (field), set to %AS
+                let pointer_init_stmt = Statement::Definition(DefinitionStatement {
+                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        ty: Type::Basic(BasicType::Field(FieldType {
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        identifier: IdentifierExpression {
+                            value: new_arr_name.to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        span: Span::new("", 0, 0).unwrap()
+                    })],
+                    expression: Expression::Identifier(IdentifierExpression {
+                        value: new_alloc_size_name.to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    }),
+                    span: Span::new("", 0, 0).unwrap()
+                });
+                new_instr.push(BlockContent::Stmt(pointer_init_stmt));
+                // Increment %AS by size of array
+                new_instr.push(BlockContent::Stmt(bl_gen_increment_stmt(&new_alloc_size_name, *size)));
+            }
+            BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
+                let new_val_expr: Expression;
+                let new_id_expr: Expression;
+                let new_arr_name: String;
+                (new_val_expr, witness_map) = var_to_reg_expr(&val_expr, witness_map);
+                (new_id_expr, witness_map) = var_to_reg_expr(&id_expr, witness_map);
+                (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
+                new_instr.push(BlockContent::Store((new_val_expr, ty.clone(), new_arr_name, new_id_expr, *init)))
+            }
+            BlockContent::Load((val, ty, arr, id_expr)) => {
+                let new_val: String;
+                let new_id_expr: Expression;
+                let new_arr_name: String;
+                (new_val, witness_map, _) = var_name_to_reg_id_expr::<0>(val.to_string(), witness_map);
+                (new_id_expr, witness_map) = var_to_reg_expr(&id_expr, witness_map);
+                (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
+                new_instr.push(BlockContent::Load((new_val, ty.clone(), new_arr_name, new_id_expr)))
+            }
+            BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
+            BlockContent::Stmt(s) => {
+                let new_stmt: Statement;
+                (new_stmt, witness_map) = var_to_reg_stmt(&s, witness_map);
+                new_instr.push(BlockContent::Stmt(new_stmt));
+            }
+        }
+    }
+    (witness_map, new_instr)
+}
+
 // Information regarding one variable for spilling
 #[derive(Clone, Debug, PartialEq)]
 struct VarSpillInfo {
@@ -2243,7 +2318,7 @@ impl<'ast> ZGen<'ast> {
                             }
                         },
                         // Note: all GENs within branches will be out of scope by the end of the block, no need to process
-                        BlockContent::Brnach(_) => {
+                        BlockContent::Branch(_) => {
                             new_instructions.push(i.clone());
                         }
                         // Do not reason about memory operations
@@ -2754,72 +2829,7 @@ impl<'ast> ZGen<'ast> {
             bls[i].inputs = new_inputs;
 
             // Map the instructions
-            for s in &bls[i].instructions {
-                match s {
-                    BlockContent::MemPush((var, ty, offset)) => {
-                        let new_var: String;
-                        (new_var, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
-                        new_instr.push(BlockContent::MemPush((new_var, ty.clone(), *offset)));
-                    }
-                    BlockContent::MemPop((var, ty, offset)) => {
-                        let new_var: String;
-                        (new_var, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
-                        new_instr.push(BlockContent::MemPop((new_var, ty.clone(), *offset)));
-                    }
-                    BlockContent::ArrayInit((arr, _, size)) => {
-                        let new_arr_name: String;
-                        let new_alloc_size_name: String;
-                        (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
-                        (new_alloc_size_name, witness_map, _) = var_name_to_reg_id_expr::<0>("%AS".to_string(), witness_map);
-
-                        // Declare the array as a pointer (field), set to %AS
-                        let pointer_init_stmt = Statement::Definition(DefinitionStatement {
-                            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                                ty: Type::Basic(BasicType::Field(FieldType {
-                                    span: Span::new("", 0, 0).unwrap()
-                                })),
-                                identifier: IdentifierExpression {
-                                    value: new_arr_name.to_string(),
-                                    span: Span::new("", 0, 0).unwrap()
-                                },
-                                span: Span::new("", 0, 0).unwrap()
-                            })],
-                            expression: Expression::Identifier(IdentifierExpression {
-                                value: new_alloc_size_name.to_string(),
-                                span: Span::new("", 0, 0).unwrap()
-                            }),
-                            span: Span::new("", 0, 0).unwrap()
-                        });
-                        new_instr.push(BlockContent::Stmt(pointer_init_stmt));
-                        // Increment %AS by size of array
-                        new_instr.push(BlockContent::Stmt(bl_gen_increment_stmt(&new_alloc_size_name, *size)));
-                    }
-                    BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
-                        let new_val_expr: Expression;
-                        let new_id_expr: Expression;
-                        let new_arr_name: String;
-                        (new_val_expr, witness_map) = var_to_reg_expr(&val_expr, witness_map);
-                        (new_id_expr, witness_map) = var_to_reg_expr(&id_expr, witness_map);
-                        (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
-                        new_instr.push(BlockContent::Store((new_val_expr, ty.clone(), new_arr_name, new_id_expr, *init)))
-                    }
-                    BlockContent::Load((val, ty, arr, id_expr)) => {
-                        let new_val: String;
-                        let new_id_expr: Expression;
-                        let new_arr_name: String;
-                        (new_val, witness_map, _) = var_name_to_reg_id_expr::<0>(val.to_string(), witness_map);
-                        (new_id_expr, witness_map) = var_to_reg_expr(&id_expr, witness_map);
-                        (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
-                        new_instr.push(BlockContent::Load((new_val, ty.clone(), new_arr_name, new_id_expr)))
-                    }
-                    BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
-                    BlockContent::Stmt(s) => {
-                        let new_stmt: Statement;
-                        (new_stmt, witness_map) = var_to_reg_stmt(&s, witness_map);
-                        new_instr.push(BlockContent::Stmt(new_stmt));
-                    }
-                }
-            }
+            (witness_map, new_instr) = vtr_inst(witness_map, &bls[i].instructions, new_instr);
 
             // Map the outputs
             // If in MODE 0, assert the %o variables

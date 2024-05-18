@@ -97,6 +97,7 @@ fn print_bls(bls: &Vec<Block>, entry_bl: &usize) {
 // --
 // HELPER FUNCTIONS
 // --
+
 // If bc is a statement of form field %RP = val,
 // return val
 fn rp_find_val(bc: BlockContent) -> Option<usize> {
@@ -904,8 +905,112 @@ fn tydef_to_assignee_stmt<'ast>(
 }
 
 // --
-// END HELPER FUNCTION
+// PROCESSOR FUNCTION
 // --
+
+// Liveness Analysis
+fn la_inst<'ast>(
+    mut state: HashSet<String>,
+    inst: &Vec<BlockContent<'ast>>
+) -> (HashSet<String>, Vec<BlockContent<'ast>>) {
+    let mut new_instructions = Vec::new();
+    for i in inst.iter().rev() {
+        match i {
+            BlockContent::MemPush((var, _, _)) => {
+                // Keep all push statements, remove them in PMR
+                new_instructions.insert(0, i.clone());
+                state.insert(var.to_string());
+                state.insert("%SP".to_string());
+            }
+            BlockContent::MemPop((var, _, _)) => {
+                // Don't remove %BP, remove them in PMR
+                if is_alive(&state, var) || var == "%BP" {
+                    new_instructions.insert(0, i.clone());
+                }
+                state.remove(var);
+                state.insert("%BP".to_string());
+            }
+            // If there is an array initialization, then the array is dead but %AS is alive
+            BlockContent::ArrayInit((arr, _, _)) => {
+                if is_alive(&state, arr) {
+                    new_instructions.insert(0, i.clone());
+                    state.remove(arr);
+                    state.insert("%AS".to_string());
+                }
+            }
+            // If there is a store, then keep the statement if array is alive
+            BlockContent::Store((val_expr, _, arr, id_expr, _)) => {
+                if is_alive(&state, arr) {
+                    new_instructions.insert(0, i.clone());
+                    let gen = expr_find_val(val_expr);
+                    state = la_gen(state, &gen);
+                    let gen = expr_find_val(id_expr);
+                    state = la_gen(state, &gen);
+                    state.insert("%TS".to_string());
+                }
+            }
+            // If there is a store, then keep the statement if val is alive
+            BlockContent::Load((val, _, arr, id_expr)) => {
+                if is_alive(&state, val) {
+                    new_instructions.insert(0, i.clone());
+                    state.remove(val);
+                    state.insert(arr.to_string());
+                    let gen = expr_find_val(id_expr);
+                    state = la_gen(state, &gen);
+                    state.insert("%TS".to_string());
+                }
+            }
+            BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
+            BlockContent::Stmt(s) => {
+                let (kill, gen) = stmt_find_val(s);
+                // If it's not a definition or the defined variable is alive,
+                // mark the variable dead and append gen to state
+                // Otherwise remove the statement
+                if kill.is_empty() || kill.iter().fold(false, |c, x| c || is_alive(&state, x)) {
+                    state = la_kill(state, &kill);
+                    state = la_gen(state, &gen);
+                    new_instructions.insert(0, i.clone());
+                }
+            }
+        }
+    }
+    (state, new_instructions)
+}
+
+// Typing
+fn ty_inst<'ast>(
+    mut state: HashMap<String, Ty>,
+    inst: &Vec<BlockContent<'ast>>
+) -> HashMap<String, Ty> {
+    for i in inst.iter().rev() {
+        match i {
+            BlockContent::MemPush(_) => {}
+            BlockContent::MemPop((id, ty, _)) => {
+                state.insert(id.clone(), ty.clone());
+            }
+            BlockContent::ArrayInit((arr, _, _)) => {
+                state.insert(arr.clone(), Ty::Field);
+            }
+            BlockContent::Store(_) => {}
+            BlockContent::Load((val, ty, _, _)) => {
+                state.insert(val.clone(), ty.clone());
+            }
+            BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
+            BlockContent::Stmt(s) => {
+                if let Statement::Definition(ds) = s {
+                    for d in &ds.lhs {
+                        if let TypedIdentifierOrAssignee::TypedIdentifier(p) = d {
+                            let name = p.identifier.value.to_string();
+                            let ty = type_to_ty(p.ty.clone());
+                            state.insert(name, ty.unwrap());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    state
+}
 
 // Information regarding one variable for spilling
 #[derive(Clone, Debug, PartialEq)]
@@ -1302,57 +1407,7 @@ impl<'ast> ZGen<'ast> {
                 }
 
                 // KILL and GEN within the block
-                for i in bls[cur_bl].instructions.iter().rev() {
-                    match i {
-                        // If there is a PUSH, then var is alive and %SP is alive
-                        BlockContent::MemPush((var, _, _)) => {
-                            state.insert(var.to_string());
-                            state.insert("%SP".to_string());
-                        }
-                        // If there is a POP, then var is dead and %BP is alive
-                        BlockContent::MemPop((var, _, _)) => {
-                            state.remove(var);
-                            state.insert("%BP".to_string());
-                        }
-                        // If there is an array initialization, then the array is dead but %AS is alive
-                        BlockContent::ArrayInit((arr, _, _)) => {
-                            if is_alive(&state, arr) {
-                                state.remove(arr);
-                                state.insert("%AS".to_string());
-                            }
-                        }
-                        // If there is a store, then index, value, and %TS are alive if array is alive
-                        BlockContent::Store((val_expr, _, arr, id_expr, _)) => {
-                            if is_alive(&state, arr) {
-                                let gen = expr_find_val(val_expr);
-                                state = la_gen(state, &gen);
-                                let gen = expr_find_val(id_expr);
-                                state = la_gen(state, &gen);
-                                state.insert("%TS".to_string());
-                            }
-                        }
-                        // If val was alive, make array, index, and %TS alive
-                        BlockContent::Load((val, _, arr, id_expr)) => {
-                            if is_alive(&state, val) {
-                                state.remove(val);
-                                state.insert(arr.to_string());
-                                let gen = expr_find_val(id_expr);
-                                state = la_gen(state, &gen);
-                                state.insert("%TS".to_string());
-                            }
-                        }
-                        BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
-                        BlockContent::Stmt(s) => {
-                            let (kill, gen) = stmt_find_val(s);
-                            // Mark gens alive only if not a definition or the defined variable is alive,
-                            // Kill all defined variables
-                            if kill.is_empty() || kill.iter().fold(false, |c, x| c || is_alive(&state, x)) {
-                                state = la_kill(state, &kill);
-                                state = la_gen(state, &gen);
-                            }
-                        }
-                    }
-                }
+                (state, _) = la_inst(state, &bls[cur_bl].instructions);
                 bl_in[cur_bl] = state;
 
                 // Block Transition
@@ -1385,7 +1440,7 @@ impl<'ast> ZGen<'ast> {
             if !visited[cur_bl] {
 
                 visited[cur_bl] = true;
-                let mut new_instructions = Vec::new();
+                let new_instructions: Vec<BlockContent>;
 
                 // KILL and GEN within the terminator
                 match &bls[cur_bl].terminator {
@@ -1394,69 +1449,7 @@ impl<'ast> ZGen<'ast> {
                     BlockTerminator::ProgTerm => {}            
                 }
 
-                // KILL and GEN within the block
-                // XXX: Seems like wasting time?
-                for i in bls[cur_bl].instructions.iter().rev() {
-                    match i {
-                        BlockContent::MemPush((var, _, _)) => {
-                            // Keep all push statements, remove them in PMR
-                            new_instructions.insert(0, i.clone());
-                            state.insert(var.to_string());
-                            state.insert("%SP".to_string());
-                        }
-                        BlockContent::MemPop((var, _, _)) => {
-                            // Don't remove %BP, remove them in PMR
-                            if is_alive(&state, var) || var == "%BP" {
-                                new_instructions.insert(0, i.clone());
-                            }
-                            state.remove(var);
-                            state.insert("%BP".to_string());
-                        }
-                        // If there is an array initialization, then the array is dead but %AS is alive
-                        BlockContent::ArrayInit((arr, _, _)) => {
-                            if is_alive(&state, arr) {
-                                new_instructions.insert(0, i.clone());
-                                state.remove(arr);
-                                state.insert("%AS".to_string());
-                            }
-                        }
-                        // If there is a store, then keep the statement if array is alive
-                        BlockContent::Store((val_expr, _, arr, id_expr, _)) => {
-                            if is_alive(&state, arr) {
-                                new_instructions.insert(0, i.clone());
-                                let gen = expr_find_val(val_expr);
-                                state = la_gen(state, &gen);
-                                let gen = expr_find_val(id_expr);
-                                state = la_gen(state, &gen);
-                                state.insert("%TS".to_string());
-                            }
-                        }
-                        // If there is a store, then keep the statement if val is alive
-                        BlockContent::Load((val, _, arr, id_expr)) => {
-                            if is_alive(&state, val) {
-                                new_instructions.insert(0, i.clone());
-                                state.remove(val);
-                                state.insert(arr.to_string());
-                                let gen = expr_find_val(id_expr);
-                                state = la_gen(state, &gen);
-                                state.insert("%TS".to_string());
-                            }
-                        }
-                        BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
-                        BlockContent::Stmt(s) => {
-                            let (kill, gen) = stmt_find_val(s);
-                            // If it's not a definition or the defined variable is alive,
-                            // mark the variable dead and append gen to state
-                            // Otherwise remove the statement
-                            if kill.is_empty() || kill.iter().fold(false, |c, x| c || is_alive(&state, x)) {
-                                state = la_kill(state, &kill);
-                                state = la_gen(state, &gen);
-                                new_instructions.insert(0, i.clone());
-                            }
-                        }
-                    }
-                }
-
+                (_, new_instructions) = la_inst(state, &bls[cur_bl].instructions);
                 bls[cur_bl].instructions = new_instructions;
 
                 // Block Transition
@@ -1557,47 +1550,7 @@ impl<'ast> ZGen<'ast> {
 
                 // KILL and GEN within the block
                 // We assume that liveness analysis has been performed, don't reason about whether variables should actually be alive
-                for i in bls[cur_bl].instructions.iter().rev() {
-                    match i {
-                        BlockContent::MemPush((var, _, _)) => {
-                            state.insert(var.to_string());
-                            state.insert("%SP".to_string());
-                        }
-                        BlockContent::MemPop((var, _, _)) => {
-                            state.remove(&var.to_string());
-                            state.insert("%BP".to_string());
-                        }
-                        // If there is an array init, then arr is dead and %AS is alive
-                        BlockContent::ArrayInit((arr, _, _)) => {
-                            state.remove(&arr.to_string());
-                            state.insert("%AS".to_string());
-                        }
-                        // If there is a store, then %TS is alive
-                        BlockContent::Store((val_expr, _, _, id_expr, _)) => {
-                            let gen = expr_find_val(val_expr);
-                            state.extend(gen);
-                            let gen = expr_find_val(id_expr);
-                            state.extend(gen);
-                            state.insert("%TS".to_string());
-                        }
-                        // If there is a load, then arr and %TS is alive
-                        BlockContent::Load((val, _, arr, id_expr)) => {
-                            state.remove(val);
-                            let gen = expr_find_val(id_expr);
-                            state.extend(gen);
-                            state.insert("%TS".to_string());
-                            state.insert(arr.to_string());
-                        }
-                        BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
-                        BlockContent::Stmt(s) => {
-                            let (kill, gen) = stmt_find_val(&s);
-                            for k in kill {
-                                state.remove(&k.to_string());
-                            }
-                            state.extend(gen);
-                        }
-                    }
-                }
+                (state, _) = la_inst(state, &bls[cur_bl].instructions);
                 bl_in[cur_bl] = state;
 
                 // Block Transition
@@ -1661,33 +1614,7 @@ impl<'ast> ZGen<'ast> {
 
                 // No KILL, GEN if we meet a typed definition
                 // The only case we need to process is Typed Definition
-                for i in bls[cur_bl].instructions.iter().rev() {
-                    match i {
-                        BlockContent::MemPush(_) => {}
-                        BlockContent::MemPop((id, ty, _)) => {
-                            state.insert(id.clone(), ty.clone());
-                        }
-                        BlockContent::ArrayInit((arr, _, _)) => {
-                            state.insert(arr.clone(), Ty::Field);
-                        }
-                        BlockContent::Store(_) => {}
-                        BlockContent::Load((val, ty, _, _)) => {
-                            state.insert(val.clone(), ty.clone());
-                        }
-                        BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
-                        BlockContent::Stmt(s) => {
-                            if let Statement::Definition(ds) = s {
-                                for d in &ds.lhs {
-                                    if let TypedIdentifierOrAssignee::TypedIdentifier(p) = d {
-                                        let name = p.identifier.value.to_string();
-                                        let ty = type_to_ty(p.ty.clone());
-                                        state.insert(name, ty.unwrap());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                state = ty_inst(state, &bls[cur_bl].instructions);
                 bl_out[cur_bl] = state;
 
                 // Terminator is just an expression so we don't need to worry about it
@@ -2075,6 +2002,7 @@ impl<'ast> ZGen<'ast> {
                                 }
                             }
                         },
+                        // Note: all GENs within branches will be out of scope by the end of the block, no need to process
                         _ => {}
                     }
                 }
@@ -2314,6 +2242,10 @@ impl<'ast> ZGen<'ast> {
                                 new_instructions.push(i.clone());
                             }
                         },
+                        // Note: all GENs within branches will be out of scope by the end of the block, no need to process
+                        BlockContent::Brnach(_) => {
+                            new_instructions.push(i.clone());
+                        }
                         // Do not reason about memory operations
                         BlockContent::ArrayInit(_) => {
                             new_instructions.push(i.clone());
@@ -3073,6 +3005,7 @@ impl<'ast> ZGen<'ast> {
             let mut phy_mem_accesses_count = 0;
             let mut vir_mem_accesses_count = 0;
             // List of bools of whether each vm variable is alive, useful for branch merge
+            // Note: legacy feature, now defunct
             let mut vm_liveness: Vec<bool> = Vec::new();
             for i in &b.instructions {
                 match i {

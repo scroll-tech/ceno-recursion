@@ -33,7 +33,7 @@ pub fn pretty_block_content(indent: usize, bc: &BlockContent) {
                 pretty_block_content(indent + 1, i);
             }
          }
-        BlockContent::Stmt(s) => { pretty_stmt(1, &s); }
+        BlockContent::Stmt(s) => { pretty_stmt(0, &s); }
     }
 }
 
@@ -115,7 +115,6 @@ fn pretty_while_stmt(indent: usize, w: &WhileLoopStatement) {
         pretty_stmt(indent + 1, &s);
     }
 }
-
 
 fn pretty_cond_stmt(indent: usize, c: &ConditionalStatement) {
     print!("if ");

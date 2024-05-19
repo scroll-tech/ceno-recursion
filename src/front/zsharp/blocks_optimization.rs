@@ -530,7 +530,7 @@ fn term_to_instr<'ast>(
     cur_bl: usize,
 ) -> (Vec<BlockContent<'ast>>, usize) {
     // There are three cases for the terminator
-    // A ternary should be converted to an if / else statement
+    // A ternary should be converted to a branching instruction
     // A constant literal should be converted to the corresponding instruction list x looping
     // Any reference to %RP should result in the termination of the conversion
     match term {
@@ -546,22 +546,24 @@ fn term_to_instr<'ast>(
             assert_eq!(right_repeat, 1);
             assert!(left_repeat == 1 || right_instr.len() == 0);
 
-            // No memory ops should be contained within left_instr & right_instr
-            let left_stmt = left_instr.iter().map(|i|
-                if let BlockContent::Stmt(s) = i { s.clone() } else { panic!{"Terminator to instruction failed: branch blocks should not contain memory operations!"} }
-            ).collect();
-            let right_stmt = right_instr.iter().map(|i|
-                if let BlockContent::Stmt(s) = i { s.clone() } else { panic!{"Terminator to instruction failed: branch blocks should not contain memory operations!"} }
-            ).collect();
-            let cond_stmt = Statement::Conditional(ConditionalStatement {
-                condition: *t.first.clone(),
-                ifbranch: left_stmt,
-                dummy: Vec::new(),
-                elsebranch: right_stmt,
-                span: Span::new("", 0, 0).unwrap()
-            });
+            // TODO: Resolve mem ops
+            left_instr.iter().for_each(|i|
+                if let BlockContent::Stmt(_) = i {} 
+                else if let BlockContent::Branch(_) = i {} 
+                else{ panic!{"Terminator to instruction failed: branch blocks should not contain memory operations!"} }
+            );
+            right_instr.iter().for_each(|i|
+                if let BlockContent::Stmt(_) = i {} 
+                else if let BlockContent::Branch(_) = i {}
+                else { panic!{"Terminator to instruction failed: branch blocks should not contain memory operations!"} }
+            );
+            let branch_inst = BlockContent::Branch((
+                *t.first.clone(),
+                left_instr,
+                right_instr
+            ));
 
-            (vec![BlockContent::Stmt(cond_stmt); left_repeat], 1)
+            (vec![branch_inst; left_repeat], 1)
         }
         Expression::Literal(le) => {
             if let LiteralExpression::DecimalLiteral(dle) = le {
@@ -960,7 +962,20 @@ fn la_inst<'ast>(
                     state.insert("%TS".to_string());
                 }
             }
-            BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
+            BlockContent::Branch((cond, if_inst, else_inst)) => {
+                // Liveness of branches
+                let (mut new_if_state, new_if_inst) = la_inst(state.clone(), if_inst);
+                let (new_else_state, new_else_inst) = la_inst(state.clone(), else_inst);
+                new_if_state.extend(new_else_state);
+                state = new_if_state;
+                // Liveness of condition
+                let gen = expr_find_val(&cond);
+                state = la_gen(state, &gen);
+                // Branch is dead if both branches are empty
+                if new_if_inst.len() > 0 || new_else_inst.len() > 0 {
+                    new_instructions.insert(0, BlockContent::Branch((cond.clone(), new_if_inst, new_else_inst)));
+                }
+            }
             BlockContent::Stmt(s) => {
                 let (kill, gen) = stmt_find_val(s);
                 // If it's not a definition or the defined variable is alive,
@@ -995,7 +1010,10 @@ fn ty_inst<'ast>(
             BlockContent::Load((val, ty, _, _)) => {
                 state.insert(val.clone(), ty.clone());
             }
-            BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
+            BlockContent::Branch((_, if_inst, else_inst)) => {
+                state = ty_inst(state, &if_inst);
+                state = ty_inst(state, &else_inst);
+            }
             BlockContent::Stmt(s) => {
                 if let Statement::Definition(ds) = s {
                     for d in &ds.lhs {
@@ -1076,7 +1094,15 @@ fn vtr_inst<'ast>(
                 (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
                 new_instr.push(BlockContent::Load((new_val, ty.clone(), new_arr_name, new_id_expr)))
             }
-            BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
+            BlockContent::Branch((cond, if_inst, else_inst)) => {
+                let new_cond: Expression;
+                let new_if_inst: Vec<BlockContent<'ast>>;
+                let new_else_inst: Vec<BlockContent<'ast>>;
+                (new_cond, witness_map) = var_to_reg_expr(&cond, witness_map);
+                (witness_map, new_if_inst) = vtr_inst(witness_map, &if_inst, Vec::new());
+                (witness_map, new_else_inst) = vtr_inst(witness_map, &else_inst, Vec::new());
+                new_instr.push(BlockContent::Branch((new_cond, new_if_inst, new_else_inst)));
+            }
             BlockContent::Stmt(s) => {
                 let new_stmt: Statement;
                 (new_stmt, witness_map) = var_to_reg_stmt(&s, witness_map);
@@ -1085,6 +1111,101 @@ fn vtr_inst<'ast>(
         }
     }
     (witness_map, new_instr)
+}
+
+// TyDef -> Assignee
+fn tta_inst<'ast>(
+    mut gen_set: HashSet<String>,
+    inst: &Vec<BlockContent<'ast>>,
+) -> (HashSet<String>, Vec<BlockContent<'ast>>) {
+    let mut new_instr = Vec::new();
+    // Process instructions
+    for i in inst {
+        match i {
+            BlockContent::Stmt(s) => {
+                let new_s: Statement;
+                (new_s, gen_set) = tydef_to_assignee_stmt(s, gen_set);
+                new_instr.push(BlockContent::Stmt(new_s));
+            }
+            BlockContent::Branch((cond, if_inst, else_inst)) => {
+                let new_if_inst: Vec<BlockContent<'ast>>;
+                let new_else_inst: Vec<BlockContent<'ast>>;
+                (gen_set, new_if_inst) = tta_inst(gen_set, &if_inst);
+                (gen_set, new_else_inst) = tta_inst(gen_set, &else_inst);
+                new_instr.push(BlockContent::Branch((cond.clone(), new_if_inst, new_else_inst)));
+            }
+            _ => { new_instr.push(i.clone()); }
+        }
+    }
+    (gen_set, new_instr)
+}
+
+// Block Memory Counter
+fn bmc_inst<'ast>(
+    inst: &Vec<BlockContent<'ast>>,
+) -> (usize, usize, Vec<bool>) {
+    let mut phy_mem_accesses_count = 0;
+    let mut vir_mem_accesses_count = 0;
+    // List of bools of whether each vm variable is alive, useful for branch merge
+    // Note: legacy feature, now defunct
+    let mut vm_liveness: Vec<bool> = Vec::new();
+    for i in inst {
+        match i {
+            BlockContent::MemPop(_) => {
+                phy_mem_accesses_count += 1;
+            }
+            BlockContent::MemPush(_) => {
+                phy_mem_accesses_count += 1;
+            }
+            BlockContent::ArrayInit(_) => {}
+            BlockContent::Load(_) => {
+                vir_mem_accesses_count += 1;
+                //                      addr  data  ls    ts
+                vm_liveness.extend(vec![true, true, true, true]);
+            }
+            // Store includes init, invalidate, & store
+            BlockContent::Store(_) => {
+                vir_mem_accesses_count += 1;
+                //                      addr  data  ls    ts
+                vm_liveness.extend(vec![true, true, true, true]);
+            }
+            /*
+            BlockContent::Load(_) => {
+                vir_mem_accesses_count += 1;
+                //                      phy_addr  vir_addr  data      ls        ts
+                vm_liveness.extend(vec![false,    true,     true,     true,     true]);
+            }
+            // Store includes init, invalidate, & store
+            BlockContent::Store((_, _, _, _, init)) => {
+                if *init {
+                    vir_mem_accesses_count += 1;
+                    //                      phy_addr  vir_addr  data      ls        ts
+                    vm_liveness.extend(vec![true,     true,     true,     true,     true]);
+                } else {
+                    vir_mem_accesses_count += 3;
+                    //                      phy_addr  vir_addr  data      ls        ts
+                    vm_liveness.extend(vec![true,     true,     false,    true,     true,    // retrieval
+                                            true,     true,     false,    true,     true,    // invalidation
+                                            true,     true,     true,     true,     true,]); // allocation
+                }
+            }
+            */
+            BlockContent::Branch((_, if_inst, else_inst)) => {
+                let (if_phy_mem_accesses_count, if_vir_mem_accesses_count, if_vm_liveness) = bmc_inst(&if_inst);
+                let (else_phy_mem_accesses_count, else_vir_mem_accesses_count, else_vm_liveness) = bmc_inst(&else_inst);
+                // No scoping should occur at all within branches
+                assert_eq!(if_phy_mem_accesses_count, 0);
+                assert_eq!(else_phy_mem_accesses_count, 0);
+                // Through dummy loads, mem ops of both branches should be the same
+                assert_eq!(if_vir_mem_accesses_count, else_vir_mem_accesses_count);
+                assert_eq!(if_vm_liveness, else_vm_liveness);
+                vir_mem_accesses_count += if_vir_mem_accesses_count;
+                vm_liveness.extend(if_vm_liveness);
+            }
+            BlockContent::Stmt(_) => {}
+        }
+    }
+    (phy_mem_accesses_count, vir_mem_accesses_count, vm_liveness)
 }
 
 // Information regarding one variable for spilling
@@ -2969,7 +3090,6 @@ impl<'ast> ZGen<'ast> {
         for i in 0..bls.len() {
             // gen_set - all defined variables
             let mut gen_set = HashSet::new();
-            let mut new_instr = Vec::new();
             // Process inputs
             for (name, _) in &bls[i].inputs {
                 gen_set.insert(name.to_string());
@@ -2981,16 +3101,7 @@ impl<'ast> ZGen<'ast> {
                 }
             }
             // Process instructions
-            for i in &bls[i].instructions {
-                match i {
-                    BlockContent::Stmt(s) => {
-                        let new_s: Statement;
-                        (new_s, gen_set) = tydef_to_assignee_stmt(s, gen_set);
-                        new_instr.push(BlockContent::Stmt(new_s));
-                    }
-                    _ => { new_instr.push(i.clone()); }
-                }
-            }
+            let (_, new_instr) = tta_inst(gen_set, &bls[i].instructions);
             bls[i].instructions = new_instr;
         }
         bls
@@ -3012,56 +3123,7 @@ impl<'ast> ZGen<'ast> {
         // Map of each _live_ vm variables to its overall ordering
         let mut live_vm_list = Vec::new();
         for b in bls {
-            let mut phy_mem_accesses_count = 0;
-            let mut vir_mem_accesses_count = 0;
-            // List of bools of whether each vm variable is alive, useful for branch merge
-            // Note: legacy feature, now defunct
-            let mut vm_liveness: Vec<bool> = Vec::new();
-            for i in &b.instructions {
-                match i {
-                    BlockContent::MemPop(_) => {
-                        phy_mem_accesses_count += 1;
-                    }
-                    BlockContent::MemPush(_) => {
-                        phy_mem_accesses_count += 1;
-                    }
-                    BlockContent::ArrayInit(_) => {}
-                    BlockContent::Load(_) => {
-                        vir_mem_accesses_count += 1;
-                        //                      addr  data  ls    ts
-                        vm_liveness.extend(vec![true, true, true, true]);
-                    }
-                    // Store includes init, invalidate, & store
-                    BlockContent::Store(_) => {
-                        vir_mem_accesses_count += 1;
-                        //                      addr  data  ls    ts
-                        vm_liveness.extend(vec![true, true, true, true]);
-                    }
-                    /*
-                    BlockContent::Load(_) => {
-                        vir_mem_accesses_count += 1;
-                        //                      phy_addr  vir_addr  data      ls        ts
-                        vm_liveness.extend(vec![false,    true,     true,     true,     true]);
-                    }
-                    // Store includes init, invalidate, & store
-                    BlockContent::Store((_, _, _, _, init)) => {
-                        if *init {
-                            vir_mem_accesses_count += 1;
-                            //                      phy_addr  vir_addr  data      ls        ts
-                            vm_liveness.extend(vec![true,     true,     true,     true,     true]);
-                        } else {
-                            vir_mem_accesses_count += 3;
-                            //                      phy_addr  vir_addr  data      ls        ts
-                            vm_liveness.extend(vec![true,     true,     false,    true,     true,    // retrieval
-                                                    true,     true,     false,    true,     true,    // invalidation
-                                                    true,     true,     true,     true,     true,]); // allocation
-                        }
-                    }
-                    */
-                    BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
-                    BlockContent::Stmt(_) => {}
-                }
-            }
+            let (phy_mem_accesses_count, vir_mem_accesses_count, vm_liveness) = bmc_inst(&b.instructions);
             num_mem_accesses.push((phy_mem_accesses_count, vir_mem_accesses_count));
             let mut live_vm = Vec::new();
             for i in 0..vm_liveness.len() {

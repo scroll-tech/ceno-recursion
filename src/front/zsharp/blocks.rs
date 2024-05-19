@@ -297,7 +297,7 @@ impl<'ast> Block<'ast> {
         }
         println!("Instructions:");
         for c in &self.instructions {
-            pretty_block_content(0, c);
+            pretty_block_content(1, c);
         }
         match &self.terminator {
             BlockTerminator::Transition(e) => {

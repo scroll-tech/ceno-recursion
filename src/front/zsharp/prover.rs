@@ -393,7 +393,32 @@ impl<'ast> ZGen<'ast> {
         }
         let mut vir_mem_op: Vec<Option<MemOp>> = vec![None; alloc_vir_mem_op_count];
 
-        for s in &bl.instructions {
+        (phy_mem, vir_mem, phy_mem_op, vir_mem_op, _) = self.bl_eval_inst_impl_(&bl.instructions, phy_mem, vir_mem, phy_mem_op, vir_mem_op, ty_mem_op_offset)?;
+
+        let vir_mem_op = vir_mem_op.into_iter().map(|i| i.unwrap()).collect();
+
+        match &bl.terminator {
+            BlockTerminator::Transition(e) => {
+                match self.t_to_usize(self.expr_impl_::<true>(&e)?) {
+                    Ok(nb) => { return Ok((nb, phy_mem, vir_mem, false, phy_mem_op, vir_mem_op)); }, 
+                    _ => { return Err("Evaluation failed: block transition evaluated to an invalid block label".to_string()); }
+                }
+            }
+            BlockTerminator::FuncCall(fc) => Err(format!("Evaluation failed: function call to {} needs to be converted to block label.", fc)),
+            BlockTerminator::ProgTerm => Ok((0, phy_mem, vir_mem, true, phy_mem_op, vir_mem_op))
+        }
+    }
+
+    fn bl_eval_inst_impl_(
+        &self,
+        inst: &Vec<BlockContent>,
+        mut phy_mem: Vec<T>,
+        mut vir_mem: Vec<Option<T>>,
+        mut phy_mem_op: Vec<MemOp>,
+        mut vir_mem_op: Vec<Option<MemOp>>,
+        mut ty_mem_op_offset: BTreeMap<Ty, usize>,
+    ) -> Result<(Vec<T>, Vec<Option<T>>, Vec<MemOp>, Vec<Option<MemOp>>, BTreeMap<Ty, usize>), String> {
+        for s in inst {
             match s {
                 BlockContent::MemPush((var, _, offset)) => {
                     let sp_t = self.cvar_lookup(W_SP).ok_or(format!("Push to %PHY failed: %SP is uninitialized."))?;
@@ -512,25 +537,30 @@ impl<'ast> ZGen<'ast> {
                     // Increment label
                     ty_mem_op_offset.insert(ty.clone(), next_label + 1);
                 }
-                BlockContent::Branch(_) => { panic!("Liveness Analysis Failed: block should not contain branching statements!") }
+                BlockContent::Branch((cond, if_inst, else_inst)) => {
+                    match self.expr_impl_::<true>(&cond).and_then(|v| {
+                        const_bool(v)
+                            .ok_or_else(|| "interpreting expr as const bool failed".to_string())
+                    }) {
+                        Ok(true) => {
+                            (phy_mem, vir_mem, phy_mem_op, vir_mem_op, ty_mem_op_offset) = self.bl_eval_inst_impl_(if_inst, phy_mem, vir_mem, phy_mem_op, vir_mem_op, ty_mem_op_offset)?;
+                        },
+                        Ok(false) => {
+                            (phy_mem, vir_mem, phy_mem_op, vir_mem_op, ty_mem_op_offset) = self.bl_eval_inst_impl_(else_inst, phy_mem, vir_mem, phy_mem_op, vir_mem_op, ty_mem_op_offset)?;
+                        },
+                        Err(err) => return Err(format!(
+                            "Const conditional expression eval failed: {} at\n{}",
+                            err,
+                            span_to_string(cond.span()),
+                        ))
+                    }
+                }
                 BlockContent::Stmt(s) => {
                     self.bl_eval_stmt_impl_(s)?;
                 }
             }
         };
-
-        let vir_mem_op = vir_mem_op.into_iter().map(|i| i.unwrap()).collect();
-
-        match &bl.terminator {
-            BlockTerminator::Transition(e) => {
-                match self.t_to_usize(self.expr_impl_::<true>(&e)?) {
-                    Ok(nb) => { return Ok((nb, phy_mem, vir_mem, false, phy_mem_op, vir_mem_op)); }, 
-                    _ => { return Err("Evaluation failed: block transition evaluated to an invalid block label".to_string()); }
-                }
-            }
-            BlockTerminator::FuncCall(fc) => Err(format!("Evaluation failed: function call to {} needs to be converted to block label.", fc)),
-            BlockTerminator::ProgTerm => Ok((0, phy_mem, vir_mem, true, phy_mem_op, vir_mem_op))
-        }
+        Ok((phy_mem, vir_mem, phy_mem_op, vir_mem_op, ty_mem_op_offset))
     }
 
     fn bl_eval_stmt_impl_(

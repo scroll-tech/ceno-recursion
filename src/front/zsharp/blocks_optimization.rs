@@ -399,7 +399,9 @@ fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
             (kill_set, expr_find_val(&d.expression))
         }
         Statement::Assertion(a) => (HashSet::new(), expr_find_val(&a.expression)),
-        Statement::Conditional(c) => {
+        Statement::Conditional(_c) => {
+            panic!("Blocks should not contain conditional statements.")
+            /*
             // KILL is empty
             // GEN is the union of the two branches
             // Iterate through if branch
@@ -420,6 +422,7 @@ fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
             gen_set.extend(else_gen_set);
             gen_set.extend(expr_find_val(&c.condition));
             (HashSet::new(), gen_set)
+            */
         }
         Statement::Iteration(_) => { panic!("Blocks should not contain iteration statements.") }
         Statement::WhileLoop(_) => { panic!("Blocks should not contain while loop statements.") }
@@ -640,7 +643,9 @@ fn var_to_reg_stmt<'ast>(
             };
             (Statement::Assertion(new_stmt), reg_map)
         }
-        Statement::Conditional(c) => {
+        Statement::Conditional(_c) => {
+            panic!("Blocks should not contain conditional statements.")
+            /*
             let new_cond: Expression;
             (new_cond, reg_map) = var_to_reg_expr(&c.condition, reg_map);
             let mut new_ifbranch = Vec::new();
@@ -663,6 +668,7 @@ fn var_to_reg_stmt<'ast>(
                 span: Span::new("", 0, 0).unwrap()
             };
             (Statement::Conditional(new_stmt), reg_map)
+            */
         }
         Statement::Iteration(_) => { panic!("Blocks should not contain iteration statements.") }
         Statement::WhileLoop(_) => { panic!("Blocks should not contain while loop statements.") }
@@ -846,7 +852,9 @@ fn tydef_to_assignee_stmt<'ast>(
             panic!("Blocks should not contain return statements.");
         }
         Statement::Assertion(_) => (s.clone(), gen_set),
-        Statement::Conditional(c) => {
+        Statement::Conditional(_c) => {
+            panic!("Blocks should not contain conditional statements.")
+            /*
             let cond = c.condition.clone();
             let mut new_ifbranch = Vec::new();
             for s in &c.ifbranch {
@@ -868,6 +876,7 @@ fn tydef_to_assignee_stmt<'ast>(
                 span: Span::new("", 0, 0).unwrap()
             };
             (Statement::Conditional(new_stmt), gen_set)
+            */
         }
         Statement::Iteration(_) => { panic!("Blocks should not contain iteration statements.") }
         Statement::WhileLoop(_) => { panic!("Blocks should not contain while loop statements.") }

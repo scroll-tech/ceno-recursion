@@ -599,7 +599,9 @@ impl<'ast> ZGen<'ast> {
             Statement::WhileLoop(_) => {
                 return Err(format!("Blocks should not contain while loop statements."));
             }
-            Statement::Conditional(c) => {
+            Statement::Conditional(_c) => {
+                panic!("Blocks should not contain conditional statements.")
+                /*
                 match self.expr_impl_::<true>(&c.condition).and_then(|v| {
                     const_bool(v)
                         .ok_or_else(|| "interpreting expr as const bool failed".to_string())
@@ -620,6 +622,7 @@ impl<'ast> ZGen<'ast> {
                         span_to_string(c.condition.span()),
                     ))
                 }
+                */
             }
             Statement::Definition(d) => {
                 // XXX(unimpl) multi-assignment unimplemented

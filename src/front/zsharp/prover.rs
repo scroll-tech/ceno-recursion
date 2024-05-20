@@ -429,7 +429,12 @@ impl<'ast> ZGen<'ast> {
                         let e = self.cvar_lookup(&var).ok_or(format!("Push to %PHY failed: pushing an out-of-scope variable: {}.", var))?;
                         phy_mem.push(e);
                     }
-                    phy_mem_op.push(MemOp::new_phy(sp + offset, self.usize_to_field(sp + offset)?, self.cvar_lookup(&var).unwrap()));
+                    // Convert val_t to field for MemOp
+                    let mut val_t = self.cvar_lookup(&var).unwrap();
+                    if val_t.type_() != &Ty::Field {
+                        val_t = uint_to_field(val_t).unwrap();
+                    }
+                    phy_mem_op.push(MemOp::new_phy(sp + offset, self.usize_to_field(sp + offset)?, val_t));
                 }
                 BlockContent::MemPop((var, _, offset)) => {
                     let bp_t = self.cvar_lookup(W_BP).ok_or(format!("Pop from %PHY failed: %BP is uninitialized."))?;
@@ -440,11 +445,16 @@ impl<'ast> ZGen<'ast> {
                         let t = phy_mem[bp + offset].clone();
                         self.cvar_assign(&var, t)?;
                     }
-                    phy_mem_op.push(MemOp::new_phy(bp + offset, self.usize_to_field(bp + offset)?, self.cvar_lookup(&var).unwrap()));         
+                    // Convert val_t to field for MemOp
+                    let mut val_t = self.cvar_lookup(&var).unwrap();
+                    if val_t.type_() != &Ty::Field {
+                        val_t = uint_to_field(val_t).unwrap();
+                    }
+                    phy_mem_op.push(MemOp::new_phy(bp + offset, self.usize_to_field(bp + offset)?, val_t));         
                 }
                 BlockContent::ArrayInit(_) => { return Err(format!("Blocks should not contain array initializations.")); }
                 BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
-                    let val_t = self.expr_impl_::<true>(&val_expr)?;
+                    let mut val_t = self.expr_impl_::<true>(&val_expr)?;
                     let mut id_t = self.expr_impl_::<true>(&id_expr)?;
 
                     // Add array offset to obtain address
@@ -477,6 +487,11 @@ impl<'ast> ZGen<'ast> {
                     }
                     let ts_t = self.cvar_lookup(W_TS).ok_or(format!("STORE failed: %TS is uninitialized."))?;
                     let ts = self.t_to_usize(ts_t.clone())?;
+
+                    // Convert val_t to field for MemOp
+                    if val_t.type_() != &Ty::Field {
+                        val_t = uint_to_field(val_t).unwrap();
+                    }
                     vir_mem_op[next_label] = Some(MemOp::new_vir(
                         addr,
                         addr_t,
@@ -501,7 +516,7 @@ impl<'ast> ZGen<'ast> {
                     let addr = self.t_to_usize(addr_t.clone())?;
 
                     // Declare the variable
-                    let val_t = vir_mem[addr].clone().ok_or(format!("LOAD failed: entry {} is uninitialized.", addr))?;
+                    let mut val_t = vir_mem[addr].clone().ok_or(format!("LOAD failed: entry {} is uninitialized.", addr))?;
                     let entry_ty = val_t.type_();
                     if ty != entry_ty {
                         return Err(format!(
@@ -525,6 +540,11 @@ impl<'ast> ZGen<'ast> {
                     }))).unwrap();
                     let ts_t = self.cvar_lookup(W_TS).ok_or(format!("STORE failed: %TS is uninitialized."))?;
                     let ts = self.t_to_usize(ts_t.clone())?;
+
+                    // Convert val_t to field for MemOp
+                    if val_t.type_() != &Ty::Field {
+                        val_t = uint_to_field(val_t).unwrap();
+                    }
                     vir_mem_op[next_label] = Some(MemOp::new_vir(
                         addr,
                         addr_t,

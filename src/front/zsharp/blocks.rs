@@ -76,6 +76,16 @@ pub fn ty_to_type<'ast>(ty: &Ty) -> Result<Type<'ast>, String> {
     }
 }
 
+// Convert a field into other types, used for LOADs
+fn field_to_ty(f: T, ty: &Ty) -> Result<T, String> {
+    match ty {
+        Ty::Uint(n) => Ok(T::new(Ty::Uint(*n), term![Op::PfToBv(*n); f.term])),
+        Ty::Bool => field_to_bits(f, 1),
+        Ty::Field => Ok(f),
+        _ => Err(format!("Type not supported: {:?}", ty))
+    }
+}
+
 pub fn bl_coda<'ast>(nb: NextBlock) -> Expression<'ast> {
     match nb {
         NextBlock::Label(val) => Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
@@ -1817,7 +1827,7 @@ impl<'ast> ZGen<'ast> {
         self.circ_declare_input(
             f,
             format!("%vm{:06}d", next_label),
-            ty,
+            &Ty::Field,
             ZVis::Private(0),
             None,
             true,
@@ -1898,7 +1908,7 @@ impl<'ast> ZGen<'ast> {
                 self.circ_declare_input(
                     &f,
                     format!("%pm{:06}v", phy_mem_op_count),
-                    ty,
+                    &Ty::Field,
                     ZVis::Private(0),
                     None,
                     true,
@@ -1930,10 +1940,14 @@ impl<'ast> ZGen<'ast> {
                 let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
                 self.assert(b);
                 // Assert correctness of value
-                let lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                let mut lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
                     value: var.to_string(),
                     span: Span::new("", 0, 0).unwrap()
                 })).unwrap();
+                // Store the value as Field
+                if lhs_t.type_() != &Ty::Field {
+                    lhs_t = uint_to_field(lhs_t).unwrap();
+                }
                 let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
                     value: format!("%pm{:06}v", phy_mem_op_count),
                     span: Span::new("", 0, 0).unwrap()
@@ -1955,7 +1969,7 @@ impl<'ast> ZGen<'ast> {
                 self.circ_declare_input(
                     &f,
                     format!("%pm{:06}v", phy_mem_op_count),
-                    ty,
+                    &Ty::Field,
                     ZVis::Private(0),
                     None,
                     true,
@@ -1987,10 +2001,12 @@ impl<'ast> ZGen<'ast> {
                 let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
                 self.assert(b);
                 // Assign POP value to val
-                let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                let mut e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
                     value: format!("%pm{:06}v", phy_mem_op_count),
                     span: Span::new("", 0, 0).unwrap()
                 })).unwrap();
+                // Convert the loaded value to the correct type
+                e = field_to_ty(e, &ty).unwrap();
                 self.declare_init_impl_::<false>(
                     var.clone(),
                     ty.clone(),
@@ -2032,8 +2048,11 @@ impl<'ast> ZGen<'ast> {
                             Some(&id_expr)
                         );
                     }
-                    // Assert correctness of DATA
-                    let lhs_t = self.expr_impl_::<false>(&val_expr).unwrap();
+                    // Assert correctness of DATA, always stored as Field
+                    let mut lhs_t = self.expr_impl_::<false>(&val_expr).unwrap();
+                    if lhs_t.type_() != &Ty::Field {
+                        lhs_t = uint_to_field(lhs_t).unwrap();
+                    }
                     let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
                         value: format!("%vm{:06}d", next_label),
                         span: Span::new("", 0, 0).unwrap()
@@ -2064,10 +2083,12 @@ impl<'ast> ZGen<'ast> {
                         Some(&id_expr)
                     );
                     // Assign LOAD value to data
-                    let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                    let mut e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
                         value: format!("%vm{:06}d", next_label),
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
+                    // Convert the loaded value to the correct type
+                    e = field_to_ty(e, &ty).unwrap();
                     self.declare_init_impl_::<false>(
                         val.clone(),
                         ty.clone(),

@@ -383,19 +383,9 @@ impl<'ast> ZGen<'ast> {
         mut vir_mem: Vec<Option<T>>
     ) -> Result<(usize, Vec<T>, Vec<Option<T>>, bool, Vec<MemOp>, Vec<MemOp>), String> {
         let mut phy_mem_op: Vec<MemOp> = Vec::new();
+        let mut vir_mem_op: Vec<MemOp> = Vec::new();
 
-        // The label of the next memory operation on the specific type
-        let mut ty_mem_op_offset = BTreeMap::new();
-        let mut alloc_vir_mem_op_count = 0;
-        for (ty, count) in &bl.mem_op_by_ty {
-            ty_mem_op_offset.insert(ty.clone(), alloc_vir_mem_op_count);
-            alloc_vir_mem_op_count += count;
-        }
-        let mut vir_mem_op: Vec<Option<MemOp>> = vec![None; alloc_vir_mem_op_count];
-
-        (phy_mem, vir_mem, phy_mem_op, vir_mem_op, _) = self.bl_eval_inst_impl_(&bl.instructions, phy_mem, vir_mem, phy_mem_op, vir_mem_op, ty_mem_op_offset)?;
-
-        let vir_mem_op = vir_mem_op.into_iter().map(|i| i.unwrap()).collect();
+        (phy_mem, vir_mem, phy_mem_op, vir_mem_op) = self.bl_eval_inst_impl_(&bl.instructions, phy_mem, vir_mem, phy_mem_op, vir_mem_op)?;
 
         match &bl.terminator {
             BlockTerminator::Transition(e) => {
@@ -415,9 +405,8 @@ impl<'ast> ZGen<'ast> {
         mut phy_mem: Vec<T>,
         mut vir_mem: Vec<Option<T>>,
         mut phy_mem_op: Vec<MemOp>,
-        mut vir_mem_op: Vec<Option<MemOp>>,
-        mut ty_mem_op_offset: BTreeMap<Ty, usize>,
-    ) -> Result<(Vec<T>, Vec<Option<T>>, Vec<MemOp>, Vec<Option<MemOp>>, BTreeMap<Ty, usize>), String> {
+        mut vir_mem_op: Vec<MemOp>,
+    ) -> Result<(Vec<T>, Vec<Option<T>>, Vec<MemOp>, Vec<MemOp>), String> {
         for s in inst {
             match s {
                 BlockContent::MemPush((var, _, offset)) => {
@@ -453,7 +442,7 @@ impl<'ast> ZGen<'ast> {
                     phy_mem_op.push(MemOp::new_phy(bp + offset, self.usize_to_field(bp + offset)?, val_t));         
                 }
                 BlockContent::ArrayInit(_) => { return Err(format!("Blocks should not contain array initializations.")); }
-                BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
+                BlockContent::Store((val_expr, _, arr, id_expr, init)) => {
                     let mut val_t = self.expr_impl_::<true>(&val_expr)?;
                     let mut id_t = self.expr_impl_::<true>(&id_expr)?;
 
@@ -469,7 +458,6 @@ impl<'ast> ZGen<'ast> {
                     vir_mem[addr] = Some(val_t.clone());
 
                     // Update vir_mem_op
-                    let next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
                     let ls_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
                         value: DecimalNumber {
                             value: STORE.to_string(),
@@ -492,7 +480,7 @@ impl<'ast> ZGen<'ast> {
                     if val_t.type_() != &Ty::Field {
                         val_t = uint_to_field(val_t).unwrap();
                     }
-                    vir_mem_op[next_label] = Some(MemOp::new_vir(
+                    vir_mem_op.push(MemOp::new_vir(
                         addr,
                         addr_t,
                         val_t,
@@ -500,9 +488,6 @@ impl<'ast> ZGen<'ast> {
                         ts,
                         ts_t
                     ));
-
-                    // Increment label
-                    ty_mem_op_offset.insert(ty.clone(), next_label + 1);
                 }
                 BlockContent::Load((var, ty, arr, id_expr)) => {
                     let mut id_t = self.expr_impl_::<true>(&id_expr)?;
@@ -527,7 +512,6 @@ impl<'ast> ZGen<'ast> {
                     self.cvar_declare_init(var.clone(), ty, val_t.clone())?;
 
                     // Update vir_mem_op
-                    let next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
                     let ls_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
                         value: DecimalNumber {
                             value: LOAD.to_string(),
@@ -545,7 +529,7 @@ impl<'ast> ZGen<'ast> {
                     if val_t.type_() != &Ty::Field {
                         val_t = uint_to_field(val_t).unwrap();
                     }
-                    vir_mem_op[next_label] = Some(MemOp::new_vir(
+                    vir_mem_op.push(MemOp::new_vir(
                         addr,
                         addr_t,
                         val_t,
@@ -553,9 +537,6 @@ impl<'ast> ZGen<'ast> {
                         ts,
                         ts_t
                     ));
-
-                    // Increment label
-                    ty_mem_op_offset.insert(ty.clone(), next_label + 1);
                 }
                 BlockContent::Branch((cond, if_inst, else_inst)) => {
                     match self.expr_impl_::<true>(&cond).and_then(|v| {
@@ -563,10 +544,10 @@ impl<'ast> ZGen<'ast> {
                             .ok_or_else(|| "interpreting expr as const bool failed".to_string())
                     }) {
                         Ok(true) => {
-                            (phy_mem, vir_mem, phy_mem_op, vir_mem_op, ty_mem_op_offset) = self.bl_eval_inst_impl_(if_inst, phy_mem, vir_mem, phy_mem_op, vir_mem_op, ty_mem_op_offset)?;
+                            (phy_mem, vir_mem, phy_mem_op, vir_mem_op) = self.bl_eval_inst_impl_(if_inst, phy_mem, vir_mem, phy_mem_op, vir_mem_op)?;
                         },
                         Ok(false) => {
-                            (phy_mem, vir_mem, phy_mem_op, vir_mem_op, ty_mem_op_offset) = self.bl_eval_inst_impl_(else_inst, phy_mem, vir_mem, phy_mem_op, vir_mem_op, ty_mem_op_offset)?;
+                            (phy_mem, vir_mem, phy_mem_op, vir_mem_op) = self.bl_eval_inst_impl_(else_inst, phy_mem, vir_mem, phy_mem_op, vir_mem_op)?;
                         },
                         Err(err) => return Err(format!(
                             "Const conditional expression eval failed: {} at\n{}",
@@ -580,7 +561,7 @@ impl<'ast> ZGen<'ast> {
                 }
             }
         };
-        Ok((phy_mem, vir_mem, phy_mem_op, vir_mem_op, ty_mem_op_offset))
+        Ok((phy_mem, vir_mem, phy_mem_op, vir_mem_op))
     }
 
     fn bl_eval_stmt_impl_(

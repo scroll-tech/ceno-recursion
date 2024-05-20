@@ -189,8 +189,8 @@ pub struct Block<'ast> {
     pub fn_num_exec_bound: usize,
     // Is this block the head of a while loop? If so, this block cannot be merged with any block before it
     pub is_head_of_while_loop: bool,
-    // Number of non-scoping-related memory accesses per each variable type
-    pub mem_op_by_ty: BTreeMap<Ty, usize>,
+    // Number of non-scoping-related memory accesses
+    pub num_vm_op: usize,
     // Name of the function the block is in
     pub fn_name: String,
     // Depth of the scope of the function
@@ -239,7 +239,7 @@ impl<'ast> Block<'ast> {
             terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1))),
             fn_num_exec_bound: num_exec_bound,
             is_head_of_while_loop: false,
-            mem_op_by_ty: BTreeMap::new(),
+            num_vm_op: 0,
             fn_name,
             scope
         };
@@ -255,7 +255,7 @@ impl<'ast> Block<'ast> {
             terminator: old_bl.terminator.clone(),
             fn_num_exec_bound: old_bl.fn_num_exec_bound,
             is_head_of_while_loop: old_bl.is_head_of_while_loop,
-            mem_op_by_ty: old_bl.mem_op_by_ty.clone(),
+            num_vm_op: old_bl.num_vm_op,
             fn_name: old_bl.fn_name.clone(),
             scope: old_bl.scope
         };
@@ -279,17 +279,14 @@ impl<'ast> Block<'ast> {
         self.instructions.extend(succ.instructions);
         // Terminator
         self.terminator = succ.terminator;
-        // Concatenate memory operators
-        for (ty, succ_count) in succ.mem_op_by_ty.into_iter() {
-            let total_count = if let Some(count) = self.mem_op_by_ty.get(&ty) { count + succ_count } else { succ_count };
-            self.mem_op_by_ty.insert(ty, total_count);
-        }
+        // Add up memory operators
+        self.num_vm_op += succ.num_vm_op;
     }
 
     pub fn pretty(&self) {
         println!("\nBlock {}:", self.name);
         println!("Func: {}, Scope: {}", self.fn_name, self.scope);
-        println!("Exec Bound: {}, While Loop: {}, VM Ops: {:?}", self.fn_num_exec_bound, self.is_head_of_while_loop, self.mem_op_by_ty);
+        println!("Exec Bound: {}, While Loop: {}, Num VM Ops: {}", self.fn_num_exec_bound, self.is_head_of_while_loop, self.num_vm_op);
         println!("Inputs:");
 
         for i in &self.inputs {
@@ -1170,8 +1167,7 @@ impl<'ast> ZGen<'ast> {
                                                 self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, var_scope_info)?;
                                             if !tmp_arr_info.is_empty() { panic!("Currently do not support array initialization inside array indices") }
                                             blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), entry_ty.clone(), new_l, new_e, false)));
-                                            let ty_mem_op_count = *blks[blks_len - 1].mem_op_by_ty.get(&entry_ty).unwrap_or(&0);
-                                            blks[blks_len - 1].mem_op_by_ty.insert(entry_ty.clone(), ty_mem_op_count + 1);
+                                            blks[blks_len - 1].num_vm_op += 1;
                                         } else {
                                             return Err(format!("Array range access not implemented!"));
                                         }
@@ -1359,8 +1355,7 @@ impl<'ast> ZGen<'ast> {
                                 self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, var_scope_info)?;
                             if !tmp_arr_info.is_empty() { panic!("Currently do not support array initialization inside array indices") }
                             blks[blks_len - 1].instructions.push(BlockContent::Load((load_extended_name.clone(), load_ty.clone(), arr_extended_name.clone(), new_e)));
-                            let ty_mem_op_count = *blks[blks_len - 1].mem_op_by_ty.get(&load_ty).unwrap_or(&0);
-                            blks[blks_len - 1].mem_op_by_ty.insert(load_ty.clone(), ty_mem_op_count + 1);
+                            blks[blks_len - 1].num_vm_op += 1;
                             load_count += 1;
                             ret_e = Expression::Identifier(IdentifierExpression {
                                 value: load_extended_name,
@@ -1467,8 +1462,7 @@ impl<'ast> ZGen<'ast> {
                 span: Span::new("", 0, 0).unwrap()
             }));
             blks[blks_len - 1].instructions.push(BlockContent::Store((entry_expr, entry_ty.clone(), arr_extended_name.clone(), index_expr, is_declare)));
-            let ty_mem_op_count = *blks[blks_len - 1].mem_op_by_ty.get(&entry_ty).unwrap_or(&0);
-            blks[blks_len - 1].mem_op_by_ty.insert(entry_ty.clone(), ty_mem_op_count + 1);
+            blks[blks_len - 1].num_vm_op += 1;
             index += 1;
         }
         Ok((blks, blks_len, var_scope_info))
@@ -1805,13 +1799,12 @@ impl<'ast> ZGen<'ast> {
     fn vir_mem_to_circ<const MODE: usize>(
         &'ast self,
         f: &str,
-        mut ty_mem_op_offset: BTreeMap<Ty, usize>,
-        ty: &Ty,
+        mut vir_mem_op_count: usize,
         arr: Option<&String>,
         id_expr: Option<&Expression<'ast>>,
-    ) -> (BTreeMap<Ty, usize>, usize) {
+    ) -> (usize, usize) {
         // Obtain the label for the memory operation
-        let next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
+        let next_label = vir_mem_op_count;
 
         // Declare the next ADDR, DATA, L/S, and TS
         // VIR_ADDR as 'a'
@@ -1881,20 +1874,19 @@ impl<'ast> ZGen<'ast> {
         // DATA is updated individually by LOAD or STORE
 
         // Update label
-        ty_mem_op_offset.insert(ty.clone(), next_label + 1);
+        vir_mem_op_count += 1;
 
-        (ty_mem_op_offset, next_label)
+        (vir_mem_op_count, next_label)
     }
 
     pub fn inst_to_circ<const ESTIMATE: bool>(&self, 
         i: &BlockContent, 
         f: &str,
         mut phy_mem_op_count: usize,
-        mut alloc_vir_mem_op_count: usize,
-        mut ty_mem_op_offset: BTreeMap<Ty, usize>,
-    ) -> (usize, usize, BTreeMap<Ty, usize>) {
+        mut vir_mem_op_count: usize
+    ) -> (usize, usize) {
         match i {
-            BlockContent::MemPush((var, ty, offset)) => {
+            BlockContent::MemPush((var, _, offset)) => {
                 // Non-deterministically supply ADDR
                 self.circ_declare_input(
                     &f,
@@ -2026,24 +2018,22 @@ impl<'ast> ZGen<'ast> {
                     ).unwrap();
                 }
             }
-            BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
+            BlockContent::Store((val_expr, _, arr, id_expr, init)) => {
                 if ESTIMATE {}
                 else {
                     let next_label: usize;
                     // ADDR, LS, & TS
                     if *init {
-                        (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<INIT_STORE>(
+                        (vir_mem_op_count, next_label) = self.vir_mem_to_circ::<INIT_STORE>(
                             f,
-                            ty_mem_op_offset,
-                            &ty,
+                            vir_mem_op_count,
                             Some(&arr),
                             Some(&id_expr)
                         );
                     } else {
-                        (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<STORE>(
+                        (vir_mem_op_count, next_label) = self.vir_mem_to_circ::<STORE>(
                             f,
-                            ty_mem_op_offset,
-                            &ty,
+                            vir_mem_op_count,
                             Some(&arr),
                             Some(&id_expr)
                         );
@@ -2075,10 +2065,9 @@ impl<'ast> ZGen<'ast> {
                 } else {
                     let next_label: usize;
                     // ADDR, LS, & TS
-                    (ty_mem_op_offset, next_label) = self.vir_mem_to_circ::<LOAD>(
+                    (vir_mem_op_count, next_label) = self.vir_mem_to_circ::<LOAD>(
                         f,
-                        ty_mem_op_offset,
-                        &ty,
+                        vir_mem_op_count,
                         Some(&arr),
                         Some(&id_expr)
                     );
@@ -2101,18 +2090,18 @@ impl<'ast> ZGen<'ast> {
                 let cbool = bool(cond.clone()).unwrap();
                 self.circ_enter_condition(cbool.clone());
                 for i in if_insts {
-                    (phy_mem_op_count, alloc_vir_mem_op_count, ty_mem_op_offset) = self.inst_to_circ::<ESTIMATE>(i, f, phy_mem_op_count, alloc_vir_mem_op_count, ty_mem_op_offset);
+                    (phy_mem_op_count, vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, phy_mem_op_count, vir_mem_op_count);
                 }
                 self.circ_exit_condition();
                 self.circ_enter_condition(term![NOT; cbool]);
                 for i in else_insts {
-                    (phy_mem_op_count, alloc_vir_mem_op_count, ty_mem_op_offset) = self.inst_to_circ::<ESTIMATE>(i, f, phy_mem_op_count, alloc_vir_mem_op_count, ty_mem_op_offset);
+                    (phy_mem_op_count, vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, phy_mem_op_count, vir_mem_op_count);
                 }
                 self.circ_exit_condition();
             }
             BlockContent::Stmt(stmt) => { self.stmt_impl_::<false>(&stmt).unwrap(); }
         }
-        (phy_mem_op_count, alloc_vir_mem_op_count, ty_mem_op_offset)
+        (phy_mem_op_count, vir_mem_op_count)
     }
 
     // Convert a block to circ_ir
@@ -2157,17 +2146,12 @@ impl<'ast> ZGen<'ast> {
 
         // How many scoping memory operations have we encountered?
         let mut phy_mem_op_count = 0;
-        // The label of the next memory operation on the specific type
-        let mut ty_mem_op_offset = BTreeMap::new();
-        let mut alloc_vir_mem_op_count = 0;
-        for (ty, count) in &b.mem_op_by_ty {
-            ty_mem_op_offset.insert(ty.clone(), alloc_vir_mem_op_count);
-            alloc_vir_mem_op_count += count;
-        }
+        // How many virtual memory operations have we encountered?
+        let mut vir_mem_op_count = 0;
         
         // Iterate over instructions, convert memory accesses into statements and then IR
         for i in &b.instructions {
-            (phy_mem_op_count, alloc_vir_mem_op_count, ty_mem_op_offset) = self.inst_to_circ::<ESTIMATE>(i, f, phy_mem_op_count, alloc_vir_mem_op_count, ty_mem_op_offset);
+            (phy_mem_op_count, vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, phy_mem_op_count, vir_mem_op_count);
         }
         
         // If in estimation mode, declare and assert all outputs of the block

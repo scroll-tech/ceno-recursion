@@ -1933,7 +1933,7 @@ impl<'ast> ZGen<'ast> {
                     // if any successor is the head of a while loop, 
                     // or if any successor contains memory operations
                     // no merge can be performed
-                    if bls[*succ].is_head_of_while_loop || bls[*succ].mem_op_by_ty.len() > 0 {
+                    if bls[*succ].is_head_of_while_loop || bls[*succ].num_vm_op > 0 {
                         scope_state = vec![None; cur_scope + 1];
                         break;
                     }

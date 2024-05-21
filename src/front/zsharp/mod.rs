@@ -2064,9 +2064,15 @@ impl<'ast> ZGen<'ast> {
         debug_assert!(matches!(check(&asrt), Sort::Bool));
         if self.isolate_asserts {
             let path = self.circ_condition();
-            self.assertions
-                .borrow_mut()
-                .push(term![IMPLIES; path, asrt]);
+            // if path is True, then ignore it
+            if let Some(Value::Bool(true)) = const_value(&path) {
+                self.assertions.borrow_mut().push(asrt);
+            } else {
+                self.assertions
+                    .borrow_mut()
+                    .push(term![IMPLIES; path, asrt]);
+            }
+
         } else {
             self.assertions.borrow_mut().push(asrt);
         }
@@ -2075,15 +2081,15 @@ impl<'ast> ZGen<'ast> {
     /*** circify wrapper functions (hides RefCell) ***/
 
     fn circ_enter_condition(&self, cond: Term) {
-        // if self.isolate_asserts {
+        if self.isolate_asserts {
             self.circ.borrow_mut().enter_condition(cond).unwrap();
-        // }
+        }
     }
 
     fn circ_exit_condition(&self) {
-        // if self.isolate_asserts {
+        if self.isolate_asserts {
             self.circ.borrow_mut().exit_condition()
-        // }
+        }
     }
 
     fn circ_condition(&self) -> Term {

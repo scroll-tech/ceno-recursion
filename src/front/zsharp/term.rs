@@ -608,7 +608,7 @@ pub fn to_const_value(a: T) -> Result<Value, String> {
     }
 }
 
-fn const_value(t: &Term) -> Option<Value> {
+pub fn const_value(t: &Term) -> Option<Value> {
     let folded = constant_fold(t, &[]);
     match &folded.op() {
         Op::Const(v) => Some(v.clone()),

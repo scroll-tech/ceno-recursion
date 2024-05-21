@@ -295,7 +295,7 @@ pub struct ZsharpOpt {
     ///
     /// See `--branch-isolation` in
     /// [ZoKrates](https://zokrates.github.io/language/control_flow.html).
-    #[arg(long = "zsharp-isolate-asserts", env = "ZSHARP_ISOLATE_ASSERTS", action = ArgAction::Set, default_value = "false")]
+    #[arg(long = "zsharp-isolate-asserts", env = "ZSHARP_ISOLATE_ASSERTS", action = ArgAction::Set, default_value = "true")]
     pub isolate_asserts: bool,
 }
 

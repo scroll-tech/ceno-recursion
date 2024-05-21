@@ -562,7 +562,7 @@ impl<'ast> ZGen<'ast> {
                             value: LOAD.to_string(),
                             span: Span::new("", 0, 0).unwrap()
                         },
-                        suffix: Some(DecimalSuffix::U8(U8Suffix {
+                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
                             span: Span::new("", 0, 0).unwrap()
                         })),
                         span: Span::new("", 0, 0).unwrap()

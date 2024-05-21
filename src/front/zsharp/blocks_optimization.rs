@@ -20,7 +20,7 @@ use crate::front::zsharp::cfg;
 use crate::front::zsharp::ZSharp;
 
 const MIN_BLOCK_SIZE: usize = 1024;
-const CFG_VERBOSE: bool = false;
+const CFG_VERBOSE: bool = true;
 
 fn type_to_ty(t: Type) -> Result<Ty, String> {
     match t {
@@ -2092,6 +2092,7 @@ impl<'ast> ZGen<'ast> {
                     bls[comp_head].instructions = instr_list[comp_head].clone();
                     bls[comp_head].num_vm_ops = vm_count_list[comp_head];
                     bls[comp_head].terminator = bls[comp_tail].terminator.clone();
+                    bls[comp_head].outputs = bls[comp_tail].outputs.clone();
 
                     changed = true;
                     break;
@@ -2630,11 +2631,11 @@ impl<'ast> ZGen<'ast> {
         let mut next_bls: VecDeque<usize> = VecDeque::new();
         for eb in exit_bls {
             next_bls.push_back(eb);
-            visited[eb] = true;
         }
         // Backward analysis to isolate empty blocks
         while !next_bls.is_empty() {
             let cur_bl = next_bls.pop_front().unwrap();
+            visited[cur_bl] = true;
 
             // If the block only has one predecessor and the predecessor only has one successor
             // And the transition does not involve function calls / returns, merge the two blocks
@@ -2660,8 +2661,6 @@ impl<'ast> ZGen<'ast> {
                 // either we haven't processed the predecessor
                 // or cur_bl is empty so predecessors will be changed
                 if !visited[tmp_bl] || bls[cur_bl].instructions.len() == 0 {
-                    visited[tmp_bl] = true;
-
                     if bls[cur_bl].instructions.len() == 0 {
                         if let BlockTerminator::Transition(cur_e) = &bls[cur_bl].terminator {
                             if let BlockTerminator::Transition(e) = &bls[tmp_bl].terminator {

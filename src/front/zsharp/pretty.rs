@@ -18,6 +18,7 @@ pub fn pretty_block_content(indent: usize, bc: &BlockContent) {
             println!(); 
         }
         BlockContent::Load((val, ty, arr, id)) => { print!("{ty} {} = {arr}[", pretty_name(val)); pretty_expr::<false>(&id); println!("]"); }
+        BlockContent::DummyLoad() => { println!("Dummy Load"); }
         BlockContent::Branch((cond, if_insts, else_insts)) => { 
             print!("if ");
             pretty_expr::<false>(cond);
@@ -25,12 +26,14 @@ pub fn pretty_block_content(indent: usize, bc: &BlockContent) {
             for i in if_insts {
                 pretty_block_content(indent + 1, i);
             }
-            for _ in 0..indent * 4 {
-                print!(" ");
-            }
-            println!("else:");
-            for i in else_insts {
-                pretty_block_content(indent + 1, i);
+            if else_insts.len() > 0 {
+                for _ in 0..indent * 4 {
+                    print!(" ");
+                }
+                println!("else:");
+                for i in else_insts {
+                    pretty_block_content(indent + 1, i);
+                }
             }
          }
         BlockContent::Stmt(s) => { pretty_stmt(0, &s); }

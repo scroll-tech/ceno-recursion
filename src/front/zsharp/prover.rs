@@ -10,6 +10,7 @@ use crate::front::zsharp::Op;
 use std::collections::BTreeMap;
 use crate::front::zsharp::blocks::*;
 use crate::front::zsharp::*;
+use crate::front::zsharp::pretty::pretty_name;
 use log::warn;
 use log::debug;
 use std::cmp::Ordering;
@@ -122,7 +123,7 @@ impl<'ast> ZGen<'ast> {
         }
         
         for (key, value) in all_vars {
-            print!("{key} = ");
+            print!("{} = ", pretty_name(key));
             value.pretty(&mut std::io::stdout().lock())
             .expect("error pretty-printing value");
             println!();
@@ -463,7 +464,7 @@ impl<'ast> ZGen<'ast> {
                             value: STORE.to_string(),
                             span: Span::new("", 0, 0).unwrap()
                         },
-                        suffix: Some(DecimalSuffix::U8(U8Suffix {
+                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
                             span: Span::new("", 0, 0).unwrap()
                         })),
                         span: Span::new("", 0, 0).unwrap()
@@ -510,6 +511,50 @@ impl<'ast> ZGen<'ast> {
                         ));
                     }
                     self.cvar_declare_init(var.clone(), ty, val_t.clone())?;
+
+                    // Update vir_mem_op
+                    let ls_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                        value: DecimalNumber {
+                            value: LOAD.to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        span: Span::new("", 0, 0).unwrap()
+                    }))).unwrap();
+                    let ts_t = self.cvar_lookup(W_TS).ok_or(format!("STORE failed: %TS is uninitialized."))?;
+                    let ts = self.t_to_usize(ts_t.clone())?;
+
+                    // Convert val_t to field for MemOp
+                    if val_t.type_() != &Ty::Field {
+                        val_t = uint_to_field(val_t).unwrap();
+                    }
+                    vir_mem_op.push(MemOp::new_vir(
+                        addr,
+                        addr_t,
+                        val_t,
+                        ls_t,
+                        ts,
+                        ts_t
+                    ));
+                }
+                BlockContent::DummyLoad() => {
+                    // Addr is 0
+                    let addr_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                        value: DecimalNumber {
+                            value: 0.to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                            span: Span::new("", 0, 0).unwrap()
+                        })),
+                        span: Span::new("", 0, 0).unwrap()
+                    }))).unwrap();
+                    let addr = self.t_to_usize(addr_t.clone())?;
+
+                    // Val is vir_mem[0]
+                    let mut val_t = vir_mem[addr].clone().ok_or(format!("LOAD failed: entry {} is uninitialized.", addr))?;
 
                     // Update vir_mem_op
                     let ls_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {

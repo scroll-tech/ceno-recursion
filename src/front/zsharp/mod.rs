@@ -1615,18 +1615,6 @@ impl<'ast> ZGen<'ast> {
         }
     }
 
-    fn cvar_cur_scope_find(&self, name: &str) -> bool {
-        if let Some(st1) = self.cvars_stack.borrow().last() {
-            if let Some(st2) = st1.last() {
-                st2.contains_key(name)
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    }
-
     fn ret_ty_stack_push<const IS_CNST: bool>(
         &self,
         fn_def: &ast::FunctionDefinition<'ast>,

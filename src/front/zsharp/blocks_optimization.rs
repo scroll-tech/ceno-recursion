@@ -530,43 +530,40 @@ fn term_to_instr<'ast>(
     bls: &Vec<Block>,
     term: &Expression<'ast>,
     instr_list: &Vec<Vec<BlockContent<'ast>>>,
+    vm_count_list: &Vec<usize>,
     cur_bl: usize,
-) -> (Vec<BlockContent<'ast>>, usize) {
+) -> (Vec<BlockContent<'ast>>, usize, usize) {
     // There are three cases for the terminator
     // A ternary should be converted to a branching instruction
     // A constant literal should be converted to the corresponding instruction list x looping
     // Any reference to %RP should result in the termination of the conversion
     match term {
         Expression::Ternary(t) => {
-            let (left_instr, left_repeat) = term_to_instr(bls, &t.second, instr_list, cur_bl);
-            let (right_instr, right_repeat) = term_to_instr(bls, &t.third, instr_list, cur_bl);
+            let (mut left_instr, left_vm_count, left_repeat) = term_to_instr(bls, &t.second, instr_list, vm_count_list, cur_bl);
+            let (mut right_instr, right_vm_count, right_repeat) = term_to_instr(bls, &t.third, instr_list, vm_count_list, cur_bl);
             // If both left and right are empty, don't construct if / else
             if left_instr.len() == 0 && right_instr.len() == 0 {
-                return (Vec::new(), 1);
+                return (Vec::new(), 0, 1);
             }
 
             // Restrictions on loop structure
             assert_eq!(right_repeat, 1);
             assert!(left_repeat == 1 || right_instr.len() == 0);
 
-            // TODO: Resolve mem ops
-            left_instr.iter().for_each(|i|
-                if let BlockContent::Stmt(_) = i {} 
-                else if let BlockContent::Branch(_) = i {} 
-                else{ panic!{"Terminator to instruction failed: branch blocks should not contain memory operations!"} }
-            );
-            right_instr.iter().for_each(|i|
-                if let BlockContent::Stmt(_) = i {} 
-                else if let BlockContent::Branch(_) = i {}
-                else { panic!{"Terminator to instruction failed: branch blocks should not contain memory operations!"} }
-            );
+            // Insert dummy loads on branches if vm_count does not match
+            if left_vm_count < right_vm_count {
+                left_instr.extend(vec![BlockContent::DummyLoad(); right_vm_count - left_vm_count]);
+            }
+            if right_vm_count < left_vm_count {
+                right_instr.extend(vec![BlockContent::DummyLoad(); left_vm_count - right_vm_count]);
+            }
             let branch_inst = BlockContent::Branch((
                 *t.first.clone(),
                 left_instr,
                 right_instr
             ));
 
-            (vec![branch_inst; left_repeat], 1)
+            (vec![branch_inst; left_repeat], max(left_vm_count, right_vm_count) * left_repeat, 1)
         }
         Expression::Literal(le) => {
             if let LiteralExpression::DecimalLiteral(dle) = le {
@@ -576,9 +573,9 @@ fn term_to_instr<'ast>(
                 if next_scope > cur_scope {
                     // Copy from instr_list only if scope of next_bl is higher than cur_scope
                     // DO NOT unroll the loops here. We need to unroll with the condition
-                    (instr_list[next_bl].clone(), bls[next_bl].fn_num_exec_bound / bls[cur_bl].fn_num_exec_bound)
+                    (instr_list[next_bl].clone(), vm_count_list[next_bl], bls[next_bl].fn_num_exec_bound / bls[cur_bl].fn_num_exec_bound)
                 } else {
-                    (Vec::new(), 1)
+                    (Vec::new(), 0, 1)
                 }
             } else {
                 panic!("Terminator to instruction failed: terminator cannot contain boolean or hex")
@@ -960,7 +957,7 @@ fn la_inst<'ast>(
                     state.insert("%TS".to_string());
                 }
             }
-            // If there is a store, then keep the statement if val is alive
+            // If there is a load, then keep the statement if val is alive
             BlockContent::Load((val, _, arr, id_expr)) => {
                 if is_alive(&state, val) {
                     new_instructions.insert(0, i.clone());
@@ -970,6 +967,11 @@ fn la_inst<'ast>(
                     state = la_gen(state, &gen);
                     state.insert("%TS".to_string());
                 }
+            }
+            // Do not reason about liveness of dummy loads, mark %TS as alive
+            BlockContent::DummyLoad() => {
+                new_instructions.insert(0, i.clone());
+                state.insert("%TS".to_string());
             }
             BlockContent::Branch((cond, if_inst, else_inst)) => {
                 // Liveness of branches
@@ -1019,6 +1021,7 @@ fn ty_inst<'ast>(
             BlockContent::Load((val, ty, _, _)) => {
                 state.insert(val.clone(), ty.clone());
             }
+            BlockContent::DummyLoad() => {}
             BlockContent::Branch((_, if_inst, else_inst)) => {
                 state = ty_inst(state, &if_inst);
                 state = ty_inst(state, &else_inst);
@@ -1103,6 +1106,9 @@ fn vtr_inst<'ast>(
                 (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
                 new_instr.push(BlockContent::Load((new_val, ty.clone(), new_arr_name, new_id_expr)))
             }
+            BlockContent::DummyLoad() => {
+                new_instr.push(BlockContent::DummyLoad());
+            }
             BlockContent::Branch((cond, if_inst, else_inst)) => {
                 let new_cond: Expression;
                 let new_if_inst: Vec<BlockContent<'ast>>;
@@ -1167,15 +1173,21 @@ fn bmc_inst<'ast>(
                 phy_mem_accesses_count += 1;
             }
             BlockContent::ArrayInit(_) => {}
+            // Store includes init, invalidate, & store
+            BlockContent::Store(_) => {
+                vir_mem_accesses_count += 1;
+                //                      addr  data  ls    ts
+                vm_liveness.extend(vec![true, true, true, true]);
+            }
             BlockContent::Load(_) => {
                 vir_mem_accesses_count += 1;
                 //                      addr  data  ls    ts
                 vm_liveness.extend(vec![true, true, true, true]);
             }
-            // Store includes init, invalidate, & store
-            BlockContent::Store(_) => {
+            BlockContent::DummyLoad() => {
                 vir_mem_accesses_count += 1;
                 //                      addr  data  ls    ts
+                // Note: while addr & data are not referenced in dummy loads, they are referenced in the other branch
                 vm_liveness.extend(vec![true, true, true, true]);
             }
             /*
@@ -1893,18 +1905,18 @@ impl<'ast> ZGen<'ast> {
         predecessor_fn: &Vec<HashSet<usize>>,
         exit_bls_fn: &HashSet<usize>
     ) -> Vec<Block<'ast>> {
-        // Obtain number of constraints for all blocks
+        // STEP 1: Obtain number of constraints for all blocks
         let mut bl_num_cons = Vec::new();
         for b in &bls {
             bl_num_cons.push(self.bl_count_num_cons(b));
         }
         // Reset self.circ
         self.circ.borrow_mut().reset(ZSharp::new());
-
         // Maximum # of constraints is max(MIN_BLOCK_SIZE, bl_num_cons.max().next_power_of_two())
         let max_num_cons = max(MIN_BLOCK_SIZE, bl_num_cons.iter().max().unwrap().next_power_of_two());
         
-        // Backward analysis within each function: for each block, if there exists a potential merge component, record the size of constraints of that component
+        // STEP 2: Backward analysis within each function
+        // For each block, if there exists a potential merge component, record the size of constraints of that component
         let mut visited: Vec<bool> = vec![false; bls.len()];
         // count is the size of the component, set to 0 if a component does not exist
         let mut count_list = vec![0; bls.len()];
@@ -1930,10 +1942,8 @@ impl<'ast> ZGen<'ast> {
             // if cur_bl does not call another function, then merge can be performed
             if successor_fn[cur_bl].len() == 0 || successor_fn[cur_bl] == successor[cur_bl] {
                 for succ in &successor_fn[cur_bl] {
-                    // if any successor is the head of a while loop, 
-                    // or if any successor contains memory operations
-                    // no merge can be performed
-                    if bls[*succ].is_head_of_while_loop || bls[*succ].num_vm_op > 0 {
+                    // if any successor is the head of a while loop, no merge can be performed
+                    if bls[*succ].is_head_of_while_loop {
                         scope_state = vec![None; cur_scope + 1];
                         break;
                     }
@@ -1992,10 +2002,23 @@ impl<'ast> ZGen<'ast> {
             }
         }
 
-        // Iterate through the blocks to perform merge
+        // STEP 3: Iterate through the blocks to perform merge
         // This is a partial backward analysis on the component we want to merge
         // We want to merge the largest component possible, which means it will start at the block with the lowest label
         // Repeat the merge process until there is nothing left to be merged
+
+        // Compute the scope head of each block, if exist
+        // Use 0 if scope head does not exist (since we never merge block 0)
+        let mut scope_head = vec![0; bls.len()];
+        for cur_bl in 0..scope_list.len() {
+            let cur_scope = bls[cur_bl].scope;
+            let scope_tail = scope_list[cur_bl][cur_scope];
+            if scope_tail != 0 {
+                assert_eq!(scope_head[scope_tail], 0);
+                scope_head[scope_tail] = cur_bl;
+            }
+        }
+
         let mut changed = true;
         while changed {
             changed = false;
@@ -2007,9 +2030,13 @@ impl<'ast> ZGen<'ast> {
                     let comp_head = i;
                     let comp_scope = bls[comp_head].scope;
                     let comp_tail = scope_list[comp_head][comp_scope];
+
                     // Backward analysis starting from comp_tail
-                    // STATE is a list of instructions of all merged blocks of the current scope
+                    // STATE is 
+                    // 1. a list of instructions of all merged blocks of the current scope
+                    // 2. number of vm ops of all merged blocks of the current scope
                     let mut instr_list: Vec<Vec<BlockContent<'ast>>> = vec![Vec::new(); bls.len()];
+                    let mut vm_count_list: Vec<usize> = vec![0; bls.len()];
                     let mut visited: Vec<bool> = vec![false; bls.len()];
 
                     // Start from comp_tail
@@ -2021,22 +2048,31 @@ impl<'ast> ZGen<'ast> {
                         let cur_scope = bls[cur_bl].scope;
 
                         // Instructions of cur_bl
-                        let mut instr_state = Vec::new();
-                        instr_state.extend(bls[cur_bl].instructions.clone());
+                        let mut instr_state = bls[cur_bl].instructions.clone();
+                        let mut vm_count_state = bls[cur_bl].num_vm_ops;
                         // Instructions of successors & next block in scope, if not comp_tail
                         if cur_bl != comp_tail {                  
                             if let BlockTerminator::Transition(t) = &bls[cur_bl].terminator {
-                                instr_state.extend(term_to_instr(&bls, t, &instr_list, cur_bl).0);
+                                let (merged_instr, merged_vm_count, _) = term_to_instr(&bls, t, &instr_list, &vm_count_list, cur_bl);
+                                instr_state.extend(merged_instr);
+                                vm_count_state += merged_vm_count;
                             }
                             instr_state.extend(instr_list[scope_list[cur_bl][cur_scope]].clone());
+                            vm_count_state += vm_count_list[scope_list[cur_bl][cur_scope]];
                         }
 
                         if !visited[cur_bl] || instr_state != instr_list[cur_bl] {
                             visited[cur_bl] = true;
                             instr_list[cur_bl] = instr_state;
+                            vm_count_list[cur_bl] = vm_count_state;
                             if cur_bl != comp_head {
+                                // Push in predecessors
                                 for p in &predecessor_fn[cur_bl] {
                                     next_bls.push_back(*p);
+                                }
+                                // Push in the head of the current scope
+                                if scope_head[cur_bl] != 0 {
+                                    next_bls.push_back(scope_head[cur_bl]);
                                 }
                             }
                         }
@@ -2054,6 +2090,7 @@ impl<'ast> ZGen<'ast> {
                     count_list[comp_tail] = 0;
 
                     bls[comp_head].instructions = instr_list[comp_head].clone();
+                    bls[comp_head].num_vm_ops = vm_count_list[comp_head];
                     bls[comp_head].terminator = bls[comp_tail].terminator.clone();
 
                     changed = true;

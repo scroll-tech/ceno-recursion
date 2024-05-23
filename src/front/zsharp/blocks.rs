@@ -145,14 +145,12 @@ pub fn bl_gen_init_stmt<'ast>(var: &str) -> Statement<'ast> {
 // Generate the statement: var = var + offset
 pub fn bl_gen_increment_stmt<'ast>(var: &str, offset: usize) -> Statement<'ast> {
     let var_update_stmt = Statement::Definition(DefinitionStatement {
-        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-            ty: Type::Basic(BasicType::Field(FieldType {
-                span: Span::new("", 0, 0).unwrap()
-            })),
-            identifier: IdentifierExpression {
+        lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
+            id: IdentifierExpression {
                 value: var.to_string(),
                 span: Span::new("", 0, 0).unwrap()
             },
+            accesses: Vec::new(),
             span: Span::new("", 0, 0).unwrap()
         })],
         expression: Expression::Binary(BinaryExpression {

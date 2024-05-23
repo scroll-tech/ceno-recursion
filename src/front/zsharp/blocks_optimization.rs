@@ -20,7 +20,7 @@ use crate::front::zsharp::cfg;
 use crate::front::zsharp::ZSharp;
 
 const MIN_BLOCK_SIZE: usize = 1024;
-const CFG_VERBOSE: bool = true;
+const CFG_VERBOSE: bool = false;
 
 fn type_to_ty(t: Type) -> Result<Ty, String> {
     match t {
@@ -938,24 +938,26 @@ fn la_inst<'ast>(
                 state.remove(var);
                 state.insert("%BP".to_string());
             }
+            // NOTE: Due to pointer aliasing, cannot remove any vm statements
             // If there is an array initialization, then the array is dead but %AS is alive
             BlockContent::ArrayInit((arr, _, _)) => {
-                if is_alive(&state, arr) {
+                // if is_alive(&state, arr) {
                     new_instructions.insert(0, i.clone());
                     state.remove(arr);
                     state.insert("%AS".to_string());
-                }
+                // }
             }
             // If there is a store, then keep the statement if array is alive
             BlockContent::Store((val_expr, _, arr, id_expr, _)) => {
-                if is_alive(&state, arr) {
+                // if is_alive(&state, arr) {
                     new_instructions.insert(0, i.clone());
+                    state.insert(arr.to_string());
                     let gen = expr_find_val(val_expr);
                     state = la_gen(state, &gen);
                     let gen = expr_find_val(id_expr);
                     state = la_gen(state, &gen);
                     state.insert("%TS".to_string());
-                }
+                // }
             }
             // If there is a load, then keep the statement if val is alive
             BlockContent::Load((val, _, arr, id_expr)) => {

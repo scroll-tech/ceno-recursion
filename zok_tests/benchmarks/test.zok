@@ -1,0 +1,8 @@
+def main(field a)-> field:
+  field b = a
+  if a == 0 then
+    field c = b
+  else
+    field c = b
+  endif
+  return a

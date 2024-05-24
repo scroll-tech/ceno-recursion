@@ -1,0 +1,36 @@
+def add(field a, field b) -> field:
+  return a + b
+
+def foo(field a, field b, field c) -> field:
+  for field i in 0..4 do
+    c = i
+    field i = 10
+    if c < b then
+      field c = 5
+      if a < c then      
+        return add(c, i)
+      endif
+    else
+      if c < a then
+        b = b + c
+      else
+        if c == 0 then
+          b = b + a
+        else
+          b = b + b
+        endif
+      endif
+      i = i + 1
+    endif
+  endfor
+  return a + b + c
+
+def main(field a, field b, field c) -> field:
+  for field i in 0..2 do
+    field a = 5
+    if a < add(i, add(i, b)) then
+      return foo(a, b, c)
+      a = a + 10
+    endif
+  endfor
+  return a

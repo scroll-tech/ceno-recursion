@@ -1,0 +1,71 @@
+def gen_lps(field[10] pat, field m, field[10] lps) -> field:
+    // Generate LPS
+    field[10] lps = [0; 10]
+    field len = 0
+    lps[0] = 0
+    field i = 1
+
+    // CoBBL 
+    while i < m do
+        if pat[i] == pat[len] then
+            len = len + 1
+            lps[i] = len
+            i = i + 1
+        else
+            if len != 0 then
+                len = lps[len - 1]
+            else
+                lps[i] = 0
+                i = i + 1
+            endif
+        endif
+    endwhile
+
+    return m
+
+def main(field n, field m, field b, field c) -> field:
+    field[80] txt = [0; 80]
+    field[10] pat = [0; 10]
+
+    // Initialize arrays
+    field sum = 0
+    for field i in 0..80 do
+        sum = sum + i
+        txt[i] = sum
+    endfor
+    for field i in 0..10 do
+        pat[i] = txt[n - m - b + i]
+    endfor
+    // random access to ensure array is written in memory
+    field x = pat[b]
+    field y = txt[b]
+
+    // Generate LPS
+    field[10] lps = [0; 10]
+    m = gen_lps(pat, m, lps)
+
+    field i = 0
+    field j = 0
+    field found = 0
+
+    while (n - i) >= (m - j) do
+        if pat[j] == txt[i] then
+            i = i + 1
+            j = j + 1
+        endif
+
+        if j == m then
+            j = lps[j - 1]
+            found = i - j
+        else
+            if i < n && pat[j] != txt[i] then
+                if j != 0 then
+                    j = lps[j - 1]
+                else
+                    i = i + 1
+                endif
+            endif
+        endif
+    endwhile
+
+    return found + (x + y) * c

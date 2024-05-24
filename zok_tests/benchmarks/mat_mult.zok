@@ -1,0 +1,57 @@
+def get_index(field n, field i, field j) -> field:
+    return n * i + j
+
+def main(field n, field m, field p, field x, field y, field z) -> field:
+    field[25] A = [0; 25]
+    field[25] B = [0; 25]
+    field[25] C = [0; 25]
+
+    for field i in 0..25 do
+        A[i] = i
+        B[i] = 2 * i
+    endfor
+    // random access to ensure array is written in memory
+    field c1 = A[x]
+    field c2 = B[y]
+
+    // For BASELINE
+    field i = 0
+    field j = 0
+    field k = 0
+    for field counter in 0..125 do
+        cond_store(C, get_index(n, i, k), A[get_index(n, i, j)] * B[get_index(m, j, k)], i < n && j < m && k < p)
+        // C[get_index(n, i, k)] = i < n && j < m && k < p ? A[get_index(n, i, j)] * B[get_index(m, j, k)] : C[get_index(n, i, k)]
+        k = k + 1
+        if k == p then
+            k = 0
+            j = j + 1
+        endif
+        if j == m then
+            j = 0
+            i = i + 1
+        endif
+        if i == n then
+            i = 0
+        endif
+    endfor
+
+    // For COBBL
+    /*
+    field i = 0
+    while i < n do
+        field j = 0
+        while j < m do
+            field k = 0
+            while k < p do
+                C[get_index(n, i, k)] = A[get_index(n, i, j)] * B[get_index(m, j, k)]
+                k = k + 1
+            endwhile
+            j = j + 1
+        endwhile
+        i = i + 1
+    endwhile
+    */
+
+    field c3 = C[z]
+
+    return c1 * c2 * c3

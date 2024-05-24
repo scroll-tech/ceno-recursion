@@ -1,0 +1,12 @@
+def main() -> field:
+    field a = 5
+    field b = 4
+    for field i in 0..2 do
+        field a = 10
+        for field j in 0..2 do
+            field a = 20 
+        endfor
+        field a = 20
+        b = a
+    endfor
+    return a + b

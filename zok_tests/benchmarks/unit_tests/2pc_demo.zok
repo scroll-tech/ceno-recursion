@@ -1,0 +1,19 @@
+def add(field b, field c) -> field:
+    // Blk 5
+    field a = c
+    if b == 5 then
+        return b + a
+    else
+        return b + a * a
+    endif
+
+def main(field a, field b)-> field:
+    a = a + 1
+    for field a in 0..400 do
+        b = add(a, b)
+        b = b == 3 ? 2 : 4
+        a = a + b
+    endfor
+    // Blk 4
+    a = a + 1
+    return a + b

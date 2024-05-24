@@ -1,0 +1,34 @@
+def main(field low, field high, field b, field c) -> field:
+    field[1000] arr = [0; 1000]
+    field sum = 0
+    for field i in 0..1000 do
+        sum = sum + i
+        arr[i] = sum
+    endfor
+    // random access to ensure array is written in memory
+    field x = arr[b]
+
+    field min = arr[low]
+    field min_idx = low
+
+    // For BASELINE
+    for field i in 0..1000 do
+        if low < i && i < high && arr[i] < min then
+            min = arr[i]
+            min_idx = i
+        endif
+    endfor
+
+    // For COBBL
+    /*
+    field i = low + 1
+    while i < high do
+        if arr[i] < min then
+            min = arr[i]
+            min_idx = i
+        endif
+        i = i + 1
+    endwhile
+    */
+
+    return min + (min_idx + x) * c

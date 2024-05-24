@@ -1,0 +1,77 @@
+def compress(u8 n, u8[100] txt, u8[200] compr) -> u8:
+    // worst case is no compression, in which case we actually double
+    // the size of the string!  Note that we could avoid this with a
+    // different encoding strategy, but for our purposes the *performance*
+    // of the two strategies is little different, and no one is sweating
+    // our Weissman Score here. ;)
+    u8 next_c = 0
+    u8 next_t = 0
+    u8 next_data = txt[0]
+    u8 next_count = 0
+    while next_t < n do
+        if txt[next_t] == next_data then
+            next_count = next_count + 1
+        else
+            compr[next_c] = next_data
+            compr[next_c + 1] = next_count
+            next_c = next_c + 2
+            next_data = txt[next_t]
+            next_count = 1
+        endif
+        next_t = next_t + 1
+    endwhile
+
+    // write out the last one
+    compr[next_c] = next_data
+    compr[next_c + 1] = next_count
+    next_c = next_c + 2
+    
+    return next_c
+
+def decompress(u8 m, u8[200] compr, u8[100] out) -> u8:
+    u8 next_c = 0
+    u8 next_t = 0
+    while next_c < m do
+        u8 next_data = compr[next_c]
+        u8 next_count = compr[next_c + 1]
+        while next_count > 0 do
+            out[next_t] = next_data
+            next_t = next_t + 1
+            next_count = next_count - 1
+        endwhile
+        next_c = next_c + 2
+    endwhile
+
+    return next_t
+
+def main(u8 n, u8 x, u8 y) -> u8:
+    u8[100] txt = [0; 100]
+
+    // Initialize array
+    u8 next_gap = 1
+    u8 gap = next_gap
+    for u8 i in 0..100 do
+        txt[i] = next_gap
+        gap = gap - 1
+        if gap == 0 then
+            next_gap = next_gap + 1
+            gap = next_gap
+        endif
+    endfor
+
+    // compress
+    u8[200] compr = [0; 200]
+    u8 m = compress(n, txt, compr)
+
+    // decompress
+    u8[100] out = [0; 100]
+    u8 p = decompress(m, compr, out)
+
+    assert(n == p)
+    u8 i = 0
+    while i < n do
+        assert(txt[i] == out[i])
+        i = i + 1
+    endwhile
+
+    return (txt[x] + compr[x] + out[x]) * y 

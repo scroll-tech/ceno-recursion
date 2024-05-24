@@ -1,0 +1,420 @@
+This document compares handling function calls using Call Stack v. Continuation Passing
+--
+TL;DR:
+1. Call Stack and Scoping of the Main() function (and any function that would only be called once) can be
+   stored in physical memory. Everything else needs to be in virtual memory.
+2. Special care needs to be taken to reason about local variables in recursive functions. We might also have to
+   store an UNDEFINED local var to RAM in pass continuation.
+3. In both cases, we need stack pointers for virtual memory. We also need a bound on stack size if there's a
+   recursion.
+4. We might create empty blocks due to weird control flow.
+5. Potential decision making for end-of-function scoping change in continuation passing:
+   more blocks vs. multiple identical LOAD statements
+
+--
+Introduction: Stack Frame in x86_32
+    
+    foo (a, b, c);
+          |
+          V
+    [ebp + 16] -- 'c'
+    [ebp + 12] -- 'b'
+    [ebo + 8]  -- 'a'
+    [ebp + 4]  -- return address
+    [ebp + 0]  -- saved stackbase-pointer register
+
+In addition, all local variables are stored in stack, and only transferred to registers before reading
+
+--
+Example 1: Simple Function Call + Single Return
+
+    def sum<N>(field[N] a, field k) -> field:
+        field res = 0
+        for u32 i in 0..N do
+            res = res + a[i] + k
+        endfor
+        return res
+
+    def main() -> u32:
+        field[3] a = [0, 1, 2]
+        field x = 0
+        field i = sum(a, x)
+        field[3] c = [0, 1, 3]
+        i = c[2]
+        field i = sum(c, i)
+        return i
+
+Strategy 1 - Call Stack
+
+    Head Block: 0
+    Coda Block: 6
+    @SS <- 0  // Bound on Stack Size. In this case, we know the exact value of @SS because there are no recursion.
+
+    // Function Main
+    Block 0:
+        u32 @SP = 0  // Initialize the stack pointer
+        u32 a = @SS  // Inferred after handling all call stacks
+        STORE_V(a + 0, 0)
+        STORE_V(a + 1, 1)
+        STORE_V(a + 2, 2)
+        field x = 0
+        STORE_P(0, a)  // STORE stack frame of main() in physical memory
+        STORE_P(1, x)  // We don't need @SP for physical memory
+        field k = x
+        u32 N = 3      // Pass in parameters as registers
+        @RP = 1        // Since `a` is still `a`, no work is needed there
+    Block Transition: -> 3 (function call)
+    
+    Block 1:
+        LOAD_P(0, a)
+        LOAD_P(1, x)
+        field i = @RET  // Return value is a register
+        u32 c = @SS + 3
+        STORE_V(c + 0, 0)
+        STORE_V(c + 1, 1)
+        STORE_V(c + 2, 3)
+        LOAD_V(c + 2, i)
+        STORE_P(2, a)
+        STORE_P(3, x)
+        STORE_P(4, i)
+        STORE_P(5, c)
+        @RP = 2
+    Block Transition: -> 3 (function call)
+
+    Block 2:
+        LOAD_P(2, a)
+        LOAD_P(3, x)
+        LOAD_P(4, i)   // Can be eliminated when applying optimizations
+        LOAD_P(5, c)
+        field i = @RET
+        @RET = i       // Both lines can be eliminated when applying optimizations
+    Block Coda: -> 6
+    
+    // Function Sum
+    Block 3:
+        field res = 0
+        u32 i = 0       
+    Block Transition: if i < N then -> 4 else -> 5
+
+    Block 4:
+        LOAD_V(a + i, @tmp)
+        res = res + @tmp + k
+        i = i + 1
+    Block Transition: if i < N then -> 4 else -> 5
+
+    Block 5:
+        @RET = res
+    Block Transition: -> @RP (end function call)
+
+Note: Call Stack of a non-Main function requires virtual memory and @SP.
+
+Strategy 2 - Continuation Passing
+
+    Head Block: 0
+    Coda Block: 6
+    @SS <- 1
+
+    // Function Main
+    Block 0:
+        u32 @SP = 0  // Initialize the stack pointer
+        u32 a = @SS  // Inferred after handling all call stacks
+        STORE_V(a + 0, 0)
+        STORE_V(a + 1, 1)
+        STORE_V(a + 2, 2)
+        field x = 0
+        field k = x
+        u32 N = 3    // No STOREs unless parameter name overlaps with current variable
+        @RP = 1      // Return Pointer
+    Block Transition: -> 3 (function call)
+    
+    Block 1:
+        field i = @RET  // No LOADs, return value is a register
+        u32 c = @SS + 3
+        STORE_V(c + 0, 0)
+        STORE_V(c + 1, 1)
+        STORE_V(c + 2, 3)
+        LOAD_V(c + 2, i)
+        STORE_P(0, a)  // `a` will be redefined as a parameter, need to STORE
+        a = c          // We are also STOREing `a` to physical addr since it is a scope change in main
+        k = i
+        N = 3
+        @RP = 2
+    Block Transition: -> 3 (function call)
+
+    Block 2:
+        LOAD_P(0, a)
+        field i = @RET
+        @RET = i       // Both lines can be eliminated when applying optimizations
+    Block Coda: -> 6
+    
+    // Function Sum
+    Block 3:
+        field res = 0    // Nothing to LOAD, correspond to continuation passing style
+        STORE_V(@SP, i)  // `i` already exists, storing to VIRTUAL mem for scope change
+        @SP += 1
+        u32 i = 0        // (will be executed more than once)
+    Block Transition: if i < N then -> 4 else -> 5
+
+    Block 4:
+        LOAD_V(a + i, @tmp)
+        res = res + @tmp + k
+        i = i + 1
+    Block Transition: if i < N then -> 4 else -> 5
+
+    Block 5:
+        @SP -= 1
+        LOAD_V(@SP, i)
+        @RET = res
+    Block Transition: -> @RP (end function call)
+
+Analysis:
+    Memory operations from array accesses:
+        LOADs:   2 Virtual
+        STOREs:  6 Virtual
+
+    Additional mem ops from call stack:
+        LOADs:   0 Virtual, 6 Physical
+        STOREs:  0 Virtual, 6 Physical
+
+    Additional mem ops from continuation passing:
+        LOADs:   1 Virtual, 1 Physical
+        STOREs:  1 Virtual, 1 Physical
+
+--
+Example 2: Recursion + Multiple Returns (Won't work for a recursive main() function)
+
+    def fib(u32 n) -> u32:
+        u32 b = 0
+        u32 k = 0
+        if n == 0:
+            return 0
+        else if n == 1:
+            b = 1  // Make it weird to reason about complex control flow
+        else:
+            return fib(n - 1) + fib(n - 2)
+        return b
+    
+    def main() -> u32:
+        u32 b = 7
+        b = fib(b)
+        b = fib(b)
+        return b
+
+We need to first separate fib() into blocks
+
+    // Function Fib
+    Block k:
+        // Function initialization block, if necessary
+        u32 b = 0
+        u32 k = 0
+    Block Transition: if n == 0 then -> k + 1 elif n == 1 then -> k + 2 else -> k + 3
+
+    Block k + 1:
+        @RET = 0
+    Block Transition: -> k + 7 (end branching)
+    
+    Block k + 2:
+        b = 1
+    Block Transition: -> k + 6 (end branching)
+
+    Block k + 3:
+        // function call fib(n - 1)
+    Block Transition: -> k (function call)
+
+    Block k + 4:
+        // Handle result of fib(n - 1)
+        // function call fib(n - 2)
+    Block Transition: -> k (function call)
+    
+    Block k + 5:
+        // Handle result of fib(n - 2)
+        // Handle return
+    Block Transition: -> k + 7 (end branching)
+    
+    Block k + 6:
+        @RET = b  // We can incorporate this into Block 3 through optimization
+    Block Transition: -> k + 7 (end branching)
+
+    Block k + 7:
+        // Handle scoping change
+    Block Transition: -> @RP (end function call)
+
+Strategy 1 - Call Stack
+
+    Head Block: 0
+    Coda Block: 10
+    @SS <- ???  // We have recursion so we need a manually decided bound.
+
+    // Function main
+    Block 0:
+        @SP = 0
+        u32 b = 7
+        STORE_P(0, b)
+        u32 n = b
+        @RP = 1
+    Block Transition: -> 3 (function call)
+
+    Block 1:
+        LOAD_P(0, b)  // Can be eliminated when applying optimizations
+        b = @RET
+        STORE_P(0, b)
+        u32 n = b
+        @RP = 2
+    Block Transition: -> 3 (function call)
+
+    Block 2:
+        LOAD_P(0, b)  // Can be eliminated when applying optimizations
+        b = @RET
+        @RET = b
+    Block Coda: -> 10
+
+    // Function Fib
+    Block 3:
+        u32 b = 0
+        u32 k = 0
+    Block Transition: if n == 0 then -> 4 elif n == 1 then -> 5 else -> 6
+
+    Block 4:
+        @RET = 0
+    Block Transition: -> @RP (end function call)
+    
+    Block 5:
+        b = 1
+    Block Transition: -> 9 (end branching)
+
+    Block 6:
+        STORE_V(@SP, n)
+        STORE_V(@SP + 1, b)
+        STORE_V(@SP + 2, k)
+        STORE_V(@SP + 3, @RP)
+        @SP += 4
+        n = n - 1
+        @RP = 7
+    Block Transition: -> 3 (function call)
+
+    Block 7:
+        @SP -= 4
+        LOAD_V(@SP, n)
+        LOAD_V(@SP + 1, b)
+        LOAD_V(@SP + 2, k)
+        LOAD_V(@SP + 3, @RP)
+        @TMP1 = @RET
+        STORE_V(@SP, n)  // Can be eliminated when applying optimizations
+        STORE_V(@SP + 1, b)
+        STORE_V(@SP + 2, k)
+        STORE_V(@SP + 3, @TMP1)
+        STORE_V(@SP + 4, @RP)
+        @SP += 5
+        n = n - 2
+        @RP = 8
+    Block Transition: -> 3 (function call)
+    
+    Block 8:
+        @SP -= 5
+        LOAD_V(@SP, n)
+        LOAD_V(@SP + 1, b)
+        LOAD_V(@SP + 2, k)
+        LOAD_V(@SP + 3, @TMP1)
+        LOAD_V(@SP + 4, @RP)
+        @TMP2 = @RET
+        @RET = @TMP1 + @TMP2
+    Block Transition: -> @RP (end function call)
+    
+    Block 9:
+        @RET = b  // We can incorporate this into Block 3 through optimization
+    Block Transition: -> @RP (end function call)
+
+Note: I deviated a little from current Zok AST since it is impossible to write fib() right now.
+
+Strategy 2 - Continuation Passing
+
+    Head Block: 0
+    Coda Block: 11
+    @SS <- ???  // We have recursion so we need a manually decided bound.
+
+    // Function main
+    Block 0:
+        @SP = 0
+        u32 b = 7
+        u32 n = b
+        @RP = 1
+    Block Transition: -> 3 (function call)
+
+    Block 1:
+        b = @RET
+        u32 n = b
+        @RP = 2
+    Block Transition: -> 3 (function call)
+
+    Block 2:
+        b = @RET
+        @RET = b
+    Block Coda: -> 11
+
+    // Function Fib
+    Block 3:
+        STORE_V(@SP, b)  
+        STORE_V(@SP + 1, k)  // k is undefined, but we still need to store it due to recursion (HOW???)
+        @SP += 2
+        u32 b = 0
+        u32 k = 0
+    Block Transition: if n == 0 then -> 4 elif n == 1 then -> 5 else -> 6
+
+    Block 4:
+        @RET = 0
+    Block Transition: -> 10 (end function call)
+    
+    Block 5:
+        b = 1
+    Block Transition: -> 9 (end branching)
+
+    Block 6:
+        STORE_V(@SP, n)
+        STORE_V(@SP + 1, @RP)
+        @SP += 2
+        n = n - 1
+        @RP = 7
+    Block Transition: -> 3 (function call)
+
+    Block 7:
+        @SP -= 2
+        LOAD_V(@SP, n)
+        LOAD_V(@SP + 1, @RP)
+        @TMP1 = @RET
+        STORE_V(@SP, n)  // Can be eliminated when applying optimizations
+        STORE_V(@SP + 1, @TMP1)
+        STORE_V(@SP + 2, @RP)
+        @SP += 3
+        n = n - 2
+        @RP = 8
+    Block Transition: -> 3 (function call)
+    
+    Block 8:
+        @SP -= 3
+        LOAD_V(@SP, n)
+        LOAD_V(@SP + 1, @TMP1)
+        LOAD_V(@SP + 2, @RP)
+        @TMP2 = @RET
+        @RET = @TMP1 + @TMP2
+    Block Transition: -> 9 (end branching)
+    
+    Block 9:
+        @RET = b  // We can incorporate this into Block 3 through optimization
+    Block Transition: -> 9 (end branching)
+
+    Block 10:
+        @SP -= 2            // Use a separate block to handle scope change after function ends
+        LOAD_V(@SP, b)      // This prevents us from requiring to do so after every return
+        LOAD_V(@SP + 1, k)  // However, notice that scoping might vary between branches, causing complication
+    Block Transition: -> @RP (end function call)
+
+Analysis:
+    Memory operations from array accesses: None
+
+    Additional mem ops from call stack:
+        LOADs:   9 Virtual, 2 Physical
+        STOREs:  9 Virtual, 2 Physical
+
+    Additional mem ops from continuation passing:
+        LOADs:   7 Virtual, 0 Physical
+        STOREs:  7 Virtual, 0 Physical

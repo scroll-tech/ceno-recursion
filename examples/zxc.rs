@@ -35,6 +35,8 @@ use circ::cfg::{
 use std::path::PathBuf;
 use core::cmp::Ordering;
 
+use std::time::*;
+
 // How many reserved variables (EXCLUDING V) are in front of the actual input / output?
 // %BN, %RET, %TS, %AS, %RP, %SP, %BP
 const NUM_RESERVED_VARS: usize = 7;
@@ -918,14 +920,17 @@ fn main() {
     // --
     // Generate Constraints
     // --
+    let compiler_start = Instant::now();
     let benchmark_name = options.path.as_os_str().to_str().unwrap();
     let path = PathBuf::from(format!("../zok_tests/benchmarks/{}.zok", benchmark_name));
     let (ctk, live_io_size, live_mem_size, prover_data_list) = 
         get_compile_time_knowledge::<false>(path.clone());
+    let compiler_time = compiler_start.elapsed();
 
     // --
     // Obtain Inputs
     // --
+    let witness_start = Instant::now();
     let input_file_name = format!("../zok_tests/benchmarks/{}.input", benchmark_name);
     // Assume inputs are listed in the order of the parameters
     let mut entry_regs: Vec<Integer> = Vec::new();
@@ -947,10 +952,14 @@ fn main() {
     // Generate Witnesses
     // --
     let rtk = get_run_time_knowledge::<true>(path.clone(), entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
+    let witness_time = witness_start.elapsed();
 
     // --
     // Write CTK, RTK to file
     // --
     let _ = ctk.write_to_file(benchmark_name.to_string());
     let _ = rtk.write_to_file(benchmark_name.to_string());
+
+    println!("Compiler time: {}ms", compiler_time.as_millis());
+    println!("\n--\nWitness time: {}ms", witness_time.as_millis());
 }

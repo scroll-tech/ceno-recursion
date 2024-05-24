@@ -19,8 +19,8 @@ def main(field n, field m, field p, field x, field y, field z) -> field:
     field j = 0
     field k = 0
     for field counter in 0..125 do
-        cond_store(C, get_index(n, i, k), A[get_index(n, i, j)] * B[get_index(m, j, k)], i < n && j < m && k < p)
-        // C[get_index(n, i, k)] = i < n && j < m && k < p ? A[get_index(n, i, j)] * B[get_index(m, j, k)] : C[get_index(n, i, k)]
+        // cond_store(C, get_index(n, i, k), A[get_index(n, i, j)] * B[get_index(m, j, k)], i < n && j < m && k < p)
+        C[get_index(n, i, k)] = i < n && j < m && k < p ? A[get_index(n, i, j)] * B[get_index(m, j, k)] : C[get_index(n, i, k)]
         k = k + 1
         if k == p then
             k = 0

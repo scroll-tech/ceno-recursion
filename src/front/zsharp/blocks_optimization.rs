@@ -272,6 +272,7 @@ fn bl_trans_replace<'ast>(e: &Expression<'ast>, old_val: usize, new_val: &Expres
     }
 }
 
+/*
 // Sort functions in topological order
 fn top_sort_helper(
     cur_name: &str,
@@ -289,7 +290,7 @@ fn top_sort_helper(
     return (chain, visited);
 }
 
-fn _fn_top_sort(
+fn fn_top_sort(
     bls: &Vec<Block>,
     successor: &Vec<HashSet<usize>>,
     successor_fn: &Vec<HashSet<usize>>,
@@ -320,6 +321,7 @@ fn _fn_top_sort(
     // Next perform top sort using call graph
     top_sort_helper("main", &fn_call_graph, visited, Vec::new()).0
 }
+*/
 
 // Given an expression, find all variables it references
 fn expr_find_val(e: &Expression) -> HashSet<String> {
@@ -1916,7 +1918,7 @@ impl<'ast> ZGen<'ast> {
         self.circ.borrow_mut().reset(ZSharp::new());
         // Maximum # of constraints is max(MIN_BLOCK_SIZE, bl_num_cons.max().next_power_of_two())
         let max_num_cons = max(MIN_BLOCK_SIZE, bl_num_cons.iter().max().unwrap().next_power_of_two());
-        
+
         // STEP 2: Backward analysis within each function
         // For each block, if there exists a potential merge component, record the size of constraints of that component
         let mut visited: Vec<bool> = vec![false; bls.len()];
@@ -1927,6 +1929,8 @@ impl<'ast> ZGen<'ast> {
         // scope_state is a stack which, for every scope <= current scope, records the LABEL of the last block of that scope
         // Use 0 to indicate that such a block does not exist
         let mut scope_list = vec![Vec::new(); bls.len()];
+        // scope_head is the head of scope of the block, use 0 if does not exist
+        let mut scope_head_list = vec![0; bls.len()];
 
         // Start from function exit block
         let mut next_bls: VecDeque<usize> = VecDeque::new();
@@ -1994,12 +1998,24 @@ impl<'ast> ZGen<'ast> {
 
             if !visited[cur_bl] || scope_state != scope_list[cur_bl] || count_state != count_list[cur_bl] || agg_count_state != agg_count_list[cur_bl] {
                 visited[cur_bl] = true;
+                // Update scope_head
+                let scope_tail = scope_state[cur_scope];
+                if scope_tail != 0 {
+                    assert!(scope_head_list[scope_tail] == cur_bl || scope_head_list[scope_tail] == 0);
+                    scope_head_list[scope_tail] = cur_bl;
+                }
+                // Update scope, count, & agg_count
                 scope_list[cur_bl] = scope_state;
                 count_list[cur_bl] = count_state;
                 agg_count_list[cur_bl] = agg_count_state;
 
+                // Push in predecessors
                 for p in &predecessor_fn[cur_bl] {
                     next_bls.push_back(*p);
+                }
+                // Push in the head of the current scope
+                if scope_head_list[cur_bl] != 0 {
+                    next_bls.push_back(scope_head_list[cur_bl]);
                 }
             }
         }
@@ -2008,19 +2024,6 @@ impl<'ast> ZGen<'ast> {
         // This is a partial backward analysis on the component we want to merge
         // We want to merge the largest component possible, which means it will start at the block with the lowest label
         // Repeat the merge process until there is nothing left to be merged
-
-        // Compute the scope head of each block, if exist
-        // Use 0 if scope head does not exist (since we never merge block 0)
-        let mut scope_head = vec![0; bls.len()];
-        for cur_bl in 0..scope_list.len() {
-            let cur_scope = bls[cur_bl].scope;
-            let scope_tail = scope_list[cur_bl][cur_scope];
-            if scope_tail != 0 {
-                assert_eq!(scope_head[scope_tail], 0);
-                scope_head[scope_tail] = cur_bl;
-            }
-        }
-
         let mut changed = true;
         while changed {
             changed = false;
@@ -2073,8 +2076,8 @@ impl<'ast> ZGen<'ast> {
                                     next_bls.push_back(*p);
                                 }
                                 // Push in the head of the current scope
-                                if scope_head[cur_bl] != 0 {
-                                    next_bls.push_back(scope_head[cur_bl]);
+                                if scope_head_list[cur_bl] != 0 {
+                                    next_bls.push_back(scope_head_list[cur_bl]);
                                 }
                             }
                         }
@@ -2636,7 +2639,7 @@ impl<'ast> ZGen<'ast> {
         }
         // Backward analysis to isolate empty blocks
         while !next_bls.is_empty() {
-            let cur_bl = next_bls.pop_front().unwrap();
+            let mut cur_bl = next_bls.pop_front().unwrap();
             visited[cur_bl] = true;
 
             // If the block only has one predecessor and the predecessor only has one successor
@@ -2654,6 +2657,8 @@ impl<'ast> ZGen<'ast> {
                         successor[p].insert(i);
                         predecessor[i].insert(p);
                     }
+                    // change cur_bl to p
+                    cur_bl = p;
                 }
             }
 

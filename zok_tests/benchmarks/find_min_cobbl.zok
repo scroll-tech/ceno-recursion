@@ -11,12 +11,14 @@ def main(field low, field high, field b, field c) -> field:
     field min = arr[low]
     field min_idx = low
 
-    for field i in 0..64 do
-        if low < i && i < high && arr[i] < min then
+    field i = low + 1
+    while i < high do
+        if arr[i] < min then
             min = arr[i]
             min_idx = i
         endif
-    endfor
+        i = i + 1
+    endwhile
 
 
     return min + (min_idx + x) * c

@@ -1,6 +1,6 @@
 import os
 
-BENCHMARK = "2pc_if_return_cc"
+BENCHMARK = "kmp_search"
 
 print("\n--\nCOBBL")
 os.system(f"cd circ_blocks && target/release/examples/zxc {BENCHMARK} | \

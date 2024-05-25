@@ -3,7 +3,25 @@ def lps_gen(field m, field[10] pat) -> field[10]:
     field len = 0
     field i = 1
 
+    // BASELINE
+    for field count in 0..20 do
+        if i < m then
+            if i < m && pat[i] == pat[len] then
+                len = len + 1
+                lps[i] = len
+                i = i + 1
+            else
+                if len != 0 then
+                    len = lps[len - 1]
+                else
+                    i = i + 1
+                endif
+            endif
+        endif
+    endfor
+
     // CoBBL
+    /*
     while i < m do
         if i < m && pat[i] == pat[len] then
             len = len + 1
@@ -17,6 +35,7 @@ def lps_gen(field m, field[10] pat) -> field[10]:
             endif
         endif
     endwhile
+    */
 
     return lps
 
@@ -44,7 +63,31 @@ def main(field n, field m, field b, field c) -> field:
     field j = 0
     field found = 0
 
+    // BASELINE
+    for field count in 0..90 do
+        if m - j <= n - i then
+            if pat[j] == txt[i] then
+                i = i + 1
+                j = j + 1
+            endif
+
+            if j == m then
+                j = lps[j - 1]
+                found = i - j
+            else
+                if i < n && pat[j] != txt[i] then
+                    if j != 0 then
+                        j = lps[j - 1]
+                    else
+                        i = i + 1
+                    endif
+                endif
+            endif
+        endif
+    endfor
+
     // CoBBL
+    /*
     while m - j <= n - i do
         if pat[j] == txt[i] then
             i = i + 1
@@ -64,5 +107,6 @@ def main(field n, field m, field b, field c) -> field:
             endif
         endif
     endwhile
+    */
 
     return found + (x + y) * c

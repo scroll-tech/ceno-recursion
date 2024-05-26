@@ -2639,26 +2639,24 @@ impl<'ast> ZGen<'ast> {
         }
         // Backward analysis to isolate empty blocks
         while !next_bls.is_empty() {
-            let mut cur_bl = next_bls.pop_front().unwrap();
+            let cur_bl = next_bls.pop_front().unwrap();
             visited[cur_bl] = true;
 
-            // If the block only has one predecessor and the predecessor only has one successor
+            // If the block only has one successor and the successor only has one predecessor
             // And the transition does not involve function calls / returns, merge the two blocks
-            if !entry_bls_fn.contains(&cur_bl) && predecessor[cur_bl].len() == 1 {
-                let p = Vec::from_iter(predecessor[cur_bl].clone())[0];
-                if !exit_bls_fn.contains(&p) && successor[p].len() == 1 {
-                    // Append cur_bl to p
-                    let succ = bls[cur_bl].clone();
-                    bls[p].concat(succ);
+            if !exit_bls_fn.contains(&cur_bl) && successor[cur_bl].len() == 1 {
+                let s = Vec::from_iter(successor[cur_bl].clone())[0];
+                if !entry_bls_fn.contains(&s) && predecessor[s].len() == 1 {
+                    // Append s to cur_bl
+                    let s_inst = bls[s].clone();
+                    bls[cur_bl].concat(s_inst);
                     // Update CFG
-                    successor[p].remove(&cur_bl);
-                    predecessor[cur_bl].remove(&p);
-                    for i in successor[cur_bl].clone() {
-                        successor[p].insert(i);
-                        predecessor[i].insert(p);
+                    successor[cur_bl].remove(&s);
+                    predecessor[s].remove(&cur_bl);
+                    for i in successor[s].clone() {
+                        successor[cur_bl].insert(i);
+                        predecessor[i].insert(cur_bl);
                     }
-                    // change cur_bl to p
-                    cur_bl = p;
                 }
             }
 

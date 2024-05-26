@@ -941,7 +941,7 @@ fn main() {
     let _ = buffer.trim();
     while buffer != "END".to_string() {
         let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
-        entry_regs.push(Integer::from(split[2].parse::<usize>().unwrap()));
+        entry_regs.push(Integer::from(split[1].parse::<usize>().unwrap()));
 
         buffer.clear();
         reader.read_line(&mut buffer).unwrap();

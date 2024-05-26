@@ -1,6 +1,6 @@
 import os
 
-REPEAT = 5
+REPEAT = 3
 
 # Convert a .raw file to a sequence of .zok & .input files and test them
 def preprocess(b_name):
@@ -65,38 +65,83 @@ def preprocess(b_name):
     
     # Process programs for each constant
     for _ in range(REPEAT):
+        print(f"\n---\nCONSTANTS: {constants}")
+
         # Produce code
         with open(f"zok_tests/benchmarks/{b_name}.zok", "w") as f_baseline:
             f_baseline.write(baseline(constants))
         with open(f"zok_tests/benchmarks/{b_name}_cobbl.zok", "w") as f_cobbl:
             f_cobbl.write(cobbl(constants))
 
-        # Produce variables
-        pass
+        # Produce variables. Each constant is of form max_XX, where XX is a variable
+        # v = c
+        print("\nV = C")
+        for c in constants:
+            v = c[4:]
+            inputs[v] = constants[c]
+        with open(f"zok_tests/benchmarks/{b_name}.input", "w") as f_input:
+            f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
+            f_input.write("END")
+        with open(f"zok_tests/benchmarks/{b_name}_cobbl.input", "w") as f_input:
+            f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
+            f_input.write("END")
+        execute_baseline(b_name)
+        execute_cobbl_for(b_name)
+        execute_cobbl_while(b_name)
+
+        # v = 90% c
+        print("\nV = 90% C")
+        for c in constants:
+            v = c[4:]
+            inputs[v] = constants[c] * 9 // 10
+        with open(f"zok_tests/benchmarks/{b_name}_cobbl.input", "w") as f_input:
+            f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
+            f_input.write("END")
+        execute_cobbl_while(b_name)
+
+        # v = 75% c
+        print("\nV = 75% C")
+        for c in constants:
+            v = c[4:]
+            inputs[v] = constants[c] * 3 // 4
+        with open(f"zok_tests/benchmarks/{b_name}_cobbl.input", "w") as f_input:
+            f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
+            f_input.write("END")
+        execute_cobbl_while(b_name)
+
+        # v = 50% c
+        print("\nV = 50% C")
+        for c in constants:
+            v = c[4:]
+            inputs[v] = constants[c] // 2
+        with open(f"zok_tests/benchmarks/{b_name}_cobbl.input", "w") as f_input:
+            f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
+            f_input.write("END")
+        execute_cobbl_while(b_name)
 
         for var in constants:
             constants[var] *= 2
-        break
 
 def execute_baseline(b_name):
-    print("\n--\nBASELINE")
+    print("BASELINE")
     os.system(f"cd circ_baseline && target/release/examples/circ --language zsharp {b_name} r1cs | \
                 sed -n -e 's/Compiler time: //p' \
                     -e 's/  \* SNARK::encode //p' \
                     -e 's/  \* SNARK::prove //p' \
                     -e 's/  \* SNARK::verify //p'")
 
-def execute_cobbl(b_name):
-    print("\n--\nCOBBL - FOR")
+def execute_cobbl_for(b_name):
+    print("COBBL - FOR")
     os.system(f"cd circ_blocks && target/release/examples/zxc {b_name} | \
             sed -n 's/Compiler time: //p'")
     os.system(f"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
                 sed -n -e 's/Preprocess time: //p' \
                     -e 's/  \* SNARK::prove //p' \
                     -e 's/  \* SNARK::verify //p'")
-    
+
+def execute_cobbl_while(b_name):
     b_name += "_cobbl"
-    print("\n--\nCOBBL - WHILE")
+    print("COBBL - WHILE")
     os.system(f"cd circ_blocks && target/release/examples/zxc {b_name} | \
             sed -n 's/Compiler time: //p'")
     os.system(f"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \

@@ -1,5 +1,5 @@
 CONST:
-max_high 64
+max_high 512
 
 INPUT:
 low 0
@@ -7,7 +7,7 @@ b 0
 c 0
 
 PROGRAM:
-def main(field low, field high, field b, field c) -> field:
+def main(field high, field low, field b, field c) -> field:
     field[{max_high}] arr = [0; {max_high}]
     field sum = 0
     for field i in 0..{max_high} do

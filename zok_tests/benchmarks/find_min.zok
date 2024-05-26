@@ -1,7 +1,7 @@
-def main(field low, field high, field b, field c) -> field:
-    field[64] arr = [0; 64]
+def main(field high, field low, field b, field c) -> field:
+    field[2048] arr = [0; 2048]
     field sum = 0
-    for field i in 0..64 do
+    for field i in 0..2048 do
         sum = sum + i
         arr[i] = sum
     endfor
@@ -11,7 +11,7 @@ def main(field low, field high, field b, field c) -> field:
     field min = arr[low]
     field min_idx = low
 
-    for field i in 0..64 do
+    for field i in 0..2048 do
         if low < i && i < high && arr[i] < min then
             min = arr[i]
             min_idx = i

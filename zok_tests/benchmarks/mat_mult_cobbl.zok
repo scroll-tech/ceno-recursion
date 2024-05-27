@@ -14,19 +14,19 @@ def main(field n, field x, field y, field z) -> field:
     field c1 = A[x]
     field c2 = B[y]
 
-    for field i in 0..2 do
-        if i < n then
-            for field j in 0..2 do
-                if j < n then
-                    for field k in 0..2 do
-                        if k < n then
-                            C[get_index(n, i, k)] = A[get_index(n, i, j)] * B[get_index(n, j, k)]
-                        endif
-                    endfor
-                endif
-            endfor
-        endif
-    endfor
+    field i = 0
+    while i < n do
+        field j = 0
+        while j < n do
+            field k = 0
+            while k < n do
+                C[get_index(n, i, k)] = A[get_index(n, i, j)] * B[get_index(n, j, k)]
+                k = k + 1
+            endwhile
+            j = j + 1
+        endwhile
+        i = i + 1
+    endwhile
 
 
     field c3 = C[z]

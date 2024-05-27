@@ -1,5 +1,5 @@
 CONST:
-max_high 512
+max_high 256
 
 INPUT:
 low 0

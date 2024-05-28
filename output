@@ -1,0 +1,45 @@
+find_min - max_high 256
+                Baseline     CoBBl For     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler         3455.20        142.20         39.20         39.00         38.80         38.80
+Preprocess       2031.97       2398.80        311.20        308.80        310.40        309.40
+Prover          15345.58      19332.15       1775.76       1778.74       1773.16       1779.57
+Verifier          121.31        236.57        139.81        139.75        137.32        140.75
+
+--
+
+find_min - max_high 512
+                Baseline     CoBBl For     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler         7716.40         56.80         52.80         53.60         53.40         53.40
+Preprocess       5941.05        449.40        444.20        440.80        441.60        444.60
+Prover          55364.62      17948.61       5682.02       5702.38       6159.04       5644.94
+Verifier          211.38        234.43        176.88        173.96        176.39        178.06
+
+--
+
+find_min - max_high 1024
+                Baseline     CoBBl For     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler        18083.80        112.40         96.00         96.80         99.40         96.40
+Preprocess      11634.60        534.60        561.20        562.40        552.40        551.20
+Prover         118758.02      72649.08      24122.33      23952.12      23558.86      23828.47
+Verifier          284.86        302.69        217.41        219.48        212.47        222.95
+
+--
+
+mat_mult - max_n 2
+                Baseline     CoBBl For     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler           28.20         61.40         60.00         59.80         60.00         61.20
+Preprocess         67.82        465.40        464.00        460.80        461.00        460.40
+Prover            322.54       1004.83        929.13        910.45        922.81        914.07
+Verifier           26.60         98.07         87.18         87.23         87.50         88.29
+
+--
+
+mat_mult - max_n 4
+                Baseline     CoBBl For     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler          588.20         65.80         64.00         64.40         63.60         63.80
+Preprocess        920.92        552.40        544.60        543.00        546.20        547.00
+Prover           7246.96       1841.34       1674.96       1750.75       1673.38       1671.45
+Verifier           85.37        117.64        103.28        102.70        102.53        102.91
+
+--
+

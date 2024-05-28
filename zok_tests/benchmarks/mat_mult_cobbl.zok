@@ -2,11 +2,11 @@ def get_index(field n, field i, field j) -> field:
     return n * i + j
 
 def main(field n, field x, field y, field z) -> field:
-    field[4] A = [0; 4]
-    field[4] B = [0; 4]
-    field[4] C = [0; 4]
+    field[64] A = [0; 64]
+    field[64] B = [0; 64]
+    field[64] C = [0; 64]
 
-    for field i in 0..4 do
+    for field i in 0..64 do
         A[i] = i
         B[i] = 2 * i
     endfor

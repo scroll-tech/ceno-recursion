@@ -1,7 +1,7 @@
-def main(field high, field low, field b, field c) -> field:
-    field[1024] arr = [0; 1024]
+def main(field low, field b, field c, field high) -> field:
+    field[1200] arr = [0; 1200]
     field sum = 0
-    for field i in 0..1024 do
+    for field i in 0..1200 do
         sum = sum + i
         arr[i] = sum
     endfor

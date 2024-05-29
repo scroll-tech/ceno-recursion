@@ -1,12 +1,22 @@
-def lps_gen(field m, field[4] pat) -> field[4]:
-    field[4] lps = [0; 4]
+CONST:
+max_n 30
+max_m 4
+
+INPUT:
+b 0
+c 0
+
+PROGRAM:
+def lps_gen(field m, field[{max_m}] pat) -> field[{max_m}]:
+    field[{max_m}] lps = [0; {max_m}]
     field len = 0
     field i = 1
 
-    for field count in 0..8 do
+    // BASELINE
+    for field count in 0..{max_m + max_m} do
         if i < m then
-            // if i < m && pat[i] == pat[len] then
-            if i < m && pat[len] == pat[len] then
+            // if pat[i] == pat[len] then
+            if pat[len] == pat[len] then
                 len = len + 1
                 // lps[i] = len
                 lps[2] = len
@@ -22,20 +32,36 @@ def lps_gen(field m, field[4] pat) -> field[4]:
         endif
     endfor
 
+    // COBBL
+    while i < m do
+        if pat[i] == pat[len] then
+            len = len + 1
+            lps[i] = len
+            i = i + 1
+        else
+            if len != 0 then
+                len = lps[len - 1]
+            else
+                i = i + 1
+            endif
+        endif
+    endwhile
+
+    // END_SPLIT
 
     return lps
 
-def main(field n, field m, field b, field c) -> field:
-    field[30] txt = [0; 30]
-    field[4] pat = [0; 4]
+def main(field b, field c, field n, field m) -> field:
+    field[{max_n}] txt = [0; {max_n}]
+    field[{max_m}] pat = [0; {max_m}]
 
     // Initialize arrays
     field sum = 0
-    for field i in 0..30 do
+    for field i in 0..{max_n} do
         sum = sum + i
         txt[i] = sum
     endfor
-    for field i in 0..4 do
+    for field i in 0..{max_m} do
         pat[i] = txt[n - m - b + i]
     endfor
     // random access to ensure array is written in memory
@@ -43,13 +69,14 @@ def main(field n, field m, field b, field c) -> field:
     field y = txt[b]
 
     // Generate LPS
-    field[4] lps = lps_gen(m, pat)
+    field[{max_m}] lps = lps_gen(m, pat)
 
     field i = 0
     field j = 0
     field found = 0
 
-    for field count in 0..34 do
+    // BASELINE
+    for field count in 0..{max_m + max_n} do
         if m - j <= n - i then
             // if pat[j] == txt[i] then
             if pat[b] == txt[b] then
@@ -75,5 +102,27 @@ def main(field n, field m, field b, field c) -> field:
         endif
     endfor
 
+    // COBBL
+    while m - j <= n - i do
+        if pat[j] == txt[i] then
+            i = i + 1
+            j = j + 1
+        endif
+
+        if j == m then
+            j = lps[j - 1]
+            found = i - j
+        else
+            if i < n && pat[j] != txt[i] then
+                if j != 0 then
+                    j = lps[j - 1]
+                else
+                    i = i + 1
+                endif
+            endif
+        endif
+    endwhile
+    
+    // END_SPLIT
 
     return found + (x + y) * c

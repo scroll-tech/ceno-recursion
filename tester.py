@@ -1,7 +1,7 @@
 import os
 
 CONST_EXPAND = 3
-REPEAT = 5
+REPEAT = 1
 
 # Process A * B or A + B or A - B by reading A & B from consts
 def process_formula(consts, formula):
@@ -85,6 +85,7 @@ def preprocess(b_name):
     
     f_result_name = f"zok_tests/raw/{b_name}_result.raw"
     os.system(f"echo \"{b_name} {CONST_EXPAND} {REPEAT}\" > {f_result_name}")
+    constants_base = dict(constants)
     # Process programs for each constant
     for _ in range(CONST_EXPAND):
         const_list = "; ".join([str(k) + " " + str(constants[k]) for k in constants])
@@ -145,7 +146,7 @@ def preprocess(b_name):
             execute_cobbl_while(b_name, f_result_name, 50)
 
         for var in constants:
-            constants[var] *= 2
+            constants[var] += constants_base[var]
 
 def execute_baseline(b_name, f_name):
     print("BASELINE")
@@ -183,5 +184,6 @@ def execute_cobbl_while(b_name, f_name, perc):
                 >> ../{f_name}")
 
 BENCHMARK = ["find_min", "mat_mult"]
+# BENCHMARK = ["kmp_search"]
 for b in BENCHMARK:
     preprocess(b)

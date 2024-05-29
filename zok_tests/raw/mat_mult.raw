@@ -7,7 +7,7 @@ y 0
 z 0
 
 PROGRAM:
-def get_index(field n, field i, field j) -> field:
+def get_index(field i, field j, field n) -> field:
     return n * i + j
 
 def main(field n, field x, field y, field z) -> field:

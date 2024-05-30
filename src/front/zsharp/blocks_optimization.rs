@@ -842,41 +842,18 @@ fn var_name_to_reg_id_expr<const MODE: usize>(
 }
 
 // Convert a typed definition statement into assignee if LHS has been defined
-fn tydef_to_assignee_stmt<'ast>(
+// If in a branch, convert every TyDef into Assg and record declared variables in gen_map_branch
+fn tydef_to_assignee_stmt<'ast, const IN_BRANCH: bool>(
     s: &Statement<'ast>,
     mut gen_set: HashSet<String>, 
-) -> (Statement<'ast>, HashSet<String>) {
+) -> (Statement<'ast>, HashSet<String>, BTreeMap<String, Ty>) {
+    let mut gen_map_branch = BTreeMap::new();
     match s {
         Statement::Return(_) => {
             panic!("Blocks should not contain return statements.");
         }
-        Statement::Assertion(_) => (s.clone(), gen_set),
-        Statement::Conditional(_c) => {
-            panic!("Blocks should not contain conditional statements.")
-            /*
-            let cond = c.condition.clone();
-            let mut new_ifbranch = Vec::new();
-            for s in &c.ifbranch {
-                let new_stmt: Statement;
-                (new_stmt, gen_set) = tydef_to_assignee_stmt(s, gen_set);
-                new_ifbranch.push(new_stmt);
-            }
-            let mut new_elsebranch = Vec::new();
-            for s in &c.elsebranch {
-                let new_stmt: Statement;
-                (new_stmt, gen_set) = tydef_to_assignee_stmt(s, gen_set);
-                new_elsebranch.push(new_stmt);
-            }
-            let new_stmt = ConditionalStatement {
-                condition: cond,
-                ifbranch: new_ifbranch,
-                dummy: Vec::new(),
-                elsebranch: new_elsebranch,
-                span: Span::new("", 0, 0).unwrap()
-            };
-            (Statement::Conditional(new_stmt), gen_set)
-            */
-        }
+        Statement::Assertion(_) => (s.clone(), gen_set, gen_map_branch),
+        Statement::Conditional(_c) => { panic!("Blocks should not contain conditional statements.") }
         Statement::Iteration(_) => { panic!("Blocks should not contain iteration statements.") }
         Statement::WhileLoop(_) => { panic!("Blocks should not contain while loop statements.") }
         Statement::Definition(d) => {
@@ -885,6 +862,8 @@ fn tydef_to_assignee_stmt<'ast>(
                 match l {
                     TypedIdentifierOrAssignee::TypedIdentifier(tid) => {
                         let v = tid.identifier.value.to_string();
+                        let ty = type_to_ty(tid.ty.clone()).unwrap();
+                        // Variable has been declared
                         if gen_set.contains(&v) {
                             new_lhs.push(TypedIdentifierOrAssignee::Assignee(Assignee {
                                 id: IdentifierExpression {
@@ -894,7 +873,22 @@ fn tydef_to_assignee_stmt<'ast>(
                                 accesses: Vec::new(),
                                 span: Span::new("", 0, 0).unwrap()
                             }));
-                        } else {
+                        } 
+                        // Variable has not been declared, in a branch
+                        else if IN_BRANCH {
+                            new_lhs.push(TypedIdentifierOrAssignee::Assignee(Assignee {
+                                id: IdentifierExpression {
+                                    value: v.clone(),
+                                    span: Span::new("", 0, 0).unwrap()
+                                },
+                                accesses: Vec::new(),
+                                span: Span::new("", 0, 0).unwrap()
+                            }));
+                            gen_set.insert(v.clone());
+                            gen_map_branch.insert(v, ty);
+                        }
+                        // Variable has not been declared, not in a branch
+                        else {
                             new_lhs.push(l.clone());
                             gen_set.insert(v);
                         }
@@ -908,7 +902,7 @@ fn tydef_to_assignee_stmt<'ast>(
                 expression: d.expression.clone(),
                 span: Span::new("", 0, 0).unwrap()
             });
-            (s, gen_set)
+            (s, gen_set, gen_map_branch)
         }
         Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
     }
@@ -1133,30 +1127,44 @@ fn vtr_inst<'ast>(
 }
 
 // TyDef -> Assignee
-fn tta_inst<'ast>(
+// If we are in a branch, DO NOT DECLARE VARS. Need to declare before branching to resolve scoping
+fn tta_inst<'ast, const IN_BRANCH: bool>(
     mut gen_set: HashSet<String>,
     inst: &Vec<BlockContent<'ast>>,
-) -> (HashSet<String>, Vec<BlockContent<'ast>>) {
+) -> (HashSet<String>, BTreeMap<String, Ty>, Vec<BlockContent<'ast>>) {
     let mut new_instr = Vec::new();
+    let mut gen_map_branch = BTreeMap::new();
     // Process instructions
     for i in inst {
         match i {
             BlockContent::Stmt(s) => {
                 let new_s: Statement;
-                (new_s, gen_set) = tydef_to_assignee_stmt(s, gen_set);
+                let new_map: BTreeMap<String, Ty>;
+                (new_s, gen_set, new_map) = tydef_to_assignee_stmt::<IN_BRANCH>(s, gen_set);
                 new_instr.push(BlockContent::Stmt(new_s));
+                gen_map_branch.extend(new_map);
             }
             BlockContent::Branch((cond, if_inst, else_inst)) => {
-                let new_if_inst: Vec<BlockContent<'ast>>;
-                let new_else_inst: Vec<BlockContent<'ast>>;
-                (gen_set, new_if_inst) = tta_inst(gen_set, &if_inst);
-                (gen_set, new_else_inst) = tta_inst(gen_set, &else_inst);
+                let (mut gen_if_set, new_if_map, new_if_inst) = tta_inst::<true>(gen_set.clone(), &if_inst);
+                let (gen_else_set, new_else_map, new_else_inst) = tta_inst::<true>(gen_set, &else_inst);
+                gen_if_set.extend(gen_else_set);
+                gen_set = gen_if_set;
+
+                // If not in a branch, declare everything in gen_map_branch
+                gen_map_branch.extend(new_if_map);
+                gen_map_branch.extend(new_else_map);
+                if !IN_BRANCH {
+                    for (v, ty) in gen_map_branch {
+                        new_instr.push(BlockContent::Stmt(bl_gen_init_stmt(&v, &ty)));
+                    }
+                    gen_map_branch = BTreeMap::new();
+                }
                 new_instr.push(BlockContent::Branch((cond.clone(), new_if_inst, new_else_inst)));
             }
             _ => { new_instr.push(i.clone()); }
         }
     }
-    (gen_set, new_instr)
+    (gen_set, gen_map_branch, new_instr)
 }
 
 // Block Memory Counter
@@ -2345,17 +2353,17 @@ impl<'ast> ZGen<'ast> {
         // If size of spills is not zero, need to add %BP and %SP to block 0
         if spills.len() > 0 {
             // Initialize %SP
-            entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%SP")));
+            entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%SP", &Ty::Field)));
             // Initialize %BP
-            entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%BP")));
+            entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%BP", &Ty::Field)));
         }
         // If %TS is alive, initialize %TS
         if bls[entry_bl].outputs.contains(&("%TS".to_string(), Some(Ty::Field))) {
-            entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%TS")));
+            entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%TS", &Ty::Field)));
         }
         // If %AS is alive, initialize %AS
         if bls[entry_bl].outputs.contains(&("%AS".to_string(), Some(Ty::Field))) {
-            entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS")));
+            entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS", &Ty::Field)));
         }
         bls[entry_bl].instructions = entry_bl_instructions;
 
@@ -3151,7 +3159,7 @@ impl<'ast> ZGen<'ast> {
                 }
             }
             // Process instructions
-            let (_, new_instr) = tta_inst(gen_set, &bls[i].instructions);
+            let (_, _, new_instr) = tta_inst::<false>(gen_set, &bls[i].instructions);
             bls[i].instructions = new_instr;
         }
         bls

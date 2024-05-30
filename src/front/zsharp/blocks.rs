@@ -114,13 +114,12 @@ pub fn bl_trans<'ast>(cond: Expression<'ast>, tval: NextBlock, fval: NextBlock) 
     })
 }
 
-// Generate the statement: var = 0 (Field)
-pub fn bl_gen_init_stmt<'ast>(var: &str) -> Statement<'ast> {
+// Generate the statement: var = 0
+pub fn bl_gen_init_stmt<'ast>(var: &str, ty: &Ty) -> Statement<'ast> {
+    let typ = ty_to_type(ty).unwrap();
     let var_init_stmt = Statement::Definition(DefinitionStatement {
         lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-            ty: Type::Basic(BasicType::Field(FieldType {
-                span: Span::new("", 0, 0).unwrap()
-            })),
+            ty: typ.clone(),
             identifier: IdentifierExpression {
                 value: var.to_string(),
                 span: Span::new("", 0, 0).unwrap()
@@ -132,9 +131,7 @@ pub fn bl_gen_init_stmt<'ast>(var: &str) -> Statement<'ast> {
                 value: "0".to_string(),
                 span: Span::new("", 0, 0).unwrap()
             },
-            suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                span: Span::new("", 0, 0).unwrap()
-            })),
+            suffix: Some(ty_to_dec_suffix(&typ)),
             span: Span::new("", 0, 0).unwrap()
         })),
         span: Span::new("", 0, 0).unwrap()
@@ -476,13 +473,13 @@ impl<'ast> ZGen<'ast> {
         blks.push(Block::new(0, 1, f_name.to_string(), 0));
         blks_len += 1;
         // Initialize %SP
-        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%SP")));
+        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%SP", &Ty::Field)));
         // Initialize %BP
-        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%BP")));
+        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%BP", &Ty::Field)));
         // Initialize %TS for memory timestamp
-        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%TS")));
+        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%TS", &Ty::Field)));
         // Initialize %AS for allocating arrays
-        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS")));
+        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS", &Ty::Field)));
 
         let inputs: Vec<(String, Ty)>;
         (blks, blks_len, inputs) = self.bl_gen_function_init_::<true>(blks, blks_len, f_file.clone(), f_name)

@@ -43,7 +43,7 @@ const NUM_RESERVED_VARS: usize = 7;
 // Which index in the output (INCLUDING V) denotes %RET?
 const OUTPUT_OFFSET: usize = 2;
 // What is the maximum width (# of bits) of %TS?
-const MAX_TS_WIDTH: usize = 10;
+const MAX_TS_WIDTH: usize = 11;
 
 const VARS_PER_ST_ACCESS: usize = 2;
 const VARS_PER_VM_ACCESS: usize = 4;
@@ -108,9 +108,9 @@ struct SparseMatEntry {
 fn get_sparse_cons_with_v_check(
     c: &(Lc, Lc, Lc), 
     v_cnst: usize,
-    io_relabel: impl FnOnce(usize) -> usize + std::marker::Copy,
+    io_relabel: impl FnOnce(usize) -> Option<usize> + std::marker::Copy,
     witness_relabel: impl FnOnce(usize) -> usize + std::marker::Copy,
-) -> SparseMatEntry {
+) -> Option<SparseMatEntry> {
     // Extract all entries from A, B, C
     let (args_a, args_b, args_c) = {
         let mut args_a = Vec::new();
@@ -121,7 +121,7 @@ fn get_sparse_cons_with_v_check(
         }
         for (var, coeff) in c.0.monomials.iter() {
             match var.ty() {
-                VarType::Inst => args_a.push((io_relabel(var.number()), coeff.i())),
+                VarType::Inst => args_a.push((io_relabel(var.number())?, coeff.i())),
                 VarType::FinalWit => args_a.push((witness_relabel(var.number()), coeff.i())),
                 _ => panic!("Unsupported variable type!")
             }
@@ -131,7 +131,7 @@ fn get_sparse_cons_with_v_check(
         }
         for (var, coeff) in c.1.monomials.iter() {
             match var.ty() {
-                VarType::Inst => args_b.push((io_relabel(var.number()), coeff.i())),
+                VarType::Inst => args_b.push((io_relabel(var.number())?, coeff.i())),
                 VarType::FinalWit => args_b.push((witness_relabel(var.number()), coeff.i())),
                 _ => panic!("Unsupported variable type!")
             }
@@ -142,7 +142,7 @@ fn get_sparse_cons_with_v_check(
         for (var, coeff) in c.2.monomials.iter() {
             match var.ty() {
                 VarType::Inst => {
-                    args_c.push((io_relabel(var.number()), coeff.i()))
+                    args_c.push((io_relabel(var.number())?, coeff.i()))
                 },
                 VarType::FinalWit => args_c.push((witness_relabel(var.number()), coeff.i())),
                 _ => panic!("Unsupported variable type!")
@@ -150,7 +150,7 @@ fn get_sparse_cons_with_v_check(
         }
         (args_a, args_b, args_c)
     };
-    return SparseMatEntry { args_a, args_b, args_c };
+    return Some(SparseMatEntry { args_a, args_b, args_c });
 }
 
 // Convert an integer into a little-endian byte array
@@ -430,7 +430,6 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         ZSharpFE::gen(inputs)
     };
 
-    /*
     println!("Optimizing IR... ");
     let cs = opt(
         cs,
@@ -457,7 +456,6 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         ],
     );
     println!("done.");
-    */
 
     if VERBOSE {
         for (name, c) in &cs.comps {
@@ -500,15 +498,14 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         prover_data_list.push(prover_data);
 
         /*
-        let r1cs = if options.skip_linred {
-            println!("Skipping linearity reduction, as requested.");
+        let r1cs = {
+            let old_size = r1cs.constraints().len();
+            let r1cs = reduce_linearities(r1cs, cfg());
+            let new_size = r1cs.constraints().len();
+            if VERBOSE {
+                println!("{} linear reduction: {} -> {}", block_name, old_size, new_size);
+            }
             r1cs
-        } else {
-            println!(
-                "R1cs size before linearity reduction: {}",
-                r1cs.constraints().len()
-            );
-            reduce_linearities(r1cs, cfg())
         };
         */
         let num_witnesses = 
@@ -540,13 +537,15 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     //  mv are values of all memory accesses
     //   w are witnesses
     // According to the final io width, re-label all inputs and witnesses to the form (witness, input, output)
-    let io_relabel = |b: usize, i: usize| -> usize {
+    let io_relabel = |b: usize, i: usize| -> Option<usize> {
         if i < live_io_list[b].0.len() {
             // inputs, label starts at 1, index starts at 2
-            live_io_list[b].0[i] + 1
-        } else {
+            Some(live_io_list[b].0[i] + 1)
+        } else if i < live_io_list[b].0.len() + live_io_list[b].1.len() {
             // outputs, label starts at 1, index starts at num_inputs_unpadded + 1
-            live_io_list[b].1[i - live_io_list[b].0.len()] + num_inputs_unpadded
+            Some(live_io_list[b].1[i - live_io_list[b].0.len()] + num_inputs_unpadded)
+        } else {
+            None
         }
     };
     // Add all IOs and WV in front
@@ -554,18 +553,21 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         let num_pm_vars = VARS_PER_ST_ACCESS * block_num_mem_accesses[b].0;
         let num_live_vm_vars = live_vm_list[b].len();
         let num_vm_vars = VARS_PER_VM_ACCESS * block_num_mem_accesses[b].1;
-        // physical memory accesses
-        if i < num_pm_vars {
-            max_num_witnesses + 1 + i
-        }
-        // virtual memory accesses
-        else if i < num_pm_vars + num_live_vm_vars {
-            max_num_witnesses + 1 + num_pm_vars + live_vm_list[b][i - num_pm_vars]
-        }
-        // other witneses
-        else {
-            max_num_witnesses + 1 + num_vm_vars + (i - num_live_vm_vars)
-        }
+        let new_i = {
+            // physical memory accesses
+            if i < num_pm_vars {
+                max_num_witnesses + 1 + i
+            }
+            // virtual memory accesses
+            else if i < num_pm_vars + num_live_vm_vars {
+                max_num_witnesses + 1 + num_pm_vars + live_vm_list[b][i - num_pm_vars]
+            }
+            // other witneses
+            else {
+                max_num_witnesses + 1 + num_vm_vars + (i - num_live_vm_vars)
+            }
+        };
+        new_i
     };
     // 0th entry is constant
     let v_cnst = 0;
@@ -583,7 +585,10 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         sparse_mat_entry[b].push(SparseMatEntry { args_a, args_b, args_c });
         // Iterate
         for c in r1cs.constraints() {
-            sparse_mat_entry[b].push(get_sparse_cons_with_v_check(c, v_cnst, |i| io_relabel(b, i), |i| witness_relabel(b, i)));
+            // Any constraints involving the variable "return" should be discarded
+            if let Some(next_entry) = get_sparse_cons_with_v_check(c, v_cnst, |i| io_relabel(b, i), |i| witness_relabel(b, i)) {
+                sparse_mat_entry[b].push(next_entry);
+            }
         }
     }
 
@@ -951,7 +956,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<false>(path.clone(), entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
+    let rtk = get_run_time_knowledge::<true>(path.clone(), entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
     let witness_time = witness_start.elapsed();
 
     // --

@@ -1,5 +1,5 @@
-def lps_gen(field m, field[4] pat) -> field[4]:
-    field[4] lps = [0; 4]
+def lps_gen(field m, field[48] pat) -> field[48]:
+    field[48] lps = [0; 48]
     field len = 0
     field i = 1
 
@@ -20,17 +20,17 @@ def lps_gen(field m, field[4] pat) -> field[4]:
 
     return lps
 
-def main(field n, field m, field b, field c) -> field:
-    field[30] txt = [0; 30]
-    field[4] pat = [0; 4]
+def main(field b, field c, field n, field m) -> field:
+    field[480] txt = [0; 480]
+    field[48] pat = [0; 48]
 
     // Initialize arrays
     field sum = 0
-    for field i in 0..30 do
+    for field i in 0..480 do
         sum = sum + i
         txt[i] = sum
     endfor
-    for field i in 0..4 do
+    for field i in 0..48 do
         pat[i] = txt[n - m - b + i]
     endfor
     // random access to ensure array is written in memory
@@ -38,7 +38,7 @@ def main(field n, field m, field b, field c) -> field:
     field y = txt[b]
 
     // Generate LPS
-    field[4] lps = lps_gen(m, pat)
+    field[48] lps = lps_gen(m, pat)
 
     field i = 0
     field j = 0

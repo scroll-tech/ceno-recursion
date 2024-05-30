@@ -1,7 +1,7 @@
 import os
 
-CONST_EXPAND = 1
-REPEAT = 1
+CONST_EXPAND = 3
+REPEAT = 5
 
 # Process A * B or A + B or A - B by reading A & B from consts
 def process_formula(consts, formula):
@@ -181,7 +181,7 @@ def execute_cobbl_while(b_name, f_name, perc):
                     -e 's/  \* SNARK::verify //p' \
                 >> ../{f_name}")
 
-# BENCHMARK = ["find_min", "mat_mult", "kmp_search"]
-BENCHMARK = ["dna_align"]
+BENCHMARK = ["find_min", "mat_mult", "kmp_search"]
+#  = ["dna_align"]
 for b in BENCHMARK:
     preprocess(b)

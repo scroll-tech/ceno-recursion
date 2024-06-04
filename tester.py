@@ -182,6 +182,6 @@ def execute_cobbl_while(b_name, f_name, perc):
                 >> ../{f_name}")
 
 BENCHMARK = ["find_min", "mat_mult", "kmp_search"]
-#  = ["dna_align"]
+# BENCHMARK = ["find_min"]
 for b in BENCHMARK:
     preprocess(b)

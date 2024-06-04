@@ -1,24 +1,24 @@
-def get_index(field i, field j, field n) -> field:
+def get_index(u32 i, u32 j, u32 n) -> u32:
     return n * i + j
 
-def main(field n, field x, field y, field z) -> field:
-    field[36] A = [0; 36]
-    field[36] B = [0; 36]
-    field[36] C = [0; 36]
+def main(u32 x, u32 y, u32 z, u32 n) -> u32:
+    u32[36] A = [0; 36]
+    u32[36] B = [0; 36]
+    u32[36] C = [0; 36]
 
-    for field i in 0..36 do
+    for u32 i in 0..36 do
         A[i] = i
         B[i] = 2 * i
     endfor
     // random access to ensure array is written in memory
-    field c1 = A[x]
-    field c2 = B[y]
+    u32 c1 = A[x]
+    u32 c2 = B[y]
 
-    field i = 0
+    u32 i = 0
     while i < n do
-        field j = 0
+        u32 j = 0
         while j < n do
-            field k = 0
+            u32 k = 0
             while k < n do
                 C[get_index(n, i, k)] = A[get_index(n, i, j)] * B[get_index(n, j, k)]
                 k = k + 1
@@ -29,6 +29,6 @@ def main(field n, field x, field y, field z) -> field:
     endwhile
 
 
-    field c3 = C[z]
+    u32 c3 = C[z]
 
     return c1 * c2 * c3

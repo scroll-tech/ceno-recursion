@@ -7,13 +7,13 @@ b 0
 c 0
 
 PROGRAM:
-def lps_gen(field m, field[{max_m}] pat) -> field[{max_m}]:
-    field[{max_m}] lps = [0; {max_m}]
-    field len = 0
-    field i = 1
+def lps_gen(u32 m, u32[{max_m}] pat) -> u32[{max_m}]:
+    u32[{max_m}] lps = [0; {max_m}]
+    u32 len = 0
+    u32 i = 1
 
     // BASELINE
-    for field count in 0..{max_m + max_m} do
+    for u32 count in 0..{max_m + max_m} do
         if i < m then
             // if pat[i] == pat[len] then
             if pat[len] == pat[len] then
@@ -51,32 +51,32 @@ def lps_gen(field m, field[{max_m}] pat) -> field[{max_m}]:
 
     return lps
 
-def main(field b, field c, field n, field m) -> field:
-    field[{max_n}] txt = [0; {max_n}]
-    field[{max_m}] pat = [0; {max_m}]
+def main(u32 b, u32 c, u32 n, u32 m) -> u32:
+    u32[{max_n}] txt = [0; {max_n}]
+    u32[{max_m}] pat = [0; {max_m}]
 
     // Initialize arrays
-    field sum = 0
-    for field i in 0..{max_n} do
+    u32 sum = 0
+    for u32 i in 0..{max_n} do
         sum = sum + i
         txt[i] = sum
     endfor
-    for field i in 0..{max_m} do
+    for u32 i in 0..{max_m} do
         pat[i] = txt[n - m - b + i]
     endfor
     // random access to ensure array is written in memory
-    field x = pat[b]
-    field y = txt[b]
+    u32 x = pat[b]
+    u32 y = txt[b]
 
     // Generate LPS
-    field[{max_m}] lps = lps_gen(m, pat)
+    u32[{max_m}] lps = lps_gen(m, pat)
 
-    field i = 0
-    field j = 0
-    field found = 0
+    u32 i = 0
+    u32 j = 0
+    u32 found = 0
 
     // BASELINE
-    for field count in 0..{max_m + max_n} do
+    for u32 count in 0..{max_m + max_n} do
         if m - j <= n - i then
             // if pat[j] == txt[i] then
             if pat[b] == txt[b] then

@@ -67,6 +67,6 @@ def parse(b_name):
     f.close()
 
 BENCHMARK = ["find_min", "mat_mult", "kmp_search"]
-# BENCHMARK = ["dna_align"]
+# BENCHMARK = ["kmp_search"]
 for b in BENCHMARK:
     parse(b)

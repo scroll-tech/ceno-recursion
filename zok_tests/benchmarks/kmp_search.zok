@@ -1,9 +1,9 @@
-def lps_gen(field m, field[48] pat) -> field[48]:
-    field[48] lps = [0; 48]
-    field len = 0
-    field i = 1
+def lps_gen(u32 m, u32[48] pat) -> u32[48]:
+    u32[48] lps = [0; 48]
+    u32 len = 0
+    u32 i = 1
 
-    for field count in 0..96 do
+    for u32 count in 0..96 do
         if i < m then
             // if pat[i] == pat[len] then
             if pat[len] == pat[len] then
@@ -25,31 +25,31 @@ def lps_gen(field m, field[48] pat) -> field[48]:
 
     return lps
 
-def main(field b, field c, field n, field m) -> field:
-    field[480] txt = [0; 480]
-    field[48] pat = [0; 48]
+def main(u32 b, u32 c, u32 n, u32 m) -> u32:
+    u32[480] txt = [0; 480]
+    u32[48] pat = [0; 48]
 
     // Initialize arrays
-    field sum = 0
-    for field i in 0..480 do
+    u32 sum = 0
+    for u32 i in 0..480 do
         sum = sum + i
         txt[i] = sum
     endfor
-    for field i in 0..48 do
+    for u32 i in 0..48 do
         pat[i] = txt[n - m - b + i]
     endfor
     // random access to ensure array is written in memory
-    field x = pat[b]
-    field y = txt[b]
+    u32 x = pat[b]
+    u32 y = txt[b]
 
     // Generate LPS
-    field[48] lps = lps_gen(m, pat)
+    u32[48] lps = lps_gen(m, pat)
 
-    field i = 0
-    field j = 0
-    field found = 0
+    u32 i = 0
+    u32 j = 0
+    u32 found = 0
 
-    for field count in 0..528 do
+    for u32 count in 0..528 do
         if m - j <= n - i then
             // if pat[j] == txt[i] then
             if pat[b] == txt[b] then

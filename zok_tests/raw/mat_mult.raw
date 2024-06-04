@@ -7,28 +7,28 @@ y 0
 z 0
 
 PROGRAM:
-def get_index(field i, field j, field n) -> field:
+def get_index(u32 i, u32 j, u32 n) -> u32:
     return n * i + j
 
-def main(field n, field x, field y, field z) -> field:
-    field[{max_n * max_n}] A = [0; {max_n * max_n}]
-    field[{max_n * max_n}] B = [0; {max_n * max_n}]
-    field[{max_n * max_n}] C = [0; {max_n * max_n}]
+def main(u32 x, u32 y, u32 z, u32 n) -> u32:
+    u32[{max_n * max_n}] A = [0; {max_n * max_n}]
+    u32[{max_n * max_n}] B = [0; {max_n * max_n}]
+    u32[{max_n * max_n}] C = [0; {max_n * max_n}]
 
-    for field i in 0..{max_n * max_n} do
+    for u32 i in 0..{max_n * max_n} do
         A[i] = i
         B[i] = 2 * i
     endfor
     // random access to ensure array is written in memory
-    field c1 = A[x]
-    field c2 = B[y]
+    u32 c1 = A[x]
+    u32 c2 = B[y]
 
     // BASELINE
-    for field i in 0..{max_n} do
+    for u32 i in 0..{max_n} do
         if i < n then
-            for field j in 0..{max_n} do
+            for u32 j in 0..{max_n} do
                 if j < n then
-                    for field k in 0..{max_n} do
+                    for u32 k in 0..{max_n} do
                         if k < n then
                             C[get_index(n, i, k)] = A[get_index(n, i, j)] * B[get_index(n, j, k)]
                         endif
@@ -39,11 +39,11 @@ def main(field n, field x, field y, field z) -> field:
     endfor
 
     // COBBL
-    field i = 0
+    u32 i = 0
     while i < n do
-        field j = 0
+        u32 j = 0
         while j < n do
-            field k = 0
+            u32 k = 0
             while k < n do
                 C[get_index(n, i, k)] = A[get_index(n, i, j)] * B[get_index(n, j, k)]
                 k = k + 1
@@ -55,6 +55,6 @@ def main(field n, field x, field y, field z) -> field:
 
     // END_SPLIT
 
-    field c3 = C[z]
+    u32 c3 = C[z]
 
     return c1 * c2 * c3

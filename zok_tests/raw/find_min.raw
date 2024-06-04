@@ -7,21 +7,21 @@ b 0
 c 0
 
 PROGRAM:
-def main(field low, field b, field c, field high) -> field:
-    field[{max_high}] arr = [0; {max_high}]
-    field sum = 0
-    for field i in 0..{max_high} do
+def main(u32 low, u32 b, u32 c, u32 high) -> u32:
+    u32[{max_high}] arr = [0; {max_high}]
+    u32 sum = 0
+    for u32 i in 0..{max_high} do
         sum = sum + i
         arr[i] = sum
     endfor
     // random access to ensure array is written in memory
-    field x = arr[b]
+    u32 x = arr[b]
 
-    field min = arr[low]
-    field min_idx = low
+    u32 min = arr[low]
+    u32 min_idx = low
 
     // BASELINE
-    for field i in 0..{max_high} do
+    for u32 i in 0..{max_high} do
         if low < i && i < high && arr[i] < min then
             min = arr[i]
             min_idx = i
@@ -29,7 +29,7 @@ def main(field low, field b, field c, field high) -> field:
     endfor
 
     // COBBL
-    field i = low + 1
+    u32 i = low + 1
     while i < high do
         if arr[i] < min then
             min = arr[i]

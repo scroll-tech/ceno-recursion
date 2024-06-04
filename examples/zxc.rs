@@ -295,7 +295,6 @@ struct RunTimeKnowledge {
     total_num_vir_mem_accesses: usize,
   
     block_vars_matrix: Vec<Vec<VarsAssignment>>,
-    block_inputs_matrix: Vec<Vec<InputsAssignment>>,
     exec_inputs: Vec<InputsAssignment>,
     addr_phy_mems_list: Vec<MemsAssignment>,
     addr_vir_mems_list: Vec<MemsAssignment>,
@@ -323,18 +322,6 @@ impl RunTimeKnowledge {
         writeln!(&mut f, "BLOCK_VARS")?;
         let mut block_counter = 0;
         for block in &self.block_vars_matrix {
-            writeln!(&mut f, "BLOCK {}", block_counter)?;
-            let mut exec_counter = 0;
-            for exec in block {
-                writeln!(&mut f, "EXEC {}", exec_counter)?;
-                exec.write(&mut f)?;
-                exec_counter += 1;
-            }
-            block_counter += 1;
-        }
-        writeln!(&mut f, "BLOCK_INPUTS")?;
-        let mut block_counter = 0;
-        for block in &self.block_inputs_matrix {
             writeln!(&mut f, "BLOCK {}", block_counter)?;
             let mut exec_counter = 0;
             for exec in block {
@@ -422,7 +409,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 ) -> (CompileTimeKnowledge, Vec<usize>, Vec<usize>, Vec<ProverData>) {
     println!("Generating Compiler Time Data...");
 
-    let (cs, func_input_width, io_size, live_io_list, block_num_mem_accesses, live_vm_list) = {
+    let (cs, func_input_width, num_inputs_unpadded, live_io_list, block_num_mem_accesses, live_vm_list) = {
         let inputs = zsharp::Inputs {
             file: path.clone(),
             mode: Mode::Proof
@@ -481,7 +468,8 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     // 1. Add checks on validity: V * V = V and 0 = W - V, where W is the validity bit in the witnesses used by the backend
     // 2. Compute the maximum number of witnesses within any constraint to obtain final io width
     let mut r1cs_list = Vec::new();
-    let mut max_num_witnesses = 2 * io_size;
+    let io_width = 2 * num_inputs_unpadded;
+    let mut max_num_witnesses = io_width;
     let mut max_num_cons = 1;
     // Obtain a list of prover data by block
     let mut prover_data_list = Vec::new();
@@ -509,7 +497,8 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         };
         */
         let num_witnesses = 
-            r1cs.num_vars() + 1 // add W to witness
+            io_width // input + output
+            + r1cs.num_vars() + 1 // add W to witness
             + VARS_PER_VM_ACCESS * block_num_mem_accesses[block_num].1 - live_vm_list[block_num].len() // remove live vm vars, add all vm vars
             - live_io_list[block_num].0.len() - live_io_list[block_num].1.len(); // remove all inputs / outputs
         num_vars_per_block.push(num_witnesses.next_power_of_two());
@@ -522,8 +511,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         block_name = format!("Block_{}", block_num);
     }
     
-    max_num_witnesses = max_num_witnesses.next_power_of_two();
-    let num_inputs_unpadded = io_size;
+    let max_num_witnesses = max_num_witnesses.next_power_of_two();
     let max_num_cons = max_num_cons.next_power_of_two();
 
     // Convert R1CS into Spartan sparse format
@@ -556,15 +544,15 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         let new_i = {
             // physical memory accesses
             if i < num_pm_vars {
-                max_num_witnesses + 1 + i
+                io_width + 1 + i
             }
             // virtual memory accesses
             else if i < num_pm_vars + num_live_vm_vars {
-                max_num_witnesses + 1 + num_pm_vars + live_vm_list[b][i - num_pm_vars]
+                io_width + 1 + num_pm_vars + live_vm_list[b][i - num_pm_vars]
             }
             // other witneses
             else {
-                max_num_witnesses + 1 + num_vm_vars + (i - num_live_vm_vars)
+                io_width + 1 + num_vm_vars + (i - num_live_vm_vars)
             }
         };
         new_i
@@ -581,7 +569,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         sparse_mat_entry[b].push(SparseMatEntry { args_a, args_b, args_c });
         // Second constraint is 0 = W - V
         let (args_a, args_b, args_c) =
-            (vec![], vec![], vec![(max_num_witnesses, Integer::from(1)), (v_cnst, Integer::from(-1))]);
+            (vec![], vec![], vec![(io_width, Integer::from(1)), (v_cnst, Integer::from(-1))]);
         sparse_mat_entry[b].push(SparseMatEntry { args_a, args_b, args_c });
         // Iterate
         for c in r1cs.constraints() {
@@ -654,7 +642,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
 ) -> RunTimeKnowledge {
     let num_blocks = ctk.block_num_instances;
     let num_input_unpadded = ctk.num_inputs_unpadded;
-    let num_ios = (2 * num_input_unpadded).next_power_of_two();
+    let io_width = 2 * num_input_unpadded;
     // bl_outputs records ios of blocks as lists
     // bl_io_map maps name of io variables to their values
     // bl_outputs are used to fill in io part of vars
@@ -705,10 +693,9 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     let zero = Integer::from(0);
     let one = Integer::from(1);
     // Start from entry block, compute value of witnesses
-    // Note: block_vars_matrix & block_inputs_matrix are sorted by block_num_proofs, tie-breaked by block id
+    // Note: block_vars_matrix  are sorted by block_num_proofs, tie-breaked by block id
     // Thus, block_vars_matrix[0] might NOT store the executions of block 0!
     let mut block_vars_matrix = vec![Vec::new(); num_blocks_live];
-    let mut block_inputs_matrix = vec![Vec::new(); num_blocks_live];
     let mut exec_inputs = Vec::new();
 
     let mut func_outputs = Integer::from(0);
@@ -723,13 +710,11 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         eval.pop();
         eval.extend(evaluator.eval_stage(Default::default()).into_iter().cloned());
 
-        // Inputs are described in a length-(num_vars) array, consisted of input + output
-        // Vars are described in a length-(num_vars) array, consisted of witnesses
-        let mut inputs: Vec<Integer> = vec![zero.clone(); num_ios];
+        // Vars are described in a length-(num_vars) array, consisted of input + output + witnesses
         let mut vars: Vec<Integer> = vec![zero.clone(); ctk.num_vars_per_block[id]];
         // Valid bit should be 1
-        inputs[0] = one.clone();
         vars[0] = one.clone();
+        vars[io_width] = one.clone();
         // Use bl_outputs_list to assign input
         // Note that we do not use eval because eval automatically deletes dead registers
         // (that need to stay for consistency check)
@@ -737,17 +722,17 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         let reg_out = &bl_outputs_list[i + 1];
         for j in 0..reg_in.len() {
             if let Some(ri) = &reg_in[j] {
-                inputs[j + 1] = ri.as_integer().unwrap();
+                vars[j + 1] = ri.as_integer().unwrap();
             }
             if let Some(ro) = &reg_out[j] {
-                inputs[num_input_unpadded + j] = ro.as_integer().unwrap();
+                vars[num_input_unpadded + j] = ro.as_integer().unwrap();
             }
         }
         // Use bl_mems_list to assign all memory operations
         let reg_mem = &bl_mems_list[i];
         for j in 0..reg_mem.len() {
             if let Some(rm) = &reg_mem[j] {
-                vars[j + 1] = rm.as_integer().unwrap();
+                vars[io_width + j + 1] = rm.as_integer().unwrap();
             }
         }
 
@@ -756,10 +741,10 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         for j in wit_offset..eval.len() {
             // witnesses, skip the 0th entry for the valid bit
             let k = 1 + j - wit_offset + reg_mem.len();
-            vars[k] = eval[j].as_integer().unwrap();
+            vars[io_width + k] = eval[j].as_integer().unwrap();
         }
         if i == block_id_list.len() - 1 {
-            func_outputs = inputs[num_input_unpadded + OUTPUT_OFFSET].clone();
+            func_outputs = vars[num_input_unpadded + OUTPUT_OFFSET].clone();
         }
         if VERBOSE {
             let print_width = min(num_input_unpadded - 1, 32);
@@ -770,7 +755,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             println!();
             print!("{:3} ", "I");
             for i in 0..2 + print_width {
-                print!("{:3} ", inputs[i]);
+                print!("{:3} ", vars[i]);
             }
             if num_input_unpadded - 1 > print_width {
                 println!("...");
@@ -779,7 +764,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             }
             print!("{:3} {:3} {:3} ", "O", " ", " ");
             for i in num_input_unpadded + 1..num_input_unpadded + 1 + print_width {
-                print!("{:3} ", inputs[i]);
+                print!("{:3} ", vars[i]);
             }
             if num_input_unpadded - 1 > print_width {
                 println!("...");
@@ -789,7 +774,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             print!("{:3} ", "W");
             let print_width = min(vars.len(), print_width);
             for i in 0..print_width {
-                print!("{:3} ", vars[i]);
+                print!("{:3} ", vars[io_width + i]);
             }
             if vars.len() > print_width {
                 println!("...");
@@ -798,13 +783,13 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             }
         }
 
+        let inputs = [vars[..io_width].to_vec(), vec![zero.clone(); io_width.next_power_of_two() - io_width]].concat();
         let inputs_assignment = Assignment::new(inputs.iter().map(|i| integer_to_bytes(i.clone())).collect());
         let vars_assignment = Assignment::new(vars.iter().map(|i| integer_to_bytes(i.clone())).collect());
 
         let slot = index_rev[id];
         exec_inputs.push(inputs_assignment.clone());
         block_vars_matrix[slot].push(vars_assignment);
-        block_inputs_matrix[slot].push(inputs_assignment);
     }
 
     // Physical Memory: valid, D, addr, data
@@ -901,7 +886,6 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         total_num_vir_mem_accesses,
       
         block_vars_matrix,
-        block_inputs_matrix,
         exec_inputs,
         addr_phy_mems_list,
         addr_vir_mems_list,

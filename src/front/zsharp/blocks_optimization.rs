@@ -2818,7 +2818,7 @@ impl<'ast> ZGen<'ast> {
     // hence need to record inputs, outputs, and witnesses separately
     // Structure for input / output
     // reg  0   1   2   3   4   5   6   7   8   9
-    //      V  BN  RET TS  AS  RP  SP  BP  i8  i8
+    //      V  BN  RET TS  AS  RP  SP  BP  i8  i9
     // Structure for witness
     // reg  0   1   2   3   4   5   6   7  ...
     //     RET TS  AS  RP  SP  BP  w6  w7

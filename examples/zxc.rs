@@ -465,7 +465,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     let mut block_name = format!("Block_{}", block_num);
     // Obtain a list of (r1cs, io_map) for all blocks
     // As we generate R1Cs for each block:
-    // 1. Add checks on validity: V * V = V and 0 = W - V, where W is the validity bit in the witnesses used by the backend
+    // 1. Add checks on validity: V * V = V
     // 2. Compute the maximum number of witnesses within any constraint to obtain final io width
     let mut r1cs_list = Vec::new();
     let io_width = 2 * num_inputs_unpadded;
@@ -498,12 +498,12 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         */
         let num_witnesses = 
             io_width // input + output
-            + r1cs.num_vars() + 1 // add W to witness
+            + r1cs.num_vars()
             + VARS_PER_VM_ACCESS * block_num_mem_accesses[block_num].1 - live_vm_list[block_num].len() // remove live vm vars, add all vm vars
             - live_io_list[block_num].0.len() - live_io_list[block_num].1.len(); // remove all inputs / outputs
         num_vars_per_block.push(num_witnesses.next_power_of_two());
-        // Include V * V = V and 0 = W - V
-        let num_cons = r1cs.constraints().len() + 2;
+        // Include V * V = V
+        let num_cons = r1cs.constraints().len() + 1;
         if num_witnesses > max_num_witnesses { max_num_witnesses = num_witnesses };
         if num_cons > max_num_cons { max_num_cons = num_cons };
         r1cs_list.push(r1cs);
@@ -515,12 +515,11 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     let max_num_cons = max_num_cons.next_power_of_two();
 
     // Convert R1CS into Spartan sparse format
-    // The final version will be of form: (v, _, i, o, wv, ma, mv, w), where
+    // The final version will be of form: (v, _, i, o, ma, mv, w), where
     //   v is the valid bit
     //   _ is a dummy
     //   i are the inputs
     //   o are the outputs
-    //  wv is the valid bit, but in witnesses
     //  ma are addresses of all memory accesses
     //  mv are values of all memory accesses
     //   w are witnesses
@@ -544,15 +543,15 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         let new_i = {
             // physical memory accesses
             if i < num_pm_vars {
-                io_width + 1 + i
+                io_width + i
             }
             // virtual memory accesses
             else if i < num_pm_vars + num_live_vm_vars {
-                io_width + 1 + num_pm_vars + live_vm_list[b][i - num_pm_vars]
+                io_width + num_pm_vars + live_vm_list[b][i - num_pm_vars]
             }
             // other witneses
             else {
-                io_width + 1 + num_vm_vars + (i - num_live_vm_vars)
+                io_width + num_vm_vars + (i - num_live_vm_vars)
             }
         };
         new_i
@@ -566,10 +565,6 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         // First constraint is V * V = V
         let (args_a, args_b, args_c) =
             (vec![(v_cnst, Integer::from(1))], vec![(v_cnst, Integer::from(1))], vec![(v_cnst, Integer::from(1))]);
-        sparse_mat_entry[b].push(SparseMatEntry { args_a, args_b, args_c });
-        // Second constraint is 0 = W - V
-        let (args_a, args_b, args_c) =
-            (vec![], vec![], vec![(io_width, Integer::from(1)), (v_cnst, Integer::from(-1))]);
         sparse_mat_entry[b].push(SparseMatEntry { args_a, args_b, args_c });
         // Iterate
         for c in r1cs.constraints() {
@@ -714,7 +709,6 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         let mut vars: Vec<Integer> = vec![zero.clone(); ctk.num_vars_per_block[id]];
         // Valid bit should be 1
         vars[0] = one.clone();
-        vars[io_width] = one.clone();
         // Use bl_outputs_list to assign input
         // Note that we do not use eval because eval automatically deletes dead registers
         // (that need to stay for consistency check)
@@ -732,7 +726,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         let reg_mem = &bl_mems_list[i];
         for j in 0..reg_mem.len() {
             if let Some(rm) = &reg_mem[j] {
-                vars[io_width + j + 1] = rm.as_integer().unwrap();
+                vars[io_width + j] = rm.as_integer().unwrap();
             }
         }
 
@@ -740,7 +734,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         let wit_offset = live_io_size[id] + live_mem_size[id];
         for j in wit_offset..eval.len() {
             // witnesses, skip the 0th entry for the valid bit
-            let k = 1 + j - wit_offset + reg_mem.len();
+            let k = j - wit_offset + reg_mem.len();
             vars[io_width + k] = eval[j].as_integer().unwrap();
         }
         if i == block_id_list.len() - 1 {

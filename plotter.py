@@ -66,22 +66,23 @@ def parse_cobbl(b_name, jolt_result):
             # Print out the result
             case_name = f"{b_name} - {consts}"
             print(case_name)
-            print("{:10}    {:>10}    {:>10}    {:>10}    {:>10}    {:>10}    {:>10}    {:>10}".format("", "CirC", "Jolt", "CoBBl For", "CoBBl 100", "CoBBl 90", "CoBBl 75", "CoBBl 50"))
+            print("{:10}    {:>10}    {:>10}    {:>10}    {:>10}    {:>10}    {:>10}    {:>10}".format("", "CirC", "CoBBl For", "Jolt", "CoBBl 100", "CoBBl 90", "CoBBl 75", "CoBBl 50"))
             t_name = ["Compiler", "Preprocess", "Prover", "Verifier"]
             for j in range(4):
                 print("{:10}".format(t_name[j]), end = '')
                 # CirC
-                if entries[0][j] != 0:
-                    print("    {:10.2f}".format(entries[0][j]), end = '')
-                else:
-                    print("    {:>10}".format("-"), end = '')
+                for i in range(0, 2):
+                    if entries[i][j] != 0:
+                        print("    {:10.2f}".format(entries[i][j]), end = '')
+                    else:
+                        print("    {:>10}".format("-"), end = '')
                 # Jolt
                 if j != 1 and case_name in jolt_result.keys() and jolt_result[case_name][0 if j == 0 else j - 1] != 0:
                     print("    {:10.2f}".format(jolt_result[case_name][0 if j == 0 else j - 1]), end = '')
                 else:
                     print("    {:>10}".format("-"), end = '')
                 # CoBBl
-                for i in range(1, 6):
+                for i in range(2, 6):
                     if entries[i][j] != 0:
                         print("    {:10.2f}".format(entries[i][j]), end = '')
                     else:

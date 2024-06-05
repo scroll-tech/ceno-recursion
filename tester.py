@@ -1,7 +1,7 @@
 import os
 
 CONST_EXPAND = 3
-REPEAT = 5
+REPEAT = 1
 
 # Process A * B or A + B or A - B by reading A & B from consts
 def process_formula(consts, formula):
@@ -149,7 +149,7 @@ def preprocess(b_name):
 def execute_baseline(b_name, f_name):
     print("BASELINE")
     os.system(f"echo 'BASELINE' >> {f_name}")
-    os.system(f"cd circ_baseline && target/release/examples/circ --language zsharp {b_name} r1cs | \
+    os.system(f"timeout 300 cd circ_baseline && target/release/examples/circ --language zsharp {b_name} r1cs | \
                 sed -n -e 's/Compiler time: //p' \
                     -e 's/  \* SNARK::encode //p' \
                     -e 's/  \* SNARK::prove //p' \
@@ -159,10 +159,10 @@ def execute_baseline(b_name, f_name):
 def execute_cobbl_for(b_name, f_name):
     print("COBBL - FOR")
     os.system(f"echo 'COBBL_FOR' >> {f_name}")
-    os.system(f"cd circ_blocks && target/release/examples/zxc {b_name} | \
+    os.system(f"timeout 300 cd circ_blocks && target/release/examples/zxc {b_name} | \
             sed -n 's/Compiler time: //p' \
                 >> ../{f_name}")
-    os.system(f"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
+    os.system(f"timeout 300 cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
                 sed -n -e 's/Preprocess time: //p' \
                     -e 's/  \* SNARK::prove //p' \
                     -e 's/  \* SNARK::verify //p' \
@@ -172,16 +172,16 @@ def execute_cobbl_while(b_name, f_name, perc):
     b_name += "_cobbl"
     print("COBBL - WHILE")
     os.system(f"echo 'COBBL_WHILE {perc}' >> {f_name}")
-    os.system(f"cd circ_blocks && target/release/examples/zxc {b_name} | \
+    os.system(f"timeout 300 cd circ_blocks && target/release/examples/zxc {b_name} | \
             sed -n 's/Compiler time: //p' \
                 >> ../{f_name}")
-    os.system(f"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
+    os.system(f"timeout 300 cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
                 sed -n -e 's/Preprocess time: //p' \
                     -e 's/  \* SNARK::prove //p' \
                     -e 's/  \* SNARK::verify //p' \
                 >> ../{f_name}")
 
-BENCHMARK = ["find_min", "mat_mult", "kmp_search"]
-# BENCHMARK = ["find_min"]
+# BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align"]
+BENCHMARK = ["dna_align"]
 for b in BENCHMARK:
     preprocess(b)

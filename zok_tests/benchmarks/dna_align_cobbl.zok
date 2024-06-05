@@ -2,33 +2,28 @@
  * Computes the Longest Common Subsequence of two strings, one of 
  * length m and the other of length n in O(m*n) time
  */
-def main(field b, field n) -> field:
-    field[4] A = [0; 4]
-    field[4] B = [0; 4]
-    field[4] LCS = [0; 4]
-    field arr_size = 4
-
-    field i = 0
-    field j = 0
+def main(u32 x, u32 n) -> u32:
+    u32[30] A = [0; 30]
+    u32[30] B = [0; 30]
+    u32[30] LCS = [0; 30]
+    u32 arr_size = 30
 
     // Dynamic programming memo
-    field[16] LL = [0; 16]
+    u32[900] LL = [0; 900]
     // Hold choices made at each step, for use when backtracking
-    field[16] choices = [0; 16]
+    u32[900] choices = [0; 900]
     // Used when backtracking
-    field diag = 0
-    field down = 0
-    field right = 0
+    u32 diag = 0
+    u32 down = 0
+    u32 right = 0
 
     // Go backwards from i = n-1 downto 0
-    field i_iter = n
-    while i_iter > 0 do
-        field i = i_iter - 1
-        field j_iter = n
-        while j_iter > 0 do
-            field j = j_iter - 1
+    u32 i = n - 1
+    while i + 1 > 0 do
+        u32 j = n - 1
+        while j + 1 > 0 do
             if A[i] == B[j] then
-                if 0 <= i+1 && i+1 < n && 0 <= j+1 && j+1 < n then
+                if i+1 < n && j+1 < n then
                     diag = LL[(i+1) * arr_size + j+1]
                 else
                     diag = 0
@@ -37,12 +32,12 @@ def main(field b, field n) -> field:
                 LL[i * arr_size + j] = 1 + diag
                 choices[i * arr_size + j] = 0
             else
-                if 0 <= i+1 && i+1 < n && 0 <= j && j < n then
+                if i+1 < n && j < n then
                     down = LL[(i+1) * arr_size + j]
                 else 
                     down = 0
                 endif
-                if 0 <= i && i < n && 0 <= j+1 && j+1 < n then
+                if i < n && j+1 < n then
                     right = LL[i * arr_size + j+1]
                 else
                     right = 0
@@ -58,20 +53,20 @@ def main(field b, field n) -> field:
                     choices[i * arr_size + j] = 2
                 endif
             endif
-            j_iter = j_iter - 1
+            j = j - 1
         endwhile
-        i_iter = i_iter - 1
+        i = i - 1
     endwhile
 
 
     // Construct LCS, allowing it to have intermittent zero characters
-    field iPtr = 0
-    field jPtr = 0 // Pointers to where in LL we are with respect to backtracking
+    u32 iPtr = 0
+    u32 jPtr = 0 // Pointers to where in LL we are with respect to backtracking
 
-    field i = 0
+    u32 i = 0
     while i < n do
         LCS[i] = 0 //If A[i] is not in the LCS, this remains 0.
-        field j = 0
+        u32 j = 0
         while j < n do
             if i == iPtr && j == jPtr then // Loop until we meet up with the iPtr and jPtr
                 if choices[i * arr_size + j] == 0 then // we made a diagonal jump here
@@ -92,10 +87,10 @@ def main(field b, field n) -> field:
     endwhile
 
     // Now move any string terminator (\0) characters in LCS to the end ala insertion sort
-    field i = 1
+    u32 i = 1
     while i < n do
-        field inserted = 0
-        field j = 0
+        u32 inserted = 0
+        u32 j = 0
         while j < i do
             if LCS[j] == 0 && inserted == 0 then
                 // Swap LCS[j] and LCS[i].
@@ -109,4 +104,4 @@ def main(field b, field n) -> field:
     endwhile
 
 
-    return LCS[b]
+    return LCS[x]

@@ -1,22 +1,19 @@
 CONST:
-max_n 4
+max_n 10
 
 INPUT:
-b 0
+x 0
 
 PROGRAM:
 /*
  * Computes the Longest Common Subsequence of two strings, one of 
  * length m and the other of length n in O(m*n) time
  */
-def main(u32 b, u32 n) -> u32:
+def main(u32 x, u32 n) -> u32:
     u32[{max_n}] A = [0; {max_n}]
     u32[{max_n}] B = [0; {max_n}]
     u32[{max_n}] LCS = [0; {max_n}]
     u32 arr_size = {max_n}
-
-    u32 i = 0
-    u32 j = 0
 
     // Dynamic programming memo
     u32[{max_n * max_n}] LL = [0; {max_n * max_n}]
@@ -28,16 +25,14 @@ def main(u32 b, u32 n) -> u32:
     u32 right = 0
 
     // BASELINE
-    u32 i_iter = n
+    u32 i = n - 1
     for u32 count_i in 0..{max_n} do
-        if i_iter > 0 then
-            u32 i = i_iter - 1
-            u32 j_iter = n
+        if i + 1 > 0 then
+            u32 j = n - 1
             for u32 count_j in 0..{max_n} do
-                if j_iter > 0 then
-                    u32 j = j_iter - 1
+                if j + 1 > 0 then
                     if A[i] == B[j] then
-                        if 0 <= i+1 && i+1 < n && 0 <= j+1 && j+1 < n then
+                        if i+1 < n && j+1 < n then
                             diag = LL[(i+1) * arr_size + j+1]
                         else
                             diag = 0
@@ -46,12 +41,12 @@ def main(u32 b, u32 n) -> u32:
                         LL[i * arr_size + j] = 1 + diag
                         choices[i * arr_size + j] = 0
                     else
-                        if 0 <= i+1 && i+1 < n && 0 <= j && j < n then
+                        if i+1 < n && j < n then
                             down = LL[(i+1) * arr_size + j]
                         else 
                             down = 0
                         endif
-                        if 0 <= i && i < n && 0 <= j+1 && j+1 < n then
+                        if i < n && j+1 < n then
                             right = LL[i * arr_size + j+1]
                         else
                             right = 0
@@ -67,23 +62,21 @@ def main(u32 b, u32 n) -> u32:
                             choices[i * arr_size + j] = 2
                         endif
                     endif
-                    j_iter = j_iter - 1
+                    j = j - 1
                 endif
             endfor
-            i_iter = i_iter - 1
+            i = i - 1
         endif
     endfor
 
     // COBBL
     // Go backwards from i = n-1 downto 0
-    u32 i_iter = n
-    while i_iter > 0 do
-        u32 i = i_iter - 1
-        u32 j_iter = n
-        while j_iter > 0 do
-            u32 j = j_iter - 1
+    u32 i = n - 1
+    while i + 1 > 0 do
+        u32 j = n - 1
+        while j + 1 > 0 do
             if A[i] == B[j] then
-                if 0 <= i+1 && i+1 < n && 0 <= j+1 && j+1 < n then
+                if i+1 < n && j+1 < n then
                     diag = LL[(i+1) * arr_size + j+1]
                 else
                     diag = 0
@@ -92,12 +85,12 @@ def main(u32 b, u32 n) -> u32:
                 LL[i * arr_size + j] = 1 + diag
                 choices[i * arr_size + j] = 0
             else
-                if 0 <= i+1 && i+1 < n && 0 <= j && j < n then
+                if i+1 < n && j < n then
                     down = LL[(i+1) * arr_size + j]
                 else 
                     down = 0
                 endif
-                if 0 <= i && i < n && 0 <= j+1 && j+1 < n then
+                if i < n && j+1 < n then
                     right = LL[i * arr_size + j+1]
                 else
                     right = 0
@@ -113,9 +106,9 @@ def main(u32 b, u32 n) -> u32:
                     choices[i * arr_size + j] = 2
                 endif
             endif
-            j_iter = j_iter - 1
+            j = j - 1
         endwhile
-        i_iter = i_iter - 1
+        i = i - 1
     endwhile
 
     // END_SPLIT
@@ -160,10 +153,8 @@ def main(u32 b, u32 n) -> u32:
                         LCS[i] = 0
                         inserted = 1
                     endif
-                    j = j + 1
                 endif
             endfor
-            i = i + 1
         endif
     endfor
 
@@ -210,4 +201,4 @@ def main(u32 b, u32 n) -> u32:
 
     // END_SPLIT
 
-    return LCS[b]
+    return LCS[x]

@@ -1,20 +1,20 @@
-def lps_gen(u32 m, u32[16] pat) -> u32[16]:
-    u32[16] lps = [0; 16]
+def lps_gen(u32 m, u32[48] pat) -> u32[48]:
+    u32[48] lps = [0; 48]
     u32 len = 0
     u32 i = 1
 
-    for u32 count in 0..32 do
+    for u32 count in 0..96 do
         if i < m then
-            if pat[i] == pat[len] then
-            // if pat[len] == pat[len] then
+            // if pat[i] == pat[len] then
+            if pat[len] == pat[len] then
                 len = len + 1
-                lps[i] = len
-                // lps[2] = len
+                // lps[i] = len
+                lps[2] = len
                 i = i + 1
             else
                 if len != 0 then
-                    len = lps[len - 1]
-                    // len = lps[2]
+                    // len = lps[len - 1]
+                    len = lps[2]
                 else
                     i = i + 1
                 endif
@@ -26,16 +26,16 @@ def lps_gen(u32 m, u32[16] pat) -> u32[16]:
     return lps
 
 def main(u32 b, u32 c, u32 n, u32 m) -> u32:
-    u32[160] txt = [0; 160]
-    u32[16] pat = [0; 16]
+    u32[480] txt = [0; 480]
+    u32[48] pat = [0; 48]
 
     // Initialize arrays
     u32 sum = 0
-    for u32 i in 0..160 do
+    for u32 i in 0..480 do
         sum = sum + i
         txt[i] = sum
     endfor
-    for u32 i in 0..16 do
+    for u32 i in 0..48 do
         pat[i] = txt[n - m - b + i]
     endfor
     // random access to ensure array is written in memory
@@ -43,30 +43,30 @@ def main(u32 b, u32 c, u32 n, u32 m) -> u32:
     u32 y = txt[b]
 
     // Generate LPS
-    u32[16] lps = lps_gen(m, pat)
+    u32[48] lps = lps_gen(m, pat)
 
     u32 i = 0
     u32 j = 0
     u32 found = 0
 
-    for u32 count in 0..176 do
+    for u32 count in 0..528 do
         if m - j <= n - i then
-            if pat[j] == txt[i] then
-            // if pat[b] == txt[b] then
+            // if pat[j] == txt[i] then
+            if pat[b] == txt[b] then
                 i = i + 1
                 j = j + 1
             endif
 
             if j == m then
-                j = lps[j - 1]
-                // j = lps[b]
+                // j = lps[j - 1]
+                j = lps[b]
                 found = i - j
             else
                 // if i < n && pat[j] != txt[i] then
                 if i < n && pat[b] != txt[b] then
                     if j != 0 then
-                        j = lps[j - 1]
-                        // j = lps[b]
+                        // j = lps[j - 1]
+                        j = lps[b]
                     else
                         i = i + 1
                     endif

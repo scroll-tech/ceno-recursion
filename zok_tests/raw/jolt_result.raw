@@ -6,8 +6,8 @@ Trace length: 8183
 
 --
 find_min - max_high 400
-1245ms
-664ms
+7513ms
+682ms
 143ms
 Trace length: 16186
 Trace length: 16186
@@ -17,9 +17,9 @@ Trace length: 16186
 
 --
 find_min - max_high 800
-1221ms
-860ms
-184ms
+7911ms
+845ms
+177ms
 Trace length: 621
 Trace length: 621
 Trace length: 621
@@ -28,9 +28,9 @@ Trace length: 621
 
 --
 mat_mult - max_n 2
-1207ms
-455ms
-82ms
+1497ms
+440ms
+84ms
 Trace length: 4293
 Trace length: 4293
 Trace length: 4293
@@ -39,9 +39,9 @@ Trace length: 4293
 
 --
 mat_mult - max_n 4
-1200ms
-635ms
-133ms
+1508ms
+650ms
+127ms
 Trace length: 15111
 Trace length: 15111
 Trace length: 15111
@@ -50,9 +50,9 @@ Trace length: 15111
 
 --
 mat_mult - max_n 6
-1222ms
-882ms
-184ms
+1514ms
+878ms
+175ms
 Trace length: 6987
 Trace length: 6987
 Trace length: 6987
@@ -61,9 +61,9 @@ Trace length: 6987
 
 --
 kmp_search - max_n 160; max_m 16
-1215ms
-694ms
-152ms
+1515ms
+689ms
+141ms
 Trace length: 13578
 Trace length: 13578
 Trace length: 13578
@@ -72,9 +72,9 @@ Trace length: 13578
 
 --
 kmp_search - max_n 320; max_m 32
-1199ms
-866ms
-183ms
+1513ms
+852ms
+174ms
 Trace length: 3222
 Trace length: 3222
 Trace length: 3222
@@ -83,9 +83,9 @@ Trace length: 3222
 
 --
 dna_align - max_n 10
-1214ms
-542ms
-118ms
+1537ms
+565ms
+119ms
 Trace length: 12168
 Trace length: 12168
 Trace length: 12168
@@ -94,6 +94,28 @@ Trace length: 12168
 
 --
 dna_align - max_n 20
-1188ms
-824ms
-167ms
+1501ms
+842ms
+169ms
+Trace length: 4713
+Trace length: 4713
+Trace length: 4713
+Trace length: 4713
+Trace length: 4713
+
+--
+rle_codec - max_n 100
+1449ms
+645ms
+131ms
+Trace length: 8889
+Trace length: 8889
+Trace length: 8889
+Trace length: 8889
+Trace length: 8889
+
+--
+rle_codec - max_n 200
+1450ms
+804ms
+157ms

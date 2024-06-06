@@ -9,20 +9,18 @@ def compress(u32 n, u32[300] txt, u32[600] compr) -> u32:
     u32 next_data = txt[0]
     u32 next_count = 0
 
-    for u32 counter in 0..600 do
-        if next_t < n then
-            if txt[next_t] == next_data then
-                next_count = next_count + 1
-            else
-                compr[next_c] = next_data
-                compr[next_c + 1] = next_count
-                next_c = next_c + 2
-                next_data = txt[next_t]
-                next_count = 1
-            endif
-            next_t = next_t + 1
+    while next_t < n do
+        if txt[next_t] == next_data then
+            next_count = next_count + 1
+        else
+            compr[next_c] = next_data
+            compr[next_c + 1] = next_count
+            next_c = next_c + 2
+            next_data = txt[next_t]
+            next_count = 1
         endif
-    endfor
+        next_t = next_t + 1
+    endwhile
 
 
     // write out the last one
@@ -36,30 +34,17 @@ def decompress(u32 m, u32[600] compr, u32[300] out) -> u32:
     u32 next_c = 0
     u32 next_t = 0
 
-    // Use state machine
-    u32 next_data = 0
-    u32 next_count = 0
-    u32 state = 0
-    for u32 counter in 0..300 do
-        if next_c < m then
-            if state == 0 then
-                next_data = compr[next_c]
-                next_count = compr[next_c + 1]
-                state = next_count > 0 ? 1 : 2
-            endif
-            if state == 1 then
-                out[next_t] = next_data
-                next_t = next_t + 1
-                next_count = next_count - 1
-                state = next_count > 0 ? 1 : 2
-            endif
-            if state == 2 then
-                next_c = next_c + 2
-                state = 0
-            endif
-        endif
-    endfor
-
+    while next_c < m do
+        u32 next_data = compr[next_c]
+        u32 next_count = compr[next_c + 1]
+        while next_count > 0 do
+            out[next_t] = next_data
+            next_t = next_t + 1
+            next_count = next_count - 1
+        endwhile
+        next_c = next_c + 2
+    endwhile
+    
 
     return next_t
 
@@ -87,10 +72,10 @@ def main(u32 x, u32 y, u32 n) -> u32:
     u32 p = decompress(m, compr, out)
 
     assert(n == p)
-    for u32 i in 0..300 do
-        if i < n then
-            assert(txt[i] == out[i])
-            i = i + 1
-        endif
-    endfor
+    u32 i = 0
+    while i < n do
+        assert(txt[i] == out[i])
+        i = i + 1
+    endwhile
 
+    return (txt[x] + compr[x] + out[x]) * y 

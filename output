@@ -106,3 +106,27 @@ Verifier               -        295.75             -        296.58        296.66
 
 --
 
+rle_codec - max_n 100
+                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler         1597.80         81.60       1449.00         68.60         69.00         68.60         69.40
+Preprocess             -        384.40             -        388.60        397.80        388.00        390.40
+Prover                 -       2807.07        645.00       2644.87       2551.70       2627.00       2126.17
+Verifier               -             -        131.00        173.14        169.62        168.89        163.42
+
+--
+
+rle_codec - max_n 200
+                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler         8103.20        133.00       1450.00        113.20        116.00        114.60        114.80
+Preprocess             -        488.20             -        491.40        497.00        493.00        497.00
+Prover                 -       7399.67        804.00       6826.43       6887.02       7078.99       5173.85
+Verifier               -             -        157.00        198.63        200.99        198.50        192.60
+
+--
+
+rle_codec - max_n 300
+                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler        17440.00        198.40             -        169.20        170.60        165.40        165.20
+Preprocess             -        527.20             -        538.40        535.20        537.80        534.00
+Prover                 -      22729.65             -      17548.17      17341.21      12434.41      12157.59
+Verifier               -             -             -        227.21        230.03        225.88        215.38

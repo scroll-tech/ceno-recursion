@@ -94,8 +94,8 @@ def parse_cobbl(b_name, jolt_result):
 
     f.close()
 
-BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align"]
-# BENCHMARK = ["dna_align"]
+BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec"]
+# BENCHMARK = ["rle_codec"]
 jolt_result = parse_jolt()
 for b in BENCHMARK:
     parse_cobbl(b, jolt_result)

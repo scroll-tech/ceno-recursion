@@ -1,7 +1,7 @@
 import os
 
 CONST_EXPAND = 3
-REPEAT = 5
+REPEAT = 1
 
 # Process A * B or A + B or A - B by reading A & B from consts
 def process_formula(consts, formula):

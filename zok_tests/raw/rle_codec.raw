@@ -139,5 +139,6 @@ def main(u32 x, u32 y, u32 n) -> u32:
         assert(txt[i] == out[i])
         i = i + 1
     endwhile
+    // END_SPLIT
 
     return (txt[x] + compr[x] + out[x]) * y 

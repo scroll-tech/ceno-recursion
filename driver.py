@@ -27,30 +27,6 @@ def install(features):
             set of features required
     """
 
-    def verify_path_empty(path) -> bool:
-        return not os.path.isdir(path) or (os.path.isdir(path) and not os.listdir(path))
-
-    for f in features:
-        if f == "aby":
-            if verify_path_empty(ABY_SOURCE):
-                subprocess.run(
-                    ["git", "clone", "https://github.com/edwjchen/ABY.git", ABY_SOURCE]
-                )
-                subprocess.run(["./scripts/build_aby.zsh"])
-        if f == "kahip":
-            if verify_path_empty(KAHIP_SOURCE):
-                subprocess.run(
-                    ["git", "clone", "https://github.com/KaHIP/KaHIP.git", KAHIP_SOURCE]
-                )
-                subprocess.run(["./scripts/build_kahip.zsh"])
-        if f == "kahypar":
-            if verify_path_empty(KAHYPAR_SOURCE):
-                subprocess.run(
-                    ["git", "clone", "--depth=1", "--recursive",
-                        "https://github.com/SebastianSchlag/kahypar.git", KAHYPAR_SOURCE]
-                )
-                subprocess.run(["./scripts/build_kahypar.zsh"])
-
     # install python requirements
     subprocess.run(["pip3", "install", "-r", "requirements.txt"])
 
@@ -68,8 +44,6 @@ def check(features):
     cmd = ["cargo", "check", "--tests", "--examples", "--benches", "--bins"]
     if features:
         cmd = cmd + ["--features"] + [",".join(features)]
-        if "ristretto255" in features:
-            cmd = cmd + ["--no-default-features"]
     log_run_check(cmd)
 
 
@@ -106,8 +80,6 @@ def build(features):
 
     if features:
         cmd = cmd + ["--features"] + [",".join(features)]
-        if "ristretto255" in features:
-            cmd = cmd + ["--no-default-features"]
 
     log_run_check(cmd)
 
@@ -116,7 +88,6 @@ def build(features):
             log_run_check(["./scripts/build_mpc_c_test.zsh"])
         if "smt" in features and "zok" in features:
             log_run_check(["./scripts/build_mpc_zokrates_test.zsh"])
-        log_run_check(["./scripts/build_aby.zsh"])
 
 
 def test(features, extra_args):
@@ -139,9 +110,6 @@ def test(features, extra_args):
     if features:
         test_cmd += ["--features"] + [",".join(features)]
         test_cmd_release += ["--features"] + [",".join(features)]
-        if "ristretto255" in features:
-            test_cmd += ["--no-default-features"]
-            test_cmd_release += ["--no-default-features"]
     if len(extra_args) > 0:
         test_cmd += [a for a in extra_args if a != "--"]
         test_cmd_release += [a for a in extra_args if a != "--"]
@@ -160,12 +128,13 @@ def test(features, extra_args):
         if "lp" in features:
             log_run_check(["./scripts/test_zok_to_ilp.zsh"])
         if "r1cs" in features:
-            if "ristretto255" in features:  # spartan field
+            if "spartan" in features:  # spartan field
                 log_run_check(["./scripts/spartan_zok_test.zsh"])
             else:  # bellman field
                 log_run_check(["./scripts/zokrates_test.zsh"])
                 if "poly" in features:
                     log_run_check(["./scripts/cp_test.zsh"])
+                    log_run_check(["./scripts/ram_test.zsh"])
         if "lp" in features and "r1cs" in features:
             log_run_check(["./scripts/test_zok_to_ilp_pf.zsh"])
 
@@ -192,8 +161,6 @@ def benchmark(features):
 
     if features:
         cmd = cmd + ["--features"] + [",".join(features)]
-        if "ristretto255" in features:
-            cmd = cmd + ["--no-default-features"]
     log_run_check(cmd)
 
 
@@ -216,8 +183,6 @@ def lint():
     cmd = ["cargo", "clippy", "--tests", "--examples", "--benches", "--bins"]
     if features:
         cmd = cmd + ["--features"] + [",".join(features)]
-        if "ristretto255" in features:
-            cmd = cmd + ["--no-default-features"]
     log_run_check(cmd)
 
 
@@ -225,8 +190,6 @@ def flamegraph(features, extra):
     cmd = ["cargo", "flamegraph"]
     if features:
         cmd = cmd + ["--features"] + [",".join(features)]
-        if "ristretto255" in features:
-            cmd = cmd + ["--no-default-features"]
     cmd += extra
     print("running:", " ".join(cmd))
     log_run_check(cmd)
@@ -267,7 +230,7 @@ def set_features(features):
         features = set()
 
     def verify_feature(f):
-        if f in cargo_features | {"ristretto255"}:
+        if f in cargo_features:
             return True
         return False
 
@@ -368,7 +331,6 @@ if __name__ == "__main__":
         verify_extra_implies_flamegraph_or_test(args)
 
         features = load_features()
-        set_env(features)
 
         if args.flamegraph:
             if len(args.extra) > 0 and args.extra[0] == "--":

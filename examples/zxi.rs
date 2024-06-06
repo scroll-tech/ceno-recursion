@@ -1,4 +1,5 @@
 use circ::front::zsharp::{Inputs, ZSharpFE};
+use circ::ir::term::text::parse_value_map;
 
 use circ::cfg::{
     clap::{self, Parser},
@@ -17,6 +18,10 @@ struct Options {
     /// Input file
     #[arg()]
     zsharp_path: PathBuf,
+
+    /// Scalar input values
+    #[arg()]
+    inputs_path: Option<PathBuf>,
 
     #[command(flatten)]
     /// CirC options

@@ -17,6 +17,12 @@ fn arr_val_to_tup(v: &Value) -> Value {
             }
             vec
         }),
+        Value::Tuple(vs) => Value::Tuple(
+            vs.iter()
+                .map(arr_val_to_tup)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        ),
         v => v.clone(),
     }
 }
@@ -29,7 +35,7 @@ impl RewritePass for Linearizer {
         rewritten_children: F,
     ) -> Option<Term> {
         match &orig.op() {
-            Op::Const(v @ Value::Array(..)) => Some(leaf_term(Op::Const(arr_val_to_tup(v)))),
+            Op::Const(v) => Some(leaf_term(Op::Const(arr_val_to_tup(v)))),
             Op::Var(name, Sort::Array(..)) => {
                 let precomp = extras::array_to_tuple(orig);
                 let new_name = format!("{name}.tup");
@@ -46,15 +52,19 @@ impl RewritePass for Linearizer {
                 let cs = rewritten_children();
                 let idx = &cs[1];
                 let tup = &cs[0];
-                if let Sort::Array(key_sort, _, size) = check(&orig.cs()[0]) {
-                    assert!(size > 0);
+                if let Sort::Array(key_sort, val_sort, sz) = check(&orig.cs()[0]) {
+                    assert!(sz > 0);
                     if idx.is_const() {
-                        let idx_usize = extras::as_uint_constant(idx).unwrap().to_usize().unwrap();
-                        Some(term![Op::Field(idx_usize); tup.clone()])
+                        Some(
+                            extras::as_uint_constant(idx)
+                                .and_then(|cidx| cidx.to_usize())
+                                .and_then(|u| (u < sz).then_some(term![Op::Field(u); tup.clone()]))
+                                .unwrap_or_else(|| val_sort.default_term()),
+                        )
                     } else {
-                        let mut fields = (0..size).map(|idx| term![Op::Field(idx); tup.clone()]);
+                        let mut fields = (0..sz).map(|idx| term![Op::Field(idx); tup.clone()]);
                         let first = fields.next().unwrap();
-                        Some(key_sort.elems_iter().take(size).skip(1).zip(fields).fold(first, |acc, (idx_c, field)| {
+                        Some(key_sort.elems_iter().take(sz).skip(1).zip(fields).fold(first, |acc, (idx_c, field)| {
                             term![Op::Ite; term![Op::Eq; idx.clone(), idx_c], field, acc]
                         }))
                     }
@@ -67,17 +77,54 @@ impl RewritePass for Linearizer {
                 let tup = &cs[0];
                 let idx = &cs[1];
                 let val = &cs[2];
-                if let Sort::Array(key_sort, _, size) = check(&orig.cs()[0]) {
-                    assert!(size > 0);
+                if let Sort::Array(key_sort, _, sz) = check(&orig.cs()[0]) {
+                    assert!(sz > 0);
                     if idx.is_const() {
-                        let idx_usize = extras::as_uint_constant(idx).unwrap().to_usize().unwrap();
-                        Some(term![Op::Update(idx_usize); tup.clone(), val.clone()])
+                        Some(
+                            extras::as_uint_constant(idx)
+                                .and_then(|cidx| cidx.to_usize())
+                                .and_then(|u| {
+                                    (u < sz)
+                                        .then_some(term![Op::Update(u); tup.clone(), val.clone()])
+                                })
+                                .unwrap_or_else(|| tup.clone()),
+                        )
                     } else {
                         let mut updates =
-                            (0..size).map(|idx| term![Op::Update(idx); tup.clone(), val.clone()]);
+                            (0..sz).map(|idx| term![Op::Update(idx); tup.clone(), val.clone()]);
                         let first = updates.next().unwrap();
-                        Some(key_sort.elems_iter().take(size).skip(1).zip(updates).fold(first, |acc, (idx_c, update)| {
+                        Some(key_sort.elems_iter().take(sz).skip(1).zip(updates).fold(first, |acc, (idx_c, update)| {
                         term![Op::Ite; term![Op::Eq; idx.clone(), idx_c], update, acc]
+                    }))
+                    }
+                } else {
+                    unreachable!()
+                }
+            }
+            Op::CStore => {
+                let cs = rewritten_children();
+                let tup = &cs[0];
+                let idx = &cs[1];
+                let val = &cs[2];
+                let cond = &cs[3];
+                if let Sort::Array(key_sort, _, sz) = check(&orig.cs()[0]) {
+                    assert!(sz > 0);
+                    if idx.is_const() {
+                        Some(
+                            extras::as_uint_constant(idx)
+                                .and_then(|cidx| cidx.to_usize())
+                                .and_then(|u| {
+                                    (u < sz)
+                                        .then_some(term![Op::Ite; cond.clone(), term![Op::Update(u); tup.clone(), val.clone()], tup.clone()])
+                                })
+                                .unwrap_or_else(|| tup.clone()),
+                        )
+                    } else {
+                        let mut updates =
+                            (0..sz).map(|idx| term![Op::Update(idx); tup.clone(), val.clone()]);
+                        let first = updates.next().unwrap();
+                        Some(key_sort.elems_iter().take(sz).skip(1).zip(updates).fold(first, |acc, (idx_c, update)| {
+                        term![Op::Ite; term![AND; term![Op::Eq; idx.clone(), idx_c], cond.clone()], update, acc]
                     }))
                     }
                 } else {

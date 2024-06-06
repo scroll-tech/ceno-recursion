@@ -15,7 +15,7 @@
 //!   * `I`: integer (arbitrary-precision)
 //!   * `X`: identifier
 //!     * regex: `[^()0-9#; \t\n\f][^(); \t\n\f#]*`
-//!   * Computation `C`: `(computation M P ARRAYS T)`
+//!   * Computation `C`: `(computation M P PERSISTENT_ARRAYS RAM_ARRAYS T)`
 //!     * Metadata `M`: `(metadata PARTIES INPUTS COMMITMENTS)`
 //!       * PARTIES is `(parties X1 .. Xn)`
 //!       * INPUTS is `(inputs INPUT1 .. INPUTn)`
@@ -28,11 +28,12 @@
 //!       * INPUTS is `((X1 S1) .. (Xn Sn))`
 //!       * OUTPUTS is `((X1 S1) .. (Xn Sn))`
 //!       * TUPLE_TERM is a tuple of the same arity as the output
-//!     * ARRAYS (optional): `(persistent_arrays ARRAY*)`:
+//!     * PERSISTENT_ARRAYS (optional): `(persistent_arrays ARRAY*)`:
 //!       * ARRAY is `(X S T)`
 //!         * X is the name of the inital state
 //!         * S is the size
 //!         * T is the state (final)
+//!     * RAM_ARRAYS (optional): `(ram_arrays T*)`:
 //!   * Sort `S`:
 //!     * `bool`
 //!     * `f32`
@@ -41,6 +42,7 @@
 //!     * `(mod I)`
 //!     * `(tuple S1 ... Sn)`
 //!     * `(array Sk Sv N)`
+//!     * `(map Sk Sv)`
 //!   * Value `V`:
 //!     * boolean: `true`, `false`
 //!     * integer: `I`
@@ -51,6 +53,7 @@
 //!     * array: `(#a Sk V N ((Vk1 Vv1) ... (Vkn Vvn)))`
 //!     * list: `(#l Sk (V1 ... Vn))`
 //!       * gives an array with default value sort, length n, and increasing keys for the values
+//!     * map: `(#m Sk Sv ((Vk1 Vv1) ... (Vkn Vvn)))`
 //!   * Term `T`:
 //!     * value: `V`
 //!     * let: `(let ((X1 T1) ... (Xn Tn)) T)`
@@ -170,6 +173,7 @@ enum CtrlOp {
     Declare,
     TupleValue,
     ArrayValue,
+    MapValue,
     ListValue,
     SetDefaultModulus,
 }
@@ -202,10 +206,7 @@ impl<'src> IrInterp<'src> {
 
     /// Takes bindings in order bound, and unbinds
     fn bind(&mut self, key: &'src [u8], value: Term) {
-        self.bindings
-            .entry(key)
-            .or_insert_with(Vec::new)
-            .push(value)
+        self.bindings.entry(key).or_default().push(value)
     }
 
     /// Takes bindings in order bound, and unbinds
@@ -224,6 +225,7 @@ impl<'src> IrInterp<'src> {
             Leaf(Ident, b"#t") => Err(CtrlOp::TupleValue),
             Leaf(Ident, b"#a") => Err(CtrlOp::ArrayValue),
             Leaf(Ident, b"#l") => Err(CtrlOp::ListValue),
+            Leaf(Ident, b"#m") => Err(CtrlOp::MapValue),
             Leaf(Ident, b"set_default_modulus") => Err(CtrlOp::SetDefaultModulus),
             Leaf(Ident, b"ite") => Ok(Op::Ite),
             Leaf(Ident, b"=") => Ok(Op::Eq),
@@ -283,6 +285,7 @@ impl<'src> IrInterp<'src> {
             Leaf(Ident, b"+") => Ok(Op::PfNaryOp(PfNaryOp::Add)),
             Leaf(Ident, b"*") => Ok(Op::PfNaryOp(PfNaryOp::Mul)),
             Leaf(Ident, b"pfrecip") => Ok(Op::PfUnOp(PfUnOp::Recip)),
+            Leaf(Ident, b"/") => Ok(Op::PfDiv),
             Leaf(Ident, b"-") => Ok(Op::PfUnOp(PfUnOp::Neg)),
             Leaf(Ident, b"<") => Ok(INT_LT),
             Leaf(Ident, b"<=") => Ok(INT_LE),
@@ -358,6 +361,9 @@ impl<'src> IrInterp<'src> {
                         Box::new(self.sort(v)),
                         self.usize(s),
                     ),
+                    [Leaf(Ident, b"map"), k, v] => {
+                        Sort::Map(Box::new(self.sort(k)), Box::new(self.sort(v)))
+                    }
                     [Leaf(Ident, b"tuple"), ..] => {
                         Sort::Tuple(ls[1..].iter().map(|li| self.sort(li)).collect())
                     }
@@ -531,6 +537,15 @@ impl<'src> IrInterp<'src> {
                             Box::new(default),
                             vals.into_iter().collect(),
                             size,
+                        ))))
+                    }
+                    Err(CtrlOp::MapValue) => {
+                        assert_eq!(tts.len(), 4);
+                        let key_sort = self.sort(&tts[1]);
+                        let value_sort = self.sort(&tts[2]);
+                        let vals = self.value_alist(&tts[3]);
+                        leaf_term(Op::Const(Value::Map(map::Map::new(
+                            key_sort, value_sort, vals,
                         ))))
                     }
                     Err(CtrlOp::ListValue) => {
@@ -726,10 +741,10 @@ impl<'src> IrInterp<'src> {
         let (metadata, input_names) = self.metadata(&tts[0]);
         let precomputes = self.precompute(&tts[1]);
         let mut persistent_arrays = Vec::new();
-        let mut skip_one = false;
-        if let List(tts_inner) = &tts[2] {
+        let mut ram_arrays = Vec::new();
+        let mut num_skipped = 0;
+        while let List(tts_inner) = &tts[2 + num_skipped] {
             if tts_inner[0] == Leaf(Token::Ident, b"persistent_arrays") {
-                skip_one = true;
                 for tti in tts_inner.iter().skip(1) {
                     let ttis = self.unwrap_list(tti, "persistent_arrays");
                     let id = self.ident_string(&ttis[0]);
@@ -737,12 +752,18 @@ impl<'src> IrInterp<'src> {
                     let term = self.term(&ttis[2]);
                     persistent_arrays.push((id, term));
                 }
+                num_skipped += 1;
+            } else if tts_inner[0] == Leaf(Token::Ident, b"ram_arrays") {
+                for tti in tts_inner.iter().skip(1) {
+                    let term = self.term(tti);
+                    ram_arrays.push(term);
+                }
+                num_skipped += 1;
+            } else {
+                break;
             }
         }
-        let mut iter = tts.iter().skip(2);
-        if skip_one {
-            iter.next();
-        }
+        let iter = tts.iter().skip(2 + num_skipped);
         let outputs = iter.map(|tti| self.term(tti)).collect();
         self.unbind(input_names);
         Computation {
@@ -750,6 +771,7 @@ impl<'src> IrInterp<'src> {
             metadata,
             precomputes,
             persistent_arrays,
+            ram_arrays: ram_arrays.into_iter().collect(),
         }
     }
 
@@ -906,6 +928,13 @@ pub fn serialize_computation(c: &Computation) -> String {
         }
         writeln!(&mut out, "\n)").unwrap();
     }
+    if !c.ram_arrays.is_empty() {
+        writeln!(&mut out, "(ram_arrays").unwrap();
+        for term in &c.ram_arrays {
+            writeln!(&mut out, "  {}", serialize_term(term)).unwrap();
+        }
+        writeln!(&mut out, "\n)").unwrap();
+    }
     for o in &c.outputs {
         writeln!(&mut out, "\n  {}", serialize_term(o)).unwrap();
     }
@@ -1009,6 +1038,22 @@ mod test {
                  (B (store A a b))
          ) (xor (select B a)
                 (select (#a (bv 4) false 4 ((#b0000 true))) #b0000))))",
+        );
+        let s = serialize_term(&t);
+        let t2 = parse_term(s.as_bytes());
+        assert_eq!(t, t2);
+    }
+
+    #[test]
+    fn map_roundtrip() {
+        let t = parse_term(
+            b"
+        (declare (
+         (a bool)
+         (b bool)
+         (A (map bool bool))
+         )
+         (#m bool bool ((true false))))",
         );
         let s = serialize_term(&t);
         let t2 = parse_term(s.as_bytes());
@@ -1224,6 +1269,7 @@ mod test {
                     (tuple (not (and c d)))
                 )
                 (persistent_arrays (AA 2 (#a (bv 4) false 4 ((#b0000 true)))))
+                (ram_arrays (#a (bv 4) false 4 ((#b0001 true))))
                 (let (
                         (B ((update 1) A b))
                 ) (xor ((field 1) B)
@@ -1305,6 +1351,22 @@ mod test {
          (pairs (array (mod 17) (tuple (mod 17) bool) 5))
         )
          (uniq_deri_gcd pairs))",
+        );
+        let s = serialize_term(&t);
+        println!("{s}");
+        let t2 = parse_term(s.as_bytes());
+        assert_eq!(t, t2);
+    }
+
+    #[test]
+    fn haboeck_roundtrip() {
+        let t = parse_term(
+            b"
+        (declare (
+         (haystack (array (mod 17) (mod 17) 5))
+         (needles (array (mod 17) (mod 17) 8))
+        )
+         (haboeck haystack needles))",
         );
         let s = serialize_term(&t);
         println!("{s}");

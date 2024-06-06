@@ -102,6 +102,10 @@ impl Ty {
             _ => panic!("Not an array type: {:?}", self),
         }
     }
+    /// Is this an array?
+    pub fn is_array(&self) -> bool {
+        matches!(self, Self::Array(_, _) | Self::MutArray(_))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -912,8 +916,22 @@ pub fn bit_array_le(a: T, b: T, n: usize) -> Result<T, String> {
     ))
 }
 
-pub fn gen_challenge(challenge_name: &str) -> Result<Term, String> {
-    Ok(term![Op::PfChallenge(challenge_name.to_string(), default_field())])
+pub fn sample_challenge(a: T, number: usize) -> Result<T, String> {
+    if let Ty::Array(_, ta) = &a.ty {
+        if let Ty::Field = &**ta {
+            Ok(T::new(
+                Ty::Field,
+                term(
+                    Op::PfChallenge(format!("zx_chall_{number}"), default_field()),
+                    a.unwrap_array_ir()?,
+                ),
+            ))
+        } else {
+            Err(format!("sample_challenge called on non-field array {a}"))
+        }
+    } else {
+        Err(format!("sample_challenge called on non-array {a}"))
+    }
 }
 
 pub struct ZSharp {}

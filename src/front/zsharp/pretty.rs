@@ -52,6 +52,7 @@ pub fn pretty_stmt(indent: usize, s: &Statement) {
         Statement::WhileLoop(w) => { pretty_while_stmt(indent, w); }
         Statement::Conditional(c) => { pretty_cond_stmt(indent, c); }
         Statement::CondStore(_) => { panic!("Conditional store statements not supported.") }
+        Statement::Witness(_) => { panic!("Witness statements unsupported.") }
     }
 }
 

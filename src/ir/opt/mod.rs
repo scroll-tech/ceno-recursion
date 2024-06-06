@@ -48,8 +48,12 @@ pub enum Opt {
     PersistentRam,
     /// Eliminate volatile RAM
     VolatileRam,
+    /// Eliminate set membership args
+    SetMembership,
     /// Replace challenge terms with random variables
     SkolemizeChallenges,
+    /// Replace witness terms with variables
+    DeskolemizeWitnesses,
 }
 
 /// Run optimizations on `cs`, in this order, returning the new constraint system.
@@ -72,13 +76,15 @@ pub fn opt<I: IntoIterator<Item = Opt>>(mut cs: Computations, optimizations: I) 
                 }
                 Opt::ConstantFold(ignore) => {
                     let mut cache = TermCache::with_capacity(TERM_CACHE_LIMIT);
+                    cache.resize(std::usize::MAX);
                     for a in &mut c.outputs {
-                        // allow unbounded size during a single fold_cache call
-                        cache.resize(std::usize::MAX);
                         *a = cfold::fold_cache(a, &mut cache, &ignore.clone());
-                        // then shrink back down to size between calls
-                        cache.resize(TERM_CACHE_LIMIT);
                     }
+                    c.ram_arrays = c
+                        .ram_arrays
+                        .iter()
+                        .map(|a| cfold::fold_cache(a, &mut cache, &ignore.clone()))
+                        .collect();
                 }
                 Opt::Sha => {
                     for a in &mut c.outputs {
@@ -127,12 +133,18 @@ pub fn opt<I: IntoIterator<Item = Opt>>(mut cs: Computations, optimizations: I) 
                     let cfg = mem::ram::AccessCfg::from_cfg();
                     mem::ram::persistent::apply(c, &cfg);
                 }
+                Opt::SetMembership => {
+                    mem::ram::set::apply(c);
+                }
                 Opt::VolatileRam => {
                     let cfg = mem::ram::AccessCfg::from_cfg();
                     mem::ram::volatile::apply(c, &cfg);
                 }
+                Opt::DeskolemizeWitnesses => {
+                    chall::deskolemize_witnesses(c);
+                }
                 Opt::SkolemizeChallenges => {
-                    chall::skolemize_challenges(c);
+                    chall::deskolemize_challenges(c);
                 }
             }
             debug!("After {:?}: {} outputs", i, c.outputs.len());
@@ -140,7 +152,12 @@ pub fn opt<I: IntoIterator<Item = Opt>>(mut cs: Computations, optimizations: I) 
             //debug!("After {:?}: {}", i, Letified(cs.outputs[0].clone()));
             debug!("After {:?}: {} terms", i, c.terms());
         }
+        if crate::cfg::cfg().ir.frequent_gc {
+            garbage_collect();
+        }
     }
-    garbage_collect();
+    if !crate::cfg::cfg().ir.frequent_gc {
+        garbage_collect();
+    }
     cs
 }

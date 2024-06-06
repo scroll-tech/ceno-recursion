@@ -182,6 +182,14 @@ pub struct IrOpt {
         default_value = "wrap"
     )]
     pub field_to_bv: FieldToBv,
+    /// Garbage collection after each optimization pass.
+    #[arg(
+        long = "ir-frequent-gc",
+        env = "IR_FREQUENT_GC",
+        action = ArgAction::Set,
+        default_value = "false"
+    )]
+    pub frequent_gc: bool,
 }
 
 #[derive(ValueEnum, Debug, PartialEq, Eq, Clone, Copy)]
@@ -227,6 +235,22 @@ pub struct RamOpt {
         default_value = "uniqueness"
     )]
     pub index: IndexStrategy,
+    /// How to argue that indices are only repeated in blocks.
+    #[arg(
+        long = "ram-permutation",
+        env = "RAM_PERMUTATION",
+        value_enum,
+        default_value = "msh"
+    )]
+    pub permutation: PermutationStrategy,
+    /// ROM approach
+    #[arg(
+        long = "ram-rom",
+        env = "RAM_ROM",
+        value_enum,
+        default_value = "haboeck"
+    )]
+    pub rom: RomStrategy,
 }
 
 #[derive(ValueEnum, Debug, PartialEq, Eq, Clone, Copy)]
@@ -256,6 +280,36 @@ pub enum IndexStrategy {
 impl Default for IndexStrategy {
     fn default() -> Self {
         IndexStrategy::Uniqueness
+    }
+}
+
+#[derive(ValueEnum, Debug, PartialEq, Eq, Clone, Copy)]
+/// How to argue that accesses have been permuted
+pub enum PermutationStrategy {
+    /// Use the AS-Waksman network
+    Waksman,
+    /// Use the (keyed) multi-set hash
+    Msh,
+}
+
+impl Default for PermutationStrategy {
+    fn default() -> Self {
+        PermutationStrategy::Msh
+    }
+}
+
+#[derive(ValueEnum, Debug, PartialEq, Eq, Clone, Copy)]
+/// How to argue that accesses have been permuted
+pub enum RomStrategy {
+    /// Use Haboeck's argument
+    Haboeck,
+    /// Use permute-and-check
+    Permute,
+}
+
+impl Default for RomStrategy {
+    fn default() -> Self {
+        RomStrategy::Haboeck
     }
 }
 

@@ -53,8 +53,7 @@ impl FrontEnd for C {
         let mut cs = Computations::new();
         let main_comp = g.circify().consume().borrow().clone();
         cs.comps.insert("main".to_string(), main_comp);
-        while !g.function_queue.is_empty() {
-            let call_term = g.function_queue.pop().unwrap();
+        while let Some(call_term) = g.function_queue.pop() {
             if let Op::Call(name, arg_sorts, rets) = call_term.op() {
                 g.fn_call(name, arg_sorts, rets);
                 let comp = g.circify().consume().borrow().clone();
@@ -1226,7 +1225,7 @@ impl CGen {
     }
 
     /// Returns whether this was a builtin, and thus has been handled.
-    fn maybe_handle_builtins(&mut self, name: &String, args: &Vec<CTerm>) -> Option<CTerm> {
+    fn maybe_handle_builtins(&mut self, name: &String, args: &[CTerm]) -> Option<CTerm> {
         if self.sv_functions && (name == "__VERIFIER_assert" || name == "__VERIFIER_assume") {
             assert!(args.len() == 1);
             let bool_arg = cast_to_bool(args[0].clone());
@@ -1242,7 +1241,7 @@ impl CGen {
         }
     }
 
-    fn fn_call(&mut self, name: &String, arg_sorts: &Vec<Sort>, rets: &Sort) {
+    fn fn_call(&mut self, name: &String, arg_sorts: &[Sort], rets: &Sort) {
         debug!("Call: {}", name);
 
         // Get function types

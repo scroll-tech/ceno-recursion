@@ -23,7 +23,6 @@ fn main() {
 ### Help Messages
 ```console
 $ parser --help
-? 0
 Options that configure CirC
 
 Usage: parser [OPTIONS]
@@ -86,6 +85,13 @@ Options:
           - wrap:  x % 2^b
           - panic: a panic
 
+      --ir-frequent-gc <FREQUENT_GC>
+          Garbage collection after each optimization pass
+          
+          [env: IR_FREQUENT_GC=]
+          [default: false]
+          [possible values: true, false]
+
       --ram <ENABLED>
           Whether to use advanced RAM techniques
           
@@ -112,6 +118,26 @@ Options:
           Possible values:
           - sort:       Check that the blocks are sorted
           - uniqueness: Use the GCD-derivative uniqueness argument
+
+      --ram-permutation <PERMUTATION>
+          How to argue that indices are only repeated in blocks
+          
+          [env: RAM_PERMUTATION=]
+          [default: msh]
+
+          Possible values:
+          - waksman: Use the AS-Waksman network
+          - msh:     Use the (keyed) multi-set hash
+
+      --ram-rom <ROM>
+          ROM approach
+          
+          [env: RAM_ROM=]
+          [default: haboeck]
+
+          Possible values:
+          - haboeck: Use Haboeck's argument
+          - permute: Use permute-and-check
 
       --fmt-use-default-field <USE_DEFAULT_FIELD>
           Which field to use
@@ -160,12 +186,11 @@ Options:
           [env: C_ASSERT_NO_UB=]
 
   -h, --help
-          Print help information (use `-h` for a summary)
+          Print help (see a summary with '-h')
 
 ```
 ```console
 $ parser -h
-? 0
 Options that configure CirC
 
 Usage: parser [OPTIONS]
@@ -185,12 +210,18 @@ Options:
           Which modulus to use (overrides [FieldOpt::builtin]) [env: FIELD_CUSTOM_MODULUS=] [default: ]
       --ir-field-to-bv <FIELD_TO_BV>
           Which field to use [env: IR_FIELD_TO_BV=] [default: wrap] [possible values: wrap, panic]
+      --ir-frequent-gc <FREQUENT_GC>
+          Garbage collection after each optimization pass [env: IR_FREQUENT_GC=] [default: false] [possible values: true, false]
       --ram <ENABLED>
           Whether to use advanced RAM techniques [env: RAM=] [default: false] [possible values: true, false]
       --ram-range <RANGE>
           How to argue that values are in a range [env: RAM_RANGE=] [default: sort] [possible values: bit-split, sort]
       --ram-index <INDEX>
           How to argue that indices are only repeated in blocks [env: RAM_INDEX=] [default: uniqueness] [possible values: sort, uniqueness]
+      --ram-permutation <PERMUTATION>
+          How to argue that indices are only repeated in blocks [env: RAM_PERMUTATION=] [default: msh] [possible values: waksman, msh]
+      --ram-rom <ROM>
+          ROM approach [env: RAM_ROM=] [default: haboeck] [possible values: haboeck, permute]
       --fmt-use-default-field <USE_DEFAULT_FIELD>
           Which field to use [env: FMT_USE_DEFAULT_FIELD=] [default: true] [possible values: true, false]
       --fmt-hide-field <HIDE_FIELD>
@@ -206,14 +237,13 @@ Options:
       --c-assert-no-ub
           Assert no undefined behavior [env: C_ASSERT_NO_UB=]
   -h, --help
-          Print help information (use `--help` for more detail)
+          Print help (see more with '--help')
 
 ```
 
 ### Defaults
 ```console
 $ parser
-? 0
 BinaryOpt {
     circ: CircOpt {
         r1cs: R1csOpt {
@@ -228,11 +258,14 @@ BinaryOpt {
         },
         ir: IrOpt {
             field_to_bv: Wrap,
+            frequent_gc: false,
         },
         ram: RamOpt {
             enabled: false,
             range: Sort,
             index: Uniqueness,
+            permutation: Msh,
+            rom: Haboeck,
         },
         fmt: FmtOpt {
             use_default_field: true,
@@ -257,7 +290,6 @@ BinaryOpt {
 ### R1CS Options
 ```console
 $ parser --r1cs-verified true
-? 0
 BinaryOpt {
     circ: CircOpt {
         r1cs: R1csOpt {
@@ -272,11 +304,14 @@ BinaryOpt {
         },
         ir: IrOpt {
             field_to_bv: Wrap,
+            frequent_gc: false,
         },
         ram: RamOpt {
             enabled: false,
             range: Sort,
             index: Uniqueness,
+            permutation: Msh,
+            rom: Haboeck,
         },
         fmt: FmtOpt {
             use_default_field: true,
@@ -299,7 +334,6 @@ BinaryOpt {
 ```
 ```console
 $ parser --r1cs-verified false
-? 0
 BinaryOpt {
     circ: CircOpt {
         r1cs: R1csOpt {
@@ -314,11 +348,14 @@ BinaryOpt {
         },
         ir: IrOpt {
             field_to_bv: Wrap,
+            frequent_gc: false,
         },
         ram: RamOpt {
             enabled: false,
             range: Sort,
             index: Uniqueness,
+            permutation: Msh,
+            rom: Haboeck,
         },
         fmt: FmtOpt {
             use_default_field: true,
@@ -341,7 +378,6 @@ BinaryOpt {
 ```
 ```console
 $ parser --r1cs-div-by-zero non-det
-? 0
 BinaryOpt {
     circ: CircOpt {
         r1cs: R1csOpt {
@@ -356,11 +392,14 @@ BinaryOpt {
         },
         ir: IrOpt {
             field_to_bv: Wrap,
+            frequent_gc: false,
         },
         ram: RamOpt {
             enabled: false,
             range: Sort,
             index: Uniqueness,
+            permutation: Msh,
+            rom: Haboeck,
         },
         fmt: FmtOpt {
             use_default_field: true,
@@ -383,7 +422,6 @@ BinaryOpt {
 ```
 ```console
 $ parser --r1cs-div-by-zero incomplete
-? 0
 BinaryOpt {
     circ: CircOpt {
         r1cs: R1csOpt {
@@ -398,11 +436,14 @@ BinaryOpt {
         },
         ir: IrOpt {
             field_to_bv: Wrap,
+            frequent_gc: false,
         },
         ram: RamOpt {
             enabled: false,
             range: Sort,
             index: Uniqueness,
+            permutation: Msh,
+            rom: Haboeck,
         },
         fmt: FmtOpt {
             use_default_field: true,
@@ -425,7 +466,6 @@ BinaryOpt {
 ```
 ```console
 $ parser --r1cs-div-by-zero zero
-? 0
 BinaryOpt {
     circ: CircOpt {
         r1cs: R1csOpt {
@@ -440,11 +480,14 @@ BinaryOpt {
         },
         ir: IrOpt {
             field_to_bv: Wrap,
+            frequent_gc: false,
         },
         ram: RamOpt {
             enabled: false,
             range: Sort,
             index: Uniqueness,
+            permutation: Msh,
+            rom: Haboeck,
         },
         fmt: FmtOpt {
             use_default_field: true,
@@ -467,7 +510,6 @@ BinaryOpt {
 ```
 ```console
 $ R1CS_DIV_BY_ZERO=non-det parser --r1cs-lc-elim-thresh 11
-? 0
 BinaryOpt {
     circ: CircOpt {
         r1cs: R1csOpt {
@@ -482,11 +524,14 @@ BinaryOpt {
         },
         ir: IrOpt {
             field_to_bv: Wrap,
+            frequent_gc: false,
         },
         ram: RamOpt {
             enabled: false,
             range: Sort,
             index: Uniqueness,
+            permutation: Msh,
+            rom: Haboeck,
         },
         fmt: FmtOpt {
             use_default_field: true,
@@ -509,7 +554,6 @@ BinaryOpt {
 ```
 ```console
 $ R1CS_VERIFIED=true R1CS_LC_ELIM_THRESH=10 parser
-? 0
 BinaryOpt {
     circ: CircOpt {
         r1cs: R1csOpt {
@@ -524,11 +568,14 @@ BinaryOpt {
         },
         ir: IrOpt {
             field_to_bv: Wrap,
+            frequent_gc: false,
         },
         ram: RamOpt {
             enabled: false,
             range: Sort,
             index: Uniqueness,
+            permutation: Msh,
+            rom: Haboeck,
         },
         fmt: FmtOpt {
             use_default_field: true,
@@ -554,7 +601,6 @@ BinaryOpt {
 
 ```console
 $ FIELD_CUSTOM_MODULUS=7 parser --field-builtin bn254
-? 0
 BinaryOpt {
     circ: CircOpt {
         r1cs: R1csOpt {
@@ -569,11 +615,14 @@ BinaryOpt {
         },
         ir: IrOpt {
             field_to_bv: Wrap,
+            frequent_gc: false,
         },
         ram: RamOpt {
             enabled: false,
             range: Sort,
             index: Uniqueness,
+            permutation: Msh,
+            rom: Haboeck,
         },
         fmt: FmtOpt {
             use_default_field: true,
@@ -597,7 +646,6 @@ BinaryOpt {
 
 ```console
 $ FIELD_BUILTIN=bn254 parser --field-custom-modulus 7
-? 0
 BinaryOpt {
     circ: CircOpt {
         r1cs: R1csOpt {
@@ -612,11 +660,14 @@ BinaryOpt {
         },
         ir: IrOpt {
             field_to_bv: Wrap,
+            frequent_gc: false,
         },
         ram: RamOpt {
             enabled: false,
             range: Sort,
             index: Uniqueness,
+            permutation: Msh,
+            rom: Haboeck,
         },
         fmt: FmtOpt {
             use_default_field: true,
@@ -642,7 +693,6 @@ BinaryOpt {
 
 ```console
 $ ZSHARP_ISOLATE_ASSERTS=true parser
-? 0
 BinaryOpt {
     circ: CircOpt {
         r1cs: R1csOpt {
@@ -657,11 +707,14 @@ BinaryOpt {
         },
         ir: IrOpt {
             field_to_bv: Wrap,
+            frequent_gc: false,
         },
         ram: RamOpt {
             enabled: false,
             range: Sort,
             index: Uniqueness,
+            permutation: Msh,
+            rom: Haboeck,
         },
         fmt: FmtOpt {
             use_default_field: true,
@@ -685,7 +738,6 @@ BinaryOpt {
 
 ```console
 $ parser --zsharp-isolate-asserts true
-? 0
 BinaryOpt {
     circ: CircOpt {
         r1cs: R1csOpt {
@@ -700,11 +752,14 @@ BinaryOpt {
         },
         ir: IrOpt {
             field_to_bv: Wrap,
+            frequent_gc: false,
         },
         ram: RamOpt {
             enabled: false,
             range: Sort,
             index: Uniqueness,
+            permutation: Msh,
+            rom: Haboeck,
         },
         fmt: FmtOpt {
             use_default_field: true,
@@ -730,7 +785,6 @@ BinaryOpt {
 
 ```console
 $ DATALOG_LINT_PRIM_REC=true parser --datalog-rec-limit 10
-? 0
 BinaryOpt {
     circ: CircOpt {
         r1cs: R1csOpt {
@@ -745,11 +799,14 @@ BinaryOpt {
         },
         ir: IrOpt {
             field_to_bv: Wrap,
+            frequent_gc: false,
         },
         ram: RamOpt {
             enabled: false,
             range: Sort,
             index: Uniqueness,
+            permutation: Msh,
+            rom: Haboeck,
         },
         fmt: FmtOpt {
             use_default_field: true,
@@ -773,7 +830,6 @@ BinaryOpt {
 
 ```console
 $ DATALOG_REC_LIMIT=15 parser --datalog-lint-prim-rec true
-? 0
 BinaryOpt {
     circ: CircOpt {
         r1cs: R1csOpt {
@@ -788,11 +844,14 @@ BinaryOpt {
         },
         ir: IrOpt {
             field_to_bv: Wrap,
+            frequent_gc: false,
         },
         ram: RamOpt {
             enabled: false,
             range: Sort,
             index: Uniqueness,
+            permutation: Msh,
+            rom: Haboeck,
         },
         fmt: FmtOpt {
             use_default_field: true,

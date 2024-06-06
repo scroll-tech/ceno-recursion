@@ -149,6 +149,7 @@ fn rp_replacement_stmt(bc: BlockContent, val_map: HashMap<usize, usize>) -> Opti
                 if let Some(new_bl) = val_map.get(&tmp_bl) {
                     let new_rp_stmt = Statement::Definition(DefinitionStatement {
                         lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                            array_metadata: None,
                             ty: Type::Basic(BasicType::Field(FieldType {
                                 span: Span::new("", 0, 0).unwrap()
                             })),
@@ -429,6 +430,7 @@ fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
         Statement::Iteration(_) => { panic!("Blocks should not contain iteration statements.") }
         Statement::WhileLoop(_) => { panic!("Blocks should not contain while loop statements.") }
         Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
+        Statement::Witness(_) => { panic!("Witness statements unsupported.") }
     }
 }
 
@@ -679,6 +681,7 @@ fn var_to_reg_stmt<'ast>(
                         let new_id_expr: IdentifierExpression;
                         (new_id_expr, reg_map) = var_to_reg_id_expr(&tid.identifier, reg_map);
                         new_lhs.push(TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier{
+                            array_metadata: None,
                             ty: tid.ty.clone(),
                             identifier: new_id_expr,
                             span: tid.span
@@ -722,6 +725,7 @@ fn var_to_reg_stmt<'ast>(
             (Statement::Definition(new_stmt), reg_map)
         }
         Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
+        Statement::Witness(_) => { panic!("Witness statements unsupported.") }
     }
 }
 
@@ -905,6 +909,7 @@ fn tydef_to_assignee_stmt<'ast, const IN_BRANCH: bool>(
             (s, gen_set, gen_map_branch)
         }
         Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
+        Statement::Witness(_) => { panic!("Witness statements unsupported.") }
     }
 }
 
@@ -1067,6 +1072,7 @@ fn vtr_inst<'ast>(
                 // Declare the array as a pointer (field), set to %AS
                 let pointer_init_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        array_metadata: None,
                         ty: Type::Basic(BasicType::Field(FieldType {
                             span: Span::new("", 0, 0).unwrap()
                         })),
@@ -2372,6 +2378,7 @@ impl<'ast> ZGen<'ast> {
         // %BP = %SP
         let bp_update_stmt = Statement::Definition(DefinitionStatement {
             lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                array_metadata: None,
                 ty: Type::Basic(BasicType::Field(FieldType {
                     span: Span::new("", 0, 0).unwrap()
                 })),
@@ -2990,6 +2997,7 @@ impl<'ast> ZGen<'ast> {
                 // For each input, assign a witness to its value
                 let witness_assign_stmt = DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        array_metadata: None,
                         ty: ty_to_type(&ty.clone().unwrap()).unwrap(),
                         identifier: IdentifierExpression {
                             value: new_witness_name,
@@ -3048,6 +3056,7 @@ impl<'ast> ZGen<'ast> {
                     // For each output, assign it to the value of the corresponding witness
                     let output_assign_stmt = DefinitionStatement {
                         lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                            array_metadata: None,
                             ty: ty_to_type(&ty.clone().unwrap()).unwrap(),
                             identifier: IdentifierExpression {
                                 value: new_output_name,
@@ -3105,6 +3114,7 @@ impl<'ast> ZGen<'ast> {
             } else {
                 let output_block_assign_stmt = DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        array_metadata: None,
                         ty: Type::Basic(BasicType::Field(FieldType {
                             span: Span::new("", 0, 0).unwrap()
                         })),

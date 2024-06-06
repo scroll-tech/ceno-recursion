@@ -110,6 +110,7 @@ pub fn as_uint_constant(t: &Term) -> Option<Integer> {
     match &t.op() {
         Op::Const(Value::BitVector(bv)) => Some(bv.uint().clone()),
         Op::Const(Value::Field(f)) => Some(f.i()),
+        Op::Const(Value::Bool(b)) => Some((*b).into()),
         _ => None,
     }
 }
@@ -228,5 +229,20 @@ impl<'a, F: Fn(&Term) -> bool + 'a> std::iter::Iterator for PostOrderSkipIter<'a
             self.visited.insert(t.clone());
             t
         })
+    }
+}
+
+/// Add every AND-descendent of `fact` that satisfies `op_predicate` to `assertions`.
+pub fn collect_asserted_ops(
+    fact: &Term,
+    op_predicate: &impl Fn(&Op) -> bool,
+    assertions: &mut TermSet,
+) {
+    if op_predicate(fact.op()) {
+        assertions.insert(fact.clone());
+    } else if fact.op() == &AND {
+        for c in fact.cs() {
+            collect_asserted_ops(c, op_predicate, assertions);
+        }
     }
 }

@@ -709,6 +709,7 @@ impl<'ast> ZGen<'ast> {
                 }
             }
             Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
+            Statement::Witness(_) => { panic!("Witness statements unsupported.") }
         };
         Ok(())
     }

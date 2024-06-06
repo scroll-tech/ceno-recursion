@@ -112,12 +112,6 @@ struct ScopeIdx {
     lex: usize,
 }
 
-#[derive(Hash, PartialEq, Eq)]
-struct VerVar {
-    name: VarName,
-    ver: Version,
-}
-
 #[derive(Debug)]
 struct LexEntry<Ty> {
     ver: Version,

@@ -4,6 +4,7 @@ use circ_fields::{FieldT, FieldV};
 use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use log::{debug, trace};
 use paste::paste;
+use rayon::prelude::*;
 use rug::Integer;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -371,6 +372,37 @@ impl R1cs {
         matches!(var.ty(), VarType::FinalWit)
     }
 
+    /// Can this variable be eliminated within this constraint?
+    ///
+    /// A witness variable can be eliminated iff it is in the *last* round of its constraint.
+    /// We only approximate this.
+    /// We elim if:
+    /// 1) this is a final wit or
+    /// 2) this is a wit with only other wits and insts and it is the last wit
+    ///
+    /// This is an approximation because we comparse witness numbers in (2) instead of witness
+    /// rounds. So, we under-approximate the set of eliminatable variables.
+    pub fn can_eliminate_in(&self, var: Var, constraint: &Lc) -> bool {
+        match var.ty() {
+            VarType::FinalWit => true,
+            VarType::Inst | VarType::Chall | VarType::CWit => false,
+            VarType::RoundWit => {
+                for v in constraint.monomials.keys() {
+                    match v.ty() {
+                        VarType::Inst | VarType::CWit => {}
+                        VarType::Chall | VarType::FinalWit => return false,
+                        VarType::RoundWit => {
+                            if v.number() > var.number() {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                true
+            }
+        }
+    }
+
     /// Get a nice string represenation of the tuple.
     pub fn format_qeq(&self, (a, b, c): &(Lc, Lc, Lc)) -> String {
         format!(
@@ -398,6 +430,15 @@ impl R1csFinal {
         let bv = self.eval(b, values);
         let cv = self.eval(c, values);
         if (av.clone() * &bv) != cv {
+            let mut vars: HashSet<Var> = Default::default();
+            vars.extend(a.monomials.keys().copied());
+            vars.extend(b.monomials.keys().copied());
+            vars.extend(c.monomials.keys().copied());
+            for (k, v) in values {
+                if vars.contains(k) {
+                    eprintln!("  {} -> {}", self.names.get(k).unwrap(), v);
+                }
+            }
             panic!(
                 "Error! Bad constraint:\n    {} (value {})\n  * {} (value {})\n  = {} (value {})",
                 self.format_lc(a),
@@ -430,7 +471,7 @@ impl R1csFinal {
 
         s.push_str(&format_i(&a.constant));
         for (idx, coeff) in &a.monomials {
-            s.extend(format!(" {} {}", self.names.get(idx).unwrap(), format_i(coeff),).chars());
+            s.extend(format!(" {} {}", format_i(coeff), self.names.get(idx).unwrap()).chars());
         }
         s
     }
@@ -449,15 +490,15 @@ impl R1csFinal {
 
     /// Check all assertions
     fn check_all(&self, values: &HashMap<Var, FieldV>) {
-        for (a, b, c) in &self.constraints {
-            self.check(a, b, c, values)
-        }
+        self.constraints
+            .par_iter()
+            .for_each(|(a, b, c)| self.check(a, b, c, values));
     }
 }
 
 impl ProverData {
-    /// Check all assertions. Puts in 1 for challenges.
-    pub fn check_all(&self, values: &HashMap<String, Value>) {
+    /// Compute an R1CS witness (setting any challenges to 1s)
+    pub fn extend_r1cs_witness(&self, values: &HashMap<String, Value>) -> HashMap<Var, FieldV> {
         // we need to evaluate all R1CS variables
         let mut var_values: HashMap<Var, FieldV> = Default::default();
         let mut eval = wit_comp::StagedWitCompEvaluator::new(&self.precompute);
@@ -472,6 +513,14 @@ impl ProverData {
             // do a round of evaluation
             let value_vec = eval.eval_stage(std::mem::take(&mut inputs));
             for value in value_vec {
+                trace!(
+                    "var {} : {}",
+                    self.r1cs
+                        .names
+                        .get(&self.r1cs.vars[var_values.len()])
+                        .unwrap(),
+                    value.as_pf()
+                );
                 var_values.insert(self.r1cs.vars[var_values.len()], value.as_pf().clone());
             }
             // fill the challenges with 1s
@@ -488,7 +537,11 @@ impl ProverData {
                 }
             }
         }
-        self.r1cs.check_all(&var_values);
+        var_values
+    }
+    /// Check all assertions. Puts in 1 for challenges.
+    pub fn check_all(&self, values: &HashMap<String, Value>) {
+        self.r1cs.check_all(&self.extend_r1cs_witness(values));
     }
 
     /// How many commitments?

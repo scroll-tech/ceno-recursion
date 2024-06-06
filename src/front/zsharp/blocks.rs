@@ -119,6 +119,7 @@ pub fn bl_gen_init_stmt<'ast>(var: &str, ty: &Ty) -> Statement<'ast> {
     let typ = ty_to_type(ty).unwrap();
     let var_init_stmt = Statement::Definition(DefinitionStatement {
         lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+            array_metadata: None,
             ty: typ.clone(),
             identifier: IdentifierExpression {
                 value: var.to_string(),
@@ -652,6 +653,7 @@ impl<'ast> ZGen<'ast> {
                 // %BP = %SP
                 let bp_update_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        array_metadata: None,
                         ty: Type::Basic(BasicType::Field(FieldType {
                             span: Span::new("", 0, 0).unwrap()
                         })),
@@ -683,6 +685,7 @@ impl<'ast> ZGen<'ast> {
                 }
                 let param_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        array_metadata: None,
                         ty: ty_to_type(&p_ty)?,
                         identifier: IdentifierExpression {
                             value: var_scope_info.declare_var(&p_id, &f_name, 0, p_ty),
@@ -700,6 +703,7 @@ impl<'ast> ZGen<'ast> {
             // Set up %RP and block terminator
             let rp_update_stmt = Statement::Definition(DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                    array_metadata: None,
                     ty: Type::Basic(BasicType::Field(FieldType {
                         span: Span::new("", 0, 0).unwrap()
                     })),
@@ -759,6 +763,7 @@ impl<'ast> ZGen<'ast> {
             let ret_extended_name = var_scope_info.declare_var(&ret_name, &caller_name, caller_scope, ret_ty.clone());
             let update_ret_stmt = Statement::Definition(DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                    array_metadata: None,
                     ty: ty_to_type(&ret_ty)?,
                     identifier: IdentifierExpression {
                         value: ret_extended_name,
@@ -811,6 +816,7 @@ impl<'ast> ZGen<'ast> {
                 if !array_init_info.is_empty() { panic!("Inline array inside return statements not supported!") }
                 let ret_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        array_metadata: None,
                         ty: ret_ty.clone(),
                         identifier: IdentifierExpression {
                             value: "%RET".to_string(),
@@ -894,6 +900,7 @@ impl<'ast> ZGen<'ast> {
 
                 let from_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        array_metadata: None,
                         ty: it.ty.clone(),
                         identifier: new_id.clone(),
                         span: Span::new("", 0, 0).unwrap()
@@ -936,6 +943,7 @@ impl<'ast> ZGen<'ast> {
                 // Create and push STEP statement
                 let step_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                        array_metadata: None,
                         ty: it.ty.clone(),
                         identifier: new_id.clone(),
                         span: Span::new("", 0, 0).unwrap()
@@ -1158,6 +1166,7 @@ impl<'ast> ZGen<'ast> {
                                 // otherwise convert the assignee to a declaration
                                 else {
                                     lhs_expr = vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                        array_metadata: None,
                                         ty: ty_to_type(&lhs_ty)?,
                                         identifier: new_id.clone(),
                                         span: Span::new("", 0, 0).unwrap()
@@ -1190,6 +1199,7 @@ impl<'ast> ZGen<'ast> {
 
                                 // Convert the assignee to a declaration
                                 lhs_expr = vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                    array_metadata: None,
                                     ty: ty_to_type(&decl_ty)?,
                                     identifier: new_id.clone(),
                                     span: Span::new("", 0, 0).unwrap()
@@ -1210,6 +1220,7 @@ impl<'ast> ZGen<'ast> {
                 }
             }
             Statement::CondStore(_) => { panic!("Conditional store statements unsupported.") }
+            Statement::Witness(_) => { panic!("Witness statements unsupported.") }
         }
         Ok((blks, blks_len, var_scope_info))
     }
@@ -1407,6 +1418,7 @@ impl<'ast> ZGen<'ast> {
             let entry_ty = ty_to_type(&entry_ty)?;
             let array_init_stmt = Statement::Definition(DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                    array_metadata: None,
                     ty: entry_ty,
                     identifier: IdentifierExpression {
                         value: init_extended_name.clone(),
@@ -1493,7 +1505,7 @@ impl<'ast> ZGen<'ast> {
             span: Span::new("", 0, 0).unwrap()
         }))).unwrap();
         let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-        self.assert(b);
+        self.assert(b).unwrap();
     }
 
     // asserts var1 == var2
@@ -1507,7 +1519,7 @@ impl<'ast> ZGen<'ast> {
             span: Span::new("", 0, 0).unwrap()
         })).unwrap();
         let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-        self.assert(b);
+        self.assert(b).unwrap();
     }
 
     /*
@@ -1799,7 +1811,7 @@ impl<'ast> ZGen<'ast> {
                 span: Span::new("", 0, 0).unwrap()
             })).unwrap();
             let b = bool(eq(add(lhs_t, offset_t).unwrap(), rhs_t).unwrap()).unwrap();
-            self.assert(b);
+            self.assert(b).unwrap();
         }
         // LS
         let ls = if MODE == STORE || MODE == INIT_STORE { STORE } else { LOAD };
@@ -1828,6 +1840,7 @@ impl<'ast> ZGen<'ast> {
                     ZVis::Private(0),
                     None,
                     true,
+                    &None,
                 ).unwrap();
                 // Non-deterministically supply VAL
                 self.circ_declare_input(
@@ -1837,6 +1850,7 @@ impl<'ast> ZGen<'ast> {
                     ZVis::Private(0),
                     None,
                     true,
+                    &None,
                 ).unwrap();
                 // Assert correctness of address
                 let lhs_t = self.expr_impl_::<false>(&Expression::Binary(BinaryExpression {
@@ -1863,7 +1877,7 @@ impl<'ast> ZGen<'ast> {
                     span: Span::new("", 0, 0).unwrap()
                 })).unwrap();
                 let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-                self.assert(b);
+                self.assert(b).unwrap();
                 // Assert correctness of value
                 let mut lhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
                     value: var.to_string(),
@@ -1878,7 +1892,7 @@ impl<'ast> ZGen<'ast> {
                     span: Span::new("", 0, 0).unwrap()
                 })).unwrap();
                 let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-                self.assert(b);
+                self.assert(b).unwrap();
                 phy_mem_op_count += 1;
             }
             BlockContent::MemPop((var, ty, offset)) => {
@@ -1890,6 +1904,7 @@ impl<'ast> ZGen<'ast> {
                     ZVis::Private(0),
                     None,
                     true,
+                    &None,
                 ).unwrap();
                 self.circ_declare_input(
                     &f,
@@ -1898,6 +1913,7 @@ impl<'ast> ZGen<'ast> {
                     ZVis::Private(0),
                     None,
                     true,
+                    &None,
                 ).unwrap();
                 // Assert correctness of address
                 let lhs_t = self.expr_impl_::<false>(&Expression::Binary(BinaryExpression {
@@ -1924,7 +1940,7 @@ impl<'ast> ZGen<'ast> {
                     span: Span::new("", 0, 0).unwrap()
                 })).unwrap();
                 let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-                self.assert(b);
+                self.assert(b).unwrap();
                 // Assign POP value to val
                 let mut e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
                     value: format!("%pm{:06}v", phy_mem_op_count),
@@ -1948,6 +1964,7 @@ impl<'ast> ZGen<'ast> {
                         ZVis::Private(0),
                         None,
                         true,
+                        &None,
                     ).unwrap();
                 }
             }
@@ -1978,7 +1995,7 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     })).unwrap();
                     let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
-                    self.assert(b);
+                    self.assert(b).unwrap();
                     // Update Label
                     vir_mem_op_count += 1;
                 }
@@ -1992,6 +2009,7 @@ impl<'ast> ZGen<'ast> {
                         ZVis::Public,
                         None,
                         true,
+                        &None,
                     );
                     r.unwrap();
                 } else {
@@ -2078,6 +2096,7 @@ impl<'ast> ZGen<'ast> {
                     ZVis::Public,
                     None,
                     true,
+                    &None,
                 );
                 r.unwrap();
             }
@@ -2093,6 +2112,7 @@ impl<'ast> ZGen<'ast> {
                         ZVis::Public,
                         None,
                         true,
+                        &None,
                     );
                     r.unwrap();
                 }
@@ -2115,6 +2135,7 @@ impl<'ast> ZGen<'ast> {
                 ZVis::Private(0),
                 None,
                 true,
+                &None,
             ).unwrap();
             // VAL as 'd'
             self.circ_declare_input(
@@ -2124,6 +2145,7 @@ impl<'ast> ZGen<'ast> {
                 ZVis::Private(0),
                 None,
                 true,
+                &None,
             ).unwrap();
             // LS as 'l'
             self.circ_declare_input(
@@ -2133,6 +2155,7 @@ impl<'ast> ZGen<'ast> {
                 ZVis::Private(0),
                 None,
                 true,
+                &None,
             ).unwrap();
             // TS as 't'
             self.circ_declare_input(
@@ -2142,6 +2165,7 @@ impl<'ast> ZGen<'ast> {
                 ZVis::Private(0),
                 None,
                 true,
+                &None,
             ).unwrap();
         }
 
@@ -2165,6 +2189,7 @@ impl<'ast> ZGen<'ast> {
                         ZVis::Public,
                         None,
                         true,
+                        &None,
                     );
                     r.unwrap();
                     // Assert the correctness of the output
@@ -2231,6 +2256,7 @@ impl<'ast> ZGen<'ast> {
                 ZVis::Public,
                 None,
                 true,
+                &None,
             );
             r.unwrap();
             // Process statement
@@ -2257,7 +2283,7 @@ impl<'ast> ZGen<'ast> {
                     let name = "return".to_owned();
                     let ret_val = r.unwrap_term();
                     let ret_var_val = self
-                        .circ_declare_input(&f, name, ty, ZVis::Public, Some(ret_val.clone()), false)
+                        .circ_declare_input(&f, name, ty, ZVis::Public, Some(ret_val.clone()), false, &None)
                         .expect("circ_declare return");
                     let ret_eq = eq(ret_val, ret_var_val).unwrap().term;
                     let mut assertions = std::mem::take(&mut *self.assertions.borrow_mut());

@@ -766,7 +766,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
                 println!();
             }
             print!("{:3} ", "W");
-            let print_width = min(vars.len(), print_width);
+            let print_width = min(vars.len() - io_width, print_width);
             for i in 0..print_width {
                 print!("{:3} ", vars[io_width + i]);
             }

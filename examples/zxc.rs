@@ -733,7 +733,6 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         // Use eval to assign witnesses
         let wit_offset = live_io_size[id] + live_mem_size[id];
         for j in wit_offset..eval.len() {
-            // witnesses, skip the 0th entry for the valid bit
             let k = j - wit_offset + reg_mem.len();
             vars[io_width + k] = eval[j].as_integer().unwrap();
         }
@@ -766,7 +765,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
                 println!();
             }
             print!("{:3} ", "W");
-            let print_width = min(vars.len() - io_width, print_width);
+            let print_width = min(vars.len() - io_width, 32);
             for i in 0..print_width {
                 print!("{:3} ", vars[io_width + i]);
             }

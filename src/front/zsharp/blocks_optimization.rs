@@ -926,14 +926,13 @@ fn la_inst<'ast>(
     for i in inst.iter().rev() {
         match i {
             BlockContent::MemPush((var, _, _)) => {
-                // Keep all push statements, remove them in PMR
+                // Keep all push statements
                 new_instructions.insert(0, i.clone());
                 state.insert(var.to_string());
                 state.insert("%SP".to_string());
             }
             BlockContent::MemPop((var, _, _)) => {
-                // Don't remove %BP, remove them in PMR
-                if is_alive(&state, var) || var == "%BP" {
+                if is_alive(&state, var) {
                     new_instructions.insert(0, i.clone());
                 }
                 state.remove(var);
@@ -1355,6 +1354,8 @@ impl<'ast> ZGen<'ast> {
             print_bls(&bls, &entry_bl);
         }
 
+        // Liveness, mainly to remove %BP
+        bls = self.liveness_analysis(bls, &successor, &predecessor, &successor_fn, &predecessor_fn, &exit_bls, &exit_bls_fn);
         // EBE
         (_, predecessor, bls) = self.empty_block_elimination(bls, exit_bls, successor, predecessor, &entry_bls_fn, &exit_bls_fn);
         // DBE

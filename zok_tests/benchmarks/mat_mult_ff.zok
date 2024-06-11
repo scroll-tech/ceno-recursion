@@ -1,0 +1,34 @@
+def get_index(field i, field j, field n) -> field:
+    return n * i + j
+
+def main(field x, field y, field z, field n) -> field:
+    field[36] A = [0; 36]
+    field[36] B = [0; 36]
+    field[36] C = [0; 36]
+
+    for field i in 0..36 do
+        A[i] = i
+        B[i] = 2 * i
+    endfor
+    // random access to ensure array is written in memory
+    field c1 = A[x]
+    field c2 = B[y]
+
+    for field i in 0..6 do
+        if i < n then
+            for field j in 0..6 do
+                if j < n then
+                    for field k in 0..6 do
+                        if k < n then
+                            C[get_index(n, i, k)] = A[get_index(n, i, j)] * B[get_index(n, j, k)]
+                        endif
+                    endfor
+                endif
+            endfor
+        endif
+    endfor
+
+
+    field c3 = C[z]
+
+    return c1 * c2 * c3

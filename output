@@ -1,3 +1,5 @@
+// BV RESULTS
+
 find_min - max_high 400
                     CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
 Compiler          354.80         53.40       7513.00         50.40         49.00         49.20         48.20
@@ -130,6 +132,62 @@ Compiler        18079.60        195.80             -        166.20        165.80
 Preprocess             -        444.00             -        443.00        445.00        443.60        440.20
 Prover                 -       3752.12             -       2678.39       2688.95       2357.84       2247.95
 Verifier               -        270.12             -        235.73        235.76        233.25        226.88
+
+
+
+// FIELD RESULTS
+
+find_min_ff - max_high 25
+                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler          227.20         36.00      11989.00         37.00         37.20         37.20         37.00
+Preprocess             -        334.80             -        277.60        275.60        276.20        276.00
+Prover                 -       1276.15      39619.00        740.48        740.76        740.30        639.69
+Verifier               -        105.29       1209.00         93.15         93.24         93.22         85.50
+
+--
+
+find_min_ff - max_high 50
+                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler          505.40         41.80      12283.00         42.60         42.60         42.60         42.80
+Preprocess             -        345.40             -        287.20        285.20        286.00        287.60
+Prover                 -       1657.01      93450.00        958.32        939.85        938.39        752.48
+Verifier               -        113.02       1528.00        103.91         99.53         99.82         93.64
+
+--
+
+find_min_ff - max_high 75
+                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler          781.20         46.80      12406.00         40.00         39.40         39.80         40.00
+Preprocess             -        346.00             -        289.00        286.20        285.60        287.20
+Prover                 -       2328.39     300995.00       1341.23       1340.54       1045.32       1039.90
+Verifier               -        123.76       2076.00        116.06        115.87        113.10        112.49
+
+--
+
+mat_mult_ff - max_n 2
+                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler           29.60         69.60      12718.00         65.60         66.00         66.00         65.60
+Preprocess             -        368.20             -        363.80        362.20        363.40        361.00
+Prover                 -       1018.71      18469.00       1009.96        833.54        832.02        835.24
+Verifier               -        140.38        872.00        137.72        107.37        107.53        107.37
+
+--
+
+mat_mult_ff - max_n 4
+                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler          528.00         75.20      11967.00         71.80         71.00         71.60         71.20
+Preprocess             -        369.80             -        367.60        366.60        365.60        371.20
+Prover                 -       1717.89     365264.00       1619.61       1315.51       1310.64       1019.54
+Verifier               -        196.27       2401.00        186.23        162.75        162.00        137.75
+
+--
+
+mat_mult_ff - max_n 6
+                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler        16670.00         84.00             -         79.80         79.60         80.20         80.20
+Preprocess             -        383.20             -        377.80        375.60        376.00        376.40
+Prover                 -       3471.20             -       3386.14       2264.96       1634.82       1368.62
+Verifier               -        257.52             -        248.97        216.86        183.84        168.52
 
 --
 

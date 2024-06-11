@@ -119,3 +119,58 @@ rle_codec - max_n 200
 1450ms
 804ms
 157ms
+Trace length: 1449365
+Trace length: 1449365
+Trace length: 1449365
+Trace length: 1449365
+Trace length: 1449365
+
+--
+find_min_ff - max_high 25
+11989ms
+39619ms
+1209ms
+Trace length: 2862072
+Trace length: 2862072
+Trace length: 2862072
+Trace length: 2862072
+Trace length: 2862072
+
+--
+find_min_ff - max_high 50
+12283ms
+93450ms
+1528ms
+Trace length: 4278180
+Trace length: 4278180
+Trace length: 4278180
+Trace length: 4278180
+Trace length: 4278180
+
+--
+find_min_ff - max_high 75
+12406ms
+300995ms
+2076ms
+Trace length: 815075
+Trace length: 815075
+Trace length: 815075
+Trace length: 815075
+Trace length: 815075
+
+--
+mat_mult_ff - max_n 2
+12718ms
+18469ms
+872ms
+Trace length: 6150162
+Trace length: 6150162
+Trace length: 6150162
+Trace length: 6150162
+Trace length: 6150162
+
+--
+mat_mult_ff - max_n 4
+11967ms
+365264ms
+2401ms

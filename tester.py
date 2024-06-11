@@ -181,7 +181,7 @@ def execute_cobbl_while(b_name, f_name, perc):
                     -e 's/  \* SNARK::verify //p' \
                 >> ../{f_name}\"")
 
-BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec"]
-# BENCHMARK = ["rle_codec"]
+# BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec"]
+BENCHMARK = ["find_min_ff", "mat_mult_ff"]
 for b in BENCHMARK:
     preprocess(b)

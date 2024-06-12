@@ -64,7 +64,7 @@ def parse_cobbl(b_name, jolt_result):
                     entries[e][t] /= repeat
 
             # Print out the result
-            case_name = f"{b_name} - {consts}"
+            case_name = f"{b_name} - {consts}" if len(consts) > 0 else f"{b_name}"
             print(case_name)
             print("{:10}    {:>10}    {:>10}    {:>10}    {:>10}    {:>10}    {:>10}    {:>10}".format("", "CirC", "CoBBl For", "Jolt", "CoBBl 100", "CoBBl 90", "CoBBl 75", "CoBBl 50"))
             t_name = ["Compiler", "Preprocess", "Prover", "Verifier"]
@@ -94,7 +94,7 @@ def parse_cobbl(b_name, jolt_result):
 
     f.close()
 
-BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256", "find_min_ff", "mat_mult_ff"]
+BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "find_min_ff", "mat_mult_ff", "sha256", "poseidon"]
 # BENCHMARK = ["sha256"]
 jolt_result = parse_jolt()
 for b in BENCHMARK:

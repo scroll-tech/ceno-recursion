@@ -119,39 +119,6 @@ rle_codec - max_n 200
 1450ms
 804ms
 157ms
-Trace length: 18844
-Trace length: 18844
-Trace length: 18844
-Trace length: 18844
-Trace length: 18844
-
---
-sha256 - max_n 4
-6266ms
-1119ms
-229ms
-Trace length: 37620
-Trace length: 37620
-Trace length: 37620
-Trace length: 37620
-Trace length: 37620
-
---
-sha256 - max_n 8
-1219ms
-1727ms
-293ms
-Trace length: 56396
-Trace length: 56396
-Trace length: 56396
-Trace length: 56396
-Trace length: 56396
-
---
-sha256 - max_n 12
-1205ms
-1897ms
-317ms
 Trace length: 1449365
 Trace length: 1449365
 Trace length: 1449365
@@ -207,3 +174,47 @@ mat_mult_ff - max_n 4
 11967ms
 365264ms
 2401ms
+Trace length: 18844
+Trace length: 18844
+Trace length: 18844
+Trace length: 18844
+Trace length: 18844
+
+--
+sha256 - max_n 4
+6266ms
+1119ms
+229ms
+Trace length: 37620
+Trace length: 37620
+Trace length: 37620
+Trace length: 37620
+Trace length: 37620
+
+--
+sha256 - max_n 8
+1219ms
+1727ms
+293ms
+Trace length: 56396
+Trace length: 56396
+Trace length: 56396
+Trace length: 56396
+Trace length: 56396
+
+--
+sha256 - max_n 12
+1205ms
+1897ms
+317ms
+Trace length: 5298933
+Trace length: 5298933
+Trace length: 5298933
+Trace length: 5298933
+Trace length: 5298933
+
+--
+poseidon
+1292ms
+316412ms
+2226ms

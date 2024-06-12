@@ -1,5 +1,3 @@
-// BV RESULTS
-
 find_min - max_high 400
                     CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
 Compiler          354.80         53.40       7513.00         50.40         49.00         49.20         48.20
@@ -133,9 +131,34 @@ Preprocess             -        444.00             -        443.00        445.00
 Prover                 -       3752.12             -       2678.39       2688.95       2357.84       2247.95
 Verifier               -        270.12             -        235.73        235.76        233.25        226.88
 
+--
 
+sha256 - max_n 4
+                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler               -        125.20       6266.00        110.00        108.80        109.00        109.00
+Preprocess             -        316.40             -        348.60        342.80        347.20        343.40
+Prover                 -       3966.07       1119.00       4063.86       3930.69       3931.41       2435.83
+Verifier               -        260.98        229.00        260.68        260.83        260.74        220.82
 
-// FIELD RESULTS
+--
+
+sha256 - max_n 8
+                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler               -        131.80       1219.00        109.00        108.80        109.00        109.00
+Preprocess             -        319.20             -        347.20        349.40        349.40        345.60
+Prover                 -       7060.49       1727.00       7254.10       7121.65       6939.96       3969.91
+Verifier               -        327.93        293.00        326.25        324.54        325.14        262.37
+
+--
+
+sha256 - max_n 12
+                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
+Compiler               -        140.00       1205.00        109.00        110.00        109.80        109.40
+Preprocess             -        318.00             -        347.60        346.80        348.60        351.40
+Prover                 -      13513.27       1897.00      13499.68      12485.37      10786.52       6895.25
+Verifier               -        401.59        317.00        404.59        392.87        371.06        323.61
+
+--
 
 find_min_ff - max_high 25
                     CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50

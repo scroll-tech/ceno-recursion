@@ -593,10 +593,10 @@ fn term_to_instr<'ast>(
 }
 
 // New io map with only reserved registers
-// Reserve registers 0 - 7 for %V, %BN, %RET, %TS, %AS, %RP, %SP, and %BP
+// Reserve registers 0 - 7 for _, %BN, %RET, %TS, %AS, %RP, %SP, and %BP
 fn new_io_map() -> HashMap<String, usize> {
     let mut io_map: HashMap<String, usize> = HashMap::new();
-    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%V".to_string(), io_map);
+    (_, io_map, _) = var_name_to_reg_id_expr::<1>("_".to_string(), io_map);
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("%BN".to_string(), io_map);
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RET".to_string(), io_map);
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("%TS".to_string(), io_map);
@@ -609,10 +609,10 @@ fn new_io_map() -> HashMap<String, usize> {
 }
 
 // New witness map with only reserved registers
-// Reserve registers 0 - 5 for %RET, %TS, %AS, %RP, %SP, and %BP
+// Reserve registers 0 - 5 for _, %TS, %AS, %RP, %SP, and %BP
 fn new_witness_map() -> HashMap<String, usize> {
     let mut witness_map: HashMap<String, usize> = HashMap::new();
-    (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%RET".to_string(), witness_map);
+    (_, witness_map, _) = var_name_to_reg_id_expr::<0>("_".to_string(), witness_map);
     (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%TS".to_string(), witness_map);
     (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%AS".to_string(), witness_map);
     (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%RP".to_string(), witness_map);
@@ -1299,7 +1299,7 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Liveness
-        bls = self.liveness_analysis(bls, &successor, &predecessor, &successor_fn, &predecessor_fn, &exit_bls, &exit_bls_fn);
+        bls = self.liveness_analysis(bls, &successor, &predecessor,  &predecessor_fn, &exit_bls);
         // DBE
         (bls, entry_bl, _) = self.dead_block_elimination(bls, entry_bl, predecessor);
         if VERBOSE {
@@ -1315,7 +1315,7 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Set Input Output
-        bls = self.set_input_output(bls, &successor, &predecessor, &successor_fn, &predecessor_fn, &entry_bl, &exit_bls, &exit_bls_fn, inputs.clone());
+        bls = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, inputs.clone());
         if VERBOSE {
             println!("\n\n--\nSet Input Output before Spilling:");
             print_bls(&bls, &entry_bl);
@@ -1355,7 +1355,7 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Liveness, mainly to remove %BP
-        bls = self.liveness_analysis(bls, &successor, &predecessor, &successor_fn, &predecessor_fn, &exit_bls, &exit_bls_fn);
+        bls = self.liveness_analysis(bls, &successor, &predecessor, &predecessor_fn, &exit_bls);
         // EBE
         (_, predecessor, bls) = self.empty_block_elimination(bls, exit_bls, successor, predecessor, &entry_bls_fn, &exit_bls_fn);
         // DBE
@@ -1373,7 +1373,7 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Set I/O again after optimizations
-        bls = self.set_input_output(bls, &successor, &predecessor, &successor_fn, &predecessor_fn, &entry_bl, &exit_bls, &exit_bls_fn, inputs.clone());
+        bls = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, inputs.clone());
         if VERBOSE {
             println!("\n\n--\nSet Input Output after Spilling:");
             print_bls(&bls, &entry_bl);
@@ -1572,10 +1572,8 @@ impl<'ast> ZGen<'ast> {
         mut bls: Vec<Block<'ast>>,
         successor: &Vec<HashSet<usize>>,
         predecessor: &Vec<HashSet<usize>>,
-        successor_fn: &Vec<HashSet<usize>>,
         predecessor_fn: &Vec<HashSet<usize>>,
         exit_bls: &HashSet<usize>,
-        exit_bls_fn: &HashSet<usize>
     ) -> Vec<Block<'ast>> {
 
         let mut visited: Vec<bool> = vec![false; bls.len()];
@@ -1597,36 +1595,14 @@ impl<'ast> ZGen<'ast> {
         while !next_bls.is_empty() {
             let cur_bl = next_bls.pop_front().unwrap();
 
-            // State is the union of all local successors AND
-            // if cur_bl is a function return block, then all successors, AND
-            // if cur_bl calls another function, then all parameters + reserved variables
+            // State is the union of all successors
             let mut state: HashSet<String> = HashSet::new();
-            // local successors
-            for s in &successor_fn[cur_bl] {
+            for s in &successor[cur_bl] {
                 state.extend(bl_in[*s].clone());
-            }
-            // function return block
-            if exit_bls_fn.contains(&cur_bl) {
-                for s in &successor[cur_bl] {
-                    state.extend(bl_in[*s].clone());
-                }
-            }
-            // function caller
-            else {
-                for s in &successor[cur_bl] {
-                    let callee_name = &bls[*s].fn_name;
-                    if callee_name != &bls[cur_bl].fn_name {
-                        for i in &bl_in[*s].clone() {
-                            if i.chars().next().unwrap() == '%' || &VarSpillInfo::new(i.to_string()).fn_name == callee_name {
-                                state.insert(i.to_string());
-                            }
-                        }
-                    }
-                }
             }
             // program exit block
             if exit_bls.contains(&cur_bl) {
-                state.insert("%RET".to_string());
+                state.insert("%RET.main".to_string());
             }
 
             // Only analyze if never visited before or OUT changes
@@ -1644,6 +1620,9 @@ impl<'ast> ZGen<'ast> {
 
                 // KILL and GEN within the block
                 (state, _) = la_inst(state, &bls[cur_bl].instructions);
+                
+                println!("BL: {}, STATE: {:?}", cur_bl, state);
+                
                 bl_in[cur_bl] = state;
 
                 // Block Transition
@@ -1655,7 +1634,7 @@ impl<'ast> ZGen<'ast> {
                         next_bls.push_back(*tmp_bl);
                     }
                 }
-            }    
+            }
         }
 
         // Do this again, this time, eliminate the blocks
@@ -1711,11 +1690,9 @@ impl<'ast> ZGen<'ast> {
         mut bls: Vec<Block<'ast>>,
         successor: &Vec<HashSet<usize>>,
         predecessor: &Vec<HashSet<usize>>,
-        successor_fn: &Vec<HashSet<usize>>,
         predecessor_fn: &Vec<HashSet<usize>>,
         entry_bl: &usize,
         exit_bls: &HashSet<usize>,
-        exit_bls_fn: &HashSet<usize>,
         inputs: Vec<(String, Ty)>
     ) -> Vec<Block<'ast>> {
         // Liveness
@@ -1739,36 +1716,14 @@ impl<'ast> ZGen<'ast> {
 
             let cur_bl = next_bls.pop_front().unwrap();   
 
-            // State is the union of all local successors AND
-            // if cur_bl is a function return block, then all successors, AND
-            // if cur_bl calls another function, then all parameters + reserved variables
+            // State is the union of all successors
             let mut state: HashSet<String> = HashSet::new();
-            // local successors
-            for s in &successor_fn[cur_bl] {
+            for s in &successor[cur_bl] {
                 state.extend(bl_in[*s].clone());
-            }
-            // function return block
-            if exit_bls_fn.contains(&cur_bl) {
-                for s in &successor[cur_bl] {
-                    state.extend(bl_in[*s].clone());
-                }
-            }
-            // function caller
-            else {
-                for s in &successor[cur_bl] {
-                    let callee_name = &bls[*s].fn_name;
-                    if callee_name != &bls[cur_bl].fn_name {
-                        for i in &bl_in[*s].clone() {
-                            if i.chars().next().unwrap() == '%' || &VarSpillInfo::new(i.to_string()).fn_name == callee_name {
-                                state.insert(i.to_string());
-                            }
-                        }
-                    }
-                }
             }
             // program exit block
             if exit_bls.contains(&cur_bl) {
-                state.insert("%RET".to_string());
+                state.insert("%RET.main".to_string());
             }
 
             // Only analyze if never visited before or OUT changes
@@ -2824,12 +2779,12 @@ impl<'ast> ZGen<'ast> {
     // size of inputs = size of outputs && 2 * (size of inputs + 1) = size of witnesses
     // However, we won't know the size of witnesses until circuit generation,
     // hence need to record inputs, outputs, and witnesses separately
-    // Structure for input / output
+    // Structure for input / output:
     // reg  0   1   2   3   4   5   6   7   8   9
-    //      V  BN  RET TS  AS  RP  SP  BP  i8  i9
-    // Structure for witness
+    //      _  BN  RET TS  AS  RP  SP  BP  i8  i9
+    // Structure for witness:
     // reg  0   1   2   3   4   5   6   7  ...
-    //     RET TS  AS  RP  SP  BP  w6  w7
+    //      _  TS  AS  RP  SP  BP  w6  w7
     //
     // When the io map and witness map is determined, update the block such that
     // 1. The first and last values of each variable in io should be assigned an io register
@@ -2988,9 +2943,11 @@ impl<'ast> ZGen<'ast> {
             // Nothing in transition_map_list should change now
             let io_map = &transition_map_list[bl_in[i].unwrap()];
             for (name, ty) in &bls[i].inputs {
+                // if name is %RET.<f_name>, then input_name is set to %RET
+                let input_name = if name.len() >= 4 && &name[..4] == "%RET" { "%RET" } else { name };
                 let new_input_name: String;
                 let live_input_label: usize;
-                (new_input_name, _, live_input_label) = var_name_to_reg_id_expr::<1>(name.to_string(), io_map.clone());
+                (new_input_name, _, live_input_label) = var_name_to_reg_id_expr::<1>(input_name.to_string(), io_map.clone());
                 new_inputs.push((new_input_name.to_string(), ty.clone()));
                 live_io[i].0.push(live_input_label);
                 let new_witness_name: String;
@@ -3026,9 +2983,11 @@ impl<'ast> ZGen<'ast> {
             let mut new_outputs = Vec::new();
             new_outputs.push((format!("%o{:06}", 1), Some(Ty::Field)));
             for (name, ty) in &bls[i].outputs {
+                // if name is %RET.<f_name>, then output_name is set to %RET
+                let output_name = if name.len() >= 4 && &name[..4] == "%RET" { "%RET" } else { name };
                 let new_output_name: String;
                 let live_output_label: usize;
-                (new_output_name, _, live_output_label) = var_name_to_reg_id_expr::<2>(name.to_string(), io_map.clone());
+                (new_output_name, _, live_output_label) = var_name_to_reg_id_expr::<2>(output_name.to_string(), io_map.clone());
                 new_outputs.push((new_output_name.to_string(), ty.clone()));
                 live_io[i].1.push(live_output_label);
                 let new_witness_name: String;

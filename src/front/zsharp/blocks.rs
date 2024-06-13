@@ -6,8 +6,6 @@
 //       Can try eliminate ternaries with a constant condition
 //       What would happen if block 0 is a loop to itself? Many analyses would break down!!!
 
-// TODO: Should not count # of virtual addresses here b/c liveness analysis might remove some of them
-
 use log::{debug, warn};
 
 use zokrates_pest_ast::*;
@@ -346,8 +344,19 @@ impl VarScopeInfo {
         match self.var_stack.get(name) {
             Some(stack) => {
                 assert!(stack.len() == 0 || stack[stack.len() - 1].0 <= cur_scope);
-                // If stack[stack.len() - 1] == cur_scope, this is shadowing and we don't need to do anything
-                if stack.len() == 0 || stack[stack.len() - 1].0 < cur_scope {
+                // If stack[stack.len() - 1] == cur_scope, this is shadowing
+                // allocate a new version if declared type does not match with existing type
+                if stack.len() > 0 && stack[stack.len() - 1].0 == cur_scope {
+                    if ty != stack[stack.len() - 1].1 {
+                        let mut new_stack = stack.to_vec();
+                        new_stack[stack.len() - 1].1 = ty;
+                        let new_depth = new_stack.len() - 1;
+                        let mut version_list = self.var_version.get(name).unwrap().to_vec();
+                        version_list[new_depth] += 1;
+                        self.var_version.insert(name.clone(), version_list);
+                        self.var_stack.insert(name.clone(), new_stack);
+                    }
+                } else {
                     let new_stack = [stack.to_vec(), vec![(cur_scope, ty)]].concat();
                     let new_depth = new_stack.len() - 1;
                     let mut version_list = self.var_version.get(name).unwrap().to_vec();
@@ -773,7 +782,7 @@ impl<'ast> ZGen<'ast> {
                 })],
                 // Assume that we only have ONE return variable
                 expression: Expression::Identifier(IdentifierExpression {
-                    value: "%RET".to_string(),
+                    value: format!("%RET.{}", f_name),
                     span: Span::new("", 0, 0).unwrap()
                 }),
                 span: Span::new("", 0, 0).unwrap()
@@ -814,12 +823,14 @@ impl<'ast> ZGen<'ast> {
                 (blks, blks_len, var_scope_info, ret_expr, _, _, array_init_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &r.expressions[0], f_name, 0, 0, var_scope_info)?;
                 if !array_init_info.is_empty() { panic!("Inline array inside return statements not supported!") }
+                // Convert the statement to %RET.<f_name> = ret_expr
+                // We include <f_name> because different function has different return type
                 let ret_stmt = Statement::Definition(DefinitionStatement {
                     lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                         array_metadata: None,
                         ty: ret_ty.clone(),
                         identifier: IdentifierExpression {
-                            value: "%RET".to_string(),
+                            value: format!("%RET.{}", f_name),
                             span: Span::new("", 0, 0).unwrap()
                         },
                         span: Span::new("", 0, 0).unwrap()
@@ -1110,6 +1121,9 @@ impl<'ast> ZGen<'ast> {
                                 let arr_extended_name = var_scope_info.declare_var(arr_name, f_name, cur_scope, Ty::Field);
                                 // Declare array
                                 if let Ty::Array(size, entry_ty) = decl_ty {
+                                    if size != array_init_info.arr_entries.len() {
+                                        return Err(format!("Array initialization for {arr_name} failed: array size does not match with initializer size!"));
+                                    }
                                     blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name.clone(), *entry_ty.clone(), size)));
                                     var_scope_info.arr_map.insert(arr_extended_name.clone(), *entry_ty.clone());
                                 }
@@ -1142,12 +1156,21 @@ impl<'ast> ZGen<'ast> {
                                     span: Span::new("", 0, 0).unwrap()
                                 };
 
-                                // if the LHS is an array member, convert the assignee to a store
                                 if let Some(entry_ty) = var_scope_info.arr_map.get(&new_l) {
-                                    let entry_ty = entry_ty.clone();
-                                    assignee_is_store = true;
-                                    if l.accesses.len() != 1 { return Err(format!("Assignment to multiple array entries unsupported")); }
-                                    if let AssigneeAccess::Select(a) = &l.accesses[0] {
+                                    if l.accesses.len() > 1 { return Err(format!("Assignment to multiple array entries unsupported")); }
+                                    // if the LHS is an array, perform pointer assignment
+                                    if l.accesses.len() == 0 {
+                                        lhs_expr = vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                            array_metadata: None,
+                                            ty: ty_to_type(&Ty::Field)?,
+                                            identifier: new_id.clone(),
+                                            span: Span::new("", 0, 0).unwrap()
+                                        })];
+                                    }
+                                    // if the LHS is an array member, convert the assignee to a store
+                                    else if let AssigneeAccess::Select(a) = &l.accesses[0] {
+                                        let entry_ty = entry_ty.clone();
+                                        assignee_is_store = true;
                                         if let RangeOrExpression::Expression(e) = &a.expression {
                                             let new_e: Expression;
                                             let tmp_arr_info: ArrayInitInfo;

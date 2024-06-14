@@ -139,7 +139,8 @@ pub fn bl_gen_init_stmt<'ast>(var: &str, ty: &Ty) -> Statement<'ast> {
 }
 
 // Generate the statement: var = var + offset
-pub fn bl_gen_increment_stmt<'ast>(var: &str, offset: usize) -> Statement<'ast> {
+pub fn bl_gen_increment_stmt<'ast>(var: &str, offset: usize, ty: &Ty) -> Statement<'ast> {
+    let typ = ty_to_type(ty).unwrap();
     let var_update_stmt = Statement::Definition(DefinitionStatement {
         lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
             id: IdentifierExpression {
@@ -160,9 +161,7 @@ pub fn bl_gen_increment_stmt<'ast>(var: &str, offset: usize) -> Statement<'ast> 
                     value: offset.to_string(),
                     span: Span::new("", 0, 0).unwrap()
                 },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
+                suffix: Some(ty_to_dec_suffix(&typ)),
                 span: Span::new("", 0, 0).unwrap()
             }))),
             span: Span::new("", 0, 0).unwrap()
@@ -682,7 +681,7 @@ impl<'ast> ZGen<'ast> {
                 // Push %RP onto stack
                 blks[blks_len - 1].instructions.push(BlockContent::MemPush(("%RP".to_string(), Ty::Field, 1)));
                 // %SP = %SP + sp_offset
-                blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", 2)));
+                blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", 2, &Ty::Field)));
             }
         
             // Assign p@0 to a
@@ -878,7 +877,7 @@ impl<'ast> ZGen<'ast> {
                 // Initialize the scoped iterator
                 let v_name = it.index.value.clone();
                 let ty = self.type_impl_::<false>(&it.ty)?;
-                let new_v_name = var_scope_info.declare_var(&v_name, f_name, cur_scope, ty);
+                let new_v_name = var_scope_info.declare_var(&v_name, f_name, cur_scope, ty.clone());
 
                 let from_expr: Expression;
                 let mut array_init_info: ArrayInitInfo;
@@ -891,21 +890,27 @@ impl<'ast> ZGen<'ast> {
                 if !array_init_info.is_empty() { panic!("To expr of for loops cannot be inline array!") }
 
                 // Record the number of iterations of the loop
-                // Currently only support from_expr and to_expr being constants
-                let loop_num_it = {
+                let (loop_num_it, cnst_for_loop) = {
+                    // Indicator of whether both from and to are constants
+                    let mut cnst_for_loop = true;
                     let from_const = if let Expression::Literal(LiteralExpression::DecimalLiteral(ref dle)) = from_expr {
                         dle.value.value.parse::<usize>().unwrap()
-                    } else { panic!("Unsupported loop: from expression is not constant") };
+                    } else {
+                        cnst_for_loop = false;
+                        0
+                    };
                     let to_const = if let Expression::Literal(LiteralExpression::DecimalLiteral(ref dle)) = to_expr {
                         dle.value.value.parse::<usize>().unwrap()
-                    } else { panic!("Unsupported loop: from expression is not constant") };
-                    
-                    to_const - from_const
+                    } else {
+                        cnst_for_loop = false;
+                        0
+                    };
+                    if !cnst_for_loop { (1, cnst_for_loop) } else { (to_const - from_const, cnst_for_loop) }
                 };
 
                 // Create and push FROM statement
                 let new_id = IdentifierExpression {
-                    value: new_v_name,
+                    value: new_v_name.to_string(),
                     span: Span::new("", 0, 0).unwrap()
                 };
 
@@ -931,6 +936,10 @@ impl<'ast> ZGen<'ast> {
                 cur_scope = self.bl_gen_enter_scope_(cur_scope)?;
                 // Create new Block
                 blks.push(Block::new(blks_len, loop_num_it * num_exec_bound, f_name.to_string(), cur_scope));
+                // If number of iterations is not constant, then treat it as a while loop
+                if !cnst_for_loop {
+                    blks[blks_len].is_head_of_while_loop = true;
+                }
                 blks_len += 1;
                 let loop_header = blks_len - 1;
 
@@ -952,29 +961,7 @@ impl<'ast> ZGen<'ast> {
                 blks_len += 1;
 
                 // Create and push STEP statement
-                let step_stmt = Statement::Definition(DefinitionStatement {
-                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                        array_metadata: None,
-                        ty: it.ty.clone(),
-                        identifier: new_id.clone(),
-                        span: Span::new("", 0, 0).unwrap()
-                    })],
-                    expression: Expression::Binary(BinaryExpression {
-                        op: BinaryOperator::Add,
-                        left: Box::new(Expression::Identifier(new_id.clone())),
-                        right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                            value: DecimalNumber {
-                                value: "1".to_string(),
-                                span: Span::new("", 0, 0).unwrap()
-                            },
-                            suffix: Some(ty_to_dec_suffix(&it.ty)),
-                            span: Span::new("", 0, 0).unwrap()
-                        }))),
-                        span: Span::new("", 0, 0).unwrap()
-                    }),
-                    span: Span::new("", 0, 0).unwrap()
-                });
-                blks[blks_len - 1].instructions.push(BlockContent::Stmt(step_stmt));
+                blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_increment_stmt(&new_v_name, 1, &ty)));
 
                 // Exit scoping for LOOP TAIL
                 (var_scope_info, cur_scope) = self.bl_gen_exit_scope_(var_scope_info, f_name, cur_scope)?;
@@ -1424,7 +1411,7 @@ impl<'ast> ZGen<'ast> {
     fn bl_gen_array_init_(
         &'ast self, 
         mut blks: Vec<Block<'ast>>,
-        blks_len: usize,
+        mut blks_len: usize,
         arr_extended_name: String,
         f_name: &str,
         array_init_info: ArrayInitInfo<'ast>,
@@ -1457,28 +1444,91 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Then assigning each entries in array to corresponding init@X
-        let mut index = 0;
-        for entry in array_init_info.arr_entries {
-            let entry_name = format!("init@{}", entry);
-            let entry_extended_name = var_scope_info.reference_var(&entry_name, &f_name)?.0;
-            let entry_expr = Expression::Identifier(IdentifierExpression {
-                value: entry_extended_name,
-                span: Span::new("", 0, 0).unwrap()
-            });
+        // if there is only one unique entry, then assign the array through a simplified for loop
+        if array_init_info.unique_contents.len() == 1 {
+            let index_name = "index@";
+            let index_ty = Ty::Field;
+            let index_extended_name = var_scope_info.declare_var(&index_name, &f_name, cur_scope, index_ty.clone());
+            
+            // Init
+            blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt(&index_extended_name, &index_ty)));
+            
+            // Loop body
+            let num_exec_bound = blks[blks_len - 1].fn_num_exec_bound;
+            blks.push(Block::new(blks_len, array_init_info.arr_entries.len() * num_exec_bound, f_name.to_string(), cur_scope + 1));
+            blks_len += 1;
+            let loop_header = blks_len - 1;
+            // Store stmt & increment iterator
+            let store_instr = {
+                let entry_name = format!("init@0");
+                let entry_extended_name = var_scope_info.reference_var(&entry_name, &f_name)?.0;
+                let entry_expr = Expression::Identifier(IdentifierExpression {
+                    value: entry_extended_name,
+                    span: Span::new("", 0, 0).unwrap()
+                });
 
-            let index_expr = Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                let index_expr = Expression::Identifier(IdentifierExpression {
+                    value: index_extended_name.to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                });
+                BlockContent::Store((entry_expr, entry_ty.clone(), arr_extended_name.clone(), index_expr, is_declare))
+            };
+            blks[blks_len - 1].instructions.push(store_instr);
+            blks[blks_len - 1].num_vm_ops += 1;
+            blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_increment_stmt(&index_extended_name, 1, &Ty::Field)));
+            
+            // Bound
+            blks.push(Block::new(blks_len, num_exec_bound, f_name.to_string(), cur_scope));
+            blks_len += 1;
+            // Update terminator
+            let loop_tail = blks_len - 1;
+            let new_id = IdentifierExpression {
+                value: index_extended_name,
+                span: Span::new("", 0, 0).unwrap()
+            };
+            let to_expr = Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
                 value: DecimalNumber {
-                    value: index.to_string(),
+                    value: array_init_info.arr_entries.len().to_string(),
                     span: Span::new("", 0, 0).unwrap()
                 },
-                suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
+                suffix: Some(ty_to_dec_suffix(&ty_to_type(&index_ty).unwrap())),
                 span: Span::new("", 0, 0).unwrap()
             }));
-            blks[blks_len - 1].instructions.push(BlockContent::Store((entry_expr, entry_ty.clone(), arr_extended_name.clone(), index_expr, is_declare)));
-            blks[blks_len - 1].num_vm_ops += 1;
-            index += 1;
+            let term = BlockTerminator::Transition(
+                bl_trans(
+                    cond_expr(new_id.clone(), to_expr),
+                    NextBlock::Label(loop_header), 
+                    NextBlock::Label(loop_tail)
+                )
+            );
+            blks[loop_header - 1].terminator = term.clone();
+            blks[loop_tail - 1].terminator = term;
+        }
+        // otherwise assign individual entries
+        else {
+            let mut index = 0;
+            for entry in array_init_info.arr_entries {
+                let entry_name = format!("init@{}", entry);
+                let entry_extended_name = var_scope_info.reference_var(&entry_name, &f_name)?.0;
+                let entry_expr = Expression::Identifier(IdentifierExpression {
+                    value: entry_extended_name,
+                    span: Span::new("", 0, 0).unwrap()
+                });
+
+                let index_expr = Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                    value: DecimalNumber {
+                        value: index.to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                        span: Span::new("", 0, 0).unwrap()
+                    })),
+                    span: Span::new("", 0, 0).unwrap()
+                }));
+                blks[blks_len - 1].instructions.push(BlockContent::Store((entry_expr, entry_ty.clone(), arr_extended_name.clone(), index_expr, is_declare)));
+                blks[blks_len - 1].num_vm_ops += 1;
+                index += 1;
+            }
         }
         Ok((blks, blks_len, var_scope_info))
     }
@@ -1841,7 +1891,7 @@ impl<'ast> ZGen<'ast> {
         self.bl_gen_assert_const(&format!("%vm{:06}l", vir_mem_op_count), ls);
         // TS, increment if STORE
         if MODE == STORE {
-            self.stmt_impl_::<false>(&bl_gen_increment_stmt(W_TS, 1)).unwrap();
+            self.stmt_impl_::<false>(&bl_gen_increment_stmt(W_TS, 1, &Ty::Field)).unwrap();
         }
         self.bl_gen_assert_eq(&W_TS, &format!("%vm{:06}t", vir_mem_op_count));
         // DATA is updated individually by LOAD or STORE

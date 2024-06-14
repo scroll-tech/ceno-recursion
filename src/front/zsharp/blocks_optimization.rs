@@ -1089,7 +1089,7 @@ fn vtr_inst<'ast>(
                 });
                 new_instr.push(BlockContent::Stmt(pointer_init_stmt));
                 // Increment %AS by size of array
-                new_instr.push(BlockContent::Stmt(bl_gen_increment_stmt(&new_alloc_size_name, *size)));
+                new_instr.push(BlockContent::Stmt(bl_gen_increment_stmt(&new_alloc_size_name, *size, &Ty::Field)));
             }
             BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
                 let new_val_expr: Expression;
@@ -1620,9 +1620,6 @@ impl<'ast> ZGen<'ast> {
 
                 // KILL and GEN within the block
                 (state, _) = la_inst(state, &bls[cur_bl].instructions);
-                
-                println!("BL: {}, STATE: {:?}", cur_bl, state);
-                
                 bl_in[cur_bl] = state;
 
                 // Block Transition
@@ -2507,7 +2504,7 @@ impl<'ast> ZGen<'ast> {
 
                     // %SP = %SP + ?
                     if sp_offset > 0 {
-                        new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset)));   
+                        new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset, &Ty::Field)));   
                         sp_offset = 0;                         
                     }
 
@@ -2559,7 +2556,7 @@ impl<'ast> ZGen<'ast> {
                 }
                 // %SP = %SP + ?
                 if sp_offset > 0 {
-                    new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset)));                        
+                    new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset, &Ty::Field)));                        
                 }
 
                 bls[cur_bl].instructions = new_instructions;

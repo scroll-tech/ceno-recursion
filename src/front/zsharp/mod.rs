@@ -18,7 +18,6 @@ use crate::ir::proof::ConstraintMetadata;
 use crate::ir::term::*;
 use crate::front::zsharp::prover::MemOp;
 
-use fxhash::FxHashMap;
 use log::{debug, info, trace, warn};
 use rug::Integer;
 use std::cell::{Cell, RefCell};

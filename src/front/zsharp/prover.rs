@@ -472,7 +472,7 @@ impl<'ast> ZGen<'ast> {
 
                     // %TS = %TS + 1
                     if !init {
-                        self.bl_eval_stmt_impl_(&bl_gen_increment_stmt(W_TS, 1)).unwrap();
+                        self.bl_eval_stmt_impl_(&bl_gen_increment_stmt(W_TS, 1, &Ty::Field)).unwrap();
                     }
                     let ts_t = self.cvar_lookup(W_TS).ok_or(format!("STORE failed: %TS is uninitialized."))?;
                     let ts = self.t_to_usize(ts_t.clone())?;

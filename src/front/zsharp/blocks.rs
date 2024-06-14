@@ -195,8 +195,8 @@ pub enum BlockContent<'ast> {
     //       val   type  offset  
     MemPush((String, Ty, usize)), // %PHY[%SP + offset] = val
     MemPop((String, Ty, usize)),  // val = %PHY[%BP + offset]
-    //          arr   type  size, assume only one dimensional
-    ArrayInit((String, Ty, usize)), 
+    //          arr   type size_expr, assume only one dimensional
+    ArrayInit((String, Ty, Expression<'ast>)), 
     //     val_expr         type   arr   id_expr           init?
     Store((Expression<'ast>, Ty, String, Expression<'ast>, bool)), // arr[id] = val
     //    var    type   arr   id_expr
@@ -418,24 +418,42 @@ impl VarScopeInfo {
 
 // All information regarding array initialization
 pub struct ArrayInitInfo<'ast> {
+    // Is the initializer length runtime knowledge?
+    // If dynamic, then unique_contents.len() == 1
+    dynamic: bool,
     // All unique entries as expressions
     unique_contents: Vec<Expression<'ast>>,
+    // Length expression of array, if dynamic
+    dyn_length: Option<Expression<'ast>>,
     // Entries of the array, mapped to indices of unique_contents
-    arr_entries: Vec<usize>
+    arr_entries: Option<Vec<usize>>
 }
 
 impl<'ast> ArrayInitInfo<'ast> {
     fn new() -> ArrayInitInfo<'ast> {
         ArrayInitInfo {
+            dynamic: false,
             unique_contents: Vec::new(),
-            arr_entries: Vec::new()
+            dyn_length: None,
+            arr_entries: None
         }
     }
 
-    fn from_array_initializer(value: Expression<'ast>, arr_size: usize) -> ArrayInitInfo<'ast> {
+    fn from_static_array_initializer(value: Expression<'ast>, arr_size: usize) -> ArrayInitInfo<'ast> {
         ArrayInitInfo {
+            dynamic: false,
             unique_contents: vec![value],
-            arr_entries: vec![0; arr_size]
+            dyn_length: None,
+            arr_entries: Some(vec![0; arr_size])
+        }
+    }
+
+    fn from_dyn_array_initializer(value: Expression<'ast>, dyn_arr_len: Expression<'ast>) -> ArrayInitInfo<'ast> {
+        ArrayInitInfo {
+            dynamic: true,
+            unique_contents: vec![value],
+            dyn_length: Some(dyn_arr_len),
+            arr_entries: None,
         }
     }
 
@@ -447,14 +465,33 @@ impl<'ast> ArrayInitInfo<'ast> {
             arr_entries.push(unique_contents.len() - 1);
         }
         ArrayInitInfo {
+            dynamic: false,
             unique_contents,
-            arr_entries
+            dyn_length: None,
+            arr_entries: Some(arr_entries)
         }
     }
 
     // Check whether ArrayInitInfo is empty
     fn is_empty(&self) -> bool {
-        return self.arr_entries.len() == 0;
+        return self.unique_contents.len() == 0;
+    }
+
+    // Return array length as an expression
+    fn len_as_expr(&self, const_ty: &Ty) -> Expression<'ast> {
+        if self.dynamic {
+            self.dyn_length.clone().unwrap()
+        } else {
+            let to_expr = Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: self.arr_entries.clone().unwrap().len().to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(ty_to_dec_suffix(&ty_to_type(const_ty).unwrap())),
+                span: Span::new("", 0, 0).unwrap()
+            }));
+            to_expr
+        }
     }
 }
 
@@ -1094,25 +1131,37 @@ impl<'ast> ZGen<'ast> {
                 let array_init_info: ArrayInitInfo;
                 (blks, blks_len, var_scope_info, rhs_expr, _, _, array_init_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &d.expression, f_name, 0, 0, var_scope_info)?;
-                
+
                 // RHS is array, if array_init_info is defined
                 if !array_init_info.is_empty() {
                     if let Some(l) = d.lhs.first() {
                         let (lhs_id, is_declare) = match l {
                             TypedIdentifierOrAssignee::TypedIdentifier(l) => {
-                                let decl_ty = self.type_impl_::<false>(&l.ty)?;
-
                                 // Unroll scoping on LHS
                                 let arr_name = &l.identifier.value;
                                 // Add the identifier to current scope, declared as Field (pointer)
                                 let arr_extended_name = var_scope_info.declare_var(arr_name, f_name, cur_scope, Ty::Field);
-                                // Declare array
-                                if let Ty::Array(size, entry_ty) = decl_ty {
-                                    if size != array_init_info.arr_entries.len() {
-                                        return Err(format!("Array initialization for {arr_name} failed: array size does not match with initializer size!"));
-                                    }
-                                    blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name.clone(), *entry_ty.clone(), size)));
-                                    var_scope_info.arr_map.insert(arr_extended_name.clone(), *entry_ty.clone());
+
+                                // Array type processing, determine if array has static or dynamic bound
+                                if let Type::Array(arr_ty) = &l.ty {
+                                    let entry_ty = match &arr_ty.ty {
+                                        BasicOrStructType::Struct(s) => self.type_impl_::<false>(&Type::Struct(s.clone())),
+                                        BasicOrStructType::Basic(s) => self.type_impl_::<false>(&Type::Basic(s.clone())),
+                                    }.unwrap();
+
+                                    // Only support one-dimension arrays
+                                    assert_eq!(arr_ty.dimensions.len(), 1);
+                                    let size_expr: Expression;
+                                    (blks, blks_len, var_scope_info, size_expr, _, _, _) = 
+                                        self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &arr_ty.dimensions[0], f_name, 0, 0, var_scope_info)?;
+                                    // TODO: How to compare array length?
+                                    // if size_expr != array_init_info.len_as_expr(&Ty::Field) {
+                                    //     return Err(format!("Array initialization for {arr_name} failed: array size does not match with initializer size!"));
+                                    //}
+                                    blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name.clone(), entry_ty.clone(), size_expr)));
+                                    var_scope_info.arr_map.insert(arr_extended_name.clone(), entry_ty);
+                                } else {
+                                    return Err(format!("Array initialization for {arr_name} failed: {arr_name} is not an array!"));
                                 }
 
                                 (arr_extended_name, true)
@@ -1378,11 +1427,21 @@ impl<'ast> ZGen<'ast> {
             }
             Expression::Literal(_) => {}
             Expression::ArrayInitializer(ai) => {
-                let arr_size: usize = const_int(self.expr_impl_::<false>(&ai.count)?)?.try_into().unwrap();
                 let new_ai_value: Expression;
                 (blks, blks_len, var_scope_info, new_ai_value, func_count, load_count, _) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &ai.value, f_name, func_count, load_count, var_scope_info)?;
-                array_init_info = ArrayInitInfo::from_array_initializer(new_ai_value, arr_size);
+                // Note: if ai.count is not constant, expr_impl_ would fail
+                let arr_size: Result<usize, String> = {
+                    self.expr_impl_::<false>(&ai.count).and_then(|e| const_int(e)).and_then(|i| i.try_into().or_else(|_| Err("".to_string())))
+                };
+                if let Ok(arr_size) = arr_size {
+                    array_init_info = ArrayInitInfo::from_static_array_initializer(new_ai_value, arr_size);
+                } else {
+                    let len_expr: Expression;
+                    (blks, blks_len, var_scope_info, len_expr, func_count, load_count, _) = 
+                        self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &ai.count, f_name, func_count, load_count, var_scope_info)?;
+                    array_init_info = ArrayInitInfo::from_dyn_array_initializer(new_ai_value, len_expr);
+                }
             }
             Expression::InlineArray(ia) => {
                 let mut new_e_list = Vec::new();
@@ -1447,6 +1506,7 @@ impl<'ast> ZGen<'ast> {
         // if there is only one unique entry, then assign the array through a simplified for loop
         if array_init_info.unique_contents.len() == 1 {
             let index_name = "index@";
+            // TODO: Type analysis on to_expr
             let index_ty = Ty::Field;
             let index_extended_name = var_scope_info.declare_var(&index_name, &f_name, cur_scope, index_ty.clone());
             
@@ -1455,7 +1515,13 @@ impl<'ast> ZGen<'ast> {
             
             // Loop body
             let num_exec_bound = blks[blks_len - 1].fn_num_exec_bound;
-            blks.push(Block::new(blks_len, array_init_info.arr_entries.len() * num_exec_bound, f_name.to_string(), cur_scope + 1));
+            blks.push(Block::new(blks_len, num_exec_bound, f_name.to_string(), cur_scope + 1));
+            // Decide if loop is bounded
+            if array_init_info.dynamic {
+                blks[blks_len - 1].is_head_of_while_loop = true;
+            } else {
+                blks[blks_len - 1].fn_num_exec_bound = array_init_info.arr_entries.clone().unwrap().len() * num_exec_bound;
+            }
             blks_len += 1;
             let loop_header = blks_len - 1;
             // Store stmt & increment iterator
@@ -1475,7 +1541,7 @@ impl<'ast> ZGen<'ast> {
             };
             blks[blks_len - 1].instructions.push(store_instr);
             blks[blks_len - 1].num_vm_ops += 1;
-            blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_increment_stmt(&index_extended_name, 1, &Ty::Field)));
+            blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_increment_stmt(&index_extended_name, 1, &index_ty)));
             
             // Bound
             blks.push(Block::new(blks_len, num_exec_bound, f_name.to_string(), cur_scope));
@@ -1486,14 +1552,7 @@ impl<'ast> ZGen<'ast> {
                 value: index_extended_name,
                 span: Span::new("", 0, 0).unwrap()
             };
-            let to_expr = Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                value: DecimalNumber {
-                    value: array_init_info.arr_entries.len().to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                },
-                suffix: Some(ty_to_dec_suffix(&ty_to_type(&index_ty).unwrap())),
-                span: Span::new("", 0, 0).unwrap()
-            }));
+            let to_expr = array_init_info.len_as_expr(&index_ty).clone();
             let term = BlockTerminator::Transition(
                 bl_trans(
                     cond_expr(new_id.clone(), to_expr),
@@ -1507,7 +1566,7 @@ impl<'ast> ZGen<'ast> {
         // otherwise assign individual entries
         else {
             let mut index = 0;
-            for entry in array_init_info.arr_entries {
+            for entry in array_init_info.arr_entries.unwrap() {
                 let entry_name = format!("init@{}", entry);
                 let entry_extended_name = var_scope_info.reference_var(&entry_name, &f_name)?.0;
                 let entry_expr = Expression::Identifier(IdentifierExpression {

@@ -8,7 +8,11 @@ pub fn pretty_block_content(indent: usize, bc: &BlockContent) {
     match bc {
         BlockContent::MemPush((val, ty, offset)) => { println!("%PHY[%SP + {offset}] = {} <{ty}>", pretty_name(val)) }
         BlockContent::MemPop((val, ty, offset)) => { println!("{ty} {} = %PHY[%BP + {offset}]", pretty_name(val)) }
-        BlockContent::ArrayInit((arr, ty, size)) => { println!("{ty}[{size}] {arr}") }
+        BlockContent::ArrayInit((arr, ty, size_expr)) => {
+            print!("{ty}[");
+            pretty_expr::<false>(&size_expr); 
+            println!("] {arr}")
+        }
         BlockContent::Store((val, ty, arr, id, init)) => { 
             print!("{arr}["); 
             pretty_expr::<false>(&id); print!("] = "); 

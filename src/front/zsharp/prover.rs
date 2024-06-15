@@ -443,7 +443,7 @@ impl<'ast> ZGen<'ast> {
                     }
                     phy_mem_op.push(MemOp::new_phy(bp + offset, self.usize_to_field(bp + offset)?, val_t));         
                 }
-                BlockContent::ArrayInit((arr, ty, len_expr)) => {
+                BlockContent::ArrayInit((arr, _, len_expr)) => {
                     // Declare the array as a pointer (field), set to %AS
                     let as_t = self.cvar_lookup(W_AS).ok_or(format!("Array initialization failed: %AS is uninitialized."))?;
                     self.declare_init_impl_::<true>(

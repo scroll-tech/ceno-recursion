@@ -933,7 +933,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<false>(path.clone(), entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
+    let rtk = get_run_time_knowledge::<true>(path.clone(), entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
     let witness_time = witness_start.elapsed();
 
     // --

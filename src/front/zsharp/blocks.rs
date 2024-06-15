@@ -473,11 +473,6 @@ impl<'ast> ArrayInitInfo<'ast> {
         }
     }
 
-    // Check whether ArrayInitInfo is empty
-    fn is_empty(&self) -> bool {
-        return self.unique_contents.len() == 0;
-    }
-
     // Return array length as an expression
     fn len_as_expr(&self, const_ty: &Ty) -> Expression<'ast> {
         if self.dynamic {
@@ -856,10 +851,10 @@ impl<'ast> ZGen<'ast> {
         match s {
             Statement::Return(r) => {
                 let ret_expr: Expression;
-                let array_init_info: ArrayInitInfo;
+                let array_init_info: Option<ArrayInitInfo>;
                 (blks, blks_len, var_scope_info, ret_expr, _, _, array_init_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &r.expressions[0], f_name, 0, 0, var_scope_info)?;
-                if !array_init_info.is_empty() { panic!("Inline array inside return statements not supported!") }
+                if array_init_info.is_some() { panic!("Inline array inside return statements not supported!") }
                 // Convert the statement to %RET.<f_name> = ret_expr
                 // We include <f_name> because different function has different return type
                 let ret_stmt = Statement::Definition(DefinitionStatement {
@@ -893,10 +888,10 @@ impl<'ast> ZGen<'ast> {
             }
             Statement::Assertion(a) => {
                 let asst_expr: Expression;
-                let array_init_info: ArrayInitInfo;
+                let array_init_info: Option<ArrayInitInfo>;
                 (blks, blks_len, var_scope_info, asst_expr, _, _, array_init_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &a.expression, f_name, 0, 0, var_scope_info)?;
-                if !array_init_info.is_empty() { panic!("Inline array inside assertion statements not supported!") }
+                if array_init_info.is_some() { panic!("Inline array inside assertion statements not supported!") }
                 let asst_stmt = Statement::Assertion(AssertionStatement {
                     expression: asst_expr,
                     message: a.message.clone(),
@@ -918,14 +913,14 @@ impl<'ast> ZGen<'ast> {
                 let new_v_name = var_scope_info.declare_var(&v_name, f_name, cur_scope, ty.clone());
 
                 let from_expr: Expression;
-                let mut array_init_info: ArrayInitInfo;
+                let mut array_init_info: Option<ArrayInitInfo>;
                 (blks, blks_len, var_scope_info, from_expr, _, _, array_init_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &it.from, f_name, 0, 0, var_scope_info)?;
-                if !array_init_info.is_empty() { panic!("From expr of for loops cannot be inline array!") }
+                if array_init_info.is_some() { return Err(format!("From expr of for loops cannot be inline array!")) }
                 let to_expr: Expression;
                 (blks, blks_len, var_scope_info, to_expr, _, _, array_init_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &it.to, f_name, 0, 0, var_scope_info)?;
-                if !array_init_info.is_empty() { panic!("To expr of for loops cannot be inline array!") }
+                if array_init_info.is_some() { return Err(format!("To expr of for loops cannot be inline array!")) }
 
                 // Record the number of iterations of the loop
                 let (loop_num_it, cnst_for_loop) = {
@@ -1029,10 +1024,10 @@ impl<'ast> ZGen<'ast> {
             Statement::WhileLoop(w) => {
                 // Process function calls in the condition
                 let cond_expr: Expression;
-                let array_init_info: ArrayInitInfo;
+                let array_init_info: Option<ArrayInitInfo>;
                 (blks, blks_len, var_scope_info, cond_expr, _, _, array_init_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &w.condition, f_name, 0, 0, var_scope_info)?;
-                if !array_init_info.is_empty() { panic!("Inline array inside while loop condition not supported!") }
+                if array_init_info.is_some() { panic!("Inline array inside while loop condition not supported!") }
 
                 // New Scope to enter LOOP BODY
                 cur_scope = self.bl_gen_enter_scope_(cur_scope)?;
@@ -1068,10 +1063,10 @@ impl<'ast> ZGen<'ast> {
             Statement::Conditional(c) => {
                 // Process function calls in the condition
                 let cond_expr: Expression;
-                let array_init_info: ArrayInitInfo;
+                let array_init_info: Option<ArrayInitInfo>;
                 (blks, blks_len, var_scope_info, cond_expr, _, _, array_init_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &c.condition, f_name, 0, 0, var_scope_info)?;
-                if !array_init_info.is_empty() { panic!("Inline array inside branch condition not supported!!") }
+                if array_init_info.is_some() { panic!("Inline array inside branch condition not supported!!") }
 
                 let head_state = blks_len - 1;
 
@@ -1129,12 +1124,12 @@ impl<'ast> ZGen<'ast> {
                 // Evaluate function calls in expression
                 let mut lhs_expr = d.lhs.clone();
                 let rhs_expr: Expression;
-                let array_init_info: ArrayInitInfo;
+                let array_init_info: Option<ArrayInitInfo>;
                 (blks, blks_len, var_scope_info, rhs_expr, _, _, array_init_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &d.expression, f_name, 0, 0, var_scope_info)?;
 
                 // RHS is array, if array_init_info is defined
-                if !array_init_info.is_empty() {
+                if let Some(array_init_info) = array_init_info {
                     if let Some(l) = d.lhs.first() {
                         let (lhs_id, is_declare) = match l {
                             TypedIdentifierOrAssignee::TypedIdentifier(l) => {
@@ -1210,10 +1205,10 @@ impl<'ast> ZGen<'ast> {
                                         assignee_is_store = true;
                                         if let RangeOrExpression::Expression(e) = &a.expression {
                                             let new_e: Expression;
-                                            let tmp_arr_info: ArrayInitInfo;
+                                            let tmp_arr_info: Option<ArrayInitInfo>;
                                             (blks, blks_len, var_scope_info, new_e, _, _, tmp_arr_info) = 
                                                 self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, var_scope_info)?;
-                                            if !tmp_arr_info.is_empty() { panic!("Currently do not support array initialization inside array indices") }
+                                            if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside array indices") }
                                             blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), entry_ty.clone(), new_l, new_e, false)));
                                             blks[blks_len - 1].num_vm_ops += 1;
                                         } else {
@@ -1303,28 +1298,28 @@ impl<'ast> ZGen<'ast> {
         mut func_count: usize,
         mut load_count: usize,
         mut var_scope_info: VarScopeInfo
-    ) -> Result<(Vec<Block>, usize, VarScopeInfo, Expression, usize, usize, ArrayInitInfo), String> {
+    ) -> Result<(Vec<Block>, usize, VarScopeInfo, Expression, usize, usize, Option<ArrayInitInfo>), String> {
         debug!("Block Gen Expr: {}", e.span().as_str());
 
         let mut ret_e = e.clone();
         // All (index, value) pair for array initialization, currently cannot be put inside any other expression
-        let mut array_init_info = ArrayInitInfo::new();
+        let mut array_init_info = None;
 
         match e {
             Expression::Ternary(t) => {
-                let mut tmp_arr_info: ArrayInitInfo;
+                let mut tmp_arr_info: Option<ArrayInitInfo>;
                 let new_e_first: Expression;
                 let new_e_second: Expression;
                 let new_e_third: Expression;
                 (blks, blks_len, var_scope_info, new_e_first, func_count, load_count, tmp_arr_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &t.first, f_name, func_count, load_count, var_scope_info)?;
-                if !tmp_arr_info.is_empty() { panic!("Currently do not support array initialization inside ternary expressions") }
+                if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside ternary expressions") }
                 (blks, blks_len, var_scope_info, new_e_second, func_count, load_count, tmp_arr_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &t.second, f_name, func_count, load_count, var_scope_info)?;
-                if !tmp_arr_info.is_empty() { panic!("Currently do not support array initialization inside ternary expressions") }
+                if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside ternary expressions") }
                 (blks, blks_len, var_scope_info, new_e_third, func_count, load_count, tmp_arr_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &t.third, f_name, func_count, load_count, var_scope_info)?;
-                if !tmp_arr_info.is_empty() { panic!("Currently do not support array initialization inside ternary expressions") }
+                if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside ternary expressions") }
                 ret_e = Expression::Ternary(TernaryExpression {
                     first: Box::new(new_e_first),
                     second: Box::new(new_e_second),
@@ -1333,15 +1328,15 @@ impl<'ast> ZGen<'ast> {
                 });
             }
             Expression::Binary(b) => {
-                let mut tmp_arr_info: ArrayInitInfo;
+                let mut tmp_arr_info: Option<ArrayInitInfo>;
                 let new_e_left: Expression;
                 let new_e_right: Expression;
                 (blks, blks_len, var_scope_info, new_e_left, func_count, load_count, tmp_arr_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &b.left, f_name, func_count, load_count, var_scope_info)?;
-                if !tmp_arr_info.is_empty() { panic!("Currently do not support array initialization inside binary expressions") }
+                if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside binary expressions") }
                 (blks, blks_len, var_scope_info, new_e_right, func_count, load_count, tmp_arr_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &b.right, f_name, func_count, load_count, var_scope_info)?;
-                if !tmp_arr_info.is_empty() { panic!("Currently do not support array initialization inside binary expressions") }
+                if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside binary expressions") }
                 ret_e = Expression::Binary(BinaryExpression {
                     op: b.op.clone(),
                     left: Box::new(new_e_left),
@@ -1350,11 +1345,11 @@ impl<'ast> ZGen<'ast> {
                 });
             }
             Expression::Unary(u) => {
-                let tmp_arr_info: ArrayInitInfo;
+                let tmp_arr_info: Option<ArrayInitInfo>;
                 let new_e_expr: Expression;
                 (blks, blks_len, var_scope_info, new_e_expr, func_count, load_count, tmp_arr_info) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &u.expression, f_name, func_count, load_count, var_scope_info)?;
-                if !tmp_arr_info.is_empty() { panic!("Currently do not support array initialization inside unary expressions") }
+                if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside unary expressions") }
                 ret_e = Expression::Unary(UnaryExpression {
                     op: u.op.clone(),
                     expression: Box::new(new_e_expr),
@@ -1369,11 +1364,11 @@ impl<'ast> ZGen<'ast> {
                         let (callee_path, callee_name) = self.deref_import(&p.id.value);
                         let mut args: Vec<Expression> = Vec::new();
                         let mut new_expr: Expression;
-                        let mut tmp_arr_info: ArrayInitInfo;
+                        let mut tmp_arr_info: Option<ArrayInitInfo>;
                         for old_expr in &c.arguments.expressions {
                             (blks, blks_len, var_scope_info, new_expr, func_count, load_count, tmp_arr_info) = 
                                 self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, old_expr, f_name, func_count, load_count, var_scope_info)?;
-                            if !tmp_arr_info.is_empty() { panic!("Currently do not support array initialization inside function calls") }
+                            if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside function calls") }
                             args.push(new_expr);                       
                         }
      
@@ -1401,10 +1396,10 @@ impl<'ast> ZGen<'ast> {
                             
                             // Preprocess the indices
                             let new_e: Expression;
-                            let tmp_arr_info: ArrayInitInfo;
+                            let tmp_arr_info: Option<ArrayInitInfo>;
                             (blks, blks_len, var_scope_info, new_e, _, _, tmp_arr_info) = 
                                 self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, var_scope_info)?;
-                            if !tmp_arr_info.is_empty() { panic!("Currently do not support array initialization inside array indices") }
+                            if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside array indices") }
                             blks[blks_len - 1].instructions.push(BlockContent::Load((load_extended_name.clone(), load_ty.clone(), arr_extended_name.clone(), new_e)));
                             blks[blks_len - 1].num_vm_ops += 1;
                             load_count += 1;
@@ -1436,29 +1431,29 @@ impl<'ast> ZGen<'ast> {
                     self.expr_impl_::<false>(&ai.count).and_then(|e| const_int(e)).and_then(|i| i.try_into().or_else(|_| Err("".to_string())))
                 };
                 if let Ok(arr_size) = arr_size {
-                    array_init_info = ArrayInitInfo::from_static_array_initializer(new_ai_value, arr_size);
+                    array_init_info = Some(ArrayInitInfo::from_static_array_initializer(new_ai_value, arr_size));
                 } else {
                     let len_expr: Expression;
                     (blks, blks_len, var_scope_info, len_expr, func_count, load_count, _) = 
                         self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &ai.count, f_name, func_count, load_count, var_scope_info)?;
-                    array_init_info = ArrayInitInfo::from_dyn_array_initializer(new_ai_value, len_expr);
+                    array_init_info = Some(ArrayInitInfo::from_dyn_array_initializer(new_ai_value, len_expr));
                 }
             }
             Expression::InlineArray(ia) => {
                 let mut new_e_list = Vec::new();
                 for se in &ia.expressions {
                     if let SpreadOrExpression::Expression(e) = se {
-                        let tmp_arr_info: ArrayInitInfo;
+                        let tmp_arr_info: Option<ArrayInitInfo>;
                         let new_e: Expression;
                         (blks, blks_len, var_scope_info, new_e, func_count, load_count, tmp_arr_info) = 
                             self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, func_count, load_count, var_scope_info)?;
-                        if !tmp_arr_info.is_empty() { panic!("Currently do not support array initialization inside inline arrays") }
+                        if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside inline arrays") }
                         new_e_list.push(new_e);
                     } else {
                         return Err(format!("Spread not supported in inline arrays!"));
                     }
                 }
-                array_init_info = ArrayInitInfo::from_inline_array(new_e_list);
+                array_init_info = Some(ArrayInitInfo::from_inline_array(new_e_list));
             }
             Expression::InlineStruct(_) => { return Err(format!("Struct not supported!")); }
         }
@@ -2088,7 +2083,7 @@ impl<'ast> ZGen<'ast> {
                 ).unwrap();
                 phy_mem_op_count += 1;  
             }
-            BlockContent::ArrayInit((arr, ty, len_expr)) => {
+            BlockContent::ArrayInit((arr, _, len_expr)) => {
                 if ESTIMATE {
                     self.circ_declare_input(
                         &f,

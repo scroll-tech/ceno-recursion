@@ -1062,57 +1062,12 @@ fn vtr_inst<'ast>(
                 (new_var, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
                 new_instr.push(BlockContent::MemPop((new_var, ty.clone(), *offset)));
             }
-            BlockContent::ArrayInit((arr, _, size_expr)) => {
+            BlockContent::ArrayInit((arr, ty, size_expr)) => {
                 let new_arr_name: String;
-                let new_alloc_size_name: String;
                 (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
-                (new_alloc_size_name, witness_map, _) = var_name_to_reg_id_expr::<0>("%AS".to_string(), witness_map);
                 let new_size_expr: Expression;
                 (new_size_expr, witness_map) = var_to_reg_expr(&size_expr, witness_map);
-
-                // Declare the array as a pointer (field), set to %AS
-                let pointer_init_stmt = Statement::Definition(DefinitionStatement {
-                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                        array_metadata: None,
-                        ty: Type::Basic(BasicType::Field(FieldType {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        identifier: IdentifierExpression {
-                            value: new_arr_name.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        span: Span::new("", 0, 0).unwrap()
-                    })],
-                    expression: Expression::Identifier(IdentifierExpression {
-                        value: new_alloc_size_name.to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    }),
-                    span: Span::new("", 0, 0).unwrap()
-                });
-                new_instr.push(BlockContent::Stmt(pointer_init_stmt));
-                
-                // Increment %AS by size of array
-                let as_increment_stmt = Statement::Definition(DefinitionStatement {
-                    lhs: vec![TypedIdentifierOrAssignee::Assignee(Assignee {
-                        id: IdentifierExpression {
-                            value: new_alloc_size_name.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        accesses: Vec::new(),
-                        span: Span::new("", 0, 0).unwrap()
-                    })],
-                    expression: Expression::Binary(BinaryExpression {
-                        op: BinaryOperator::Add,
-                        left: Box::new(Expression::Identifier(IdentifierExpression {
-                            value: new_alloc_size_name.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        right: Box::new(new_size_expr),
-                        span: Span::new("", 0, 0).unwrap()
-                    }),
-                    span: Span::new("", 0, 0).unwrap()
-                });
-                new_instr.push(BlockContent::Stmt(as_increment_stmt));
+                new_instr.push(BlockContent::ArrayInit((new_arr_name, ty.clone(), new_size_expr)));
             }
             BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
                 let new_val_expr: Expression;

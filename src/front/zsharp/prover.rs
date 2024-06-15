@@ -23,6 +23,7 @@ const LOAD: usize = 1;
 
 const O_RET: &str = "%o000002";
 const W_TS: &str = "%w1";
+const W_AS: &str = "%w2";
 const W_SP: &str = "%w4";
 const W_BP: &str = "%w5";
 
@@ -442,7 +443,22 @@ impl<'ast> ZGen<'ast> {
                     }
                     phy_mem_op.push(MemOp::new_phy(bp + offset, self.usize_to_field(bp + offset)?, val_t));         
                 }
-                BlockContent::ArrayInit(_) => { return Err(format!("Blocks should not contain array initializations.")); }
+                BlockContent::ArrayInit((arr, ty, len_expr)) => {
+                    // Declare the array as a pointer (field), set to %AS
+                    let as_t = self.cvar_lookup(W_AS).ok_or(format!("Array initialization failed: %AS is uninitialized."))?;
+                    self.declare_init_impl_::<true>(
+                        arr.to_string(),
+                        Ty::Field,
+                        as_t.clone(),
+                    )?;
+                    // Increment %AS by size of array
+                    let mut len_t = self.expr_impl_::<true>(&len_expr).unwrap();
+                    if len_t.type_() != &Ty::Field {
+                        len_t = uint_to_field(len_t).unwrap();
+                    }
+                    let new_as_t = add(as_t, len_t).unwrap();
+                    self.cvar_assign(W_AS, new_as_t)?;
+                }
                 BlockContent::Store((val_expr, _, arr, id_expr, init)) => {
                     let mut val_t = self.expr_impl_::<true>(&val_expr)?;
                     let mut id_t = self.expr_impl_::<true>(&id_expr)?;

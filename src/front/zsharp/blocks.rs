@@ -24,6 +24,7 @@ const INIT_STORE: usize = 2;
 const DUMMY_LOAD: usize = 3;
 
 const W_TS: &str = "%w1";
+const W_AS: &str = "%w2";
 const W_SP: &str = "%w4";
 const W_BP: &str = "%w5";
 
@@ -1507,7 +1508,7 @@ impl<'ast> ZGen<'ast> {
         if array_init_info.unique_contents.len() == 1 {
             let index_name = "index@";
             // TODO: Type analysis on to_expr
-            let index_ty = Ty::Field;
+            let index_ty = Ty::Uint(32);
             let index_extended_name = var_scope_info.declare_var(&index_name, &f_name, cur_scope, index_ty.clone());
             
             // Init
@@ -2087,7 +2088,7 @@ impl<'ast> ZGen<'ast> {
                 ).unwrap();
                 phy_mem_op_count += 1;  
             }
-            BlockContent::ArrayInit((arr, _, _)) => {
+            BlockContent::ArrayInit((arr, ty, len_expr)) => {
                 if ESTIMATE {
                     self.circ_declare_input(
                         &f,
@@ -2098,6 +2099,25 @@ impl<'ast> ZGen<'ast> {
                         true,
                         &None,
                     ).unwrap();
+                } else {
+                    // Declare the array as a pointer (field), set to %AS
+                    let as_expr = Expression::Identifier(IdentifierExpression {
+                        value: W_AS.to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    });
+                    let as_t = self.expr_impl_::<false>(&as_expr).unwrap();
+                    self.declare_init_impl_::<false>(
+                        arr.to_string(),
+                        Ty::Field,
+                        as_t.clone(),
+                    ).unwrap();
+                    // Increment %AS by size of array
+                    let mut len_t = self.expr_impl_::<false>(&len_expr).unwrap();
+                    if len_t.type_() != &Ty::Field {
+                        len_t = uint_to_field(len_t).unwrap();
+                    }
+                    let new_as_t = add(as_t, len_t).unwrap();
+                    self.assign_impl_::<false>(W_AS, &[][..], new_as_t, false).unwrap();
                 }
             }
             BlockContent::Store((val_expr, _, arr, id_expr, init)) => {

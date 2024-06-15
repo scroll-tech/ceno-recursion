@@ -39,7 +39,7 @@ fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast
     ce
 }
 
-fn ty_to_dec_suffix<'ast>(ty: &Type<'ast>) -> DecimalSuffix<'ast> {
+pub fn ty_to_dec_suffix<'ast>(ty: &Type<'ast>) -> DecimalSuffix<'ast> {
     let span = Span::new("", 0, 0).unwrap();
     match ty {
         Type::Basic(BasicType::Field(_)) => { DecimalSuffix::Field(FieldSuffix { span }) }
@@ -1512,13 +1512,13 @@ impl<'ast> ZGen<'ast> {
             // Loop body
             let num_exec_bound = blks[blks_len - 1].fn_num_exec_bound;
             blks.push(Block::new(blks_len, num_exec_bound, f_name.to_string(), cur_scope + 1));
+            blks_len += 1;
             // Decide if loop is bounded
             if array_init_info.dynamic {
                 blks[blks_len - 1].is_head_of_while_loop = true;
             } else {
                 blks[blks_len - 1].fn_num_exec_bound = array_init_info.arr_entries.clone().unwrap().len() * num_exec_bound;
             }
-            blks_len += 1;
             let loop_header = blks_len - 1;
             // Store stmt & increment iterator
             let store_instr = {

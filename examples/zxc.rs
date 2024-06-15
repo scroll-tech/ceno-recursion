@@ -43,7 +43,7 @@ const NUM_RESERVED_VARS: usize = 7;
 // Which index in the output (INCLUDING V) denotes %RET?
 const OUTPUT_OFFSET: usize = 2;
 // What is the maximum width (# of bits) of %TS?
-const MAX_TS_WIDTH: usize = 11;
+const MAX_TS_WIDTH: usize = 12;
 
 const VARS_PER_ST_ACCESS: usize = 2;
 const VARS_PER_VM_ACCESS: usize = 4;
@@ -933,7 +933,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<true>(path.clone(), entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
+    let rtk = get_run_time_knowledge::<false>(path.clone(), entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
     let witness_time = witness_start.elapsed();
 
     // --

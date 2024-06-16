@@ -97,8 +97,7 @@ def main(u32 m, u32 n) -> u32:
     ]
     u32 hash = 0
 
-    u32 i = 0
-    while i < n do
+    for u32 i in 0..n do
         u32[16] padded_message = [0; 16]
         u32 sum = 0
         for u32 i in 0..16 do
@@ -107,7 +106,6 @@ def main(u32 m, u32 n) -> u32:
         endfor
         u32 next = shaRound(m, padded_message, IV)
         hash = hash + next
-        i = i + 1
-    endwhile
+    endfor
 
     return hash

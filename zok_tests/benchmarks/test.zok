@@ -1,8 +1,10 @@
-def main(field a)-> field:
-  field b = a
-  if a == 0 then
-    field c = b
-  else
-    field c = b
-  endif
-  return a
+def main(u32 a, u32 b, field c)-> u32:
+  u32[a] s = []
+  u32[b] t = []
+  for u32 i in 0..a do
+    s[i] = i
+  endfor
+  for u32 j in 0..b do
+    t[j] = j
+  endfor
+  return s[c] + t[c]

@@ -427,7 +427,8 @@ pub struct ArrayInitInfo<'ast> {
     // Length expression of array, if dynamic
     dyn_length: Option<Expression<'ast>>,
     // Entries of the array, mapped to indices of unique_contents
-    arr_entries: Option<Vec<usize>>
+    arr_entries: Option<Vec<usize>>,
+    entry_ty: Ty,
 }
 
 impl<'ast> ArrayInitInfo<'ast> {
@@ -436,29 +437,32 @@ impl<'ast> ArrayInitInfo<'ast> {
             dynamic: false,
             unique_contents: Vec::new(),
             dyn_length: None,
-            arr_entries: None
+            arr_entries: None,
+            entry_ty: Ty::Field,
         }
     }
 
-    fn from_static_array_initializer(value: Expression<'ast>, arr_size: usize) -> ArrayInitInfo<'ast> {
+    fn from_static_array_initializer(value: Expression<'ast>, arr_size: usize, entry_ty: Ty) -> ArrayInitInfo<'ast> {
         ArrayInitInfo {
             dynamic: false,
             unique_contents: vec![value],
             dyn_length: None,
-            arr_entries: Some(vec![0; arr_size])
+            arr_entries: Some(vec![0; arr_size]),
+            entry_ty
         }
     }
 
-    fn from_dyn_array_initializer(value: Expression<'ast>, dyn_arr_len: Expression<'ast>) -> ArrayInitInfo<'ast> {
+    fn from_dyn_array_initializer(value: Expression<'ast>, dyn_arr_len: Expression<'ast>, entry_ty: Ty) -> ArrayInitInfo<'ast> {
         ArrayInitInfo {
             dynamic: true,
             unique_contents: vec![value],
             dyn_length: Some(dyn_arr_len),
             arr_entries: None,
+            entry_ty,
         }
     }
 
-    fn from_inline_array(entries: Vec<Expression<'ast>>) -> ArrayInitInfo<'ast> {
+    fn from_inline_array(entries: Vec<Expression<'ast>>, entry_ty: Ty) -> ArrayInitInfo<'ast> {
         let mut unique_contents = Vec::new();
         let mut arr_entries = Vec::new();
         for e in entries.into_iter() {
@@ -469,7 +473,8 @@ impl<'ast> ArrayInitInfo<'ast> {
             dynamic: false,
             unique_contents,
             dyn_length: None,
-            arr_entries: Some(arr_entries)
+            arr_entries: Some(arr_entries),
+            entry_ty
         }
     }
 
@@ -851,10 +856,8 @@ impl<'ast> ZGen<'ast> {
         match s {
             Statement::Return(r) => {
                 let ret_expr: Expression;
-                let array_init_info: Option<ArrayInitInfo>;
-                (blks, blks_len, var_scope_info, ret_expr, _, _, array_init_info) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &r.expressions[0], f_name, 0, 0, var_scope_info)?;
-                if array_init_info.is_some() { panic!("Inline array inside return statements not supported!") }
+                (blks, blks_len, var_scope_info, ret_expr, _, _, _) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &r.expressions[0], f_name, 0, 0, 0, var_scope_info)?;
                 // Convert the statement to %RET.<f_name> = ret_expr
                 // We include <f_name> because different function has different return type
                 let ret_stmt = Statement::Definition(DefinitionStatement {
@@ -888,10 +891,8 @@ impl<'ast> ZGen<'ast> {
             }
             Statement::Assertion(a) => {
                 let asst_expr: Expression;
-                let array_init_info: Option<ArrayInitInfo>;
-                (blks, blks_len, var_scope_info, asst_expr, _, _, array_init_info) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &a.expression, f_name, 0, 0, var_scope_info)?;
-                if array_init_info.is_some() { panic!("Inline array inside assertion statements not supported!") }
+                (blks, blks_len, var_scope_info, asst_expr, _, _, _) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &a.expression, f_name, 0, 0, 0, var_scope_info)?;
                 let asst_stmt = Statement::Assertion(AssertionStatement {
                     expression: asst_expr,
                     message: a.message.clone(),
@@ -913,14 +914,14 @@ impl<'ast> ZGen<'ast> {
                 let new_v_name = var_scope_info.declare_var(&v_name, f_name, cur_scope, ty.clone());
 
                 let from_expr: Expression;
-                let mut array_init_info: Option<ArrayInitInfo>;
-                (blks, blks_len, var_scope_info, from_expr, _, _, array_init_info) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &it.from, f_name, 0, 0, var_scope_info)?;
-                if array_init_info.is_some() { return Err(format!("From expr of for loops cannot be inline array!")) }
+                let mut func_count = 0;
+                let mut array_count = 0;
+                let mut load_count = 0;
+                (blks, blks_len, var_scope_info, from_expr, func_count, array_count, load_count) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &it.from, f_name, func_count, array_count, load_count, var_scope_info)?;
                 let to_expr: Expression;
-                (blks, blks_len, var_scope_info, to_expr, _, _, array_init_info) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &it.to, f_name, 0, 0, var_scope_info)?;
-                if array_init_info.is_some() { return Err(format!("To expr of for loops cannot be inline array!")) }
+                (blks, blks_len, var_scope_info, to_expr, _, _, _) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &it.to, f_name, func_count, array_count, load_count, var_scope_info)?;
 
                 // Record the number of iterations of the loop
                 let (loop_num_it, cnst_for_loop) = {
@@ -1024,10 +1025,8 @@ impl<'ast> ZGen<'ast> {
             Statement::WhileLoop(w) => {
                 // Process function calls in the condition
                 let cond_expr: Expression;
-                let array_init_info: Option<ArrayInitInfo>;
-                (blks, blks_len, var_scope_info, cond_expr, _, _, array_init_info) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &w.condition, f_name, 0, 0, var_scope_info)?;
-                if array_init_info.is_some() { panic!("Inline array inside while loop condition not supported!") }
+                (blks, blks_len, var_scope_info, cond_expr, _, _, _) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &w.condition, f_name, 0, 0, 0, var_scope_info)?;
 
                 // New Scope to enter LOOP BODY
                 cur_scope = self.bl_gen_enter_scope_(cur_scope)?;
@@ -1063,10 +1062,8 @@ impl<'ast> ZGen<'ast> {
             Statement::Conditional(c) => {
                 // Process function calls in the condition
                 let cond_expr: Expression;
-                let array_init_info: Option<ArrayInitInfo>;
-                (blks, blks_len, var_scope_info, cond_expr, _, _, array_init_info) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &c.condition, f_name, 0, 0, var_scope_info)?;
-                if array_init_info.is_some() { panic!("Inline array inside branch condition not supported!!") }
+                (blks, blks_len, var_scope_info, cond_expr, _, _, _) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &c.condition, f_name, 0, 0, 0, var_scope_info)?;
 
                 let head_state = blks_len - 1;
 
@@ -1124,154 +1121,108 @@ impl<'ast> ZGen<'ast> {
                 // Evaluate function calls in expression
                 let mut lhs_expr = d.lhs.clone();
                 let rhs_expr: Expression;
-                let array_init_info: Option<ArrayInitInfo>;
-                (blks, blks_len, var_scope_info, rhs_expr, _, _, array_init_info) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &d.expression, f_name, 0, 0, var_scope_info)?;
+                (blks, blks_len, var_scope_info, rhs_expr, _, _, _) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &d.expression, f_name, 0, 0, 0, var_scope_info)?;
 
-                // RHS is array, if array_init_info is defined
-                if let Some(array_init_info) = array_init_info {
-                    if let Some(l) = d.lhs.first() {
-                        let (lhs_id, is_declare) = match l {
-                            TypedIdentifierOrAssignee::TypedIdentifier(l) => {
-                                // Unroll scoping on LHS
-                                let arr_name = &l.identifier.value;
-                                // Add the identifier to current scope, declared as Field (pointer)
-                                let arr_extended_name = var_scope_info.declare_var(arr_name, f_name, cur_scope, Ty::Field);
+                // Handle Scoping change
+                let mut assignee_is_store = false;
+                if let Some(l) = d.lhs.first() {
+                    match l {
+                        TypedIdentifierOrAssignee::Assignee(l) => {
+                            // No scoping change if lhs is an assignee, only need to make sure it has appeared before
+                            let (new_l, lhs_ty) = var_scope_info.reference_var(&l.id.value.clone(), f_name)?;
 
-                                // Array type processing, determine if array has static or dynamic bound
+                            let new_id = IdentifierExpression {
+                                value: new_l.clone(),
+                                span: Span::new("", 0, 0).unwrap()
+                            };
+
+                            if let Some(entry_ty) = var_scope_info.arr_map.get(&new_l) {
+                                if l.accesses.len() > 1 { return Err(format!("Assignment to multiple array entries unsupported")); }
+                                // if the LHS is an array, perform pointer assignment
+                                if l.accesses.len() == 0 {
+                                    lhs_expr = vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                        array_metadata: None,
+                                        ty: ty_to_type(&Ty::Field)?,
+                                        identifier: new_id.clone(),
+                                        span: Span::new("", 0, 0).unwrap()
+                                    })];
+                                }
+                                // if the LHS is an array member, convert the assignee to a store
+                                else if let AssigneeAccess::Select(a) = &l.accesses[0] {
+                                    let entry_ty = entry_ty.clone();
+                                    assignee_is_store = true;
+                                    if let RangeOrExpression::Expression(e) = &a.expression {
+                                        let new_e: Expression;
+                                        (blks, blks_len, var_scope_info, new_e, _, _, _) = 
+                                            self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, 0, var_scope_info)?;
+                                        blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), entry_ty.clone(), new_l, new_e, false)));
+                                        blks[blks_len - 1].num_vm_ops += 1;
+                                    } else {
+                                        return Err(format!("Array range access not implemented!"));
+                                    }
+                                } else {
+                                    return Err(format!("Illegal access to array {}", new_l));
+                                }
+                            }
+                            // otherwise convert the assignee to a declaration
+                            else {
+                                lhs_expr = vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                    array_metadata: None,
+                                    ty: ty_to_type(&lhs_ty)?,
+                                    identifier: new_id.clone(),
+                                    span: Span::new("", 0, 0).unwrap()
+                                })];
+                            }
+                        }
+                        TypedIdentifierOrAssignee::TypedIdentifier(l) => {
+                            // If array is dynamically bounded, cannot use type_impl_ because bound might involve variables undefined in circ
+                            let id = &l.identifier.value;
+                            // If LHS is an array declaration but RHS is not an array, 
+                            // first declare LHS as an array
+                            // then convert LHS to a pointer
+                            let (new_l, decl_ty) = {
                                 if let Type::Array(arr_ty) = &l.ty {
                                     let entry_ty = match &arr_ty.ty {
                                         BasicOrStructType::Struct(s) => self.type_impl_::<false>(&Type::Struct(s.clone())),
                                         BasicOrStructType::Basic(s) => self.type_impl_::<false>(&Type::Basic(s.clone())),
                                     }.unwrap();
 
-                                    // Only support one-dimension arrays
-                                    assert_eq!(arr_ty.dimensions.len(), 1);
-                                    let size_expr: Expression;
-                                    (blks, blks_len, var_scope_info, size_expr, _, _, _) = 
-                                        self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &arr_ty.dimensions[0], f_name, 0, 0, var_scope_info)?;
-                                    // TODO: How to compare array length?
-                                    // if size_expr != array_init_info.len_as_expr(&Ty::Field) {
-                                    //     return Err(format!("Array initialization for {arr_name} failed: array size does not match with initializer size!"));
-                                    //}
-                                    blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name.clone(), entry_ty.clone(), size_expr)));
-                                    var_scope_info.arr_map.insert(arr_extended_name.clone(), entry_ty);
+                                    let new_l = var_scope_info.declare_var(id, f_name, cur_scope, Ty::Field);
+                                    var_scope_info.arr_map.insert(new_l.clone(), entry_ty);
+                                    (new_l, Ty::Field)
                                 } else {
-                                    return Err(format!("Array initialization for {arr_name} failed: {arr_name} is not an array!"));
+                                    // Unroll scoping on LHS
+                                    let decl_ty = self.type_impl_::<false>(&l.ty)?;
+                                    let new_l = var_scope_info.declare_var(id, f_name, cur_scope, decl_ty.clone());
+                                    (new_l, decl_ty)
                                 }
+                            };
 
-                                (arr_extended_name, true)
-                            }
-                            TypedIdentifierOrAssignee::Assignee(l) => {
-                                // Array is already declared
-                                let arr_extended_name = var_scope_info.reference_var(&l.id.value.clone(), f_name)?.0;
-                                (arr_extended_name, false)
-                            }
-                        };
-                        (blks, blks_len, var_scope_info) = self.bl_gen_array_init_(blks, blks_len, lhs_id, f_name, array_init_info, var_scope_info, is_declare)?;
-                    } else {
-                        warn!("Statement with no LHS!");
-                    }
-                } 
-                // Non-array declaration
-                else {
-                    let mut assignee_is_store = false;
-                    // Handle Scoping change
-                    if let Some(l) = d.lhs.first() {
-                        match l {
-                            TypedIdentifierOrAssignee::Assignee(l) => {
-                                // No scoping change if lhs is an assignee, only need to make sure it has appeared before
-                                let (new_l, lhs_ty) = var_scope_info.reference_var(&l.id.value.clone(), f_name)?;
+                            let new_id = IdentifierExpression {
+                                value: new_l,
+                                span: Span::new("", 0, 0).unwrap()
+                            };
 
-                                let new_id = IdentifierExpression {
-                                    value: new_l.clone(),
-                                    span: Span::new("", 0, 0).unwrap()
-                                };
-
-                                if let Some(entry_ty) = var_scope_info.arr_map.get(&new_l) {
-                                    if l.accesses.len() > 1 { return Err(format!("Assignment to multiple array entries unsupported")); }
-                                    // if the LHS is an array, perform pointer assignment
-                                    if l.accesses.len() == 0 {
-                                        lhs_expr = vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                                            array_metadata: None,
-                                            ty: ty_to_type(&Ty::Field)?,
-                                            identifier: new_id.clone(),
-                                            span: Span::new("", 0, 0).unwrap()
-                                        })];
-                                    }
-                                    // if the LHS is an array member, convert the assignee to a store
-                                    else if let AssigneeAccess::Select(a) = &l.accesses[0] {
-                                        let entry_ty = entry_ty.clone();
-                                        assignee_is_store = true;
-                                        if let RangeOrExpression::Expression(e) = &a.expression {
-                                            let new_e: Expression;
-                                            let tmp_arr_info: Option<ArrayInitInfo>;
-                                            (blks, blks_len, var_scope_info, new_e, _, _, tmp_arr_info) = 
-                                                self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, var_scope_info)?;
-                                            if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside array indices") }
-                                            blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), entry_ty.clone(), new_l, new_e, false)));
-                                            blks[blks_len - 1].num_vm_ops += 1;
-                                        } else {
-                                            return Err(format!("Array range access not implemented!"));
-                                        }
-                                    } else {
-                                        return Err(format!("Illegal access to array {}", new_l));
-                                    }
-                                }
-                                // otherwise convert the assignee to a declaration
-                                else {
-                                    lhs_expr = vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                                        array_metadata: None,
-                                        ty: ty_to_type(&lhs_ty)?,
-                                        identifier: new_id.clone(),
-                                        span: Span::new("", 0, 0).unwrap()
-                                    })];
-                                }
-                            }
-                            TypedIdentifierOrAssignee::TypedIdentifier(l) => {
-                                let mut decl_ty = self.type_impl_::<false>(&l.ty)?;
-                                let id = &l.identifier.value;
-
-                                // If LHS is an array declaration but RHS is not an array, 
-                                // first declare LHS as an array
-                                // then convert LHS to a pointer
-                                let new_l = {
-                                    if let Ty::Array(_, entry_ty) = decl_ty {
-                                        let new_l = var_scope_info.declare_var(id, f_name, cur_scope, Ty::Field);
-                                        var_scope_info.arr_map.insert(new_l.clone(), *entry_ty.clone());
-                                        decl_ty = Ty::Field;
-                                        new_l
-                                    } else {
-                                        // Unroll scoping on LHS
-                                        var_scope_info.declare_var(id, f_name, cur_scope, decl_ty.clone())
-                                    }
-                                };
-
-                                let new_id = IdentifierExpression {
-                                    value: new_l,
-                                    span: Span::new("", 0, 0).unwrap()
-                                };
-
-                                // Convert the assignee to a declaration
-                                lhs_expr = vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                                    array_metadata: None,
-                                    ty: ty_to_type(&decl_ty)?,
-                                    identifier: new_id.clone(),
-                                    span: Span::new("", 0, 0).unwrap()
-                                })];
-                            }
+                            // Convert the assignee to a declaration
+                            lhs_expr = vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                array_metadata: None,
+                                ty: ty_to_type(&decl_ty)?,
+                                identifier: new_id.clone(),
+                                span: Span::new("", 0, 0).unwrap()
+                            })];
                         }
-                    } else {
-                        warn!("Statement with no LHS!");
-                    };
-                    if !assignee_is_store {
-                        let new_stmt = Statement::Definition(DefinitionStatement {
-                            lhs: lhs_expr,
-                            expression: rhs_expr,
-                            span: Span::new("", 0, 0).unwrap()
-                        });
-                        blks[blks_len - 1].instructions.push(BlockContent::Stmt(new_stmt));
                     }
+                } else {
+                    warn!("Statement with no LHS!");
+                };
+                if !assignee_is_store {
+                    let new_stmt = Statement::Definition(DefinitionStatement {
+                        lhs: lhs_expr,
+                        expression: rhs_expr,
+                        span: Span::new("", 0, 0).unwrap()
+                    });
+                    blks[blks_len - 1].instructions.push(BlockContent::Stmt(new_stmt));
                 }
             }
             Statement::CondStore(_) => { panic!("Conditional store statements unsupported.") }
@@ -1285,41 +1236,36 @@ impl<'ast> ZGen<'ast> {
     // result[0 ~ 2] follows bl_gen_stmt
     // result[3]: new_expr reconstructs the expression, converts all function calls to %RET, and handles scoping
     // result[4]: func_count, how many function calls have occured in this statement?
-    // result[5]: load_count, how many loads have occured in this statement?
-    // result[5]: all (index, value) pair for array initialization
+    // result[5]: array_count, how many arrays have been initiated in this statement?
+    // result[6]: load_count, how many loads have occured in this statement?
+    // result[7]: all (index, value) pair for array initialization
     // Since the return value of all function calls are stored in %RET, we need to differentiate them if
     // multiple function calls occur in the same statement
     fn bl_gen_expr_<const IS_MAIN: bool>(
         &'ast self, 
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
-        e: &'ast Expression<'ast>,
+        e: & Expression<'ast>,
         f_name: &str,
         mut func_count: usize,
+        mut array_count: usize,
         mut load_count: usize,
         mut var_scope_info: VarScopeInfo
-    ) -> Result<(Vec<Block>, usize, VarScopeInfo, Expression, usize, usize, Option<ArrayInitInfo>), String> {
+    ) -> Result<(Vec<Block>, usize, VarScopeInfo, Expression, usize, usize, usize), String> {
         debug!("Block Gen Expr: {}", e.span().as_str());
 
         let mut ret_e = e.clone();
-        // All (index, value) pair for array initialization, currently cannot be put inside any other expression
-        let mut array_init_info = None;
-
         match e {
             Expression::Ternary(t) => {
-                let mut tmp_arr_info: Option<ArrayInitInfo>;
                 let new_e_first: Expression;
                 let new_e_second: Expression;
                 let new_e_third: Expression;
-                (blks, blks_len, var_scope_info, new_e_first, func_count, load_count, tmp_arr_info) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &t.first, f_name, func_count, load_count, var_scope_info)?;
-                if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside ternary expressions") }
-                (blks, blks_len, var_scope_info, new_e_second, func_count, load_count, tmp_arr_info) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &t.second, f_name, func_count, load_count, var_scope_info)?;
-                if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside ternary expressions") }
-                (blks, blks_len, var_scope_info, new_e_third, func_count, load_count, tmp_arr_info) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &t.third, f_name, func_count, load_count, var_scope_info)?;
-                if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside ternary expressions") }
+                (blks, blks_len, var_scope_info, new_e_first, func_count, array_count, load_count) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &t.first, f_name, func_count, array_count, load_count, var_scope_info)?;
+                (blks, blks_len, var_scope_info, new_e_second, func_count, array_count, load_count) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &t.second, f_name, func_count, array_count, load_count, var_scope_info)?;
+                (blks, blks_len, var_scope_info, new_e_third, func_count, array_count, load_count) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &t.third, f_name, func_count, array_count, load_count, var_scope_info)?;
                 ret_e = Expression::Ternary(TernaryExpression {
                     first: Box::new(new_e_first),
                     second: Box::new(new_e_second),
@@ -1328,15 +1274,12 @@ impl<'ast> ZGen<'ast> {
                 });
             }
             Expression::Binary(b) => {
-                let mut tmp_arr_info: Option<ArrayInitInfo>;
                 let new_e_left: Expression;
                 let new_e_right: Expression;
-                (blks, blks_len, var_scope_info, new_e_left, func_count, load_count, tmp_arr_info) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &b.left, f_name, func_count, load_count, var_scope_info)?;
-                if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside binary expressions") }
-                (blks, blks_len, var_scope_info, new_e_right, func_count, load_count, tmp_arr_info) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &b.right, f_name, func_count, load_count, var_scope_info)?;
-                if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside binary expressions") }
+                (blks, blks_len, var_scope_info, new_e_left, func_count, array_count, load_count) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &b.left, f_name, func_count, array_count, load_count, var_scope_info)?;
+                (blks, blks_len, var_scope_info, new_e_right, func_count, array_count, load_count) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &b.right, f_name, func_count, array_count, load_count, var_scope_info)?;
                 ret_e = Expression::Binary(BinaryExpression {
                     op: b.op.clone(),
                     left: Box::new(new_e_left),
@@ -1345,11 +1288,9 @@ impl<'ast> ZGen<'ast> {
                 });
             }
             Expression::Unary(u) => {
-                let tmp_arr_info: Option<ArrayInitInfo>;
                 let new_e_expr: Expression;
-                (blks, blks_len, var_scope_info, new_e_expr, func_count, load_count, tmp_arr_info) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &u.expression, f_name, func_count, load_count, var_scope_info)?;
-                if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside unary expressions") }
+                (blks, blks_len, var_scope_info, new_e_expr, func_count, array_count, load_count) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &u.expression, f_name, func_count, array_count, load_count, var_scope_info)?;
                 ret_e = Expression::Unary(UnaryExpression {
                     op: u.op.clone(),
                     expression: Box::new(new_e_expr),
@@ -1358,17 +1299,15 @@ impl<'ast> ZGen<'ast> {
             }
             Expression::Postfix(p) => {
                 // assume no functions in arrays, etc.
-                assert!(!p.accesses.is_empty());
+                assert!(p.accesses.len() == 1);
                 match p.accesses.first() {
                     Some(Access::Call(c)) => {
                         let (callee_path, callee_name) = self.deref_import(&p.id.value);
                         let mut args: Vec<Expression> = Vec::new();
                         let mut new_expr: Expression;
-                        let mut tmp_arr_info: Option<ArrayInitInfo>;
                         for old_expr in &c.arguments.expressions {
-                            (blks, blks_len, var_scope_info, new_expr, func_count, load_count, tmp_arr_info) = 
-                                self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, old_expr, f_name, func_count, load_count, var_scope_info)?;
-                            if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside function calls") }
+                            (blks, blks_len, var_scope_info, new_expr, func_count, array_count, load_count) = 
+                                self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, old_expr, f_name, func_count, array_count, load_count, var_scope_info)?;
                             args.push(new_expr);                       
                         }
      
@@ -1396,10 +1335,8 @@ impl<'ast> ZGen<'ast> {
                             
                             // Preprocess the indices
                             let new_e: Expression;
-                            let tmp_arr_info: Option<ArrayInitInfo>;
-                            (blks, blks_len, var_scope_info, new_e, _, _, tmp_arr_info) = 
-                                self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, var_scope_info)?;
-                            if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside array indices") }
+                            (blks, blks_len, var_scope_info, new_e, func_count, array_count, load_count) = 
+                                self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, func_count, array_count, load_count, var_scope_info)?;
                             blks[blks_len - 1].instructions.push(BlockContent::Load((load_extended_name.clone(), load_ty.clone(), arr_extended_name.clone(), new_e)));
                             blks[blks_len - 1].num_vm_ops += 1;
                             load_count += 1;
@@ -1423,64 +1360,91 @@ impl<'ast> ZGen<'ast> {
             }
             Expression::Literal(_) => {}
             Expression::ArrayInitializer(ai) => {
-                let new_ai_value: Expression;
-                (blks, blks_len, var_scope_info, new_ai_value, func_count, load_count, _) = 
-                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &ai.value, f_name, func_count, load_count, var_scope_info)?;
+                let entry_ty = self.bl_gen_type_(&ai.value, f_name, &var_scope_info)?;
                 // Note: if ai.count is not constant, expr_impl_ would fail
                 let arr_size: Result<usize, String> = {
                     self.expr_impl_::<false>(&ai.count).and_then(|e| const_int(e)).and_then(|i| i.try_into().or_else(|_| Err("".to_string())))
                 };
-                if let Ok(arr_size) = arr_size {
-                    array_init_info = Some(ArrayInitInfo::from_static_array_initializer(new_ai_value, arr_size));
+                let array_init_info = if let Ok(arr_size) = arr_size {
+                    ArrayInitInfo::from_static_array_initializer(*ai.value.clone(), arr_size, entry_ty.clone())
                 } else {
-                    let len_expr: Expression;
-                    (blks, blks_len, var_scope_info, len_expr, func_count, load_count, _) = 
-                        self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &ai.count, f_name, func_count, load_count, var_scope_info)?;
-                    array_init_info = Some(ArrayInitInfo::from_dyn_array_initializer(new_ai_value, len_expr));
-                }
+                    ArrayInitInfo::from_dyn_array_initializer(*ai.value.clone(), *ai.count.clone(), entry_ty)
+                };
+                // TODO: Decide if array_init is a declaration
+                let arr_extended_name: String;
+                (blks, blks_len, var_scope_info, arr_extended_name, func_count, array_count, load_count) = 
+                    self.bl_gen_array_init_::<IS_MAIN>(blks, blks_len, func_count, array_count, load_count, f_name, array_init_info, var_scope_info, false)?;
+                ret_e = Expression::Identifier(IdentifierExpression {
+                    value: arr_extended_name,
+                    span: Span::new("", 0, 0).unwrap()
+                });
             }
             Expression::InlineArray(ia) => {
-                let mut new_e_list = Vec::new();
+                let mut e_list = Vec::new();
+                let mut entry_ty = Ty::Field;
                 for se in &ia.expressions {
                     if let SpreadOrExpression::Expression(e) = se {
-                        let tmp_arr_info: Option<ArrayInitInfo>;
-                        let new_e: Expression;
-                        (blks, blks_len, var_scope_info, new_e, func_count, load_count, tmp_arr_info) = 
-                            self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, func_count, load_count, var_scope_info)?;
-                        if tmp_arr_info.is_some() { panic!("Currently do not support array initialization inside inline arrays") }
-                        new_e_list.push(new_e);
+                        entry_ty = self.bl_gen_type_(&e, f_name, &var_scope_info)?;
+                        e_list.push(e.clone());
                     } else {
                         return Err(format!("Spread not supported in inline arrays!"));
                     }
                 }
-                array_init_info = Some(ArrayInitInfo::from_inline_array(new_e_list));
+                let array_init_info = ArrayInitInfo::from_inline_array(e_list, entry_ty.clone());
+                // TODO: Decide if array_init is a declaration
+                let arr_extended_name: String;
+                (blks, blks_len, var_scope_info, arr_extended_name, func_count, array_count, load_count) = 
+                    self.bl_gen_array_init_::<IS_MAIN>(blks, blks_len, func_count, array_count, load_count, f_name, array_init_info, var_scope_info, false)?;
+                ret_e = Expression::Identifier(IdentifierExpression {
+                    value: arr_extended_name,
+                    span: Span::new("", 0, 0).unwrap()
+                });
             }
             Expression::InlineStruct(_) => { return Err(format!("Struct not supported!")); }
         }
-        Ok((blks, blks_len, var_scope_info, ret_e, func_count, load_count, array_init_info))
+        Ok((blks, blks_len, var_scope_info, ret_e, func_count, array_count, load_count))
     }
 
     // Generate blocks from an array initialization
     // Assume both the array and all entries are preprocessed
     // Returns the new blocks
-    fn bl_gen_array_init_(
+    fn bl_gen_array_init_<const IS_MAIN: bool>(
         &'ast self, 
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
-        arr_extended_name: String,
+        mut func_count: usize,
+        mut array_count: usize,
+        mut load_count: usize,
         f_name: &str,
         array_init_info: ArrayInitInfo<'ast>,
         mut var_scope_info: VarScopeInfo,
         is_declare: bool // if is_declare, then array is being initialized
-    ) -> Result<(Vec<Block>, usize, VarScopeInfo), String> {
-        let entry_ty = var_scope_info.arr_map.get(&arr_extended_name).ok_or_else(|| format!("Assignment failed: no array {}", &arr_extended_name))?.clone();
+    ) -> Result<(Vec<Block>, usize, VarScopeInfo, String, usize, usize, usize), String> {
+        debug!("Block Gen Array Init");
+
         let cur_scope = blks[blks_len - 1].scope;
+        let entry_ty = array_init_info.entry_ty.clone();
+        // Assign array@X to be the temporary array
+        let arr_name = format!("array@{}", array_count);
+        let arr_extended_name = var_scope_info.declare_var(&arr_name, &f_name, cur_scope, Ty::Field);
+        var_scope_info.arr_map.insert(arr_extended_name.clone(), entry_ty.clone());
+        array_count += 1;
+        
+        // Initialize array
+        let size_expr: Expression;
+        let index_expr = array_init_info.len_as_expr(&Ty::Uint(32));
+        (blks, blks_len, var_scope_info, size_expr, func_count, array_count, load_count) = 
+            self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &index_expr, f_name, func_count, array_count, load_count, var_scope_info)?;
+        blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name.clone(), entry_ty.clone(), size_expr)));
 
         // Start by declaring all init@X to unique_contents
         for i in 0..array_init_info.unique_contents.len() {
             let init_name = format!("init@{}", i);
             let init_extended_name = var_scope_info.declare_var(&init_name, &f_name, cur_scope, entry_ty.clone());
             let entry_ty = ty_to_type(&entry_ty)?;
+            let content_expr: Expression;
+            (blks, blks_len, var_scope_info, content_expr, func_count, array_count, load_count) = 
+                self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &array_init_info.unique_contents[i], f_name, func_count, array_count, load_count, var_scope_info)?;
             let array_init_stmt = Statement::Definition(DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                     array_metadata: None,
@@ -1492,7 +1456,7 @@ impl<'ast> ZGen<'ast> {
                     span: Span::new("", 0, 0).unwrap()
                 })],
                 // Assume that we only have ONE return variable
-                expression: array_init_info.unique_contents[i].clone(),
+                expression: content_expr,
                 span: Span::new("", 0, 0).unwrap()
             });
             blks[blks_len - 1].instructions.push(BlockContent::Stmt(array_init_stmt));
@@ -1503,7 +1467,7 @@ impl<'ast> ZGen<'ast> {
         if array_init_info.unique_contents.len() == 1 {
             let index_name = "index@";
             // TODO: Type analysis on to_expr
-            let index_ty = Ty::Uint(32);
+            let index_ty = self.bl_gen_type_(&index_expr, f_name, &var_scope_info)?;
             let index_extended_name = var_scope_info.declare_var(&index_name, &f_name, cur_scope, index_ty.clone());
             
             // Init
@@ -1549,9 +1513,12 @@ impl<'ast> ZGen<'ast> {
                 span: Span::new("", 0, 0).unwrap()
             };
             let to_expr = array_init_info.len_as_expr(&index_ty).clone();
+            let new_to_expr: Expression;
+            (blks, blks_len, var_scope_info, new_to_expr, func_count, array_count, load_count) = 
+                self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &to_expr, f_name, func_count, array_count, load_count, var_scope_info)?;
             let term = BlockTerminator::Transition(
                 bl_trans(
-                    cond_expr(new_id.clone(), to_expr),
+                    cond_expr(new_id.clone(), new_to_expr),
                     NextBlock::Label(loop_header), 
                     NextBlock::Label(loop_tail)
                 )
@@ -1585,7 +1552,91 @@ impl<'ast> ZGen<'ast> {
                 index += 1;
             }
         }
-        Ok((blks, blks_len, var_scope_info))
+        Ok((blks, blks_len, var_scope_info, arr_extended_name, func_count, array_count, load_count))
+    }
+
+    // Given an expression, return its type
+    // This is performed after a type check, so assume all typing are correct
+    fn bl_gen_type_(
+        &'ast self, 
+        e: &'ast Expression<'ast>,
+        f_name: &str,
+        var_scope_info: &VarScopeInfo
+    ) -> Result<Ty, String> {
+        debug!("Block Gen Type: {}", e.span().as_str());
+
+        let ty = match e {
+            Expression::Ternary(t) => {
+                let second_ty = self.bl_gen_type_(&t.second, f_name, var_scope_info)?;
+                second_ty
+            }
+            Expression::Binary(b) => {
+                let left_ty = self.bl_gen_type_(&b.left, f_name, var_scope_info)?;
+                match b.op {
+                    BinaryOperator::Eq | BinaryOperator::NotEq | BinaryOperator::Lt | BinaryOperator::Gt | BinaryOperator::Lte | BinaryOperator::Gte => {
+                        Ty::Bool
+                    },
+                    _ => {
+                        left_ty
+                    }
+                }
+            }
+            Expression::Unary(u) => {
+                let expr_ty = self.bl_gen_type_(&u.expression, f_name, var_scope_info)?;
+                expr_ty
+            }
+            Expression::Postfix(p) => {
+                // assume no functions in arrays, etc.
+                assert!(!p.accesses.is_empty());
+                match p.accesses.first() {
+                    Some(Access::Call(_)) => {
+                        let (callee_path, callee_name) = self.deref_import(&p.id.value);
+                        let callee = self
+                        .functions
+                        .get(&callee_path)
+                        .ok_or_else(|| format!("No file '{:?}' attempting fn call", &callee_path))?
+                        .get(&callee_name)
+                        .ok_or_else(|| format!("No function '{}' attempting fn call", &callee_name))?;
+
+                        // Get the return type because we need to convert it into a variable
+                        let ret_type = callee
+                        .returns
+                        .first().ok_or("No return type provided for one or more function")?;
+                        let mut ret_ty = self.type_impl_::<false>(&ret_type)?;
+                        // If return type is an array, convert it to a pointer
+                        if let Ty::Array(_, _) = ret_ty {
+                            ret_ty = Ty::Field;
+                        }
+                        ret_ty
+                    }
+                    Some(Access::Select(s)) => {
+                        if let RangeOrExpression::Expression(_) = &s.expression {
+                            let arr_name = &p.id.value;
+                            let arr_extended_name = var_scope_info.reference_var(&arr_name, f_name)?.0;
+                            let load_ty = var_scope_info.arr_map.get(&arr_extended_name).ok_or_else(|| format!("Load failed: no array {}", &arr_extended_name))?.clone();
+                            load_ty
+                        } else {
+                            return Err(format!("Array range access not implemented!"));
+                        }
+                    }
+                    _ => { return Err(format!("Struct not implemented!")); }
+                }
+            }
+            Expression::Identifier(i) => {
+                var_scope_info.reference_var(&i.value.clone(), &f_name)?.1
+            }
+            Expression::Literal(_) => {
+                self.expr_impl_::<false>(&e)?.type_().clone()
+            }
+            Expression::ArrayInitializer(_) => {
+                Ty::Field
+            }
+            Expression::InlineArray(_) => {
+                Ty::Field
+            }
+            Expression::InlineStruct(_) => { return Err(format!("Struct not supported!")); }
+        };
+        Ok(ty)
     }
 
     fn bl_gen_enter_scope_(

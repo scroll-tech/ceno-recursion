@@ -53,6 +53,8 @@ pub fn ty_to_dec_suffix<'ast>(ty: &Type<'ast>) -> DecimalSuffix<'ast> {
 }
 
 pub fn ty_to_type<'ast>(ty: &Ty) -> Result<Type<'ast>, String> {
+    debug!("Ty to type: {:?}", ty);
+
     match ty {
         Ty::Uint(8) => Ok(Type::Basic(BasicType::U8(U8Type {
             span: Span::new("", 0, 0).unwrap()
@@ -433,16 +435,6 @@ pub struct ArrayInitInfo<'ast> {
 }
 
 impl<'ast> ArrayInitInfo<'ast> {
-    fn new() -> ArrayInitInfo<'ast> {
-        ArrayInitInfo {
-            dynamic: false,
-            unique_contents: Vec::new(),
-            dyn_length: None,
-            arr_entries: None,
-            entry_ty: Ty::Field,
-        }
-    }
-
     fn from_static_array_initializer(value: Expression<'ast>, arr_size: usize, entry_ty: Ty) -> ArrayInitInfo<'ast> {
         ArrayInitInfo {
             dynamic: false,
@@ -1158,7 +1150,7 @@ impl<'ast> ZGen<'ast> {
 
                     // Array assignment
                     if let Some(entry_ty) = var_scope_info.arr_map.get(&new_l) {
-                        if l.accesses.len() > 1 { return Err(format!("Assignment to multiple array entries unsupported")); }
+                        if l.accesses.len() > 1 { return Err(format!("Multi-dimensional arrays not supported!")); }
                         // if the LHS is an array access, convert the assignee to a store
                         if l.accesses.len() > 0 {
                             if let AssigneeAccess::Select(a) = &l.accesses[0] {
@@ -1183,13 +1175,15 @@ impl<'ast> ZGen<'ast> {
                     }
                     // Struct assignment
                     else if let Ty::Struct(..) = &lhs_ty {
-                        if l.accesses.len() > 1 { return Err(format!("Assignment to multiple array entries unsupported")); }
                         // if the LHS is a struct member, unroll variable name
                         if l.accesses.len() > 0 {
-                            if let AssigneeAccess::Member(m) = &l.accesses[0] {
-                                l_name = format!("{}@{}", &l.id.value, m.id.value);
-                            } else {
-                                return Err(format!("Illegal access to struct {}", new_l));
+                            l_name = l.id.value.to_string();
+                            for acc in &l.accesses {
+                                if let AssigneeAccess::Member(m) = acc {
+                                    l_name = format!("{}@{}", l_name, m.id.value);
+                                } else {
+                                    return Err(format!("Illegal access to struct {}", new_l));
+                                }
                             }
                         } else {
                             assert_eq!(lhs_ty, rhs_ty);
@@ -1369,9 +1363,11 @@ impl<'ast> ZGen<'ast> {
             }
             Expression::Postfix(p) => {
                 // assume no functions in arrays, etc.
-                assert!(p.accesses.len() == 1);
+                assert!(p.accesses.len() > 0);
                 match p.accesses.first() {
                     Some(Access::Call(c)) => {
+                        assert_eq!(p.accesses.len(), 1);
+
                         let (callee_path, callee_name) = self.deref_import(&p.id.value);
                         let mut args: Vec<Expression> = Vec::new();
                         let mut new_expr: Expression;
@@ -1394,6 +1390,8 @@ impl<'ast> ZGen<'ast> {
                         func_count += 1;
                     }
                     Some(Access::Select(s)) => {
+                        assert_eq!(p.accesses.len(), 1);
+
                         if let RangeOrExpression::Expression(e) = &s.expression {
                             // Store the loaded value in a separate variable and return it
                             let load_name = format!("load@{}", load_count);
@@ -1418,9 +1416,16 @@ impl<'ast> ZGen<'ast> {
                             return Err(format!("Array range access not implemented!"));
                         }
                     }
-                    Some(Access::Member(m)) => {
+                    Some(Access::Member(_)) => {
                         // Construct p@member
-                        let member_name = format!{"{}@{}", &p.id.value, &m.id.value};
+                        let mut member_name = p.id.value.to_string();
+                        for acc in &p.accesses {
+                            if let Access::Member(m) = acc {
+                                member_name = format!{"{}@{}", member_name, m.id.value};
+                            } else {
+                                panic!("Array inside struct not supported!")
+                            }
+                        }
                         let member_extended_name = var_scope_info.reference_var(&member_name, f_name)?.0;
                         ret_e = Expression::Identifier(IdentifierExpression {
                             value: member_extended_name,
@@ -1488,23 +1493,15 @@ impl<'ast> ZGen<'ast> {
                 let new_struct_name = var_scope_info.declare_var(&struct_name, f_name, cur_scope, struct_ty);
 
                 for ism in &is.members {
+                     // Assign member_name to new_member_expr
                     let member_ty = self.bl_gen_type_(&ism.expression, f_name, &var_scope_info)?;
                     let member_name = format!("struct@{}@{}", struct_count, &ism.id.value);
-                    // Assign member_name to &ism.expression
-                    let member_assg_stmt = DefinitionStatement {
-                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                            array_metadata: None,
-                            ty: ty_to_type(&member_ty)?,
-                            identifier: IdentifierExpression {
-                                value: member_name,
-                                span: Span::new("", 0, 0).unwrap()
-                            },
-                            span: Span::new("", 0, 0).unwrap()
-                        })],
-                        expression: ism.expression.clone(),
-                        span: Span::new("", 0, 0).unwrap()
-                    };
-                    (blks, blks_len, var_scope_info) = self.bl_gen_assign_::<IS_MAIN>(blks, blks_len, &member_assg_stmt, f_name, cur_scope, var_scope_info)?;
+
+                    let new_member_expr: Expression;
+                    (blks, blks_len, var_scope_info, new_member_expr, func_count, array_count, struct_count, load_count) = 
+                        self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &ism.expression, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
+                    (blks, blks_len, var_scope_info) =
+                        self.bl_gen_def_stmt_::<false>(blks, blks_len, &member_name, &new_member_expr, &member_ty, f_name, cur_scope, var_scope_info)?;
                 }
 
                 ret_e = Expression::Identifier(IdentifierExpression {

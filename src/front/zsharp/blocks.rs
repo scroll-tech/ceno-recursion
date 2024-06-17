@@ -342,8 +342,17 @@ impl VarScopeInfo {
     }
 
     // Declare a variable in a given scope of a given function, return the new variable name
+    // If the declared variable is a struct, declare itself and all members, return the new struct
     fn declare_var(&mut self, var_name: &str, fn_name: &str, cur_scope: usize, ty: Ty) -> String {
         let name = &(var_name.to_string(), fn_name.to_string());
+        // Declare struct members
+        if let Ty::Struct(_, members) = &ty {
+            for (m, m_ty) in members.clone().into_map() {
+                let member_name = format!("{}@{}", var_name, m);
+                self.declare_var(&member_name, fn_name, cur_scope, m_ty);
+            }
+        }
+        // Declare self
         match self.var_stack.get(name) {
             Some(stack) => {
                 assert!(stack.len() == 0 || stack[stack.len() - 1].0 <= cur_scope);
@@ -599,8 +608,10 @@ impl<'ast> ZGen<'ast> {
                 .first().ok_or("No return type provided for one or more function")?;
             let mut ret_ty = self.type_impl_::<false>(&ret_type)?;
             // If return type is an array, convert it to a pointer
-            if let Ty::Array(_, _) = ret_ty {
+            if let Ty::Array(..) = ret_ty {
                 ret_ty = Ty::Field;
+            } else if let Ty::Struct(..) = ret_ty {
+                panic!("%RET cannot be a struct!");
             }
             let ret_type = ty_to_type(&ret_ty)?;
 
@@ -618,7 +629,9 @@ impl<'ast> ZGen<'ast> {
                 if let Ty::Array(_, entry_ty) = p_ty {
                     let p_extended_id = var_scope_info.declare_var(&p_id, &f_name, 0, Ty::Field);
                     var_scope_info.arr_map.insert(p_extended_id.clone(), *entry_ty.clone());
-                } else {
+                } 
+                // otherwise struct or variable declaration
+                else {
                     var_scope_info.declare_var(&p_id, &f_name, 0, p_ty);
                 }
                 inputs.push(var_scope_info.reference_var(&p_id, &f_name)?.clone());     
@@ -684,6 +697,8 @@ impl<'ast> ZGen<'ast> {
             }
 
             // Enter Scope
+            let caller_name = blks[blks_len - 1].fn_name.to_string();
+            let caller_scope = blks[blks_len - 1].scope;
 
             // Push %RP onto the stack if not in main
             if !IS_MAIN {
@@ -719,23 +734,11 @@ impl<'ast> ZGen<'ast> {
             for (p, a) in f.parameters.clone().into_iter().zip(args) {
                 let p_id = p.id.value.clone();
                 let mut p_ty = self.type_impl_::<false>(&p.ty)?;
-                if let Ty::Array(_, _) = p_ty {
+                if let Ty::Array(..) = p_ty {
                     p_ty = Ty::Field;
                 }
-                let param_stmt = Statement::Definition(DefinitionStatement {
-                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                        array_metadata: None,
-                        ty: ty_to_type(&p_ty)?,
-                        identifier: IdentifierExpression {
-                            value: var_scope_info.declare_var(&p_id, &f_name, 0, p_ty),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        span: Span::new("", 0, 0).unwrap()
-                    })],
-                    expression: a.clone(),
-                    span: Span::new("", 0, 0).unwrap()
-                });
-                blks[blks_len - 1].instructions.push(BlockContent::Stmt(param_stmt));
+                var_scope_info.declare_var(&p_id, &f_name, 0, p_ty.clone());
+                (blks, blks_len, var_scope_info) = self.bl_gen_def_stmt_(blks, blks_len, &p_id, &a, &p_ty, &f_name, &caller_name, var_scope_info)?;
             }
 
             // %RP has been pushed to stack before function call
@@ -771,9 +774,7 @@ impl<'ast> ZGen<'ast> {
             // Exit Function - Create new Block
             // The new block should have the same number of execution bound as the previous block
             // As well as in the same scope of the same function
-            let caller_name = blks[blks_len - 1].fn_name.to_string();
             let num_exec_bound = blks[blks_len - 1].fn_num_exec_bound;
-            let caller_scope = blks[blks_len - 1].scope;
             blks.push(Block::new(blks_len, num_exec_bound, caller_name.clone(), caller_scope));
             blks_len += 1; 
             
@@ -1140,10 +1141,11 @@ impl<'ast> ZGen<'ast> {
             self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &d.expression, f_name, 0, 0, 0, 0, var_scope_info)?;
 
         // Handle Scoping change
-        let mut skip_stmt_gen = false;
         if let Some(l) = d.lhs.first() {
             match l {
                 TypedIdentifierOrAssignee::Assignee(l) => {
+                    let mut skip_stmt_gen = false;
+
                     let mut l_name = l.id.value.clone();
                     // No scoping change if lhs is an assignee, only need to make sure it has appeared before
                     let (new_l, lhs_ty) = var_scope_info.reference_var(&l.id.value.clone(), f_name)?;
@@ -1195,12 +1197,13 @@ impl<'ast> ZGen<'ast> {
                     }
                     if !skip_stmt_gen {
                         (blks, blks_len, var_scope_info) = 
-                            self.bl_gen_def_stmt_::<true>(blks, blks_len, &l_name, &rhs_expr, &rhs_ty, f_name, cur_scope, var_scope_info)?;
+                            self.bl_gen_def_stmt_(blks, blks_len, &l_name, &rhs_expr, &rhs_ty, f_name, f_name, var_scope_info)?;
                     }
                 }
                 TypedIdentifierOrAssignee::TypedIdentifier(l) => {
                     // If array is dynamically bounded, cannot use type_impl_ because bound might involve variables undefined in circ
                     let l_name = l.identifier.value.to_string();
+                    var_scope_info.declare_var(&l_name, f_name, cur_scope, rhs_ty.clone());
                     // if LHS is a struct, assert RHS is a struct
                     if let Type::Struct(_) = &l.ty {
                         if let Ty::Struct(..) = rhs_ty {} else {
@@ -1223,10 +1226,8 @@ impl<'ast> ZGen<'ast> {
                         let lhs_ty = self.type_impl_::<false>(&l.ty)?;
                         assert_eq!(lhs_ty, rhs_ty);
                     }
-                    if !skip_stmt_gen {
-                        (blks, blks_len, var_scope_info) = 
-                            self.bl_gen_def_stmt_::<false>(blks, blks_len, &l_name, &rhs_expr, &rhs_ty, f_name, cur_scope, var_scope_info)?;
-                    }
+                    (blks, blks_len, var_scope_info) = 
+                        self.bl_gen_def_stmt_(blks, blks_len, &l_name, &rhs_expr, &rhs_ty, f_name, f_name, var_scope_info)?;
                 }
             }
         } else {
@@ -1237,23 +1238,20 @@ impl<'ast> ZGen<'ast> {
 
     // Generate definition statements l = r_expr that might involve structs
     // Assume that r_expr has been processed
-    fn bl_gen_def_stmt_<const IS_ASSIGN: bool>(
+    // Allow f_name for LHS and RHS to be different for function calls
+    fn bl_gen_def_stmt_(
         &'ast self,
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
         l: &str,
         new_r_expr: &Expression<'ast>,
         ty: &Ty,
-        f_name: &str,
-        cur_scope: usize,
+        l_f_name: &str,
+        r_f_name: &str,
         mut var_scope_info: VarScopeInfo,
     ) -> Result<(Vec<Block>, usize, VarScopeInfo), String> {
         // declare lhs
-        let new_l = if IS_ASSIGN { 
-            var_scope_info.reference_var(&l, f_name)?.0
-        } else {
-            var_scope_info.declare_var(&l, f_name, cur_scope, ty.clone())
-        };
+        let new_l = var_scope_info.reference_var(&l, l_f_name)?.0;
 
         // Struct assignment
         if let Ty::Struct(_, members) = ty {
@@ -1263,12 +1261,12 @@ impl<'ast> ZGen<'ast> {
                 let r = ie.value.split(".").next().unwrap_or("");
                 for (m, m_ty) in members.clone().into_map() {
                     let l_member = format!("{l}@{m}");
-                    let new_r_member = var_scope_info.reference_var(&format!("{r}@{m}"), f_name)?.0;
+                    let new_r_member = var_scope_info.reference_var(&format!("{r}@{m}"), r_f_name)?.0;
                     let new_r_member_expr = Expression::Identifier(IdentifierExpression {
                         value: new_r_member,
                         span: Span::new("", 0, 0).unwrap()
                     });
-                    (blks, blks_len, var_scope_info) = self.bl_gen_def_stmt_::<IS_ASSIGN>(blks, blks_len, &l_member, &new_r_member_expr, &m_ty, f_name, cur_scope, var_scope_info)?;
+                    (blks, blks_len, var_scope_info) = self.bl_gen_def_stmt_(blks, blks_len, &l_member, &new_r_member_expr, &m_ty, l_f_name, r_f_name, var_scope_info)?;
                 }
             } else {
                 return Err(format!("Struct assignment failed: cannot identify RHS of definition statement!"));
@@ -1496,12 +1494,13 @@ impl<'ast> ZGen<'ast> {
                      // Assign member_name to new_member_expr
                     let member_ty = self.bl_gen_type_(&ism.expression, f_name, &var_scope_info)?;
                     let member_name = format!("struct@{}@{}", struct_count, &ism.id.value);
+                    var_scope_info.declare_var(&member_name, f_name, cur_scope, member_ty.clone());
 
                     let new_member_expr: Expression;
                     (blks, blks_len, var_scope_info, new_member_expr, func_count, array_count, struct_count, load_count) = 
                         self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &ism.expression, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
                     (blks, blks_len, var_scope_info) =
-                        self.bl_gen_def_stmt_::<false>(blks, blks_len, &member_name, &new_member_expr, &member_ty, f_name, cur_scope, var_scope_info)?;
+                        self.bl_gen_def_stmt_(blks, blks_len, &member_name, &new_member_expr, &member_ty, f_name, f_name, var_scope_info)?;
                 }
 
                 ret_e = Expression::Identifier(IdentifierExpression {

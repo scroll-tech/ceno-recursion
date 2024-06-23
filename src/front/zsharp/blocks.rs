@@ -1104,73 +1104,41 @@ impl<'ast> ZGen<'ast> {
 
                     let mut l_name = l.id.value.clone();
                     // No scoping change if lhs is an assignee, only need to make sure it has appeared before
-                    let (new_l, lhs_ty) = var_scope_info.reference_var(&l.id.value.clone(), f_name)?;
+                    let mut lhs_ty = var_scope_info.reference_var(&l.id.value.clone(), f_name)?.1;
 
-                    // Array assignment
-                    if let Ty::Array(_, entry_ty) = &lhs_ty {
-                        if l.accesses.len() > 1 { return Err(format!("Multi-dimensional arrays not supported!")); }
-                        // if the LHS is an array access, convert the assignee to a store
-                        if l.accesses.len() > 0 {
-                            if let AssigneeAccess::Select(a) = &l.accesses[0] {
-                                let entry_ty = *entry_ty.clone();
-                                assert_eq!(entry_ty, rhs_ty);
-                                skip_stmt_gen = true;
-                                if let RangeOrExpression::Expression(e) = &a.expression {
-                                    let new_e: Expression;
-                                    (blks, blks_len, var_scope_info, new_e, _, _, _, _) = 
-                                        self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, 0, 0, var_scope_info)?;
-                                    blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), entry_ty.clone(), new_l, new_e, false)));
-                                    blks[blks_len - 1].num_vm_ops += 1;
-                                } else {
-                                    return Err(format!("Array range access not implemented!"));
-                                }
-                            } else {
-                                return Err(format!("Illegal access to array {}", new_l));
+                    let mut acc_counter = 0;
+                    for acc in &l.accesses {
+                        match acc {
+                            AssigneeAccess::Member(m) => {
+                                l_name = format!("{}@{}", l_name, m.id.value);
+                                let member_ty = var_scope_info.reference_var(&l_name, f_name)?.1;
+                                lhs_ty = member_ty;
                             }
-                        } else {
-                            assert_eq!(lhs_ty, rhs_ty);
-                        }
-                    }
-                    // Struct assignment
-                    else if let Ty::Struct(..) = &lhs_ty {
-                        // if the LHS is a struct member, unroll variable name
-                        if l.accesses.len() > 0 {
-                            l_name = l.id.value.to_string();
-                            for i in 0..l.accesses.len() {
-                                let acc = &l.accesses[i];
-                                if let AssigneeAccess::Member(m) = acc {
-                                    l_name = format!("{}@{}", l_name, m.id.value);
-                                } else if let AssigneeAccess::Select(a) = acc {
-                                    // Array access is the last access
-                                    assert_eq!(i, l.accesses.len() - 1);
-                                    let (new_l, l_ty) = var_scope_info.reference_var(&l_name, f_name)?;
-                                    if let Ty::Array(_, entry_ty) = l_ty {
-                                        let entry_ty = *entry_ty.clone();
-                                        assert_eq!(entry_ty, rhs_ty);
-                                        if let RangeOrExpression::Expression(e) = &a.expression {
-                                            let new_e: Expression;
-                                            (blks, blks_len, var_scope_info, new_e, _, _, _, _) = 
-                                                self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, 0, 0, var_scope_info)?;
-                                            blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), entry_ty.clone(), new_l, new_e, false)));
-                                            blks[blks_len - 1].num_vm_ops += 1;
-                                        } else {
-                                            return Err(format!("Array range access not implemented!"));
-                                        }
+                            AssigneeAccess::Select(s) => {
+                                assert_eq!(acc_counter, l.accesses.len() - 1);
+                                let (new_l, arr_ty) = var_scope_info.reference_var(&l_name, f_name)?;
+                                if let Ty::Array(_, entry_ty) = arr_ty {
+                                    let entry_ty = *entry_ty.clone();
+                                    assert_eq!(entry_ty, rhs_ty);
+                                    skip_stmt_gen = true;
+                                    if let RangeOrExpression::Expression(e) = &s.expression {
+                                        let new_e: Expression;
+                                        (blks, blks_len, var_scope_info, new_e, _, _, _, _) = 
+                                            self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, 0, 0, var_scope_info)?;
+                                        blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), entry_ty.clone(), new_l, new_e, false)));
+                                        blks[blks_len - 1].num_vm_ops += 1;
                                     } else {
-                                        return Err(format!("Cannot perform store: {} is not an array!", new_l));
+                                        return Err(format!("Array range access not implemented!"));
                                     }
+                                    lhs_ty = entry_ty;
                                 } else {
-                                    return Err(format!("Illegal access to struct {}", new_l));
+                                    return Err(format!("Cannot perform store: {} is not an array!", new_l));
                                 }
                             }
-                        } else {
-                            assert_eq!(lhs_ty, rhs_ty);
                         }
+                        acc_counter += 1;
                     }
-                    // other assignment
-                    else {
-                        assert_eq!(lhs_ty, rhs_ty);
-                    }
+                    assert_eq!(lhs_ty, rhs_ty);
                     if !skip_stmt_gen {
                         (blks, blks_len, var_scope_info) = 
                             self.bl_gen_def_stmt_(blks, blks_len, &l_name, &rhs_expr, &rhs_ty, f_name, f_name, var_scope_info)?;
@@ -1318,82 +1286,65 @@ impl<'ast> ZGen<'ast> {
             Expression::Postfix(p) => {
                 // assume no functions in arrays, etc.
                 assert!(p.accesses.len() > 0);
-                match p.accesses.first() {
-                    Some(Access::Call(c)) => {
-                        assert_eq!(p.accesses.len(), 1);
+                let mut ret_name = p.id.value.to_string();
+                for acc in &p.accesses {
+                    match acc {
+                        Access::Call(c) => {
+                            assert_eq!(p.accesses.len(), 1);
 
-                        let (callee_path, callee_name) = self.deref_import(&p.id.value);
-                        let mut args: Vec<Expression> = Vec::new();
-                        let mut new_expr: Expression;
-                        for old_expr in &c.arguments.expressions {
-                            (blks, blks_len, var_scope_info, new_expr, func_count, array_count, struct_count, load_count) = 
-                                self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, old_expr, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
-                            args.push(new_expr);                       
+                            let (callee_path, callee_name) = self.deref_import(&p.id.value);
+                            let mut args: Vec<Expression> = Vec::new();
+                            let mut new_expr: Expression;
+                            for old_expr in &c.arguments.expressions {
+                                (blks, blks_len, var_scope_info, new_expr, func_count, array_count, struct_count, load_count) = 
+                                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, old_expr, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
+                                args.push(new_expr);                       
+                            }
+        
+                            // Do the function call
+                            (blks, blks_len, _, var_scope_info, func_count) =
+                                self.bl_gen_function_call_::<IS_MAIN>(blks, blks_len, args, callee_path.clone(), callee_name.clone(), func_count, var_scope_info)?;
+        
+                            ret_name = format!("ret@{}", func_count);
+                            func_count += 1;
                         }
-     
-                        // Do the function call
-                        (blks, blks_len, _, var_scope_info, func_count) =
-                            self.bl_gen_function_call_::<IS_MAIN>(blks, blks_len, args, callee_path.clone(), callee_name.clone(), func_count, var_scope_info)?;
-    
-                        let ret_name = format!("ret@{}", func_count);
-                        let ret_extended_name = var_scope_info.reference_var(&ret_name, f_name)?.0;
-                        ret_e = Expression::Identifier(IdentifierExpression {
-                            value: ret_extended_name,
-                            span: Span::new("", 0, 0).unwrap()
-                        });
-                        func_count += 1;
-                    }
-                    Some(Access::Select(s)) => {
-                        assert_eq!(p.accesses.len(), 1);
-
-                        if let RangeOrExpression::Expression(e) = &s.expression {
-                            // Store the loaded value in a separate variable and return it
-                            let load_name = format!("load@{}", load_count);
-                            let arr_name = &p.id.value;
-                            let (arr_extended_name, arr_ty) = var_scope_info.reference_var(&arr_name, f_name)?;
-                            let load_ty = if let Ty::Array(_, load_ty) = arr_ty {
-                                *load_ty.clone()
+                        Access::Select(s) => {
+                            if let RangeOrExpression::Expression(e) = &s.expression {
+                                // Store the loaded value in a separate variable and return it
+                                let load_name = format!("load@{}", load_count);
+                                let arr_name = &ret_name;
+                                let (arr_extended_name, arr_ty) = var_scope_info.reference_var(&arr_name, f_name)?;
+                                let load_ty = if let Ty::Array(_, load_ty) = arr_ty {
+                                    *load_ty.clone()
+                                } else {
+                                    return Err(format!("Loading from a variable {} that is not an array!", arr_extended_name));
+                                };
+                                let cur_scope = blks[blks_len - 1].scope;
+                                let load_extended_name = var_scope_info.declare_var(&load_name, &f_name, cur_scope, load_ty.clone());
+                                
+                                // Preprocess the indices
+                                let new_e: Expression;
+                                (blks, blks_len, var_scope_info, new_e, func_count, array_count, struct_count, load_count) = 
+                                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
+                                blks[blks_len - 1].instructions.push(BlockContent::Load((load_extended_name.clone(), load_ty.clone(), arr_extended_name.clone(), new_e)));
+                                blks[blks_len - 1].num_vm_ops += 1;
+                                load_count += 1;
+                                ret_name = load_name;
                             } else {
-                                return Err(format!("Loading from a variable {} that is not an array!", arr_extended_name));
-                            };
-                            let cur_scope = blks[blks_len - 1].scope;
-                            let load_extended_name = var_scope_info.declare_var(&load_name, &f_name, cur_scope, load_ty.clone());
-                            
-                            // Preprocess the indices
-                            let new_e: Expression;
-                            (blks, blks_len, var_scope_info, new_e, func_count, array_count, struct_count, load_count) = 
-                                self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
-                            blks[blks_len - 1].instructions.push(BlockContent::Load((load_extended_name.clone(), load_ty.clone(), arr_extended_name.clone(), new_e)));
-                            blks[blks_len - 1].num_vm_ops += 1;
-                            load_count += 1;
-                            ret_e = Expression::Identifier(IdentifierExpression {
-                                value: load_extended_name,
-                                span: Span::new("", 0, 0).unwrap()
-                            });
-                        } else {
-                            return Err(format!("Array range access not implemented!"));
-                        }
-                    }
-                    Some(Access::Member(_)) => {
-                        // Construct p@member
-                        let mut member_name = p.id.value.to_string();
-                        for acc in &p.accesses {
-                            if let Access::Member(m) = acc {
-                                member_name = format!{"{}@{}", member_name, m.id.value};
-                            } else {
-                                panic!("Array inside struct not supported!")
+                                return Err(format!("Array range access not implemented!"));
                             }
                         }
-                        let member_extended_name = var_scope_info.reference_var(&member_name, f_name)?.0;
-                        ret_e = Expression::Identifier(IdentifierExpression {
-                            value: member_extended_name,
-                            span: Span::new("", 0, 0).unwrap()
-                        });
-                    }
-                    None => {
-                        return Err(format!("Unknown postfix!"));
+                        Access::Member(m) => {
+                            // Construct p@member
+                            ret_name = format!{"{}@{}", ret_name, m.id.value};
+                        }
                     }
                 }
+                let ret_extended_name = var_scope_info.reference_var(&ret_name, f_name)?.0;
+                ret_e = Expression::Identifier(IdentifierExpression {
+                    value: ret_extended_name,
+                    span: Span::new("", 0, 0).unwrap()
+                });
             }
             Expression::Identifier(i) => {
                 let new_var: String = var_scope_info.reference_var(&i.value.clone(), &f_name)?.0;
@@ -1718,7 +1669,7 @@ impl<'ast> ZGen<'ast> {
                     let member_ty = self.bl_gen_type_(&member.expression, f_name, var_scope_info)?;
                     struct_ty.push((member_name, member_ty));
                 }
-                Ty::Struct(format!(""), FieldList::new(struct_ty))
+                Ty::Struct(is.ty.value.clone(), FieldList::new(struct_ty))
             }
         };
         Ok(ty)
@@ -1830,6 +1781,7 @@ impl<'ast> ZGen<'ast> {
         mut phy_mem_op_count: usize,
         mut vir_mem_op_count: usize
     ) -> (usize, usize) {
+        debug!("Inst to Circ: {:?}", i);
         match i {
             BlockContent::MemPush((var, _, offset)) => {
                 // Non-deterministically supply ADDR
@@ -2100,6 +2052,8 @@ impl<'ast> ZGen<'ast> {
     // This can be done to either produce the constraints, or to estimate the size of constraints
     // In estimation mode, we rename all output variable from X -> oX, add assertion, and process the terminator
     pub fn bl_to_circ<const ESTIMATE: bool>(&self, b: &Block, f: &str) {
+        debug!("Bl to Circ: {}", b.name);
+
         // setup stack frame for entry function
         // returns the next block, so return type is Field
         let ret_ty = Some(Ty::Field);

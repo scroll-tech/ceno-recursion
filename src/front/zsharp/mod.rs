@@ -1885,7 +1885,9 @@ impl<'ast> ZGen<'ast> {
                     .iter()
                     .rev()
                     .map(|d| self.const_usize_impl_::<IS_CNST>(d))
-                    .fold(b, |b, d| Ok(Ty::Array(d?, Box::new(b?))))
+                    // if array is dynamically-sized, set length to 0
+                    .map(|d| if let Ok(d) = d { d } else { 0 })
+                    .fold(b, |b, d| Ok(Ty::Array(d, Box::new(b?))))
             }
             ast::Type::Struct(s) => {
                 let (def, path) = self.get_struct_or_type(&s.id.value).ok_or_else(|| {

@@ -328,16 +328,13 @@ pub struct VarScopeInfo {
     // For each (var_name, fn_name), record all scopes that it has been defined
     // i.e., [0, 2, 3] means the variables has been defined in scope 0, 2, 3
     var_stack: HashMap<(String, String), Vec<(usize, Ty)>>,
-    // Map of arrays to the type of their content
-    arr_map: HashMap<String, Ty>,
 }
 
 impl VarScopeInfo {
     fn new() -> VarScopeInfo {
         VarScopeInfo {
             var_version: HashMap::new(),
-            var_stack: HashMap::new(),
-            arr_map: HashMap::new()
+            var_stack: HashMap::new()
         }
     }
 
@@ -606,14 +603,10 @@ impl<'ast> ZGen<'ast> {
             let ret_type = f
                 .returns
                 .first().ok_or("No return type provided for one or more function")?;
-            let mut ret_ty = self.type_impl_::<false>(&ret_type)?;
-            // If return type is an array, convert it to a pointer
-            if let Ty::Array(..) = ret_ty {
-                ret_ty = Ty::Field;
-            } else if let Ty::Struct(..) = ret_ty {
+            let ret_ty = self.type_impl_::<false>(&ret_type)?;
+            if let Ty::Struct(..) = ret_ty {
                 panic!("%RET cannot be a struct!");
             }
-            let ret_type = ty_to_type(&ret_ty)?;
 
             // Create new Block, initial scope is 0
             blks.push(Block::new(blks_len, 1, f_name.to_string(), 0));
@@ -625,22 +618,14 @@ impl<'ast> ZGen<'ast> {
             for p in f.parameters.clone().into_iter() {
                 let p_id = p.id.value.clone();
                 let p_ty = self.type_impl_::<false>(&p.ty)?;
-                // if p_ty is an array, convert p_ty to a field (pointer)
-                if let Ty::Array(_, entry_ty) = p_ty {
-                    let p_extended_id = var_scope_info.declare_var(&p_id, &f_name, 0, Ty::Field);
-                    var_scope_info.arr_map.insert(p_extended_id.clone(), *entry_ty.clone());
-                } 
-                // otherwise struct or variable declaration
-                else {
-                    var_scope_info.declare_var(&p_id, &f_name, 0, p_ty);
-                }
+                var_scope_info.declare_var(&p_id, &f_name, 0, p_ty);
                 inputs.push(var_scope_info.reference_var(&p_id, &f_name)?.clone());     
             }
 
             // Iterate through Stmts
             for s in &f.statements {
                 // All statements at function level have scope 0
-                (blks, blks_len, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, s, &ret_type, &f_name, var_scope_info, 1, 0)?;
+                (blks, blks_len, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, s, &ret_ty, &f_name, var_scope_info, 1, 0)?;
             }
 
             // Set terminator to ProgTerm if in main, point to %RP otherwise
@@ -733,10 +718,7 @@ impl<'ast> ZGen<'ast> {
             // Assign p@0 to a
             for (p, a) in f.parameters.clone().into_iter().zip(args) {
                 let p_id = p.id.value.clone();
-                let mut p_ty = self.type_impl_::<false>(&p.ty)?;
-                if let Ty::Array(..) = p_ty {
-                    p_ty = Ty::Field;
-                }
+                let p_ty = self.type_impl_::<false>(&p.ty)?;
                 var_scope_info.declare_var(&p_id, &f_name, 0, p_ty.clone());
                 (blks, blks_len, var_scope_info) = self.bl_gen_def_stmt_(blks, blks_len, &p_id, &a, &p_ty, &f_name, &caller_name, var_scope_info)?;
             }
@@ -800,25 +782,12 @@ impl<'ast> ZGen<'ast> {
             }
 
             let ret_name = format!("ret@{}", func_count);
-            let ret_extended_name = var_scope_info.declare_var(&ret_name, &caller_name, caller_scope, ret_ty.clone());
-            let update_ret_stmt = Statement::Definition(DefinitionStatement {
-                lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                    array_metadata: None,
-                    ty: ty_to_type(&ret_ty)?,
-                    identifier: IdentifierExpression {
-                        value: ret_extended_name,
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    span: Span::new("", 0, 0).unwrap()
-                })],
-                // Assume that we only have ONE return variable
-                expression: Expression::Identifier(IdentifierExpression {
-                    value: format!("%RET.{}", f_name),
-                    span: Span::new("", 0, 0).unwrap()
-                }),
+            var_scope_info.declare_var(&ret_name, &caller_name, caller_scope, ret_ty.clone());
+            let ret_expr = Expression::Identifier(IdentifierExpression {
+                value: format!("%RET.{}", f_name),
                 span: Span::new("", 0, 0).unwrap()
             });
-            blks[blks_len - 1].instructions.push(BlockContent::Stmt(update_ret_stmt));
+            (blks, blks_len, var_scope_info) = self.bl_gen_def_stmt_(blks, blks_len, &ret_name, &ret_expr, &ret_ty, &caller_name, &f_name, var_scope_info)?;
         }
 
         Ok((blks, blks_len, 0, var_scope_info, func_count))
@@ -835,7 +804,7 @@ impl<'ast> ZGen<'ast> {
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
         s: &'ast Statement<'ast>,
-        ret_ty: &Type<'ast>,
+        ret_ty: &Ty,
         // function name
         f_name: &str,
         // Records the version number of each (var_name, fn_name) at each scope
@@ -852,23 +821,10 @@ impl<'ast> ZGen<'ast> {
                 let ret_expr: Expression;
                 (blks, blks_len, var_scope_info, ret_expr, _, _, _, _) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &r.expressions[0], f_name, 0, 0, 0, 0, var_scope_info)?;
-                // Convert the statement to %RET.<f_name> = ret_expr
+                // Convert the statement to %RET.<f_name>.0.0 = ret_expr
                 // We include <f_name> because different function has different return type
-                let ret_stmt = Statement::Definition(DefinitionStatement {
-                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                        array_metadata: None,
-                        ty: ret_ty.clone(),
-                        identifier: IdentifierExpression {
-                            value: format!("%RET.{}", f_name),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        span: Span::new("", 0, 0).unwrap()
-                    })],
-                    // Assume that we only have ONE return variable
-                    expression: ret_expr,
-                    span: Span::new("", 0, 0).unwrap()
-                });
-                blks[blks_len - 1].instructions.push(BlockContent::Stmt(ret_stmt));
+                let ret_name = format!("%RET.{}", f_name);
+                (blks, blks_len, var_scope_info) = self.bl_gen_def_stmt_(blks, blks_len, &ret_name, &ret_expr, &ret_ty, f_name, f_name, var_scope_info)?;
 
                 // Set terminator to ProgTerm if in main, point to %RP otherwise
                 if IS_MAIN {
@@ -1151,12 +1107,12 @@ impl<'ast> ZGen<'ast> {
                     let (new_l, lhs_ty) = var_scope_info.reference_var(&l.id.value.clone(), f_name)?;
 
                     // Array assignment
-                    if let Some(entry_ty) = var_scope_info.arr_map.get(&new_l) {
+                    if let Ty::Array(_, entry_ty) = &lhs_ty {
                         if l.accesses.len() > 1 { return Err(format!("Multi-dimensional arrays not supported!")); }
                         // if the LHS is an array access, convert the assignee to a store
                         if l.accesses.len() > 0 {
                             if let AssigneeAccess::Select(a) = &l.accesses[0] {
-                                let entry_ty = entry_ty.clone();
+                                let entry_ty = *entry_ty.clone();
                                 assert_eq!(entry_ty, rhs_ty);
                                 skip_stmt_gen = true;
                                 if let RangeOrExpression::Expression(e) = &a.expression {
@@ -1180,9 +1136,29 @@ impl<'ast> ZGen<'ast> {
                         // if the LHS is a struct member, unroll variable name
                         if l.accesses.len() > 0 {
                             l_name = l.id.value.to_string();
-                            for acc in &l.accesses {
+                            for i in 0..l.accesses.len() {
+                                let acc = &l.accesses[i];
                                 if let AssigneeAccess::Member(m) = acc {
                                     l_name = format!("{}@{}", l_name, m.id.value);
+                                } else if let AssigneeAccess::Select(a) = acc {
+                                    // Array access is the last access
+                                    assert_eq!(i, l.accesses.len() - 1);
+                                    let (new_l, l_ty) = var_scope_info.reference_var(&l_name, f_name)?;
+                                    if let Ty::Array(_, entry_ty) = l_ty {
+                                        let entry_ty = *entry_ty.clone();
+                                        assert_eq!(entry_ty, rhs_ty);
+                                        if let RangeOrExpression::Expression(e) = &a.expression {
+                                            let new_e: Expression;
+                                            (blks, blks_len, var_scope_info, new_e, _, _, _, _) = 
+                                                self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, 0, 0, var_scope_info)?;
+                                            blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), entry_ty.clone(), new_l, new_e, false)));
+                                            blks[blks_len - 1].num_vm_ops += 1;
+                                        } else {
+                                            return Err(format!("Array range access not implemented!"));
+                                        }
+                                    } else {
+                                        return Err(format!("Cannot perform store: {} is not an array!", new_l));
+                                    }
                                 } else {
                                     return Err(format!("Illegal access to struct {}", new_l));
                                 }
@@ -1203,29 +1179,9 @@ impl<'ast> ZGen<'ast> {
                 TypedIdentifierOrAssignee::TypedIdentifier(l) => {
                     // If array is dynamically bounded, cannot use type_impl_ because bound might involve variables undefined in circ
                     let l_name = l.identifier.value.to_string();
-                    var_scope_info.declare_var(&l_name, f_name, cur_scope, rhs_ty.clone());
-                    // if LHS is a struct, assert RHS is a struct
-                    if let Type::Struct(_) = &l.ty {
-                        if let Ty::Struct(..) = rhs_ty {} else {
-                            return Err(format!("Assigning struct {} to non-array!", l_name));
-                        }
-                    }
-                    // if LHS is an array, declare it as a pointer
-                    else if let Type::Array(arr_ty) = &l.ty {
-                        assert_eq!(rhs_ty, Ty::Field);
-
-                        let entry_ty = match &arr_ty.ty {
-                            BasicOrStructType::Struct(_) => { panic!("Struct inside arrays not supported!") },
-                            BasicOrStructType::Basic(s) => self.type_impl_::<false>(&Type::Basic(s.clone())),
-                        }.unwrap();
-
-                        let new_l = var_scope_info.declare_var(&l_name, f_name, cur_scope, Ty::Field);
-                        var_scope_info.arr_map.insert(new_l.clone(), entry_ty);
-                    } else {
-                        // Unroll scoping on LHS
-                        let lhs_ty = self.type_impl_::<false>(&l.ty)?;
-                        assert_eq!(lhs_ty, rhs_ty);
-                    }
+                    let lhs_ty = self.type_impl_::<false>(&l.ty)?;
+                    assert_eq!(lhs_ty, rhs_ty);
+                    var_scope_info.declare_var(&l_name, f_name, cur_scope, lhs_ty.clone());
                     (blks, blks_len, var_scope_info) = 
                         self.bl_gen_def_stmt_(blks, blks_len, &l_name, &rhs_expr, &rhs_ty, f_name, f_name, var_scope_info)?;
                 }
@@ -1250,9 +1206,8 @@ impl<'ast> ZGen<'ast> {
         r_f_name: &str,
         mut var_scope_info: VarScopeInfo,
     ) -> Result<(Vec<Block>, usize, VarScopeInfo), String> {
-        // declare lhs
-        let new_l = var_scope_info.reference_var(&l, l_f_name)?.0;
-
+        // declare lhs, only reference the var if not reserved register
+        let new_l = if l.chars().next().unwrap() == '%' { l.to_string() } else { var_scope_info.reference_var(&l, l_f_name)?.0 };
         // Struct assignment
         if let Ty::Struct(_, members) = ty {
             // rhs needs to be an identifier
@@ -1277,7 +1232,8 @@ impl<'ast> ZGen<'ast> {
             let decl_stmt = DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                     array_metadata: None,
-                    ty: ty_to_type(ty).unwrap(),
+                    // if ty is an array, convert it to a field
+                    ty: ty_to_type(if let Ty::Array(..) = ty { &Ty::Field } else { ty }).unwrap(),
                     identifier: IdentifierExpression {
                         value: new_l,
                         span: Span::new("", 0, 0).unwrap()
@@ -1394,8 +1350,12 @@ impl<'ast> ZGen<'ast> {
                             // Store the loaded value in a separate variable and return it
                             let load_name = format!("load@{}", load_count);
                             let arr_name = &p.id.value;
-                            let arr_extended_name = var_scope_info.reference_var(&arr_name, f_name)?.0;
-                            let load_ty = var_scope_info.arr_map.get(&arr_extended_name).ok_or_else(|| format!("Load failed: no array {}", &arr_extended_name))?.clone();
+                            let (arr_extended_name, arr_ty) = var_scope_info.reference_var(&arr_name, f_name)?;
+                            let load_ty = if let Ty::Array(_, load_ty) = arr_ty {
+                                *load_ty.clone()
+                            } else {
+                                return Err(format!("Loading from a variable {} that is not an array!", arr_extended_name));
+                            };
                             let cur_scope = blks[blks_len - 1].scope;
                             let load_extended_name = var_scope_info.declare_var(&load_name, &f_name, cur_scope, load_ty.clone());
                             
@@ -1535,10 +1495,10 @@ impl<'ast> ZGen<'ast> {
 
         let cur_scope = blks[blks_len - 1].scope;
         let entry_ty = array_init_info.entry_ty.clone();
+        let arr_len = if let Some(arr_content) = &array_init_info.arr_entries { arr_content.len() } else { 0 };
         // Assign array@X to be the temporary array
         let arr_name = format!("array@{}", array_count);
-        let arr_extended_name = var_scope_info.declare_var(&arr_name, &f_name, cur_scope, Ty::Field);
-        var_scope_info.arr_map.insert(arr_extended_name.clone(), entry_ty.clone());
+        let arr_extended_name = var_scope_info.declare_var(&arr_name, &f_name, cur_scope, Ty::Array(arr_len, Box::new(entry_ty.clone())));
         array_count += 1;
         
         // Initialize array
@@ -1713,18 +1673,18 @@ impl<'ast> ZGen<'ast> {
                         let ret_type = callee
                         .returns
                         .first().ok_or("No return type provided for one or more function")?;
-                        let mut ret_ty = self.type_impl_::<false>(&ret_type)?;
-                        // If return type is an array, convert it to a pointer
-                        if let Ty::Array(_, _) = ret_ty {
-                            ret_ty = Ty::Field;
-                        }
+                        let ret_ty = self.type_impl_::<false>(&ret_type)?;
                         ret_ty
                     }
                     Some(Access::Select(s)) => {
                         if let RangeOrExpression::Expression(_) = &s.expression {
                             let arr_name = &p.id.value;
-                            let arr_extended_name = var_scope_info.reference_var(&arr_name, f_name)?.0;
-                            let load_ty = var_scope_info.arr_map.get(&arr_extended_name).ok_or_else(|| format!("Load failed: no array {}", &arr_extended_name))?.clone();
+                            let (arr_extended_name, arr_ty) = var_scope_info.reference_var(&arr_name, f_name)?;
+                            let load_ty = if let Ty::Array(_, load_ty) = arr_ty {
+                                *load_ty.clone()
+                            } else {
+                                return Err(format!("Loading from a variable {} that is not an array!", arr_extended_name));
+                            };
                             load_ty
                         } else {
                             return Err(format!("Array range access not implemented!"));
@@ -1739,11 +1699,17 @@ impl<'ast> ZGen<'ast> {
             Expression::Literal(_) => {
                 self.expr_impl_::<false>(&e)?.type_().clone()
             }
-            Expression::ArrayInitializer(_) => {
-                Ty::Field
+            Expression::ArrayInitializer(ai) => {
+                let ai_len = self.const_usize_impl_::<false>(&*ai.count);
+                let ai_len = if let Ok(ai_len) = ai_len { ai_len } else { 0 };
+                Ty::Array(ai_len, Box::new(self.bl_gen_type_(&ai.value, f_name, var_scope_info)?)) // array length does not matter
             }
-            Expression::InlineArray(_) => {
-                Ty::Field
+            Expression::InlineArray(ia) => {
+                if let SpreadOrExpression::Expression(e) = &ia.expressions[0] {
+                    Ty::Array(ia.expressions.len(), Box::new(self.bl_gen_type_(e, f_name, var_scope_info)?)) // array length does not matter
+                } else {
+                    return Err(format!("Spread not supported in inline arrays!"));
+                }
             }
             Expression::InlineStruct(is) => {
                 let mut struct_ty = Vec::new();
@@ -1819,270 +1785,6 @@ impl<'ast> ZGen<'ast> {
         let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
         self.assert(b).unwrap();
     }
-
-    /*
-    // Convert a virtual memory operation to circ_ir
-    // MODE: LOAD, STORE, DUMMY_LOAD, INIT_STORE
-    fn vir_mem_to_circ<const MODE: usize>(
-        &'ast self,
-        f: &str,
-        mut ty_mem_op_offset: BTreeMap<Ty, usize>,
-        array_offset_map: &HashMap<String, usize>,
-        ty: &Ty,
-        arr: Option<&String>,
-        id_expr: Option<&Expression<'ast>>,
-    ) -> (BTreeMap<Ty, usize>, usize) {
-        // Obtain the label for the memory operation
-        let mut next_label = ty_mem_op_offset.get(&ty).unwrap().clone();
-
-        // Declare the next PHY_ADDR, VIR_ADDR, VAL, L/S, and TS
-        // For simplicity, call them a, b, c, l, t
-
-        // RETRIEVAL
-        // For LOAD, this is to obtain the value
-        // For STORE, this is to obtain the physical memory
-        // For DUMMY_LOAD, this does nothing
-        // For INIT_STORE, skip
-        if MODE == LOAD || MODE == STORE || MODE == DUMMY_LOAD {
-            // PHY_ADDR as 'a'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}a", next_label),
-                &Ty::Field,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-            // VIR_ADDR as 'b'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}b", next_label),
-                ty,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-            // VAL as 'c'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}c", next_label),
-                ty,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-            // LS as 'l'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}l", next_label),
-                &Ty::Field,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-            // TS as 't'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}t", next_label),
-                &Ty::Field,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-            // VIR_ADDR if exist
-            if let Some(addr_expr) = id_expr {
-                // lhs_t + offset_t == rhs_t
-                let mut lhs_t = self.expr_impl_::<false>(&addr_expr).unwrap();
-                // if lhs_t is not a field, cast it to a field
-                if lhs_t.type_() != &Ty::Field {
-                    lhs_t = uint_to_field(lhs_t).unwrap();
-                }
-                let offset_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                    value: DecimalNumber {
-                        value: array_offset_map.get(arr.unwrap()).unwrap().to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    span: Span::new("", 0, 0).unwrap()
-                }))).unwrap();
-                let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                    value: format!("%vm{:06}b", next_label),
-                    span: Span::new("", 0, 0).unwrap()
-                })).unwrap();
-                let b = bool(eq(add(lhs_t, offset_t).unwrap(), rhs_t).unwrap()).unwrap();
-                self.assert(b);
-            }
-
-            // LS
-            self.bl_gen_assert_const(&format!("%vm{:06}l", next_label), LOAD);
-            // TS
-            self.bl_gen_assert_eq(&format!("%w1"), &format!("%vm{:06}t", next_label));
-        }
-
-        // INCREMENT TIMESTAMP
-        if MODE == STORE || MODE == INIT_STORE {
-            self.stmt_impl_::<false>(&bl_gen_increment_stmt("%w1", 1)).unwrap();
-        }
-
-        // INVALIDATION
-        if MODE == STORE || MODE == DUMMY_LOAD {
-            // Increment label
-            next_label += 1;
-
-            // PHY_ADDR as 'a'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}a", next_label),
-                &Ty::Field,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-            // VIR_ADDR as 'b'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}b", next_label),
-                ty,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-            // VAL as 'c'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}c", next_label),
-                ty,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-            // LS as 'l'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}l", next_label),
-                &Ty::Field,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-            // TS as 't'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}t", next_label),
-                &Ty::Field,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-
-
-            // If STORE, PHY_ADDR matches with previous LOAD and VIR_ADDR is 0
-            if MODE == STORE {
-                self.bl_gen_assert_eq(&format!("%vm{:06}a", next_label - 1), &format!("%vm{:06}a", next_label));
-                self.bl_gen_assert_const(&format!("%vm{:06}b", next_label), 0);
-            }
-            // LS
-            self.bl_gen_assert_const(&format!("%vm{:06}l", next_label), if MODE == STORE { STORE } else { LOAD });
-            // TS
-            self.bl_gen_assert_eq(&format!("%w1"), &format!("%vm{:06}t", next_label));
-
-            // Increment next_label
-            next_label += 1;
-        }
-        
-        // ALLOCATION
-        if MODE == STORE || MODE == DUMMY_LOAD || MODE == INIT_STORE {
-            // PHY_ADDR as 'a'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}a", next_label),
-                &Ty::Field,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-            // VIR_ADDR as 'b'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}b", next_label),
-                ty,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-            // VAL as 'c'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}c", next_label),
-                ty,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-            // LS as 'l'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}l", next_label),
-                &Ty::Field,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-            // TS as 't'
-            self.circ_declare_input(
-                f,
-                format!("%vm{:06}t", next_label),
-                &Ty::Field,
-                ZVis::Private(0),
-                None,
-                true,
-            ).unwrap();
-
-            // If STORE or INIT_STORE, PHY_ADDR matches with TS
-            if MODE == STORE || MODE == INIT_STORE {
-                self.bl_gen_assert_eq(&format!("%w1"), &format!("%vm{:06}a", next_label));    
-            }
-
-            // VIR_ADDR
-            if let Some(addr_expr) = id_expr {
-                // lhs_t + offset_t == rhs_t
-                let mut lhs_t = self.expr_impl_::<false>(&addr_expr).unwrap();
-                // if lhs_t is not a field, cast it to a field
-                if lhs_t.type_() != &Ty::Field {
-                    lhs_t = uint_to_field(lhs_t).unwrap();
-                }
-                let offset_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                    value: DecimalNumber {
-                        value: array_offset_map.get(arr.unwrap()).unwrap().to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    span: Span::new("", 0, 0).unwrap()
-                }))).unwrap();
-                let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                    value: format!("%vm{:06}b", next_label),
-                    span: Span::new("", 0, 0).unwrap()
-                })).unwrap();
-                let b = bool(eq(add(lhs_t, offset_t).unwrap(), rhs_t).unwrap()).unwrap();
-                self.assert(b);
-            }
-            // LS
-            self.bl_gen_assert_const(&format!("%vm{:06}l", next_label), if MODE == STORE || MODE == INIT_STORE { STORE } else { LOAD });
-            // TS
-            self.bl_gen_assert_eq(&format!("%w1"), &format!("%vm{:06}t", next_label));
-        }
-        // VAL is handled individually depending on LOAD & STORE
-
-        // Update label
-        ty_mem_op_offset.insert(ty.clone(), next_label + 1);
-
-        (ty_mem_op_offset, next_label)
-    }
-    */
 
     // Convert a virtual memory operation to circ_ir
     // MODE: LOAD, STORE, DUMMY_LOAD, INIT_STORE

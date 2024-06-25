@@ -1116,6 +1116,8 @@ impl<'ast> ZGen<'ast> {
         cur_scope: usize,
         mut var_scope_info: VarScopeInfo,
     ) -> Result<(Vec<Block>, usize, VarScopeInfo), String> {
+        debug!("Block Gen Assign");
+
         // XXX(unimpl) multi-assignment unimplemented
         assert!(d.lhs.len() <= 1);
 
@@ -1145,11 +1147,10 @@ impl<'ast> ZGen<'ast> {
                                 lhs_ty = member_ty;
                             }
                             AssigneeAccess::Select(s) => {
-                                assert_eq!(acc_counter, l.accesses.len() - 1);
                                 let (new_l, arr_ty) = var_scope_info.reference_var(&l_name, f_name)?;
                                 if let Ty::Array(_, entry_ty) = arr_ty {
                                     let entry_ty = *entry_ty.clone();
-                                    assert_eq!(entry_ty, rhs_ty);
+                                    // assert_eq!(entry_ty, rhs_ty);
                                     skip_stmt_gen = true;
                                     if let RangeOrExpression::Expression(e) = &s.expression {
                                         // Assert that all remaining accesses are struct member accesses
@@ -1218,6 +1219,8 @@ impl<'ast> ZGen<'ast> {
         r_f_name: &str,
         var_scope_info: &VarScopeInfo,
     ) -> Result<(Vec<Block>, usize), String> {
+        debug!("Block Gen Def Stmt: {} = {}", l, new_r_expr.span().as_str());
+
         // declare lhs, only reference the var if not reserved register
         let new_l = if l.chars().next().unwrap() == '%' { l.to_string() } else { var_scope_info.reference_var(&l, l_f_name)?.0 };
         // Struct assignment
@@ -1236,7 +1239,7 @@ impl<'ast> ZGen<'ast> {
                     (blks, blks_len) = self.bl_gen_def_stmt_(blks, blks_len, &l_member, &new_r_member_expr, &m_ty, l_f_name, r_f_name, var_scope_info)?;
                 }
             } else {
-                return Err(format!("Struct assignment failed: cannot identify RHS of definition statement!"));
+                return Err(format!("Struct assignment failed: cannot identify RHS of definition statement: {:?}", new_r_expr));
             }
         }
         // Other assignment
@@ -1276,6 +1279,8 @@ impl<'ast> ZGen<'ast> {
         struct_ty: &Ty,
         prev_accesses: &Vec<MemberAccess>,
     ) -> Result<(Vec<Block>, usize), String> {
+        debug!("Block Gen Store: {}[{}] = {}", arr_extended_name, new_index_expr.span().as_str(), new_entry_expr.span().as_str());
+
         // Struct store
         if let Ty::Struct(_, members) = cur_ty {
             // entry needs to be an identifier
@@ -1312,7 +1317,7 @@ impl<'ast> ZGen<'ast> {
                     )?;
                 }
             } else {
-                return Err(format!("Struct assignment failed: cannot identify RHS of definition statement!"));
+                return Err(format!("Struct assignment failed: cannot identify RHS of definition statement: {:?}", new_entry_expr));
             }
         }
         // Other assignment
@@ -1340,6 +1345,8 @@ impl<'ast> ZGen<'ast> {
         struct_ty: &Ty,
         prev_accesses: &Vec<MemberAccess>,
     ) -> Result<(Vec<Block>, usize), String> {
+        debug!("Block Gen Load: {} = {}[{}]", l, arr_extended_name, new_index_expr.span().as_str());
+
         // declare lhs, only reference the var if not reserved register
         let new_l = if l.chars().next().unwrap() == '%' { l.to_string() } else { var_scope_info.reference_var(&l, l_f_name)?.0 };
         // Struct load
@@ -1486,7 +1493,7 @@ impl<'ast> ZGen<'ast> {
                                     return Err(format!("Loading from a variable {} that is not an array!", arr_extended_name));
                                 };
                                 let cur_scope = blks[blks_len - 1].scope;
-                                let load_extended_name = var_scope_info.declare_var(&load_name, &f_name, cur_scope, load_ty.clone());
+                                var_scope_info.declare_var(&load_name, &f_name, cur_scope, load_ty.clone());
 
                                 // Assert that all remaining accesses are struct member accesses
                                 let mut member_accesses = Vec::new();
@@ -1509,7 +1516,7 @@ impl<'ast> ZGen<'ast> {
                                 (blks, blks_len) = self.bl_gen_load_(
                                     blks, 
                                     blks_len, 
-                                    &load_extended_name,
+                                    &load_name,
                                     &arr_extended_name,
                                     &index_ty, 
                                     &new_index_expr, 
@@ -1576,6 +1583,7 @@ impl<'ast> ZGen<'ast> {
                         return Err(format!("Spread not supported in inline arrays!"));
                     }
                 }
+
                 let array_init_info = ArrayInitInfo::from_inline_array(e_list, entry_ty.clone());
                 let arr_extended_name: String;
                 (blks, blks_len, var_scope_info, arr_extended_name, func_count, array_count, struct_count, load_count) = 
@@ -1705,26 +1713,11 @@ impl<'ast> ZGen<'ast> {
         // Start by declaring all init@X to unique_contents
         for i in 0..array_init_info.unique_contents.len() {
             let init_name = format!("init@{}", i);
-            let init_extended_name = var_scope_info.declare_var(&init_name, &f_name, cur_scope, entry_ty.clone());
-            let entry_ty = ty_to_type(&entry_ty)?;
+            var_scope_info.declare_var(&init_name, &f_name, cur_scope, entry_ty.clone());
             let content_expr: Expression;
             (blks, blks_len, var_scope_info, content_expr, func_count, array_count, struct_count, load_count) = 
                 self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &array_init_info.unique_contents[i], f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
-            let array_init_stmt = Statement::Definition(DefinitionStatement {
-                lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                    array_metadata: None,
-                    ty: entry_ty,
-                    identifier: IdentifierExpression {
-                        value: init_extended_name.clone(),
-                        span: Span::new("", 0, 0).unwrap()
-                    },
-                    span: Span::new("", 0, 0).unwrap()
-                })],
-                // Assume that we only have ONE return variable
-                expression: content_expr,
-                span: Span::new("", 0, 0).unwrap()
-            });
-            blks[blks_len - 1].instructions.push(BlockContent::Stmt(array_init_stmt));
+            (blks, blks_len) = self.bl_gen_def_stmt_(blks, blks_len, &init_name, &content_expr, &entry_ty, f_name, f_name, &var_scope_info)?;
         }
 
         // Then assigning each entries in array to corresponding init@X

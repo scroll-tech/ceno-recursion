@@ -88,6 +88,35 @@ fn field_to_ty(f: T, ty: &Ty) -> Result<T, String> {
     }
 }
 
+// Given a (potentially struct) type and access pattern,
+// return size of type (# of fields to express it) and offset to the access
+fn access_to_offset(ty: &Ty, acc: &[MemberAccess]) -> (usize, usize){
+    if let Ty::Struct(_, members) = ty {
+        let mut size = 0;
+        let mut offset = size;
+        // if acc_encountered is true, then offset no longer inreases
+        let mut acc_encountered = acc.len() == 0;
+        for (m_name, m_ty) in &members.clone().into_map() {
+            if acc.len() > 0 && &acc[0].id.value == m_name {
+                let (m_size, m_offset) = access_to_offset(m_ty, &acc[1..]);
+                size += m_size;
+                offset += m_offset;
+                acc_encountered = true;
+            } else {
+                let (m_size, _) = access_to_offset(m_ty, acc);
+                size += m_size;
+                if !acc_encountered { offset += m_size };
+            }
+        }
+        assert!(acc_encountered);
+        (size, offset)
+    } 
+    // All non-struct types have size 1
+    else {
+        return (1, 0);
+    }
+}
+
 pub fn bl_coda<'ast>(nb: NextBlock) -> Expression<'ast> {
     match nb {
         NextBlock::Label(val) => Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
@@ -720,7 +749,7 @@ impl<'ast> ZGen<'ast> {
                 let p_id = p.id.value.clone();
                 let p_ty = self.type_impl_::<false>(&p.ty)?;
                 var_scope_info.declare_var(&p_id, &f_name, 0, p_ty.clone());
-                (blks, blks_len, var_scope_info) = self.bl_gen_def_stmt_(blks, blks_len, &p_id, &a, &p_ty, &f_name, &caller_name, var_scope_info)?;
+                (blks, blks_len) = self.bl_gen_def_stmt_(blks, blks_len, &p_id, &a, &p_ty, &f_name, &caller_name, &var_scope_info)?;
             }
 
             // %RP has been pushed to stack before function call
@@ -787,7 +816,7 @@ impl<'ast> ZGen<'ast> {
                 value: format!("%RET.{}", f_name),
                 span: Span::new("", 0, 0).unwrap()
             });
-            (blks, blks_len, var_scope_info) = self.bl_gen_def_stmt_(blks, blks_len, &ret_name, &ret_expr, &ret_ty, &caller_name, &f_name, var_scope_info)?;
+            (blks, blks_len) = self.bl_gen_def_stmt_(blks, blks_len, &ret_name, &ret_expr, &ret_ty, &caller_name, &f_name, &var_scope_info)?;
         }
 
         Ok((blks, blks_len, 0, var_scope_info, func_count))
@@ -824,7 +853,7 @@ impl<'ast> ZGen<'ast> {
                 // Convert the statement to %RET.<f_name>.0.0 = ret_expr
                 // We include <f_name> because different function has different return type
                 let ret_name = format!("%RET.{}", f_name);
-                (blks, blks_len, var_scope_info) = self.bl_gen_def_stmt_(blks, blks_len, &ret_name, &ret_expr, &ret_ty, f_name, f_name, var_scope_info)?;
+                (blks, blks_len) = self.bl_gen_def_stmt_(blks, blks_len, &ret_name, &ret_expr, &ret_ty, f_name, f_name, &var_scope_info)?;
 
                 // Set terminator to ProgTerm if in main, point to %RP otherwise
                 if IS_MAIN {
@@ -1107,7 +1136,8 @@ impl<'ast> ZGen<'ast> {
                     let mut lhs_ty = var_scope_info.reference_var(&l.id.value.clone(), f_name)?.1;
 
                     let mut acc_counter = 0;
-                    for acc in &l.accesses {
+                    while acc_counter < l.accesses.len() {
+                        let acc = &l.accesses[acc_counter];
                         match acc {
                             AssigneeAccess::Member(m) => {
                                 l_name = format!("{}@{}", l_name, m.id.value);
@@ -1122,11 +1152,25 @@ impl<'ast> ZGen<'ast> {
                                     assert_eq!(entry_ty, rhs_ty);
                                     skip_stmt_gen = true;
                                     if let RangeOrExpression::Expression(e) = &s.expression {
-                                        let new_e: Expression;
-                                        (blks, blks_len, var_scope_info, new_e, _, _, _, _) = 
+                                        // Assert that all remaining accesses are struct member accesses
+                                        let mut member_accesses = Vec::new();
+                                        acc_counter += 1;
+                                        while acc_counter < l.accesses.len() {
+                                            if let AssigneeAccess::Member(m) = &l.accesses[acc_counter] {
+                                                member_accesses.push(m.clone());
+                                            } else {
+                                                break;
+                                            }
+                                            acc_counter += 1;
+                                        }
+
+                                        // Process the index
+                                        let index_ty = self.bl_gen_type_(&e, f_name, &var_scope_info)?;
+                                        let new_index_expr: Expression;
+                                        (blks, blks_len, var_scope_info, new_index_expr, _, _, _, _) = 
                                             self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, 0, 0, var_scope_info)?;
-                                        blks[blks_len - 1].instructions.push(BlockContent::Store((rhs_expr.clone(), entry_ty.clone(), new_l, new_e, false)));
-                                        blks[blks_len - 1].num_vm_ops += 1;
+                                        // Perform pointer arithmetics
+                                        (blks, blks_len) = self.bl_gen_store_(blks, blks_len, &new_l, &index_ty, &new_index_expr, &rhs_expr, &entry_ty, f_name, &var_scope_info, false, &entry_ty, &Vec::new())?;
                                     } else {
                                         return Err(format!("Array range access not implemented!"));
                                     }
@@ -1140,8 +1184,8 @@ impl<'ast> ZGen<'ast> {
                     }
                     assert_eq!(lhs_ty, rhs_ty);
                     if !skip_stmt_gen {
-                        (blks, blks_len, var_scope_info) = 
-                            self.bl_gen_def_stmt_(blks, blks_len, &l_name, &rhs_expr, &rhs_ty, f_name, f_name, var_scope_info)?;
+                        (blks, blks_len) = 
+                            self.bl_gen_def_stmt_(blks, blks_len, &l_name, &rhs_expr, &rhs_ty, f_name, f_name, &var_scope_info)?;
                     }
                 }
                 TypedIdentifierOrAssignee::TypedIdentifier(l) => {
@@ -1150,8 +1194,8 @@ impl<'ast> ZGen<'ast> {
                     let lhs_ty = self.type_impl_::<false>(&l.ty)?;
                     assert_eq!(lhs_ty, rhs_ty);
                     var_scope_info.declare_var(&l_name, f_name, cur_scope, lhs_ty.clone());
-                    (blks, blks_len, var_scope_info) = 
-                        self.bl_gen_def_stmt_(blks, blks_len, &l_name, &rhs_expr, &rhs_ty, f_name, f_name, var_scope_info)?;
+                    (blks, blks_len) = 
+                        self.bl_gen_def_stmt_(blks, blks_len, &l_name, &rhs_expr, &rhs_ty, f_name, f_name, &var_scope_info)?;
                 }
             }
         } else {
@@ -1172,8 +1216,8 @@ impl<'ast> ZGen<'ast> {
         ty: &Ty,
         l_f_name: &str,
         r_f_name: &str,
-        mut var_scope_info: VarScopeInfo,
-    ) -> Result<(Vec<Block>, usize, VarScopeInfo), String> {
+        var_scope_info: &VarScopeInfo,
+    ) -> Result<(Vec<Block>, usize), String> {
         // declare lhs, only reference the var if not reserved register
         let new_l = if l.chars().next().unwrap() == '%' { l.to_string() } else { var_scope_info.reference_var(&l, l_f_name)?.0 };
         // Struct assignment
@@ -1189,7 +1233,7 @@ impl<'ast> ZGen<'ast> {
                         value: new_r_member,
                         span: Span::new("", 0, 0).unwrap()
                     });
-                    (blks, blks_len, var_scope_info) = self.bl_gen_def_stmt_(blks, blks_len, &l_member, &new_r_member_expr, &m_ty, l_f_name, r_f_name, var_scope_info)?;
+                    (blks, blks_len) = self.bl_gen_def_stmt_(blks, blks_len, &l_member, &new_r_member_expr, &m_ty, l_f_name, r_f_name, var_scope_info)?;
                 }
             } else {
                 return Err(format!("Struct assignment failed: cannot identify RHS of definition statement!"));
@@ -1213,7 +1257,126 @@ impl<'ast> ZGen<'ast> {
             };
             blks[blks_len - 1].instructions.push(BlockContent::Stmt(Statement::Definition(decl_stmt)));
         }
-        Ok((blks, blks_len, var_scope_info))
+        Ok((blks, blks_len))
+    }
+
+    // Generate store instructions, similar to bl_gen_def_stmt
+    fn bl_gen_store_(
+        &'ast self,
+        mut blks: Vec<Block<'ast>>,
+        mut blks_len: usize,
+        arr_extended_name: &str,
+        index_ty: &Ty,
+        new_index_expr: &Expression<'ast>,
+        new_entry_expr: &Expression<'ast>,
+        cur_ty: &Ty,
+        r_f_name: &str,
+        var_scope_info: &VarScopeInfo,
+        is_alloc: bool,
+        struct_ty: &Ty,
+        prev_accesses: &Vec<MemberAccess>,
+    ) -> Result<(Vec<Block>, usize), String> {
+        // Struct store
+        if let Ty::Struct(_, members) = cur_ty {
+            // entry needs to be an identifier
+            if let Expression::Identifier(ie) = &new_entry_expr {
+                // Strip scope & f_name out of r
+                let r = ie.value.split(".").next().unwrap_or("");
+                for (m, m_ty) in members.clone().into_map() {
+                    let new_r_member = var_scope_info.reference_var(&format!("{r}@{m}"), r_f_name)?.0;
+                    let new_r_member_expr = Expression::Identifier(IdentifierExpression {
+                        value: new_r_member,
+                        span: Span::new("", 0, 0).unwrap()
+                    });
+                    let mut next_accesses = prev_accesses.clone();
+                    next_accesses.push(MemberAccess {
+                        id: IdentifierExpression {
+                            value: m.to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        span: Span::new("", 0, 0).unwrap()
+                    });
+                    (blks, blks_len) = self.bl_gen_store_(
+                        blks, 
+                        blks_len, 
+                        arr_extended_name,
+                        index_ty,
+                        new_index_expr,
+                        &new_r_member_expr,
+                        &m_ty,
+                        r_f_name,
+                        var_scope_info,
+                        is_alloc,
+                        struct_ty,
+                        &next_accesses,
+                    )?;
+                }
+            } else {
+                return Err(format!("Struct assignment failed: cannot identify RHS of definition statement!"));
+            }
+        }
+        // Other assignment
+        else {
+            let new_offset_expr = self.bl_gen_pointer_offset_(new_index_expr.clone(), prev_accesses, index_ty, struct_ty)?;
+            let store_instr = BlockContent::Store((new_entry_expr.clone(), cur_ty.clone(), arr_extended_name.to_string(), new_offset_expr, is_alloc));
+            blks[blks_len - 1].instructions.push(store_instr);
+            blks[blks_len - 1].num_vm_ops += 1;
+        }
+        Ok((blks, blks_len))
+    }
+
+    // Generate load instructions
+    fn bl_gen_load_(
+        &'ast self,
+        mut blks: Vec<Block<'ast>>,
+        mut blks_len: usize,
+        l: &str,
+        arr_extended_name: &str,
+        index_ty: &Ty,
+        new_index_expr: &Expression<'ast>,
+        cur_ty: &Ty,
+        l_f_name: &str,
+        var_scope_info: &VarScopeInfo,
+        struct_ty: &Ty,
+        prev_accesses: &Vec<MemberAccess>,
+    ) -> Result<(Vec<Block>, usize), String> {
+        // declare lhs, only reference the var if not reserved register
+        let new_l = if l.chars().next().unwrap() == '%' { l.to_string() } else { var_scope_info.reference_var(&l, l_f_name)?.0 };
+        // Struct load
+        if let Ty::Struct(_, members) = cur_ty {
+            for (m, m_ty) in members.clone().into_map() {
+                let l_member = format!("{l}@{m}");
+                let mut next_accesses = prev_accesses.clone();
+                next_accesses.push(MemberAccess {
+                    id: IdentifierExpression {
+                        value: m.to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    span: Span::new("", 0, 0).unwrap()
+                });
+                (blks, blks_len) = self.bl_gen_load_(
+                    blks, 
+                    blks_len, 
+                    &l_member,
+                    arr_extended_name,
+                    index_ty,
+                    new_index_expr,
+                    &m_ty,
+                    l_f_name,
+                    var_scope_info,
+                    struct_ty,
+                    &next_accesses,
+                )?;
+            }
+        }
+        // Other assignment
+        else {
+            let new_offset_expr = self.bl_gen_pointer_offset_(new_index_expr.clone(), prev_accesses, index_ty, struct_ty)?;
+            let load_instr = BlockContent::Load((new_l, cur_ty.clone(), arr_extended_name.to_string(), new_offset_expr));
+            blks[blks_len - 1].instructions.push(load_instr);
+            blks[blks_len - 1].num_vm_ops += 1;
+        }
+        Ok((blks, blks_len))
     }
 
     // Generate blocks from expressions
@@ -1287,7 +1450,9 @@ impl<'ast> ZGen<'ast> {
                 // assume no functions in arrays, etc.
                 assert!(p.accesses.len() > 0);
                 let mut ret_name = p.id.value.to_string();
-                for acc in &p.accesses {
+                let mut acc_counter = 0;
+                while acc_counter < p.accesses.len() {
+                    let acc = &p.accesses[acc_counter];
                     match acc {
                         Access::Call(c) => {
                             assert_eq!(p.accesses.len(), 1);
@@ -1307,6 +1472,7 @@ impl<'ast> ZGen<'ast> {
         
                             ret_name = format!("ret@{}", func_count);
                             func_count += 1;
+                            acc_counter += 1;
                         }
                         Access::Select(s) => {
                             if let RangeOrExpression::Expression(e) = &s.expression {
@@ -1321,13 +1487,38 @@ impl<'ast> ZGen<'ast> {
                                 };
                                 let cur_scope = blks[blks_len - 1].scope;
                                 let load_extended_name = var_scope_info.declare_var(&load_name, &f_name, cur_scope, load_ty.clone());
-                                
-                                // Preprocess the indices
-                                let new_e: Expression;
-                                (blks, blks_len, var_scope_info, new_e, func_count, array_count, struct_count, load_count) = 
+
+                                // Assert that all remaining accesses are struct member accesses
+                                let mut member_accesses = Vec::new();
+                                acc_counter += 1;
+                                while acc_counter < p.accesses.len() {
+                                    if let Access::Member(m) = &p.accesses[acc_counter] {
+                                        member_accesses.push(m.clone());
+                                    } else {
+                                        break;
+                                    }
+                                    acc_counter += 1;
+                                }
+
+                                // Process the index
+                                let index_ty = self.bl_gen_type_(&e, f_name, &var_scope_info)?;
+                                let new_index_expr: Expression;
+                                (blks, blks_len, var_scope_info, new_index_expr, func_count, array_count, struct_count, load_count) = 
                                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
-                                blks[blks_len - 1].instructions.push(BlockContent::Load((load_extended_name.clone(), load_ty.clone(), arr_extended_name.clone(), new_e)));
-                                blks[blks_len - 1].num_vm_ops += 1;
+                                // Perform pointer arithmetics
+                                (blks, blks_len) = self.bl_gen_load_(
+                                    blks, 
+                                    blks_len, 
+                                    &load_extended_name,
+                                    &arr_extended_name,
+                                    &index_ty, 
+                                    &new_index_expr, 
+                                    &load_ty, 
+                                    f_name, 
+                                    &var_scope_info, 
+                                    &load_ty,
+                                    &Vec::new()
+                                )?;
                                 load_count += 1;
                                 ret_name = load_name;
                             } else {
@@ -1337,6 +1528,7 @@ impl<'ast> ZGen<'ast> {
                         Access::Member(m) => {
                             // Construct p@member
                             ret_name = format!{"{}@{}", ret_name, m.id.value};
+                            acc_counter += 1;
                         }
                     }
                 }
@@ -1410,8 +1602,8 @@ impl<'ast> ZGen<'ast> {
                     let new_member_expr: Expression;
                     (blks, blks_len, var_scope_info, new_member_expr, func_count, array_count, struct_count, load_count) = 
                         self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &ism.expression, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
-                    (blks, blks_len, var_scope_info) =
-                        self.bl_gen_def_stmt_(blks, blks_len, &member_name, &new_member_expr, &member_ty, f_name, f_name, var_scope_info)?;
+                    (blks, blks_len) =
+                        self.bl_gen_def_stmt_(blks, blks_len, &member_name, &new_member_expr, &member_ty, f_name, f_name, &var_scope_info)?;
                 }
 
                 ret_e = Expression::Identifier(IdentifierExpression {
@@ -1422,6 +1614,53 @@ impl<'ast> ZGen<'ast> {
             }
         }
         Ok((blks, blks_len, var_scope_info, ret_e, func_count, array_count, struct_count, load_count))
+    }
+
+    // Convert array index into pointer offset and generate an expression
+    fn bl_gen_pointer_offset_(
+        &'ast self, 
+        new_index_expr: Expression<'ast>,
+        accesses: &Vec<MemberAccess>,
+        index_ty: &Ty,
+        entry_ty: &Ty,
+    ) -> Result<Expression, String> {
+        let (size, offset) = access_to_offset(entry_ty, accesses);
+        assert!(size > 0 && offset < size);
+        // returns size * new_index_expr + offset
+        if size > 1 {
+            let index_ty_suffix = ty_to_dec_suffix(&ty_to_type(index_ty)?);
+            let mult_expr = Expression::Binary(BinaryExpression {
+                op: BinaryOperator::Mul,
+                left: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                    value: DecimalNumber {
+                        value: size.to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    suffix: Some(index_ty_suffix.clone()),
+                    span: Span::new("", 0, 0).unwrap()
+                }))),
+                right: Box::new(new_index_expr),
+                span: Span::new("", 0, 0).unwrap()
+            });
+            let add_expr = if offset == 0 { mult_expr } else {
+                Expression::Binary(BinaryExpression {
+                    op: BinaryOperator::Add,
+                    left: Box::new(mult_expr),
+                    right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                        value: DecimalNumber {
+                            value: offset.to_string(),
+                            span: Span::new("", 0, 0).unwrap()
+                        },
+                        suffix: Some(index_ty_suffix.clone()),
+                        span: Span::new("", 0, 0).unwrap()
+                    }))),
+                    span: Span::new("", 0, 0).unwrap()
+                })
+            };
+            Ok(add_expr)
+        } else {
+            Ok(new_index_expr)
+        }
     }
 
     // Generate blocks from an array initialization
@@ -1453,11 +1692,15 @@ impl<'ast> ZGen<'ast> {
         array_count += 1;
         
         // Initialize array
-        let size_expr: Expression;
-        let index_expr = array_init_info.len_as_expr(&Ty::Uint(32));
-        (blks, blks_len, var_scope_info, size_expr, func_count, array_count, struct_count, load_count) = 
-            self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &index_expr, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
-        blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name.clone(), entry_ty.clone(), size_expr)));
+        // Process the index
+        let len_expr = array_init_info.len_as_expr(&Ty::Uint(32));
+        let index_ty = self.bl_gen_type_(&len_expr, f_name, &var_scope_info)?;
+        let new_len_expr: Expression;
+        (blks, blks_len, var_scope_info, new_len_expr, func_count, array_count, struct_count, load_count) = 
+            self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &len_expr, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
+        // Perform pointer arithmetics
+        let new_size_expr = self.bl_gen_pointer_offset_(new_len_expr, &Vec::new(), &index_ty, &entry_ty)?;
+        blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name.clone(), entry_ty.clone(), new_size_expr)));
 
         // Start by declaring all init@X to unique_contents
         for i in 0..array_init_info.unique_contents.len() {
@@ -1488,8 +1731,6 @@ impl<'ast> ZGen<'ast> {
         // if there is only one unique entry, then assign the array through a simplified for loop
         if array_init_info.unique_contents.len() == 1 {
             let index_name = "index@";
-            // TODO: Type analysis on to_expr
-            let index_ty = self.bl_gen_type_(&index_expr, f_name, &var_scope_info)?;
             let index_extended_name = var_scope_info.declare_var(&index_name, &f_name, cur_scope, index_ty.clone());
             
             // Init
@@ -1506,23 +1747,19 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].fn_num_exec_bound = array_init_info.arr_entries.clone().unwrap().len() * num_exec_bound;
             }
             let loop_header = blks_len - 1;
-            // Store stmt & increment iterator
-            let store_instr = {
-                let entry_name = format!("init@0");
-                let entry_extended_name = var_scope_info.reference_var(&entry_name, &f_name)?.0;
-                let entry_expr = Expression::Identifier(IdentifierExpression {
-                    value: entry_extended_name,
-                    span: Span::new("", 0, 0).unwrap()
-                });
 
-                let index_expr = Expression::Identifier(IdentifierExpression {
-                    value: index_extended_name.to_string(),
-                    span: Span::new("", 0, 0).unwrap()
-                });
-                BlockContent::Store((entry_expr, entry_ty.clone(), arr_extended_name.clone(), index_expr, is_alloc))
-            };
-            blks[blks_len - 1].instructions.push(store_instr);
-            blks[blks_len - 1].num_vm_ops += 1;
+            // Store stmt & increment iterator
+            let entry_name = format!("init@0");
+            let entry_extended_name = var_scope_info.reference_var(&entry_name, &f_name)?.0;
+            let new_entry_expr = Expression::Identifier(IdentifierExpression {
+                value: entry_extended_name,
+                span: Span::new("", 0, 0).unwrap()
+            });
+            let new_index_expr = Expression::Identifier(IdentifierExpression {
+                value: index_extended_name.to_string(),
+                span: Span::new("", 0, 0).unwrap()
+            });
+            (blks, blks_len) = self.bl_gen_store_(blks, blks_len, &arr_extended_name, &index_ty, &new_index_expr, &new_entry_expr, &entry_ty, f_name, &var_scope_info, is_alloc, &entry_ty, &Vec::new())?;
             blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_increment_stmt(&index_extended_name, 1, &index_ty)));
             
             // Bound
@@ -1554,12 +1791,12 @@ impl<'ast> ZGen<'ast> {
             for entry in array_init_info.arr_entries.unwrap() {
                 let entry_name = format!("init@{}", entry);
                 let entry_extended_name = var_scope_info.reference_var(&entry_name, &f_name)?.0;
-                let entry_expr = Expression::Identifier(IdentifierExpression {
+                let new_entry_expr = Expression::Identifier(IdentifierExpression {
                     value: entry_extended_name,
                     span: Span::new("", 0, 0).unwrap()
                 });
 
-                let index_expr = Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                let new_index_expr = Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
                     value: DecimalNumber {
                         value: index.to_string(),
                         span: Span::new("", 0, 0).unwrap()
@@ -1569,8 +1806,7 @@ impl<'ast> ZGen<'ast> {
                     })),
                     span: Span::new("", 0, 0).unwrap()
                 }));
-                blks[blks_len - 1].instructions.push(BlockContent::Store((entry_expr, entry_ty.clone(), arr_extended_name.clone(), index_expr, is_alloc)));
-                blks[blks_len - 1].num_vm_ops += 1;
+                (blks, blks_len) = self.bl_gen_store_(blks, blks_len, &arr_extended_name, &index_ty, &new_index_expr, &new_entry_expr, &entry_ty, f_name, &var_scope_info, is_alloc, &entry_ty, &Vec::new())?;
                 index += 1;
             }
         }

@@ -374,7 +374,7 @@ impl VarScopeInfo {
         // Declare struct members
         if let Ty::Struct(_, members) = &ty {
             for (m, m_ty) in members.clone().into_map() {
-                let member_name = format!("{}@{}", var_name, m);
+                let member_name = format!("{}^{}", var_name, m);
                 self.declare_var(&member_name, fn_name, cur_scope, m_ty);
             }
         }
@@ -744,7 +744,7 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", 2, &Ty::Field)));
             }
         
-            // Assign p@0 to a
+            // Assign p^0 to a
             for (p, a) in f.parameters.clone().into_iter().zip(args) {
                 let p_id = p.id.value.clone();
                 let p_ty = self.type_impl_::<false>(&p.ty)?;
@@ -795,7 +795,7 @@ impl<'ast> ZGen<'ast> {
                 blks[blks_len - 1].instructions.push(BlockContent::MemPop(("%BP".to_string(), Ty::Field, 0)));
             }
 
-            // Store Return value to a temporary variable "ret@X"
+            // Store Return value to a temporary variable "ret^X"
             let ret_type = self
                 .functions
                 .get(&f_path)
@@ -810,7 +810,7 @@ impl<'ast> ZGen<'ast> {
                 ret_ty = Ty::Field;
             }
 
-            let ret_name = format!("ret@{}", func_count);
+            let ret_name = format!("ret^{}", func_count);
             var_scope_info.declare_var(&ret_name, &caller_name, caller_scope, ret_ty.clone());
             let ret_expr = Expression::Identifier(IdentifierExpression {
                 value: format!("%RET.{}", f_name),
@@ -1142,23 +1142,30 @@ impl<'ast> ZGen<'ast> {
                         let acc = &l.accesses[acc_counter];
                         match acc {
                             AssigneeAccess::Member(m) => {
-                                l_name = format!("{}@{}", l_name, m.id.value);
+                                l_name = format!("{}^{}", l_name, m.id.value);
                                 let member_ty = var_scope_info.reference_var(&l_name, f_name)?.1;
                                 lhs_ty = member_ty;
                             }
                             AssigneeAccess::Select(s) => {
                                 let (new_l, arr_ty) = var_scope_info.reference_var(&l_name, f_name)?;
                                 if let Ty::Array(_, entry_ty) = arr_ty {
-                                    let entry_ty = *entry_ty.clone();
+                                    let struct_ty = *entry_ty.clone();
+                                    let mut entry_ty = *entry_ty.clone();
                                     // assert_eq!(entry_ty, rhs_ty);
                                     skip_stmt_gen = true;
                                     if let RangeOrExpression::Expression(e) = &s.expression {
-                                        // Assert that all remaining accesses are struct member accesses
+                                        // For all subsequent struct member accesses, compute index and rhs
                                         let mut member_accesses = Vec::new();
                                         acc_counter += 1;
                                         while acc_counter < l.accesses.len() {
                                             if let AssigneeAccess::Member(m) = &l.accesses[acc_counter] {
                                                 member_accesses.push(m.clone());
+                                                if let Ty::Struct(_, members) = &entry_ty {
+                                                    entry_ty = members.clone().into_map().get(&m.id.value)
+                                                        .ok_or(format!("Array struct {} does not have member {}!", l.id.value, m.id.value))?.clone();
+                                                } else {
+                                                    return Err(format!("Cannot perform member access on non-struct {}!", l.id.value));
+                                                }
                                             } else {
                                                 break;
                                             }
@@ -1170,8 +1177,9 @@ impl<'ast> ZGen<'ast> {
                                         let new_index_expr: Expression;
                                         (blks, blks_len, var_scope_info, new_index_expr, _, _, _, _) = 
                                             self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, 0, 0, var_scope_info)?;
+                                        let new_pointer_expr = self.bl_gen_pointer_offset_(new_index_expr, &member_accesses, &index_ty, &struct_ty)?;
                                         // Perform pointer arithmetics
-                                        (blks, blks_len) = self.bl_gen_store_(blks, blks_len, &new_l, &index_ty, &new_index_expr, &rhs_expr, &entry_ty, f_name, &var_scope_info, false, &entry_ty, &Vec::new())?;
+                                        (blks, blks_len) = self.bl_gen_store_(blks, blks_len, &new_l, &index_ty, &new_pointer_expr, &rhs_expr, &entry_ty, f_name, &var_scope_info, false, &entry_ty, &Vec::new())?;
                                     } else {
                                         return Err(format!("Array range access not implemented!"));
                                     }
@@ -1230,8 +1238,8 @@ impl<'ast> ZGen<'ast> {
                 // Strip scope & f_name out of r
                 let r = ie.value.split(".").next().unwrap_or("");
                 for (m, m_ty) in members.clone().into_map() {
-                    let l_member = format!("{l}@{m}");
-                    let new_r_member = var_scope_info.reference_var(&format!("{r}@{m}"), r_f_name)?.0;
+                    let l_member = format!("{l}^{m}");
+                    let new_r_member = var_scope_info.reference_var(&format!("{r}^{m}"), r_f_name)?.0;
                     let new_r_member_expr = Expression::Identifier(IdentifierExpression {
                         value: new_r_member,
                         span: Span::new("", 0, 0).unwrap()
@@ -1288,7 +1296,7 @@ impl<'ast> ZGen<'ast> {
                 // Strip scope & f_name out of r
                 let r = ie.value.split(".").next().unwrap_or("");
                 for (m, m_ty) in members.clone().into_map() {
-                    let new_r_member = var_scope_info.reference_var(&format!("{r}@{m}"), r_f_name)?.0;
+                    let new_r_member = var_scope_info.reference_var(&format!("{r}^{m}"), r_f_name)?.0;
                     let new_r_member_expr = Expression::Identifier(IdentifierExpression {
                         value: new_r_member,
                         span: Span::new("", 0, 0).unwrap()
@@ -1352,7 +1360,7 @@ impl<'ast> ZGen<'ast> {
         // Struct load
         if let Ty::Struct(_, members) = cur_ty {
             for (m, m_ty) in members.clone().into_map() {
-                let l_member = format!("{l}@{m}");
+                let l_member = format!("{l}^{m}");
                 let mut next_accesses = prev_accesses.clone();
                 next_accesses.push(MemberAccess {
                     id: IdentifierExpression {
@@ -1477,21 +1485,22 @@ impl<'ast> ZGen<'ast> {
                             (blks, blks_len, _, var_scope_info, func_count) =
                                 self.bl_gen_function_call_::<IS_MAIN>(blks, blks_len, args, callee_path.clone(), callee_name.clone(), func_count, var_scope_info)?;
         
-                            ret_name = format!("ret@{}", func_count);
+                            ret_name = format!("ret^{}", func_count);
                             func_count += 1;
                             acc_counter += 1;
                         }
                         Access::Select(s) => {
                             if let RangeOrExpression::Expression(e) = &s.expression {
                                 // Store the loaded value in a separate variable and return it
-                                let load_name = format!("load@{}", load_count);
+                                let load_name = format!("load^{}", load_count);
                                 let arr_name = &ret_name;
                                 let (arr_extended_name, arr_ty) = var_scope_info.reference_var(&arr_name, f_name)?;
-                                let load_ty = if let Ty::Array(_, load_ty) = arr_ty {
+                                let mut load_ty = if let Ty::Array(_, load_ty) = arr_ty {
                                     *load_ty.clone()
                                 } else {
                                     return Err(format!("Loading from a variable {} that is not an array!", arr_extended_name));
                                 };
+                                let struct_ty = load_ty.clone();
                                 let cur_scope = blks[blks_len - 1].scope;
                                 var_scope_info.declare_var(&load_name, &f_name, cur_scope, load_ty.clone());
 
@@ -1501,6 +1510,12 @@ impl<'ast> ZGen<'ast> {
                                 while acc_counter < p.accesses.len() {
                                     if let Access::Member(m) = &p.accesses[acc_counter] {
                                         member_accesses.push(m.clone());
+                                        if let Ty::Struct(_, members) = &load_ty {
+                                            load_ty = members.clone().into_map().get(&m.id.value)
+                                                .ok_or(format!("Array struct {} does not have member {}!", arr_name, m.id.value))?.clone();
+                                        } else {
+                                            return Err(format!("Cannot perform member access on non-struct {}!", arr_name));
+                                        }
                                     } else {
                                         break;
                                     }
@@ -1512,6 +1527,7 @@ impl<'ast> ZGen<'ast> {
                                 let new_index_expr: Expression;
                                 (blks, blks_len, var_scope_info, new_index_expr, func_count, array_count, struct_count, load_count) = 
                                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
+                                let new_pointer_expr = self.bl_gen_pointer_offset_(new_index_expr, &member_accesses, &index_ty, &struct_ty)?;
                                 // Perform pointer arithmetics
                                 (blks, blks_len) = self.bl_gen_load_(
                                     blks, 
@@ -1519,7 +1535,7 @@ impl<'ast> ZGen<'ast> {
                                     &load_name,
                                     &arr_extended_name,
                                     &index_ty, 
-                                    &new_index_expr, 
+                                    &new_pointer_expr, 
                                     &load_ty, 
                                     f_name, 
                                     &var_scope_info, 
@@ -1533,8 +1549,8 @@ impl<'ast> ZGen<'ast> {
                             }
                         }
                         Access::Member(m) => {
-                            // Construct p@member
-                            ret_name = format!{"{}@{}", ret_name, m.id.value};
+                            // Construct p^member
+                            ret_name = format!{"{}^{}", ret_name, m.id.value};
                             acc_counter += 1;
                         }
                     }
@@ -1595,25 +1611,32 @@ impl<'ast> ZGen<'ast> {
             }
             Expression::InlineStruct(is) => {
                 // Assume that type analysis has ensured correctness of the inline_struct
-                // Declare the struct in the variable struct@X
                 let cur_scope = blks[blks_len - 1].scope;
-                let struct_name = format!("struct@{}", struct_count);
-                let struct_ty = self.bl_gen_type_(&e, f_name, &var_scope_info)?;
-                let new_struct_name = var_scope_info.declare_var(&struct_name, f_name, cur_scope, struct_ty);
-
+                // Process all struct members
+                let mut new_member_expr_list = Vec::new();
                 for ism in &is.members {
-                     // Assign member_name to new_member_expr
-                    let member_ty = self.bl_gen_type_(&ism.expression, f_name, &var_scope_info)?;
-                    let member_name = format!("struct@{}@{}", struct_count, &ism.id.value);
-                    var_scope_info.declare_var(&member_name, f_name, cur_scope, member_ty.clone());
-
                     let new_member_expr: Expression;
                     (blks, blks_len, var_scope_info, new_member_expr, func_count, array_count, struct_count, load_count) = 
                         self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &ism.expression, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
-                    (blks, blks_len) =
-                        self.bl_gen_def_stmt_(blks, blks_len, &member_name, &new_member_expr, &member_ty, f_name, f_name, &var_scope_info)?;
+                    new_member_expr_list.push(new_member_expr);
                 }
 
+                // Declare the inline struct
+                let struct_name = format!("struct^{}", struct_count);
+                let struct_ty = self.bl_gen_type_(&e, f_name, &var_scope_info)?;
+                let new_struct_name = var_scope_info.declare_var(&struct_name, f_name, cur_scope, struct_ty);
+                let mut ism_counter = 0;
+                for ism in &is.members {
+                     // Assign member_name to new_member_expr
+                    let member_ty = self.bl_gen_type_(&ism.expression, f_name, &var_scope_info)?;
+                    let member_name = format!("struct^{}^{}", struct_count, &ism.id.value);
+                    var_scope_info.declare_var(&member_name, f_name, cur_scope, member_ty.clone());
+                    let new_member_expr = &new_member_expr_list[ism_counter];
+
+                    (blks, blks_len) =
+                        self.bl_gen_def_stmt_(blks, blks_len, &member_name, new_member_expr, &member_ty, f_name, f_name, &var_scope_info)?;
+                    ism_counter += 1;
+                }
                 ret_e = Expression::Identifier(IdentifierExpression {
                     value: new_struct_name,
                     span: Span::new("", 0, 0).unwrap()
@@ -1694,8 +1717,8 @@ impl<'ast> ZGen<'ast> {
         let cur_scope = blks[blks_len - 1].scope;
         let entry_ty = array_init_info.entry_ty.clone();
         let arr_len = if let Some(arr_content) = &array_init_info.arr_entries { arr_content.len() } else { 0 };
-        // Assign array@X to be the temporary array
-        let arr_name = format!("array@{}", array_count);
+        // Assign array^X to be the temporary array
+        let arr_name = format!("array^{}", array_count);
         let arr_extended_name = var_scope_info.declare_var(&arr_name, &f_name, cur_scope, Ty::Array(arr_len, Box::new(entry_ty.clone())));
         array_count += 1;
         
@@ -1710,9 +1733,9 @@ impl<'ast> ZGen<'ast> {
         let new_size_expr = self.bl_gen_pointer_offset_(new_len_expr, &Vec::new(), &index_ty, &entry_ty)?;
         blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name.clone(), entry_ty.clone(), new_size_expr)));
 
-        // Start by declaring all init@X to unique_contents
+        // Start by declaring all init^X to unique_contents
         for i in 0..array_init_info.unique_contents.len() {
-            let init_name = format!("init@{}", i);
+            let init_name = format!("init^{}", i);
             var_scope_info.declare_var(&init_name, &f_name, cur_scope, entry_ty.clone());
             let content_expr: Expression;
             (blks, blks_len, var_scope_info, content_expr, func_count, array_count, struct_count, load_count) = 
@@ -1720,10 +1743,10 @@ impl<'ast> ZGen<'ast> {
             (blks, blks_len) = self.bl_gen_def_stmt_(blks, blks_len, &init_name, &content_expr, &entry_ty, f_name, f_name, &var_scope_info)?;
         }
 
-        // Then assigning each entries in array to corresponding init@X
+        // Then assigning each entries in array to corresponding init^X
         // if there is only one unique entry, then assign the array through a simplified for loop
         if array_init_info.unique_contents.len() == 1 {
-            let index_name = "index@";
+            let index_name = "index^";
             let index_extended_name = var_scope_info.declare_var(&index_name, &f_name, cur_scope, index_ty.clone());
             
             // Init
@@ -1742,7 +1765,7 @@ impl<'ast> ZGen<'ast> {
             let loop_header = blks_len - 1;
 
             // Store stmt & increment iterator
-            let entry_name = format!("init@0");
+            let entry_name = format!("init^0");
             let entry_extended_name = var_scope_info.reference_var(&entry_name, &f_name)?.0;
             let new_entry_expr = Expression::Identifier(IdentifierExpression {
                 value: entry_extended_name,
@@ -1782,7 +1805,7 @@ impl<'ast> ZGen<'ast> {
         else {
             let mut index = 0;
             for entry in array_init_info.arr_entries.unwrap() {
-                let entry_name = format!("init@{}", entry);
+                let entry_name = format!("init^{}", entry);
                 let entry_extended_name = var_scope_info.reference_var(&entry_name, &f_name)?.0;
                 let new_entry_expr = Expression::Identifier(IdentifierExpression {
                     value: entry_extended_name,

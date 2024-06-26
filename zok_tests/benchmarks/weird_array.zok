@@ -1,9 +1,9 @@
 // Test array appearance in all weird locations
-def foo(u32[6] arr, u32 b) -> u32[10]:
+def foo(u32[0] arr, u32 b) -> u32[0]:
   return [arr[b]; 2 * b]
 
 def main(u32 a, u32 b) -> u32:
-  u32[a] s = []
+  u32[a] s = [0; a]
   for u32 i in 0..a do
     s[i] = i
   endfor

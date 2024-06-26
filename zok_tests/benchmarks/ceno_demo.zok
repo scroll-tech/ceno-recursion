@@ -1,0 +1,111 @@
+struct SumcheckProof {
+    field[10] points
+    IOPProverMessage[10] proofs
+}
+
+struct IOPProverMessage {
+    field[10] evaluations
+}
+
+struct VPAuxInfo {
+    u32 max_degree
+    u32 num_variables
+    field phantom
+}
+
+struct Transcript {
+    field hash
+}
+
+struct SumCheckSubClaim {
+    field[10] point
+    field expected_evaluation    
+}
+
+struct IOPVerifierState {
+    u32 rounds
+    u32 num_vars
+    u32 max_degree
+    bool finished
+    field[10] polynomials_received
+    field[10] challenges
+}
+
+def append_message_u32(Transcript t, u32 f) -> Transcript {
+    return t
+}
+
+def verifier_init(VPAuxInfo index_info) -> IOPVerifierState {
+    return IOPVerifierState {
+        round: 1,
+        num_vars: index_info.num_variables,
+        max_degree: index_info.max_degree,
+        finished: false,
+        polynomials_received: [0; index_info.num_variables],
+        challenges: [0; index_info.num_variables]
+    }
+}
+
+def verify_round_and_update_state(IOPVerifierState self, IOPProverMessage prover_msg, Transcript transcript) -> field {
+        assert(!self.finished)
+
+        // In an interactive protocol, the verifier should
+        //
+        // 1. check if the received 'P(0) + P(1) = expected`.
+        // 2. set `expected` to P(r)`
+        //
+        // When we turn the protocol to a non-interactive one, it is sufficient to defer
+        // such checks to `check_and_generate_subclaim` after the last round.
+
+        field challenge = transcript.hash
+
+        
+        
+        self.challenges.push(challenge);
+        self.polynomials_received
+            .push(prover_msg.evaluations.to_vec());
+
+        if self.round == self.num_vars {
+            // accept and close
+            self.finished = true;
+        } else {
+            // proceed to the next round
+            self.round += 1;
+        }
+
+        end_timer!(start);
+        challenge
+}
+
+def verify(
+    field claimed_sum,
+    SumcheckProof proof,
+    VPAuxInfo aux_info,
+    Transcript transcript,
+) -> SumCheckSubClaim {
+    if aux_info.num_variables == 0 {
+        return SumCheckSubClaim {
+            point: [],
+            expected_evaluation: claimed_sum
+        }
+    }
+
+    t = append_message_u32(transcript, aux_info.num_variables)
+    t = append_message_u32(transcript, aux_info.max_degrees)
+
+    IOPVerifierState verifier_state = verifier_init(aux_info)
+    for u32 i in 0..aux_info.num_variables {
+        let prover_msg = proof.proofs.get(i).expect("proof is incomplete");
+        prover_msg
+            .evaluations
+            .iter()
+            .for_each(|e| transcript.append_field_element_ext(e));
+        Self::verify_round_and_update_state(&mut verifier_state, prover_msg, transcript);
+    }
+
+    let res = Self::check_and_generate_subclaim(&verifier_state, &claimed_sum);
+
+    res
+}
+
+def main(field b) -> field:

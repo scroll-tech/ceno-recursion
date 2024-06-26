@@ -335,6 +335,10 @@ pub trait ZVisitorMut<'ast>: Sized {
         Ok(())
     }
 
+    fn visit_to_field_operator(&mut self, _tfo: &mut ast::ToFieldOperator) -> ZVisitorResult {
+        Ok(())
+    }
+
     fn visit_postfix_expression(
         &mut self,
         pe: &mut ast::PostfixExpression<'ast>,

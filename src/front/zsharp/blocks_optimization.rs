@@ -2286,7 +2286,7 @@ impl<'ast> ZGen<'ast> {
                 }
             }
         }
-        let mut entry_bl_instructions = Vec::new();
+        let mut entry_bl_instructions = bls[entry_bl].instructions.clone();
         // If size of spills is not zero, need to add %BP and %SP to block 0
         if spills.len() > 0 {
             // Initialize %SP

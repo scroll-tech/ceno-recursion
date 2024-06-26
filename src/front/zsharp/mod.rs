@@ -34,7 +34,7 @@ use zvisit::{ZConstLiteralRewriter, ZGenericInf, ZStatementWalker, ZVisitorMut};
 
 // garbage collection increment for adaptive GC threshold
 const GC_INC: usize = 32;
-const GEN_VERBOSE: bool = false;
+const GEN_VERBOSE: bool = true;
 const INTERPRET_VERBOSE: bool = false;
 
 /// Inputs to the Z# compiler
@@ -693,6 +693,7 @@ impl<'ast> ZGen<'ast> {
             ast::UnaryOperator::Neg(_) => neg,
             ast::UnaryOperator::Not(_) => not,
             ast::UnaryOperator::Strict(_) => const_val,
+            ast::UnaryOperator::ToField(_) => uint_to_field,
         }
     }
 

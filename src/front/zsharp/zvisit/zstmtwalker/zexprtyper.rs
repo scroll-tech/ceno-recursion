@@ -178,6 +178,17 @@ impl<'ast, 'ret, 'wlk> ZVisitorMut<'ast> for ZExpressionTyper<'ast, 'ret, 'wlk> 
                 }
             }
             Strict(_) => (),
+            ToField(_) => {
+                if let Some(ty) = &self.ty {
+                    if !matches!(ty, Basic(_)) || matches!(ty, Basic(Field(_))) || matches!(ty, Basic(Boolean(_))) {
+                        return Err(ZVisitorError(
+                            "ZExpressionTyper: got Bool, Field, or non-Basic for unary (F)".to_string(),
+                        ));
+                    }
+                }
+                self.ty
+                    .replace(Basic(Field(ast::FieldType { span: ue.span })));
+            }
         }
         Ok(())
     }

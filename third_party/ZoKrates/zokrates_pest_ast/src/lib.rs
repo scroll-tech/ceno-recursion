@@ -21,7 +21,7 @@ pub use ast::{
     PosOperator, PostfixExpression, Pragma, PrivateNumber, PrivateVisibility, PublicVisibility,
     Range, RangeOrExpression, ReturnStatement, Span, Spread, SpreadOrExpression, Statement,
     StrOperator, StructDefinition, StructField, StructType, SymbolDeclaration, TernaryExpression,
-    ToExpression, Type, TypeDefinition, TypedIdentifier, TypedIdentifierOrAssignee,
+    ToExpression, ToFieldOperator, Type, TypeDefinition, TypedIdentifier, TypedIdentifierOrAssignee,
     U16NumberExpression, U16Suffix, U16Type, U32NumberExpression, U32Suffix, U32Type,
     U64NumberExpression, U64Suffix, U64Type, U8NumberExpression, U8Suffix, U8Type, UnaryExpression,
     UnaryOperator, Underscore, Visibility, WhileLoopStatement, WitnessStatement, EOI,
@@ -625,7 +625,12 @@ mod ast {
         Neg(NegOperator),
         Not(NotOperator),
         Strict(StrOperator),
+        ToField(ToFieldOperator),
     }
+
+    #[derive(Debug, FromPest, PartialEq, Clone)]
+    #[pest_ast(rule(Rule::op_to_field))]
+    pub struct ToFieldOperator;
 
     #[derive(Debug, FromPest, PartialEq, Clone)]
     #[pest_ast(rule(Rule::op_str))]

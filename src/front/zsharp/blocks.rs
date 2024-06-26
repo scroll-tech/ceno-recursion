@@ -1847,17 +1847,16 @@ impl<'ast> ZGen<'ast> {
             Expression::Binary(b) => {
                 let left_ty = self.bl_gen_type_(&b.left, f_name, var_scope_info)?;
                 match b.op {
-                    BinaryOperator::Eq | BinaryOperator::NotEq | BinaryOperator::Lt | BinaryOperator::Gt | BinaryOperator::Lte | BinaryOperator::Gte => {
-                        Ty::Bool
-                    },
-                    _ => {
-                        left_ty
-                    }
+                    BinaryOperator::Eq | BinaryOperator::NotEq | BinaryOperator::Lt | BinaryOperator::Gt | BinaryOperator::Lte | BinaryOperator::Gte => Ty::Bool,
+                    _ => left_ty
                 }
             }
             Expression::Unary(u) => {
                 let expr_ty = self.bl_gen_type_(&u.expression, f_name, var_scope_info)?;
-                expr_ty
+                match u.op {
+                    UnaryOperator::ToField(_) => Ty::Field,
+                    _ => expr_ty
+                }
             }
             Expression::Postfix(p) => {
                 // assume no functions in arrays, etc.
@@ -1908,7 +1907,10 @@ impl<'ast> ZGen<'ast> {
                 Ty::Array(ai_len, Box::new(self.bl_gen_type_(&ai.value, f_name, var_scope_info)?)) // array length does not matter
             }
             Expression::InlineArray(ia) => {
-                if let SpreadOrExpression::Expression(e) = &ia.expressions[0] {
+                if ia.expressions.len() == 0 {
+                    Ty::Array(0, Box::new(Ty::Field))
+                }
+                else if let SpreadOrExpression::Expression(e) = &ia.expressions[0] {
                     Ty::Array(ia.expressions.len(), Box::new(self.bl_gen_type_(e, f_name, var_scope_info)?)) // array length does not matter
                 } else {
                     return Err(format!("Spread not supported in inline arrays!"));

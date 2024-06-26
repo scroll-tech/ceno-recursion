@@ -251,7 +251,8 @@ fn get_un_op(op: &UnaryOperator) -> &str {
         UnaryOperator::Pos(_) => "+",
         UnaryOperator::Neg(_) => "-",
         UnaryOperator::Not(_) => "!",
-        UnaryOperator::Strict(_) => "#"
+        UnaryOperator::Strict(_) => "#",
+        UnaryOperator::ToField(_) => "(F)",
     }
 }
 

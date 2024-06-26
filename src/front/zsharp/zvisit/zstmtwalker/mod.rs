@@ -12,7 +12,7 @@ use super::{
 use zexprtyper::ZExpressionTyper;
 
 use std::collections::HashMap;
-use zokrates_pest_ast as ast;
+use zokrates_pest_ast::{self as ast, BasicType};
 
 pub(in super::super) struct ZStatementWalker<'ast, 'ret> {
     rets: &'ret [ast::Type<'ast>],
@@ -460,6 +460,30 @@ impl<'ast, 'ret> ZStatementWalker<'ast, 'ret> {
                 _ => Ok(Basic(bt)),
             },
             Strict(_) => unreachable!(),
+            ToField(_) => match &bt {
+                Field(_) => {
+                    let mut expr_walker = ZExpressionTyper::new(self);
+                    let ety = self.type_expression(&mut ue.expression, &mut expr_walker)?;
+                    if let Some(et) = &ety {
+                        if !matches!(et, Basic(Field(_))) && !matches!(et, Basic(Boolean(_))) {
+                            Ok(ety.clone().unwrap())
+                        } else {
+                            Err(ZVisitorError(format!(
+                                "ZStatementWalker: (F) operators cannot be applied to Field or Bool:\n{}",
+                                span_to_string(&ue.span),
+                            )))
+                        }
+                    } else {
+                        Err(ZVisitorError(format!(
+                            "ZStatementWalker: could not infer type of unop:\n{}",
+                            span_to_string(&ue.span),
+                        )))
+                    }
+                },
+                _ => Err(ZVisitorError(
+                    "ZStatementWalker: (F) unary operator requires field operand".to_string(),
+                )),
+            }
         }?;
 
         self.unify_expression(ety, &mut ue.expression)

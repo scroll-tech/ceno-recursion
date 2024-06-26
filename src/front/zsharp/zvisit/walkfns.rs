@@ -551,6 +551,7 @@ pub fn walk_unary_operator<'ast, Z: ZVisitorMut<'ast>>(
         Neg(ne) => visitor.visit_neg_operator(ne),
         Not(no) => visitor.visit_not_operator(no),
         Strict(so) => visitor.visit_strict_operator(so),
+        ToField(tfo) => visitor.visit_to_field_operator(tfo),
     }
 }
 

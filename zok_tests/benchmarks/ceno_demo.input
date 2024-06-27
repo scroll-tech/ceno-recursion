@@ -1,2 +1,5 @@
-b 1
+rounds 3
+num_vars 2
+max_degree 3
+i 1
 END

@@ -598,6 +598,7 @@ impl<'ast> ZGen<'ast> {
     // Generic: IS_MAIN determines if we are in the main function, which has two properties:
     //   1. We don't need to push %RP when doing function calls in MAIN, since %RP is undefined
     //   2. We don't update the exit block of MAIN to %RP
+    //   3. Return value of main is not a struct & stored in %RET, return value of every function, if struct, is stored in ret@
     // Return type:
     // Blks, blks_len
     fn bl_gen_function_init_<const IS_MAIN: bool>(
@@ -634,7 +635,9 @@ impl<'ast> ZGen<'ast> {
                 .first().ok_or("No return type provided for one or more function")?;
             let ret_ty = self.type_impl_::<false>(&ret_type)?;
             if let Ty::Struct(..) = ret_ty {
-                panic!("%RET cannot be a struct!");
+                if IS_MAIN {
+                    panic!("%RET cannot be a struct!");
+                }
             }
 
             // Create new Block, initial scope is 0
@@ -1330,8 +1333,9 @@ impl<'ast> ZGen<'ast> {
         }
         // Other assignment
         else {
+            let cur_ty = if let Ty::Array(..) = cur_ty { Ty::Field } else { cur_ty.clone() };
             let new_offset_expr = self.bl_gen_pointer_offset_(new_index_expr.clone(), prev_accesses, index_ty, struct_ty)?;
-            let store_instr = BlockContent::Store((new_entry_expr.clone(), cur_ty.clone(), arr_extended_name.to_string(), new_offset_expr, is_alloc));
+            let store_instr = BlockContent::Store((new_entry_expr.clone(), cur_ty, arr_extended_name.to_string(), new_offset_expr, is_alloc));
             blks[blks_len - 1].instructions.push(store_instr);
             blks[blks_len - 1].num_vm_ops += 1;
         }
@@ -1386,8 +1390,9 @@ impl<'ast> ZGen<'ast> {
         }
         // Other assignment
         else {
+            let cur_ty = if let Ty::Array(..) = cur_ty { Ty::Field } else { cur_ty.clone() };
             let new_offset_expr = self.bl_gen_pointer_offset_(new_index_expr.clone(), prev_accesses, index_ty, struct_ty)?;
-            let load_instr = BlockContent::Load((new_l, cur_ty.clone(), arr_extended_name.to_string(), new_offset_expr));
+            let load_instr = BlockContent::Load((new_l, cur_ty, arr_extended_name.to_string(), new_offset_expr));
             blks[blks_len - 1].instructions.push(load_instr);
             blks[blks_len - 1].num_vm_ops += 1;
         }
@@ -1746,7 +1751,7 @@ impl<'ast> ZGen<'ast> {
         // Then assigning each entries in array to corresponding init^X
         // if there is only one unique entry, then assign the array through a simplified for loop
         if array_init_info.unique_contents.len() == 1 {
-            let index_name = "index^";
+            let index_name = "index@";
             let index_extended_name = var_scope_info.declare_var(&index_name, &f_name, cur_scope, index_ty.clone());
             
             // Init
@@ -1861,38 +1866,54 @@ impl<'ast> ZGen<'ast> {
             Expression::Postfix(p) => {
                 // assume no functions in arrays, etc.
                 assert!(!p.accesses.is_empty());
-                match p.accesses.first() {
-                    Some(Access::Call(_)) => {
-                        let (callee_path, callee_name) = self.deref_import(&p.id.value);
-                        let callee = self
-                        .functions
-                        .get(&callee_path)
-                        .ok_or_else(|| format!("No file '{:?}' attempting fn call", &callee_path))?
-                        .get(&callee_name)
-                        .ok_or_else(|| format!("No function '{}' attempting fn call", &callee_name))?;
+                if let Some(Access::Call(_)) = p.accesses.first() {
+                    assert!(p.accesses.len() == 1);
+                    let (callee_path, callee_name) = self.deref_import(&p.id.value);
+                    let callee = self
+                    .functions
+                    .get(&callee_path)
+                    .ok_or_else(|| format!("No file '{:?}' attempting fn call", &callee_path))?
+                    .get(&callee_name)
+                    .ok_or_else(|| format!("No function '{}' attempting fn call", &callee_name))?;
 
-                        // Get the return type because we need to convert it into a variable
-                        let ret_type = callee
-                        .returns
-                        .first().ok_or("No return type provided for one or more function")?;
-                        let ret_ty = self.type_impl_::<false>(&ret_type)?;
-                        ret_ty
+                    // Get the return type because we need to convert it into a variable
+                    let ret_type = callee
+                    .returns
+                    .first().ok_or("No return type provided for one or more function")?;
+                    let ret_ty = self.type_impl_::<false>(&ret_type)?;
+                    ret_ty
+                } else {
+                    let var_name = &p.id.value;
+                    let (var_extended_name, mut var_ty) = var_scope_info.reference_var(&var_name, f_name)?;
+                    for acc in &p.accesses {
+                        var_ty = match acc {
+                            Access::Call(_) => {
+                                return Err(format!("First order functions not implemented!"));
+                            }
+                            Access::Select(s) => {
+                                if let RangeOrExpression::Expression(_) = &s.expression {
+                                    let load_ty = if let Ty::Array(_, load_ty) = var_ty {
+                                        *load_ty.clone()
+                                    } else {
+                                        return Err(format!("Loading from a variable {} that is not an array!", var_extended_name));
+                                    };
+                                    load_ty
+                                } else {
+                                    return Err(format!("Array range access not implemented!"));
+                                }
+                            }
+                            Access::Member(m) => {
+                                let member_name = &m.id.value;
+                                let member_ty = if let Ty::Struct(_, members) = var_ty {
+                                    members.clone().into_map().get(member_name).ok_or_else(|| format!("Member {} does not exist in struct {}!", member_name, var_extended_name))?.clone()
+                                } else {
+                                    return Err(format!("Accessing member {} of a variable {} that is not a struct!", member_name, var_extended_name));
+                                };
+                                member_ty
+                            }
+                        };
                     }
-                    Some(Access::Select(s)) => {
-                        if let RangeOrExpression::Expression(_) = &s.expression {
-                            let arr_name = &p.id.value;
-                            let (arr_extended_name, arr_ty) = var_scope_info.reference_var(&arr_name, f_name)?;
-                            let load_ty = if let Ty::Array(_, load_ty) = arr_ty {
-                                *load_ty.clone()
-                            } else {
-                                return Err(format!("Loading from a variable {} that is not an array!", arr_extended_name));
-                            };
-                            load_ty
-                        } else {
-                            return Err(format!("Array range access not implemented!"));
-                        }
-                    }
-                    _ => { return Err(format!("Struct not implemented!")); }
+                    var_ty
                 }
             }
             Expression::Identifier(i) => {

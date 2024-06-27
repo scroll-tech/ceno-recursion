@@ -255,40 +255,50 @@ impl<'ast> ZGen<'ast> {
                 }
             }
             // If not the first block, redefine output of the last block as input to this block
-            // If an input is not defined in the previous output, then set it to 0
+            // If an input is not defined in the previous output, then set it to 0 / false
             // Record the transition state
             else {
                 for (name, ty) in &bls[nb].inputs {
                     if let Some(x) = ty {
                         let output_name = str::replace(name, "i", "o");
                         let val = self.cvar_lookup(&output_name).unwrap_or(
-                            self.expr_impl_::<true>(
-                                &Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                                    value: DecimalNumber {
-                                        value: "0".to_string(),
-                                        span: Span::new("", 0, 0).unwrap()
+                            self.expr_impl_::<true>(&Expression::Literal(
+                                match x {
+                                    Ty::Bool => {
+                                        LiteralExpression::BooleanLiteral(BooleanLiteralExpression {
+                                            value: "false".to_string(),
+                                            span: Span::new("", 0, 0).unwrap()
+                                        })
                                     },
-                                    suffix: Some(match x {
-                                        Ty::Field => DecimalSuffix::Field(FieldSuffix {
+                                    _ => {
+                                        LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                                            value: DecimalNumber {
+                                                value: "0".to_string(),
+                                                span: Span::new("", 0, 0).unwrap()
+                                            },
+                                            suffix: Some(match x {
+                                                Ty::Field => DecimalSuffix::Field(FieldSuffix {
+                                                    span: Span::new("", 0, 0).unwrap()
+                                                }),
+                                                Ty::Uint(64) => DecimalSuffix::U64(U64Suffix {
+                                                    span: Span::new("", 0, 0).unwrap()
+                                                }),
+                                                Ty::Uint(32) => DecimalSuffix::U32(U32Suffix {
+                                                    span: Span::new("", 0, 0).unwrap()
+                                                }),
+                                                Ty::Uint(16) => DecimalSuffix::U16(U16Suffix {
+                                                    span: Span::new("", 0, 0).unwrap()
+                                                }),
+                                                Ty::Uint(8) => DecimalSuffix::U8(U8Suffix {
+                                                    span: Span::new("", 0, 0).unwrap()
+                                                }),
+                                                _ => panic!("Unsupported input type: {:?}!", x)
+                                            }),
                                             span: Span::new("", 0, 0).unwrap()
-                                        }),
-                                        Ty::Uint(64) => DecimalSuffix::U64(U64Suffix {
-                                            span: Span::new("", 0, 0).unwrap()
-                                        }),
-                                        Ty::Uint(32) => DecimalSuffix::U32(U32Suffix {
-                                            span: Span::new("", 0, 0).unwrap()
-                                        }),
-                                        Ty::Uint(16) => DecimalSuffix::U16(U16Suffix {
-                                            span: Span::new("", 0, 0).unwrap()
-                                        }),
-                                        Ty::Uint(8) => DecimalSuffix::U8(U8Suffix {
-                                            span: Span::new("", 0, 0).unwrap()
-                                        }),
-                                        _ => panic!("Unsupported input type: {:?}!", x)
-                                    }),
-                                    span: Span::new("", 0, 0).unwrap()
-                                }))
-                            ).unwrap()
+                                        })
+                                    }
+                                }
+                            )).unwrap()
                         );
                         self.declare_init_impl_::<true>(
                             name.to_string(),

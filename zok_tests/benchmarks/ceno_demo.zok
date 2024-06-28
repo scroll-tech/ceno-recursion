@@ -102,7 +102,7 @@ def verify(
         verify_round_and_update_state(verifier_state, prover_msg, transcript, i);
     }
 
-    let res = Self::check_and_generate_subclaim(&verifier_state, &claimed_sum);
+    let res = check_and_generate_subclaim(&verifier_state, &claimed_sum);
 
     res
 }
@@ -194,15 +194,35 @@ def check_and_generate_subclaim(IOPVerifierState self, field asserted_sum) -> fi
 def main(u32 rounds, u32 num_vars, u32 max_degree, u32 i) -> field:
     // Random assertion to ensure round is alive
     assert(rounds == 3)
+    array_decl field[max_degree + 1] pr0
+    array_decl field[max_degree + 1] pr1
+    array_decl field[max_degree + 1] pr2
+    pr0[0] = 1
+    pr0[1] = 2
+    pr0[2] = 3
+    pr1[0] = 2
+    pr1[1] = 2
+    pr1[2] = 2
+    pr2[0] = 1
+    pr2[1] = 1
+    pr2[2] = 4
+    field[num_vars][max_degree + 1] pr = [[0; max_degree + 1]; num_vars]
+    pr[0] = pr0
+    pr[1] = pr1
+    pr[2] = pr2
+    array_decl field[num_vars] c
+    c[0] = 3
+    c[1] = 6
+    c[2] = 3
     IOPVerifierState vs = IOPVerifierState {
         rounds: rounds,
         num_vars: num_vars,
         max_degree: max_degree,
         finished: true,
-        polynomials_received: [[0; max_degree + 1]; num_vars],
-        challenges: [7; num_vars]
+        polynomials_received: pr,
+        challenges: c
     }
-    field sum = 0
+    field sum = 3
     field expected_eval = check_and_generate_subclaim(vs, sum)
     SumCheckSubClaim sc = SumCheckSubClaim {
         point: vs.challenges,

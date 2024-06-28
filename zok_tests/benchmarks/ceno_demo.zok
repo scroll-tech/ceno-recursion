@@ -119,7 +119,7 @@ def field_factorial(u32 a) -> field:
 
 def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
     u32 len = p_i_len
-    field[len] evals = [0; len]
+    array_decl field[len] evals
     field prod = eval_at
     evals[0] = eval_at
 
@@ -165,7 +165,6 @@ def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
     endwhile
     return res
 
-
 def check_and_generate_subclaim(IOPVerifierState self, field asserted_sum) -> field:
     assert(self.finished)
     // assert(self.polynomials_received.len() == self.num_vars)
@@ -173,8 +172,7 @@ def check_and_generate_subclaim(IOPVerifierState self, field asserted_sum) -> fi
     // the deferred check during the interactive phase:
     // 2. set `expected` to P(r)`
 
-    field[self.num_vars + 1] expected_vec = [0; self.num_vars + 1]
-
+    array_decl field[self.num_vars + 1] expected_vec
     for u32 i in 0..self.num_vars do
         field[self.max_degree + 1] evaluations = self.polynomials_received[i]
         field challenge = self.challenges[i]
@@ -194,13 +192,15 @@ def check_and_generate_subclaim(IOPVerifierState self, field asserted_sum) -> fi
     return expected_vec[self.num_vars]
 
 def main(u32 rounds, u32 num_vars, u32 max_degree, u32 i) -> field:
+    // Random assertion to ensure round is alive
+    assert(rounds == 3)
     IOPVerifierState vs = IOPVerifierState {
         rounds: rounds,
         num_vars: num_vars,
         max_degree: max_degree,
         finished: true,
         polynomials_received: [[0; max_degree + 1]; num_vars],
-        challenges: [0; num_vars]
+        challenges: [7; num_vars]
     }
     field sum = 0
     field expected_eval = check_and_generate_subclaim(vs, sum)

@@ -431,6 +431,7 @@ fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
         Statement::WhileLoop(_) => { panic!("Blocks should not contain while loop statements.") }
         Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
         Statement::Witness(_) => { panic!("Witness statements unsupported.") }
+        Statement::ArrayDecl(_) => { panic!("Blocks should not contain array declaration statements.") }
     }
 }
 
@@ -726,6 +727,7 @@ fn var_to_reg_stmt<'ast>(
         }
         Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
         Statement::Witness(_) => { panic!("Witness statements unsupported.") }
+        Statement::ArrayDecl(_) => { panic!("Blocks should not contain array declaration statements.") }
     }
 }
 
@@ -910,6 +912,7 @@ fn tydef_to_assignee_stmt<'ast, const IN_BRANCH: bool>(
         }
         Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
         Statement::Witness(_) => { panic!("Witness statements unsupported.") }
+        Statement::ArrayDecl(_) => { panic!("Blocks should not contain array declaration statements.") }
     }
 }
 

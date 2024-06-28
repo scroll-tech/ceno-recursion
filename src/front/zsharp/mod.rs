@@ -1609,6 +1609,7 @@ impl<'ast> ZGen<'ast> {
                 self.declare_init_impl_::<IS_CNST>(d.id.value.clone(), decl_ty, e)?;
                 Ok(())
             }
+            ast::Statement::ArrayDecl(_) => { panic!("Array declaration statements not supported!") }
         }
         .map_err(|err| format!("{}; context:\n{}", err, span_to_string(s.span())))
     }

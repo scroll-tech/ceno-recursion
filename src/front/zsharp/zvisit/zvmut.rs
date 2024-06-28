@@ -503,4 +503,11 @@ pub trait ZVisitorMut<'ast>: Sized {
     ) -> ZVisitorResult {
         walk_conditional_statement(self, cond)
     }
+
+    fn visit_array_decl_statement(
+        &mut self,
+        arr_decl: &mut ast::ArrayDeclStatement<'ast>,
+    ) -> ZVisitorResult {
+        walk_array_decl_statement(self, arr_decl)
+    }
 }

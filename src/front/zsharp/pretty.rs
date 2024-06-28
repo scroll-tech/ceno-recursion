@@ -57,6 +57,7 @@ pub fn pretty_stmt(indent: usize, s: &Statement) {
         Statement::Conditional(c) => { pretty_cond_stmt(indent, c); }
         Statement::CondStore(_) => { panic!("Conditional store statements not supported.") }
         Statement::Witness(_) => { panic!("Witness statements unsupported.") }
+        Statement::ArrayDecl(a) => { pretty_arr_decl_stmt(a); }
     }
 }
 
@@ -138,6 +139,13 @@ fn pretty_cond_stmt(indent: usize, c: &ConditionalStatement) {
     for s in &c.elsebranch {
         pretty_stmt(indent + 1, &s);
     }
+}
+
+fn pretty_arr_decl_stmt(a: &ArrayDeclStatement) {
+    pretty_type(&a.ty);
+    print!(" ");
+    pretty_ident_expr(&a.id);
+    println!("");
 }
 
 fn pretty_typed_ident(ti: &TypedIdentifier) {

@@ -62,6 +62,7 @@ statement = { (return_statement // does not require subsequent newline
                 | expression_statement
                 | cond_store_statement
                 | witness_statement
+                | array_decl_statement
                 ) ~ NEWLINE
             ) ~ NEWLINE* }
 
@@ -74,6 +75,7 @@ definition_statement = { typed_identifier_or_assignee_list ~ "=" ~ expression } 
 expression_statement = {"assert" ~ "(" ~ expression ~ ("," ~ quoted_string)? ~ ")"}
 witness_statement = {"unsafe" ~ "witness" ~ ty ~ identifier ~ "=" ~ expression }
 cond_store_statement = {"cond_store" ~ "(" ~ identifier ~ "," ~ expression ~ "," ~ expression ~ "," ~ expression ~ ")"}
+array_decl_statement = {"array_decl" ~ ty ~ identifier}
 
 typed_identifier_or_assignee_list = _{ typed_identifier_or_assignee ~ ("," ~ typed_identifier_or_assignee)* }
 typed_identifier_or_assignee = { typed_identifier | assignee } // we don't use { ty? ~ identifier } as with a single token, it gets parsed as `ty` but we want `identifier`

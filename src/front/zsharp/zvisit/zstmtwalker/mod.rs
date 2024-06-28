@@ -909,6 +909,23 @@ impl<'ast, 'ret> ZVisitorMut<'ast> for ZStatementWalker<'ast, 'ret> {
         self.visit_span(&mut def.span)
     }
 
+    fn visit_array_decl_statement(
+        &mut self,
+        arr_decl: &mut zokrates_pest_ast::ArrayDeclStatement<'ast>,
+    ) -> ZVisitorResult {
+        if let zokrates_pest_ast::Type::Array(_) = &arr_decl.ty {
+            ZConstLiteralRewriter::new(None).visit_type(&mut arr_decl.ty)?;
+            self.insert_var(&arr_decl.id.value, arr_decl.ty.clone())?;
+            self.visit_identifier_expression(&mut arr_decl.id)?;
+            self.visit_span(&mut arr_decl.span)
+        } else {
+            Err(ZVisitorError(format!(
+                "ZStatementWalker: declaring non-array {} as array",
+                &arr_decl.id.value
+            )))
+        }
+    }
+
     fn visit_assignee(&mut self, asgn: &mut ast::Assignee<'ast>) -> ZVisitorResult {
         if !self.var_defined(&asgn.id.value) {
             Err(ZVisitorError(format!(

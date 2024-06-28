@@ -725,6 +725,7 @@ pub fn walk_statement<'ast, Z: ZVisitorMut<'ast>>(
         Iteration(i) => visitor.visit_iteration_statement(i),
         WhileLoop(w) => visitor.visit_while_loop_statement(w),
         Conditional(c) => visitor.visit_conditional_statement(c),
+        ArrayDecl(a) => visitor.visit_array_decl_statement(a),
     }
 }
 
@@ -860,4 +861,13 @@ pub fn walk_conditional_statement<'ast, Z: ZVisitorMut<'ast>>(
         .iter_mut()
         .try_for_each(|s| visitor.visit_statement(s))?;
     visitor.visit_span(&mut cond.span)
+}
+
+pub fn walk_array_decl_statement<'ast, Z: ZVisitorMut<'ast>>(
+    visitor:&mut Z,
+    arr_decl: &mut ast::ArrayDeclStatement<'ast>,
+) -> ZVisitorResult {
+    visitor.visit_type(&mut arr_decl.ty)?;
+    visitor.visit_identifier_expression(&mut arr_decl.id)?;
+    visitor.visit_span(&mut arr_decl.span)
 }

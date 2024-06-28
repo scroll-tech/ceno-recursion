@@ -850,6 +850,7 @@ impl<'ast> ZGen<'ast> {
 
         match s {
             Statement::Return(r) => {
+                assert_eq!(r.expressions.len(), 1);
                 let ret_expr: Expression;
                 (blks, blks_len, var_scope_info, ret_expr, _, _, _, _) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &r.expressions[0], f_name, 0, 0, 0, 0, var_scope_info)?;
@@ -1102,6 +1103,27 @@ impl<'ast> ZGen<'ast> {
             }
             Statement::CondStore(_) => { panic!("Conditional store statements unsupported.") }
             Statement::Witness(_) => { panic!("Witness statements unsupported.") }
+            Statement::ArrayDecl(a) => {
+                // Convert the statement into an ArrayInit
+                let arr_ty = self.type_impl_::<false>(&a.ty)?;
+                let arr_name = a.id.value.to_string();
+                let arr_extended_name = var_scope_info.declare_var(&arr_name, f_name, cur_scope, arr_ty.clone());
+                if let Type::Array(aty) = &a.ty {
+                    // Only support one-dimensional array
+                    assert_eq!(aty.dimensions.len(), 1);
+                    let index_ty = self.bl_gen_type_(&aty.dimensions[0], f_name, &var_scope_info)?;
+                    let new_len_expr: Expression;
+                    (blks, blks_len, var_scope_info, new_len_expr, _, _, _, _) = 
+                        self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &aty.dimensions[0], f_name, 0, 0, 0, 0, var_scope_info)?;
+                    let entry_ty = if let Ty::Array(_, entry_ty) = arr_ty { *entry_ty.clone() } else { unreachable!() };
+                    
+                    // Compute the actual allocated size
+                    let new_size_expr = self.bl_gen_pointer_offset_(new_len_expr, &Vec::new(), &index_ty, &entry_ty)?;
+                    blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name, entry_ty, new_size_expr)));
+                } else {
+                    return Err(format!("Declaring non-array {} as an array!", arr_extended_name));
+                }
+            }
         }
         Ok((blks, blks_len, var_scope_info))
     }

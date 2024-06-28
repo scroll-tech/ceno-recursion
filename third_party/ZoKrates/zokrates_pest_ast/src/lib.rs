@@ -8,8 +8,8 @@ use zokrates_parser::Rule;
 extern crate lazy_static;
 
 pub use ast::{
-    Access, AnyString, Arguments, ArrayAccess, ArrayCommitted, ArrayInitializerExpression,
-    ArrayParamMetadata, ArrayTranscript, ArrayType,
+    Access, AnyString, Arguments, ArrayAccess, ArrayCommitted, ArrayDeclStatement,
+    ArrayInitializerExpression, ArrayParamMetadata, ArrayTranscript, ArrayType,
     AssertionStatement, Assignee, AssigneeAccess, BasicOrStructType, BasicType, BinaryExpression,
     BinaryOperator, BooleanLiteralExpression, BooleanType, CallAccess, ConditionalStatement, 
     CondStoreStatement, ConstantDefinition, ConstantGenericValue, Curve, DecimalLiteralExpression,
@@ -413,6 +413,7 @@ mod ast {
         Iteration(IterationStatement<'ast>),
         WhileLoop(WhileLoopStatement<'ast>),
         Conditional(ConditionalStatement<'ast>),
+        ArrayDecl(ArrayDeclStatement<'ast>)
     }
 
     impl<'ast> Statement<'ast> {
@@ -426,6 +427,7 @@ mod ast {
                 Statement::Iteration(x) => &x.span,
                 Statement::WhileLoop(x) => &x.span,
                 Statement::Conditional(x) => &x.span,
+                Statement::ArrayDecl(x) => &x.span,
             }
         }
     }
@@ -445,6 +447,15 @@ mod ast {
         pub ty: Type<'ast>,
         pub id: IdentifierExpression<'ast>,
         pub expression: Expression<'ast>,
+        #[pest_ast(outer())]
+        pub span: Span<'ast>,
+    }
+
+    #[derive(Debug, FromPest, PartialEq, Clone)]
+    #[pest_ast(rule(Rule::array_decl_statement))]
+    pub struct ArrayDeclStatement<'ast> {
+        pub ty: Type<'ast>,
+        pub id: IdentifierExpression<'ast>,
         #[pest_ast(outer())]
         pub span: Span<'ast>,
     }

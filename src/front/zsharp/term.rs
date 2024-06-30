@@ -827,6 +827,10 @@ pub fn uint_to_field(u: T) -> Result<T, String> {
             Ty::Field,
             term![Op::UbvToPf(default_field()); u.term],
         )),
+        Ty::Bool => Ok(T::new(
+            Ty::Field,
+            term![Op::UbvToPf(default_field()); term![Op::BoolToBv; u.term]],
+        )),
         u => Err(format!("Cannot do uint-to-field on {u}")),
     }
 }
@@ -846,7 +850,7 @@ pub fn uint_to_bits(u: T) -> Result<T, String> {
             ir_array(
                 Sort::Bool,
                 (0..*n).rev().map(|i| term![Op::BvBit(i); u.term.clone()]),
-            ),
+            )
         )),
         u => Err(format!("Cannot do uint-to-bits on {u}")),
     }
@@ -875,6 +879,13 @@ pub fn uint_from_bits(u: T) -> Result<T, String> {
 pub fn field_to_bits(f: T, n: usize) -> Result<T, String> {
     match &f.ty {
         Ty::Field => uint_to_bits(T::new(Ty::Uint(n), term![Op::PfToBv(n); f.term])),
+        u => Err(format!("Cannot do uint-to-bits on {u}")),
+    }
+}
+
+pub fn field_to_bool(f: T) -> Result<T, String> {
+    match &f.ty {
+        Ty::Field => Ok(T::new(Ty::Bool, term![Op::BvBit(0); term![Op::PfToBv(1); f.term]])),
         u => Err(format!("Cannot do uint-to-bits on {u}")),
     }
 }

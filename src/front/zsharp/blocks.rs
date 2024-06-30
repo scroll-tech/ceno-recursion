@@ -82,7 +82,7 @@ pub fn ty_to_type<'ast>(ty: &Ty) -> Result<Type<'ast>, String> {
 fn field_to_ty(f: T, ty: &Ty) -> Result<T, String> {
     match ty {
         Ty::Uint(n) => Ok(T::new(Ty::Uint(*n), term![Op::PfToBv(*n); f.term])),
-        Ty::Bool => field_to_bits(f, 1),
+        Ty::Bool => field_to_bool(f),
         Ty::Field => Ok(f),
         _ => Err(format!("Type not supported: {:?}", ty))
     }

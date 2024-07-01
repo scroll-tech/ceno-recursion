@@ -2350,7 +2350,9 @@ impl<'ast> ZGen<'ast> {
                 phy_mem_op_count = if_phy_mem_op_count;
                 vir_mem_op_count = if_vir_mem_op_count;
             }
-            BlockContent::Stmt(stmt) => { self.stmt_impl_::<false>(&stmt).unwrap(); }
+            BlockContent::Stmt(stmt) => {
+                self.stmt_impl_::<false>(&stmt).unwrap();
+            }
         }
         (phy_mem_op_count, vir_mem_op_count)
     }

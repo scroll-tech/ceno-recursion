@@ -2923,8 +2923,11 @@ impl<'ast> ZGen<'ast> {
             // Nothing in transition_map_list should change now
             let io_map = &transition_map_list[bl_in[i].unwrap()];
             for (name, ty) in &bls[i].inputs {
-                // if name is %RET.<f_name>, then input_name is set to %RET
-                let input_name = if name.len() >= 4 && &name[..4] == "%RET" { "%RET" } else { name };
+                // if name is %RET.<f_name> (and not %RET^X), then input_name is set to %RET
+                let input_name = {
+                    let name_no_suffix = name.split(".").next().unwrap_or("");
+                    if name_no_suffix == "%RET" { name_no_suffix } else { name }
+                };
                 let new_input_name: String;
                 let live_input_label: usize;
                 (new_input_name, _, live_input_label) = var_name_to_reg_id_expr::<1>(input_name.to_string(), io_map.clone());
@@ -2963,8 +2966,11 @@ impl<'ast> ZGen<'ast> {
             let mut new_outputs = Vec::new();
             new_outputs.push((format!("%o{:06}", 1), Some(Ty::Field)));
             for (name, ty) in &bls[i].outputs {
-                // if name is %RET.<f_name>, then output_name is set to %RET
-                let output_name = if name.len() >= 4 && &name[..4] == "%RET" { "%RET" } else { name };
+                // if name is %RET.<f_name> (and not %RET^X), then input_name is set to %RET
+                let output_name = {
+                    let name_no_suffix = name.split(".").next().unwrap_or("");
+                    if name_no_suffix == "%RET" { name_no_suffix } else { name }
+                };
                 let new_output_name: String;
                 let live_output_label: usize;
                 (new_output_name, _, live_output_label) = var_name_to_reg_id_expr::<2>(output_name.to_string(), io_map.clone());

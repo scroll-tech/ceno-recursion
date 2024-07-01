@@ -854,9 +854,9 @@ impl<'ast> ZGen<'ast> {
                 let ret_expr: Expression;
                 (blks, blks_len, var_scope_info, ret_expr, _, _, _, _) = 
                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &r.expressions[0], f_name, 0, 0, 0, 0, var_scope_info)?;
-                // Convert the statement to %RET.<f_name>.0.0 = ret_expr
-                // We include <f_name> because different function has different return type
-                let ret_name = format!("%RET.{}", f_name);
+                // Convert the statement to %RET = ret_expr
+                // Note return variable should be reference as %RET.<f_name> to allow different type for different functions
+                let ret_name = "%RET".to_string();
                 (blks, blks_len) = self.bl_gen_def_stmt_(blks, blks_len, &ret_name, &ret_expr, &ret_ty, f_name, f_name, &var_scope_info)?;
 
                 // Set terminator to ProgTerm if in main, point to %RP otherwise
@@ -1254,8 +1254,13 @@ impl<'ast> ZGen<'ast> {
     ) -> Result<(Vec<Block>, usize), String> {
         debug!("Block Gen Def Stmt: {} = {}", l, new_r_expr.span().as_str());
 
-        // declare lhs, only reference the var if not reserved register
-        let new_l = if l.chars().next().unwrap() == '%' { l.to_string() } else { var_scope_info.reference_var(&l, l_f_name)?.0 };
+        // declare lhs
+        // if LHS is %RET or its members, only append function name
+        let new_l = if l.len() >= 4 && &l[..4] == "%RET" {
+            format!("{}.{}", l, l_f_name)
+        } else {
+            var_scope_info.reference_var(&l, l_f_name)?.0
+        };
         // Struct assignment
         if let Ty::Struct(_, members) = ty {
             // rhs needs to be an identifier
@@ -1264,7 +1269,12 @@ impl<'ast> ZGen<'ast> {
                 let r = ie.value.split(".").next().unwrap_or("");
                 for (m, m_ty) in members.clone().into_map() {
                     let l_member = format!("{l}^{m}");
-                    let new_r_member = var_scope_info.reference_var(&format!("{r}^{m}"), r_f_name)?.0;
+                    let r_member = format!("{r}^{m}");
+                    let new_r_member = if r_member.len() >= 4 && &r_member[..4] == "%RET" {
+                        format!("{}.{}", r_member, r_f_name)
+                    } else {
+                        var_scope_info.reference_var(&r_member, r_f_name)?.0
+                    };
                     let new_r_member_expr = Expression::Identifier(IdentifierExpression {
                         value: new_r_member,
                         span: Span::new("", 0, 0).unwrap()

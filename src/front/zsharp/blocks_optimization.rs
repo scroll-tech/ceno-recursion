@@ -943,8 +943,10 @@ fn la_inst<'ast>(
             }
             // NOTE: Due to pointer aliasing, cannot remove any vm statements
             // If there is an array initialization, then the array is dead but %AS is alive
-            BlockContent::ArrayInit((arr, _, _)) => {
+            BlockContent::ArrayInit((arr, _, len)) => {
                 // if is_alive(&state, arr) {
+                    let gen = expr_find_val(&len);
+                    state = la_gen(state, &gen);
                     new_instructions.insert(0, i.clone());
                     state.remove(arr);
                     state.insert("%AS".to_string());

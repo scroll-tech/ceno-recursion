@@ -1,16 +1,15 @@
 struct SumcheckProof {
-    field[10] points
-    IOPProverMessage[10] proofs
+    field[0] points
+    IOPProverMessage[0] proofs
 }
 
 struct IOPProverMessage {
-    field[10] evaluations
+    field[0] evaluations
 }
 
 struct VPAuxInfo {
     u32 max_degree
     u32 num_variables
-    field phantom
 }
 
 struct Transcript {
@@ -23,7 +22,7 @@ struct SumCheckSubClaim {
 }
 
 struct IOPVerifierState {
-    u32 rounds
+    u32 round
     u32 num_vars
     u32 max_degree
     bool finished
@@ -31,27 +30,15 @@ struct IOPVerifierState {
     field[0] challenges
 }
 
-/*
-def append_message_u32(Transcript t, u32 f) -> Transcript {
+def append_message_u32(Transcript t, u32 f) -> Transcript:
+    t.hash = t.hash + (F)f
     return t
-}
 
-def append_message_field(Transcript t, field f) -> Transcript {
+def append_message_field(Transcript t, field f) -> Transcript:
+    t.hash = t.hash + f
     return t
-}
 
-def verifier_init(VPAuxInfo index_info) -> IOPVerifierState {
-    return IOPVerifierState {
-        round: 1,
-        num_vars: index_info.num_variables,
-        max_degree: index_info.max_degree,
-        finished: false,
-        polynomials_received: [0; index_info.num_variables],
-        challenges: [0; index_info.num_variables]
-    }
-}
-
-def verify_round_and_update_state(IOPVerifierState self, IOPProverMessage prover_msg, Transcript transcript, u32 round) -> field {
+def verify_round_and_update_state(IOPVerifierState self, IOPProverMessage prover_msg, Transcript transcript) -> IOPVerifierState:
     assert(!self.finished)
 
     // In an interactive protocol, the verifier should
@@ -61,61 +48,18 @@ def verify_round_and_update_state(IOPVerifierState self, IOPProverMessage prover
     //
     // When we turn the protocol to a non-interactive one, it is sufficient to defer
     // such checks to `check_and_generate_subclaim` after the last round.
-
     field challenge = transcript.hash
-    self.challenges[round] = challenge
-    self.polynomials_received[round] = prover_msg.evaluations
+    self.challenges[self.round - 1] = challenge
+    self.polynomials_received[self.round - 1] = prover_msg.evaluations
 
-    if self.round == self.num_vars {
+    if self.round == self.num_vars then
         // accept and close
         self.finished = true
-    } else {
+    else
         // proceed to the next round
-        self.round += 1
-    }
-    return challenge
-}
-*/
-
-/*
-def verify(
-    field claimed_sum,
-    SumcheckProof proof,
-    VPAuxInfo aux_info,
-    Transcript transcript,
-) -> SumCheckSubClaim {
-    if aux_info.num_variables == 0 {
-        return SumCheckSubClaim {
-            point: [],
-            expected_evaluation: claimed_sum
-        }
-    }
-    t = append_message_u32(transcript, aux_info.num_variables)
-    t = append_message_u32(transcript, aux_info.max_degrees)
-
-    IOPVerifierState verifier_state = verifier_init(aux_info)
-    for u32 i in 0..aux_info.num_variables {
-        IOPProverMessage prover_msg = proof.proofs[i];
-        for i in 0..10 {
-            t = append_message_field(t, prover_msg.evaluations[i])
-        }
-        verify_round_and_update_state(verifier_state, prover_msg, transcript, i);
-    }
-
-    let res = check_and_generate_subclaim(&verifier_state, &claimed_sum);
-
-    res
-}
-*/
-
-
-/// compute the factorial(a) = 1 * 2 * ... * a
-def field_factorial(u32 a) -> field:
-    field res = 1
-    for u32 i in 2..a+1 do
-        res = res * (F)i
-    endfor
-    return res
+        self.round = self.round + 1
+    endif
+    return self
 
 def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
     u32 len = p_i_len
@@ -148,7 +92,11 @@ def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
     //   (len-i) / i from all previous steps and we store this product as a fraction
     //   number to reduce field divisions.
 
-    field denom_up = field_factorial(len - 1)
+    // denom_up = field_factorial(len - 1)
+    field denom_up = 1
+    for u32 i in 2..len do
+        denom_up = denom_up * (F)i
+    endfor
     field denom_down = 1
 
     u32 it = len
@@ -165,7 +113,7 @@ def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
     endwhile
     return res
 
-def check_and_generate_subclaim(IOPVerifierState self, field asserted_sum) -> field:
+def check_and_generate_subclaim(IOPVerifierState self, field asserted_sum) -> SumCheckSubClaim:
     assert(self.finished)
     // assert(self.polynomials_received.len() == self.num_vars)
 
@@ -189,46 +137,84 @@ def check_and_generate_subclaim(IOPVerifierState self, field asserted_sum) -> fi
         assert(evaluations[0] + evaluations[1] == expected)
     endfor
 
-    return expected_vec[self.num_vars]
+    return SumCheckSubClaim {
+        point: self.challenges,
+        // the last expected value (not checked within this function) will be included in the
+        // subclaim
+        expected_evaluation: expected_vec[self.num_vars]
+    }
 
-def main(u32 rounds, u32 num_vars, u32 max_degree, u32 i) -> field:
-    // Random assertion to ensure round is alive
-    assert(rounds == 3)
+def verify(field claimed_sum, SumcheckProof proof, VPAuxInfo aux_info, Transcript t) -> SumCheckSubClaim:
+    if aux_info.num_variables == 0 then
+        return SumCheckSubClaim {
+            point: [],
+            expected_evaluation: claimed_sum
+        }
+    endif
+    t = append_message_u32(t, aux_info.num_variables)
+    t = append_message_u32(t, aux_info.max_degree)
+
+    IOPVerifierState vs = IOPVerifierState {
+        round: 1,
+        num_vars: aux_info.num_variables,
+        max_degree: aux_info.max_degree,
+        finished: false,
+        polynomials_received: [[0; aux_info.max_degree + 1]; aux_info.num_variables],
+        challenges: [0; aux_info.num_variables]
+    }
+    for u32 i in 0..aux_info.num_variables do
+        IOPProverMessage prover_msg = proof.proofs[i]
+        for u32 j in 0..aux_info.max_degree + 1 do
+            t = append_message_field(t, prover_msg.evaluations[j])
+        endfor
+        vs = verify_round_and_update_state(vs, prover_msg, t)
+    endfor
+
+    SumCheckSubClaim sc = check_and_generate_subclaim(vs, claimed_sum)
+
+    return sc
+
+def main(u32 num_vars, u32 max_degree, u32 i) -> field:
+    // Generate polynomials
     array_decl field[max_degree + 1] pr0
     array_decl field[max_degree + 1] pr1
     array_decl field[max_degree + 1] pr2
     pr0[0] = 1
     pr0[1] = 2
     pr0[2] = 3
-    pr1[0] = 2
-    pr1[1] = 2
-    pr1[2] = 2
-    pr2[0] = 1
-    pr2[1] = 1
-    pr2[2] = 4
-    field[num_vars][max_degree + 1] pr = [[0; max_degree + 1]; num_vars]
-    pr[0] = pr0
-    pr[1] = pr1
-    pr[2] = pr2
-    array_decl field[num_vars] c
-    c[0] = 3
-    c[1] = 6
-    c[2] = 3
-    IOPVerifierState vs = IOPVerifierState {
-        rounds: rounds,
-        num_vars: num_vars,
+    pr1[0] = 6
+    pr1[1] = 6
+    pr1[2] = 6
+    pr2[0] = 3
+    pr2[1] = 3
+    pr2[2] = 5
+    IOPProverMessage pm0 = IOPProverMessage {
+        evaluations: pr0
+    }
+    IOPProverMessage pm1 = IOPProverMessage {
+        evaluations: pr1
+    }
+    IOPProverMessage pm2 = IOPProverMessage {
+        evaluations: pr2
+    }
+
+    // Generate structs
+    field claimed_sum = 3
+    SumcheckProof proof = SumcheckProof {
+        points: [11; num_vars],
+        proofs: [pm0; num_vars]
+    }
+    proof.points[1] = 29
+    proof.proofs[1] = pm1
+    proof.points[2] = 40
+    proof.proofs[2] = pm2
+    VPAuxInfo aux_info = VPAuxInfo {
         max_degree: max_degree,
-        finished: true,
-        polynomials_received: pr,
-        challenges: c
+        num_variables: num_vars,
     }
-    field sum = 3
-    field expected_eval = check_and_generate_subclaim(vs, sum)
-    SumCheckSubClaim sc = SumCheckSubClaim {
-        point: vs.challenges,
-        // the last expected value (not checked within this function) will be included in the
-        // subclaim
-        expected_evaluation: expected_eval
+    Transcript t = Transcript {
+        hash: 0
     }
-    
+
+    SumCheckSubClaim sc = verify(claimed_sum, proof, aux_info, t)
     return sc.point[i] * 1000 + sc.expected_evaluation

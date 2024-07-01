@@ -6,7 +6,7 @@
 use std::collections::VecDeque;
 use zokrates_pest_ast::*;
 use crate::front::zsharp::blocks::*;
-use std::collections::{HashMap, HashSet, BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet};
 use crate::front::zsharp::Ty;
 use itertools::Itertools;
 use std::cmp::max;
@@ -36,13 +36,13 @@ fn type_to_ty(t: Type) -> Result<Ty, String> {
 }
 
 fn print_cfg(
-    successor: &Vec<HashSet<usize>>,
-    predecessor: &Vec<HashSet<usize>>,
-    exit_bls: &HashSet<usize>,
-    entry_bls_fn: &HashSet<usize>,
-    successor_fn: &Vec<HashSet<usize>>,
-    predecessor_fn: &Vec<HashSet<usize>>,
-    exit_bls_fn: &HashSet<usize>,
+    successor: &Vec<BTreeSet<usize>>,
+    predecessor: &Vec<BTreeSet<usize>>,
+    exit_bls: &BTreeSet<usize>,
+    entry_bls_fn: &BTreeSet<usize>,
+    successor_fn: &Vec<BTreeSet<usize>>,
+    predecessor_fn: &Vec<BTreeSet<usize>>,
+    exit_bls_fn: &BTreeSet<usize>,
 ) {
     println!("\n\n--\nControl Flow Graph:");
     println!("\nSuccessor:");
@@ -130,7 +130,7 @@ fn rp_find_val(bc: BlockContent) -> Option<usize> {
 
 // If bc is a statement of form %RP = old_val and old_val is a key in val_map,
 // replace it with %RP = val_map[val]
-fn rp_replacement_stmt(bc: BlockContent, val_map: HashMap<usize, usize>) -> Option<BlockContent> {
+fn rp_replacement_stmt(bc: BlockContent, val_map: BTreeMap<usize, usize>) -> Option<BlockContent> {
     if let BlockContent::Stmt(Statement::Definition(d)) = bc {
         let mut is_rp = false;
         if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
@@ -208,7 +208,7 @@ fn bl_trans_find_val(e: &Expression) -> Vec<NextBlock> {
 // Given an expression consisted of only ternary, literals, and identifiers,
 // Replace all literal values according to label_map
 // Skip all %RP or other references to variables
-fn bl_trans_map<'ast>(e: &Expression<'ast>, label_map: &HashMap<usize, usize>) -> Expression<'ast> {
+fn bl_trans_map<'ast>(e: &Expression<'ast>, label_map: &BTreeMap<usize, usize>) -> Expression<'ast> {
     match e {
         Expression::Ternary(te) => {
             let new_second = bl_trans_map(&te.second, label_map);
@@ -277,10 +277,10 @@ fn bl_trans_replace<'ast>(e: &Expression<'ast>, old_val: usize, new_val: &Expres
 // Sort functions in topological order
 fn top_sort_helper(
     cur_name: &str,
-    call_graph: &HashMap<String, HashSet<String>>,
-    mut visited: HashMap<String, bool>,
+    call_graph: &BTreeMap<String, BTreeSet<String>>,
+    mut visited: BTreeMap<String, bool>,
     mut chain: Vec<String>
-) -> (Vec<String>, HashMap<String, bool>) {
+) -> (Vec<String>, BTreeMap<String, bool>) {
     visited.insert(cur_name.to_string(), true);
     for s in call_graph.get(cur_name).unwrap() {
         if !visited.get(s).unwrap() {
@@ -293,20 +293,20 @@ fn top_sort_helper(
 
 fn fn_top_sort(
     bls: &Vec<Block>,
-    successor: &Vec<HashSet<usize>>,
-    successor_fn: &Vec<HashSet<usize>>,
+    successor: &Vec<BTreeSet<usize>>,
+    successor_fn: &Vec<BTreeSet<usize>>,
 ) -> Vec<String> {
     // First construct function call graph
-    let mut fn_call_graph: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut fn_call_graph: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     // Initialize every function to NOT VISITED
-    let mut visited = HashMap::new();
-    fn_call_graph.insert("main".to_string(), HashSet::new());
+    let mut visited = BTreeMap::new();
+    fn_call_graph.insert("main".to_string(), BTreeSet::new());
     for cur_bl in 0..bls.len() {
         let b = &bls[cur_bl];
         let caller_name = b.fn_name.to_string();
         if !visited.contains_key(&caller_name) {
             visited.insert(caller_name.to_string(), false);
-            fn_call_graph.insert(caller_name.to_string(), HashSet::new());
+            fn_call_graph.insert(caller_name.to_string(), BTreeSet::new());
         }
         // if cur_bl is a caller of a function, add the call to call graph
         if successor_fn[cur_bl].len() != 0 && successor_fn[cur_bl] != successor[cur_bl] {
@@ -325,22 +325,22 @@ fn fn_top_sort(
 */
 
 // Given an expression, find all variables it references
-fn expr_find_val(e: &Expression) -> HashSet<String> {
+fn expr_find_val(e: &Expression) -> BTreeSet<String> {
     match e {
         Expression::Ternary(t) => {
-            let mut ret: HashSet<String> = expr_find_val(&t.first);
+            let mut ret: BTreeSet<String> = expr_find_val(&t.first);
             ret.extend(expr_find_val(&t.second));
             ret.extend(expr_find_val(&t.third));
             ret
         }
         Expression::Binary(b) => {
-            let mut ret: HashSet<String> = expr_find_val(&b.left);
+            let mut ret: BTreeSet<String> = expr_find_val(&b.left);
             ret.extend(expr_find_val(&b.right));
             ret
         }
         Expression::Unary(u) => expr_find_val(&u.expression),
         Expression::Postfix(p) => {
-            let mut ret: HashSet<String> = HashSet::new();
+            let mut ret: BTreeSet<String> = BTreeSet::new();
             ret.insert(p.id.value.clone());
             for aa in &p.accesses {
                 if let Access::Select(a) = aa {
@@ -356,11 +356,11 @@ fn expr_find_val(e: &Expression) -> HashSet<String> {
             ret
         }
         Expression::Identifier(i) => {
-            let mut ret: HashSet<String> = HashSet::new();
+            let mut ret: BTreeSet<String> = BTreeSet::new();
             ret.insert(i.value.clone());
             ret
         }
-        Expression::Literal(_) => HashSet::new(),
+        Expression::Literal(_) => BTreeSet::new(),
         _ => {
             panic!("Unsupported Expression.");
         }
@@ -371,13 +371,13 @@ fn expr_find_val(e: &Expression) -> HashSet<String> {
 // Return value:
 // ret[0]: all variables that S defines (KILL)
 // ret[1]: all variables that S references (GEN)
-fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
+fn stmt_find_val(s: &Statement) -> (BTreeSet<String>, BTreeSet<String>) {
     match s {
         Statement::Return(_) => {
             panic!("Blocks should not contain return statements.")
         }
         Statement::Definition(d) => {
-            let mut kill_set = HashSet::new();
+            let mut kill_set = BTreeSet::new();
             for l in &d.lhs {
                 match l {
                     TypedIdentifierOrAssignee::Assignee(p) => {
@@ -401,30 +401,30 @@ fn stmt_find_val(s: &Statement) -> (HashSet<String>, HashSet<String>) {
             }
             (kill_set, expr_find_val(&d.expression))
         }
-        Statement::Assertion(a) => (HashSet::new(), expr_find_val(&a.expression)),
+        Statement::Assertion(a) => (BTreeSet::new(), expr_find_val(&a.expression)),
         Statement::Conditional(_c) => {
             panic!("Blocks should not contain conditional statements.")
             /*
             // KILL is empty
             // GEN is the union of the two branches
             // Iterate through if branch
-            let mut if_gen_set = HashSet::new();
+            let mut if_gen_set = BTreeSet::new();
             for s in c.ifbranch.iter().rev() {
                 let (kill, gen) = stmt_find_val(&s);
                 if_gen_set = la_kill(if_gen_set, &kill);
                 if_gen_set = la_gen(if_gen_set, &gen);
             }
-            let mut else_gen_set = HashSet::new();
+            let mut else_gen_set = BTreeSet::new();
             for s in c.elsebranch.iter().rev() {
                 let (kill, gen) = stmt_find_val(&s);
                 else_gen_set = la_kill(else_gen_set, &kill);
                 else_gen_set = la_gen(else_gen_set, &gen);
             }
-            let mut gen_set = HashSet::new();
+            let mut gen_set = BTreeSet::new();
             gen_set.extend(if_gen_set);
             gen_set.extend(else_gen_set);
             gen_set.extend(expr_find_val(&c.condition));
-            (HashSet::new(), gen_set)
+            (BTreeSet::new(), gen_set)
             */
         }
         Statement::Iteration(_) => { panic!("Blocks should not contain iteration statements.") }
@@ -490,9 +490,9 @@ fn is_bp_update(s: &Statement) -> bool {
 // Liveness analysis
 // GEN all variables in gen
 fn la_gen(
-    mut state: HashSet<String>,
-    gen: &HashSet<String>
-) -> HashSet<String> {
+    mut state: BTreeSet<String>,
+    gen: &BTreeSet<String>
+) -> BTreeSet<String> {
     // Add all gens to state
     state.extend(gen.clone());
     state
@@ -500,9 +500,9 @@ fn la_gen(
 
 // KILL all variables in kill
 fn la_kill(
-    mut state: HashSet<String>,
-    kill: &HashSet<String>
-) -> HashSet<String> {
+    mut state: BTreeSet<String>,
+    kill: &BTreeSet<String>
+) -> BTreeSet<String> {
     // Remove all kills to state
     for v in kill {
         state.remove(v);
@@ -512,7 +512,7 @@ fn la_kill(
 
 // Decide if var is alive in the current scope given state
 fn is_alive(
-    state: &HashSet<String>,
+    state: &BTreeSet<String>,
     var: &String
 ) -> bool {
     state.get(var) != None
@@ -595,8 +595,8 @@ fn term_to_instr<'ast>(
 
 // New io map with only reserved registers
 // Reserve registers 0 - 7 for _, %BN, %RET, %TS, %AS, %RP, %SP, and %BP
-fn new_io_map() -> HashMap<String, usize> {
-    let mut io_map: HashMap<String, usize> = HashMap::new();
+fn new_io_map() -> BTreeMap<String, usize> {
+    let mut io_map: BTreeMap<String, usize> = BTreeMap::new();
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("_".to_string(), io_map);
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("%BN".to_string(), io_map);
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RET".to_string(), io_map);
@@ -611,8 +611,8 @@ fn new_io_map() -> HashMap<String, usize> {
 
 // New witness map with only reserved registers
 // Reserve registers 0 - 5 for _, %TS, %AS, %RP, %SP, and %BP
-fn new_witness_map() -> HashMap<String, usize> {
-    let mut witness_map: HashMap<String, usize> = HashMap::new();
+fn new_witness_map() -> BTreeMap<String, usize> {
+    let mut witness_map: BTreeMap<String, usize> = BTreeMap::new();
     (_, witness_map, _) = var_name_to_reg_id_expr::<0>("_".to_string(), witness_map);
     (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%TS".to_string(), witness_map);
     (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%AS".to_string(), witness_map);
@@ -629,8 +629,8 @@ fn new_witness_map() -> HashMap<String, usize> {
 // Returns the new statement and new reg_map
 fn var_to_reg_stmt<'ast>(
     s: &Statement<'ast>, 
-    mut reg_map: HashMap<String, usize>, 
-) -> (Statement<'ast>, HashMap<String, usize>) {
+    mut reg_map: BTreeMap<String, usize>, 
+) -> (Statement<'ast>, BTreeMap<String, usize>) {
     match s {
         Statement::Return(_) => {
             panic!("Blocks should not contain return statements.");
@@ -737,8 +737,8 @@ fn var_to_reg_stmt<'ast>(
 // Returns the new expression and new reg_map
 fn var_to_reg_expr<'ast>(
     e: &Expression<'ast>, 
-    mut reg_map: HashMap<String, usize>, 
-) -> (Expression<'ast>, HashMap<String, usize>) {
+    mut reg_map: BTreeMap<String, usize>, 
+) -> (Expression<'ast>, BTreeMap<String, usize>) {
     match e {
         Expression::Ternary(t) => {
             let new_first: Expression;
@@ -817,8 +817,8 @@ fn var_to_reg_expr<'ast>(
 
 fn var_to_reg_id_expr<'ast>(
     ie: &IdentifierExpression<'ast>, 
-    mut reg_map: HashMap<String, usize>,
-) -> (IdentifierExpression<'ast>, HashMap<String, usize>) {
+    mut reg_map: BTreeMap<String, usize>,
+) -> (IdentifierExpression<'ast>, BTreeMap<String, usize>) {
     let var_name: String;
     (var_name, reg_map, _) = var_name_to_reg_id_expr::<0>(ie.value.to_string(), reg_map);
     (IdentifierExpression {
@@ -830,8 +830,8 @@ fn var_to_reg_id_expr<'ast>(
 // MODE: 0 - WITNESS, 1 - INPUT, 2 - OUTPUT
 fn var_name_to_reg_id_expr<const MODE: usize>(
     var_name: String,
-    mut reg_map: HashMap<String, usize>,
-) -> (String, HashMap<String, usize>, usize) {
+    mut reg_map: BTreeMap<String, usize>,
+) -> (String, BTreeMap<String, usize>, usize) {
     let reg_size = reg_map.len();
     
     if !reg_map.contains_key(&var_name) {
@@ -851,8 +851,8 @@ fn var_name_to_reg_id_expr<const MODE: usize>(
 // If in a branch, convert every TyDef into Assg and record declared variables in gen_map_branch
 fn tydef_to_assignee_stmt<'ast, const IN_BRANCH: bool>(
     s: &Statement<'ast>,
-    mut gen_set: HashSet<String>, 
-) -> (Statement<'ast>, HashSet<String>, BTreeMap<String, Ty>) {
+    mut gen_set: BTreeSet<String>, 
+) -> (Statement<'ast>, BTreeSet<String>, BTreeMap<String, Ty>) {
     let mut gen_map_branch = BTreeMap::new();
     match s {
         Statement::Return(_) => {
@@ -922,9 +922,9 @@ fn tydef_to_assignee_stmt<'ast, const IN_BRANCH: bool>(
 
 // Liveness Analysis
 fn la_inst<'ast>(
-    mut state: HashSet<String>,
+    mut state: BTreeSet<String>,
     inst: &Vec<BlockContent<'ast>>
-) -> (HashSet<String>, Vec<BlockContent<'ast>>) {
+) -> (BTreeSet<String>, Vec<BlockContent<'ast>>) {
     let mut new_instructions = Vec::new();
     for i in inst.iter().rev() {
         match i {
@@ -1012,9 +1012,9 @@ fn la_inst<'ast>(
 
 // Typing
 fn ty_inst<'ast>(
-    mut state: HashMap<String, Ty>,
+    mut state: BTreeMap<String, Ty>,
     inst: &Vec<BlockContent<'ast>>
-) -> HashMap<String, Ty> {
+) -> BTreeMap<String, Ty> {
     for i in inst.iter().rev() {
         match i {
             BlockContent::MemPush(_) => {}
@@ -1051,10 +1051,10 @@ fn ty_inst<'ast>(
 
 // Var -> Reg
 fn vtr_inst<'ast>(
-    mut witness_map: HashMap<String, usize>,
+    mut witness_map: BTreeMap<String, usize>,
     inst: &Vec<BlockContent<'ast>>,
     mut new_instr: Vec<BlockContent<'ast>>,
-) -> (HashMap<String, usize>, Vec<BlockContent<'ast>>) {
+) -> (BTreeMap<String, usize>, Vec<BlockContent<'ast>>) {
     for s in inst {
         match s {
             BlockContent::MemPush((var, ty, offset)) => {
@@ -1117,9 +1117,9 @@ fn vtr_inst<'ast>(
 // TyDef -> Assignee
 // If we are in a branch, DO NOT DECLARE VARS. Need to declare before branching to resolve scoping
 fn tta_inst<'ast, const IN_BRANCH: bool>(
-    mut gen_set: HashSet<String>,
+    mut gen_set: BTreeSet<String>,
     inst: &Vec<BlockContent<'ast>>,
-) -> (HashSet<String>, BTreeMap<String, Ty>, Vec<BlockContent<'ast>>) {
+) -> (BTreeSet<String>, BTreeMap<String, Ty>, Vec<BlockContent<'ast>>) {
     let mut new_instr = Vec::new();
     let mut gen_map_branch = BTreeMap::new();
     // Process instructions
@@ -1370,12 +1370,12 @@ impl<'ast> ZGen<'ast> {
         cur_bl: usize,
         next_bl: &NextBlock,
         rp_slot: usize,
-        mut successor: Vec<HashSet<usize>>,
-        mut rp_successor: Vec<HashSet<usize>>,
-        mut successor_fn: Vec<HashSet<usize>>,
+        mut successor: Vec<BTreeSet<usize>>,
+        mut rp_successor: Vec<BTreeSet<usize>>,
+        mut successor_fn: Vec<BTreeSet<usize>>,
         mut visited: Vec<bool>,
         mut next_bls: VecDeque<usize>
-    ) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, Vec<HashSet<usize>>, Vec<bool>, VecDeque<usize>) {
+    ) -> (Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, Vec<bool>, VecDeque<usize>) {
 
         match next_bl {
             NextBlock::Label(tmp_bl) => {
@@ -1427,7 +1427,7 @@ impl<'ast> ZGen<'ast> {
 
     // Construct a flow graph from a set of blocks
     // Return value:
-    // ret[0]: map from block to all its successors (no need to use HashMap since every block should exists right now)
+    // ret[0]: map from block to all its successors (no need to use BTreeMap since every block should exists right now)
     // ret[1]: map from block to all its predecessors
     // ret[2]: list of all blocks that ends with ProgTerm
     // ret[3]: list of entry blocks of all reachable functions
@@ -1439,31 +1439,31 @@ impl<'ast> ZGen<'ast> {
         &self,
         bls: &Vec<Block>,
         entry_bl: usize
-    ) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, HashSet<usize>, HashSet<usize>, Vec<HashSet<usize>>, Vec<HashSet<usize>>, HashSet<usize>) {
+    ) -> (Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, BTreeSet<usize>, BTreeSet<usize>, Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, BTreeSet<usize>) {
         let bl_size = bls.len();
         
         // list of all blocks that ends with ProgTerm
-        let mut exit_bls: HashSet<usize> = HashSet::new();
+        let mut exit_bls: BTreeSet<usize> = BTreeSet::new();
 
         // list of all entry blocks to a function
-        let mut entry_bl_fn: HashSet<usize> = HashSet::new();
+        let mut entry_bl_fn: BTreeSet<usize> = BTreeSet::new();
         entry_bl_fn.insert(entry_bl);
         // list of all blocks that ends with ProgTerm or Rp
-        let mut exit_bls_fn: HashSet<usize> = HashSet::new();
+        let mut exit_bls_fn: BTreeSet<usize> = BTreeSet::new();
         
         // Start from entry_bl, do a BFS, add all blocks in its terminator to its successor
         // When we reach a function call (i.e., %RP is set), add %RP to the callee's rp_successor
         // Propagate rp_successor until we reach an rp() terminator, at that point, append rp_successor to successor
         // We don't care about blocks that won't be touched by BFS, they'll get eliminated anyways
-        let mut successor: Vec<HashSet<usize>> = vec![HashSet::new(); bl_size];
-        let mut rp_successor: Vec<HashSet<usize>> = vec![HashSet::new(); bl_size];
+        let mut successor: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); bl_size];
+        let mut rp_successor: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); bl_size];
         let mut visited: Vec<bool> = vec![false; bl_size];
         // predecessor is just the inverse of successor
-        let mut predecessor: Vec<HashSet<usize>> = vec![HashSet::new(); bl_size];
+        let mut predecessor: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); bl_size];
 
         // successor & predecessor within a function, ignoring function calls (which is redirected to %RP)
-        let mut successor_fn: Vec<HashSet<usize>> = vec![HashSet::new(); bl_size];
-        let mut predecessor_fn: Vec<HashSet<usize>> = vec![HashSet::new(); bl_size];
+        let mut successor_fn: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); bl_size];
+        let mut predecessor_fn: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); bl_size];
 
         let mut next_bls: VecDeque<usize> = VecDeque::new();
         let _ = std::mem::replace(&mut visited[entry_bl], true);
@@ -1500,14 +1500,14 @@ impl<'ast> ZGen<'ast> {
                     }
                     // if %RP is set, the next block must be a function entrance
                     if rp_slot != 0 {
-                        if branches.len() != 1 {
-                            panic!("Blocks that invoke function calls cannot have branches.")
+                        for b in &branches {
+                            if let NextBlock::Label(l) = b {
+                                entry_bl_fn.insert(*l);
+                            } else {
+                                panic!("Blocks {} invokes function calls and cannot terminate to %RP block.", cur_bl)
+                            }
                         }
-                        if let NextBlock::Label(l) = branches[0] {
-                            entry_bl_fn.insert(l);
-                        } else {
-                            panic!("Blocks that invoke function calls cannot terminates to %RP block.")
-                        }
+
                     }
                     // If block terminates to %RP, add it to exit_bls_fn
                     for b in branches {
@@ -1553,16 +1553,16 @@ impl<'ast> ZGen<'ast> {
     fn liveness_analysis(
         &self,
         mut bls: Vec<Block<'ast>>,
-        successor: &Vec<HashSet<usize>>,
-        predecessor: &Vec<HashSet<usize>>,
-        predecessor_fn: &Vec<HashSet<usize>>,
-        exit_bls: &HashSet<usize>,
+        successor: &Vec<BTreeSet<usize>>,
+        predecessor: &Vec<BTreeSet<usize>>,
+        predecessor_fn: &Vec<BTreeSet<usize>>,
+        exit_bls: &BTreeSet<usize>,
     ) -> Vec<Block<'ast>> {
 
         let mut visited: Vec<bool> = vec![false; bls.len()];
         // MEET is union, so IN and OUT are Empty Set
-        let mut bl_in: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
-        let mut bl_out: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
+        let mut bl_in: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
+        let mut bl_out: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
         
         // Can this ever happen?
         if exit_bls.is_empty() { 
@@ -1579,7 +1579,7 @@ impl<'ast> ZGen<'ast> {
             let cur_bl = next_bls.pop_front().unwrap();
 
             // State is the union of all successors
-            let mut state: HashSet<String> = HashSet::new();
+            let mut state: BTreeSet<String> = BTreeSet::new();
             for s in &successor[cur_bl] {
                 state.extend(bl_in[*s].clone());
             }
@@ -1629,7 +1629,7 @@ impl<'ast> ZGen<'ast> {
             let cur_bl = next_bls.pop_front().unwrap();
 
             // State is simply bl_out
-            let mut state: HashSet<String> = bl_out[cur_bl].clone();
+            let mut state: BTreeSet<String> = bl_out[cur_bl].clone();
 
             // Only visit each block once
             if !visited[cur_bl] {
@@ -1668,18 +1668,18 @@ impl<'ast> ZGen<'ast> {
     fn set_input_output(
         &self,
         mut bls: Vec<Block<'ast>>,
-        successor: &Vec<HashSet<usize>>,
-        predecessor: &Vec<HashSet<usize>>,
-        predecessor_fn: &Vec<HashSet<usize>>,
+        successor: &Vec<BTreeSet<usize>>,
+        predecessor: &Vec<BTreeSet<usize>>,
+        predecessor_fn: &Vec<BTreeSet<usize>>,
         entry_bl: &usize,
-        exit_bls: &HashSet<usize>,
+        exit_bls: &BTreeSet<usize>,
         inputs: Vec<(String, Ty)>
     ) -> Vec<Block<'ast>> {
         // Liveness
         let mut visited: Vec<bool> = vec![false; bls.len()];
         // MEET is union, so IN and OUT are Empty Set
-        let mut bl_in: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
-        let mut bl_out: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
+        let mut bl_in: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
+        let mut bl_out: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
         
         // Can this ever happen?
         if exit_bls.is_empty() { 
@@ -1697,7 +1697,7 @@ impl<'ast> ZGen<'ast> {
             let cur_bl = next_bls.pop_front().unwrap();   
 
             // State is the union of all successors
-            let mut state: HashSet<String> = HashSet::new();
+            let mut state: BTreeSet<String> = BTreeSet::new();
             for s in &successor[cur_bl] {
                 state.extend(bl_in[*s].clone());
             }
@@ -1746,8 +1746,8 @@ impl<'ast> ZGen<'ast> {
         // Typing
         let mut visited: Vec<bool> = vec![false; bls.len()];
         // MEET is union, so IN and OUT are Empty Set
-        let mut bl_in: Vec<HashMap<String, Ty>> = vec![HashMap::new(); bls.len()];
-        let mut bl_out: Vec<HashMap<String, Ty>> = vec![HashMap::new(); bls.len()];
+        let mut bl_in: Vec<BTreeMap<String, Ty>> = vec![BTreeMap::new(); bls.len()];
+        let mut bl_out: Vec<BTreeMap<String, Ty>> = vec![BTreeMap::new(); bls.len()];
         
         // Start from entry block
         let mut next_bls: VecDeque<usize> = VecDeque::new();
@@ -1757,7 +1757,7 @@ impl<'ast> ZGen<'ast> {
             let cur_bl = next_bls.pop_front().unwrap();
 
             // State is the union of all predecessors
-            let mut state: HashMap<String, Ty> = HashMap::new();
+            let mut state: BTreeMap<String, Ty> = BTreeMap::new();
             for s in &predecessor[cur_bl] {
                 for (name, ty) in &bl_out[*s] {
                     if let Some(k) = state.get(name) {
@@ -1854,10 +1854,10 @@ impl<'ast> ZGen<'ast> {
     fn resolve_block_merge(
         &self,
         mut bls: Vec<Block<'ast>>,
-        successor: &Vec<HashSet<usize>>,
-        successor_fn: &Vec<HashSet<usize>>,
-        predecessor_fn: &Vec<HashSet<usize>>,
-        exit_bls_fn: &HashSet<usize>
+        successor: &Vec<BTreeSet<usize>>,
+        successor_fn: &Vec<BTreeSet<usize>>,
+        predecessor_fn: &Vec<BTreeSet<usize>>,
+        exit_bls_fn: &BTreeSet<usize>
     ) -> Vec<Block<'ast>> {
         // STEP 1: Obtain number of constraints for all blocks
         let mut bl_num_cons = Vec::new();
@@ -2063,7 +2063,7 @@ impl<'ast> ZGen<'ast> {
         let mut io_size = inputs.len();
         // Process block outputs
         for b in bls {
-            let mut essential_vars = HashSet::new();
+            let mut essential_vars = BTreeSet::new();
             for (v, _) in &b.outputs {
                 // Skip all reserved registers
                 if v.chars().next().unwrap() != '%' {
@@ -2083,12 +2083,12 @@ impl<'ast> ZGen<'ast> {
         &self,
         mut bls: Vec<Block<'ast>>,
         io_size: usize,
-        predecessor: &Vec<HashSet<usize>>,
-        successor: &Vec<HashSet<usize>>,
+        predecessor: &Vec<BTreeSet<usize>>,
+        successor: &Vec<BTreeSet<usize>>,
         entry_bl: usize,
-        entry_bls_fn: &HashSet<usize>,
-        predecessor_fn: &Vec<HashSet<usize>>,
-        successor_fn: &Vec<HashSet<usize>>,
+        entry_bls_fn: &BTreeSet<usize>,
+        predecessor_fn: &Vec<BTreeSet<usize>>,
+        successor_fn: &Vec<BTreeSet<usize>>,
     ) -> Vec<Block<'ast>> {
         // Number of spills required for every block
         let mut spill_size = vec![0];
@@ -2114,12 +2114,12 @@ impl<'ast> ZGen<'ast> {
         // KILL: Whenever a shadower is out of scope, update STACK and OOP
         
         // OOS is a set of all local variables out of scope
-        let mut oos_in: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
-        let mut oos_out: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
+        let mut oos_in: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
+        let mut oos_out: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
         // STACK is (shadower, candidate, pop_function, pop_scope).
         // When the current scope is (pop_function, pop_scope), need to pop the spill
-        let mut stack_in: Vec<HashSet<(String, String, String, usize)>> = vec![HashSet::new(); bls.len()];
-        let mut stack_out: Vec<HashSet<(String, String, String, usize)>> = vec![HashSet::new(); bls.len()];
+        let mut stack_in: Vec<BTreeSet<(String, String, String, usize)>> = vec![BTreeSet::new(); bls.len()];
+        let mut stack_out: Vec<BTreeSet<(String, String, String, usize)>> = vec![BTreeSet::new(); bls.len()];
         let mut visited = vec![false; bls.len()];
         let mut next_bls: VecDeque<usize> = VecDeque::new();
         next_bls.push_back(entry_bl);
@@ -2128,7 +2128,7 @@ impl<'ast> ZGen<'ast> {
             
             // JOIN of OOS
             let mut oos = {
-                let mut oos = HashSet::new();
+                let mut oos = BTreeSet::new();
                 // oos only stores local variables, so only process local predecessors
                 // there is no join, OOS of all predecessors should either be the same or empty
                 for p in &predecessor_fn[cur_bl] {
@@ -2142,7 +2142,7 @@ impl<'ast> ZGen<'ast> {
 
             // JOIN of STACK:
             let mut stack = {
-                let mut stack = HashSet::new();
+                let mut stack = BTreeSet::new();
                 // if a function entry block, union over all predecessors
                 if predecessor_fn[cur_bl].len() == 0 {
                     for p in &predecessor[cur_bl] {
@@ -2253,7 +2253,7 @@ impl<'ast> ZGen<'ast> {
         }
         // As long as any block has spill_size > 0, keep vote out the candidate that can reduce the most total_spill_size
         let mut total_spill_size = spill_size.iter().fold(0, |a, b| a + b);
-        let mut spills: HashMap<String, BTreeSet<String>> = HashMap::new();
+        let mut spills: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         while total_spill_size > 0 {
             // Compute vote score for each candidate, use BTreeMap to make ranking deterministic
             // Scores records all blocks where the spilling of the candidate can affect spill_size
@@ -2331,8 +2331,8 @@ impl<'ast> ZGen<'ast> {
             span: Span::new("", 0, 0).unwrap()
         });
         // OOS: Out-of-Scope
-        let mut oos_in: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
-        let mut oos_out: Vec<HashSet<String>> = vec![HashSet::new(); bls.len()];
+        let mut oos_in: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
+        let mut oos_out: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
         // STACK is a (ordered) list of variables in stack per stack frame
         let mut stack_in: Vec<Vec<Vec<(String, Ty)>>> = vec![Vec::new(); bls.len()];
         let mut stack_out: Vec<Vec<Vec<(String, Ty)>>> = vec![Vec::new(); bls.len()];
@@ -2347,7 +2347,7 @@ impl<'ast> ZGen<'ast> {
 
             // JOIN of OOS & STACK
             let (mut oos, mut stack) = {
-                let mut oos = HashSet::new();
+                let mut oos = BTreeSet::new();
                 let mut stack = Vec::new();
                 // OOS of all predecessors should either be the same or empty
                 // the first cur_scope + 1 entries of all predecessors should either be the same of empty
@@ -2566,12 +2566,12 @@ impl<'ast> ZGen<'ast> {
     fn empty_block_elimination(
         &self,
         mut bls: Vec<Block<'ast>>,
-        exit_bls: HashSet<usize>,
-        mut successor: Vec<HashSet<usize>>,
-        mut predecessor: Vec<HashSet<usize>>,
-        entry_bls_fn: &HashSet<usize>,
-        exit_bls_fn: &HashSet<usize>
-    ) -> (Vec<HashSet<usize>>, Vec<HashSet<usize>>, Vec<Block<'ast>>) {
+        exit_bls: BTreeSet<usize>,
+        mut successor: Vec<BTreeSet<usize>>,
+        mut predecessor: Vec<BTreeSet<usize>>,
+        entry_bls_fn: &BTreeSet<usize>,
+        exit_bls_fn: &BTreeSet<usize>
+    ) -> (Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, Vec<Block<'ast>>) {
 
         let mut visited: Vec<bool> = Vec::new();
         for _ in 0..bls.len() {
@@ -2648,12 +2648,12 @@ impl<'ast> ZGen<'ast> {
         &self,
         bls: Vec<Block<'ast>>,
         entry_bl: usize,
-        predecessor: Vec<HashSet<usize>>
-    ) -> (Vec<Block<'ast>>, usize, HashMap<usize, usize>) {      
+        predecessor: Vec<BTreeSet<usize>>
+    ) -> (Vec<Block<'ast>>, usize, BTreeMap<usize, usize>) {      
         let old_size = bls.len();
         
         // Initialize map from old label of blocks to new labels
-        let mut label_map = HashMap::new();
+        let mut label_map = BTreeMap::new();
         // Initialize a new list of blocks
         let mut new_bls = Vec::new();
 
@@ -2782,11 +2782,11 @@ impl<'ast> ZGen<'ast> {
     fn var_to_reg<const MODE: usize>(
         &self,
         mut bls: Vec<Block<'ast>>,
-        predecessor: &Vec<HashSet<usize>>,
-        successor: &Vec<HashSet<usize>>,
+        predecessor: &Vec<BTreeSet<usize>>,
+        successor: &Vec<BTreeSet<usize>>,
         entry_bl: usize,
         inputs: Vec<(String, Ty)>
-    ) -> (Vec<Block<'ast>>, Vec<HashMap<String, usize>>, usize, HashMap<String, usize>, usize, Vec<(Vec<usize>, Vec<usize>)>) {    
+    ) -> (Vec<Block<'ast>>, Vec<BTreeMap<String, usize>>, usize, BTreeMap<String, usize>, usize, Vec<(Vec<usize>, Vec<usize>)>) {    
         // reg_map is consisted of two Var -> Reg Maps: TRANSITION_MAP_LIST & WITNESS_MAP
         // TRANSITION_MAP_LIST is a list of maps corresponding to each transition state
         // Reserve registers 0 - 7 for %V, %BN, %RET, %TS, %AS, %RP, %SP, and %BP
@@ -2800,7 +2800,7 @@ impl<'ast> ZGen<'ast> {
 
         // Process program inputs
         let input_map = {
-            let mut io_map: HashMap<String, usize> = new_io_map();
+            let mut io_map: BTreeMap<String, usize> = new_io_map();
             // inputs
             for (v, _) in &inputs {
                 (_, io_map, _) = var_name_to_reg_id_expr::<1>(v.to_string(), io_map);
@@ -2875,7 +2875,7 @@ impl<'ast> ZGen<'ast> {
         // --
         // WITNESS_MAP is one single map to describe all block witnesses
         // Reserve registers 0 - 5 for %RET, %TS, %AS, %RP, %SP, and %BP
-        let mut witness_map: HashMap<String, usize> = new_witness_map();
+        let mut witness_map: BTreeMap<String, usize> = new_witness_map();
 
         // Record down labels of all live inputs / outputs of each block
         let mut live_io: Vec<(Vec<usize>, Vec<usize>)> = Vec::new();
@@ -3103,7 +3103,7 @@ impl<'ast> ZGen<'ast> {
     ) -> Vec<Block<'ast>> {
         for i in 0..bls.len() {
             // gen_set - all defined variables
-            let mut gen_set = HashSet::new();
+            let mut gen_set = BTreeSet::new();
             // Process inputs
             for (name, _) in &bls[i].inputs {
                 gen_set.insert(name.to_string());
@@ -3156,11 +3156,11 @@ impl<'ast> ZGen<'ast> {
         &self,
         bls: &Vec<Block>,
         num_mem_accesses: &Vec<usize>,
-        successor: &Vec<HashSet<usize>>,
+        successor: &Vec<BTreeSet<usize>>,
         entry_bl: usize,
-        exit_bls_fn: &HashSet<usize>,
-        successor_fn: &Vec<HashSet<usize>>,
-        predecessor_fn: &Vec<HashSet<usize>>,
+        exit_bls_fn: &BTreeSet<usize>,
+        successor_fn: &Vec<BTreeSet<usize>>,
+        predecessor_fn: &Vec<BTreeSet<usize>>,
         sorted_fns: &Vec<String>
     ) -> (usize, usize) {
         // Static bound on number of block executions & memory accesses

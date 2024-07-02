@@ -50,12 +50,12 @@ def parse_cobbl(b_name, jolt_result):
         for _ in range(c_expand):
             # first line is a list of [const_name, val]
             consts = f.readline().strip()
-            # Record time entries for BASELINE, COBBL_FOR, COBBL_WHILE
+            # Record time entries for BASELINE, COBBL_FOR, COBBL_WHILE, COBBL_NO_OPT
             # Entreis: Compiler Time, Preprocess Time, Prover Time, Verifier Time
-            time_entries = [[0.0] * 4 for _ in range(3)]
-            # Record constraint entries for BASELINE, COBBL_FOR, COBBL_WHILE
+            time_entries = [[0.0] * 4 for _ in range(4)]
+            # Record constraint entries for BASELINE, COBBL_FOR, COBBL_WHILE, COBBL_NO_OPT
             # Entries: Commit Size, Var Size, Exec Size, Extra Cons Size
-            cons_entries = [[0] * 4 for _ in range(3)]
+            cons_entries = [[0] * 4 for _ in range(4)]
             for _ in range(repeat):
                 # Circ Baseline: Num Cons, Compiler Time, Num Vars, Num NNZ (x3), Preprocess Time, Prover Time, Verifier Time
                 # read entry name
@@ -87,7 +87,7 @@ def parse_cobbl(b_name, jolt_result):
                 for t in range(3):
                     time_entries[e][t + 1] += tmp_time[t]
                 # CoBBl: Compiler Time, (Num NNZ, Num Vars, Num Cons) x3, Preprocess Time, Prover Time, Verifier Time
-                for e in range(1, 3):
+                for e in range(1, 4):
                     # read entry name
                     f.readline()
                     tmp_time = extract_time(f, 1)
@@ -105,7 +105,7 @@ def parse_cobbl(b_name, jolt_result):
                     tmp_time = extract_time(f, 3)
                     for t in range(3):
                         time_entries[e][t + 1] += tmp_time[t]
-            for e in range(3):
+            for e in range(4):
                 for t in range(4):
                     time_entries[e][t] /= repeat
 
@@ -113,7 +113,7 @@ def parse_cobbl(b_name, jolt_result):
             case_name = f"{b_name} - {consts}" if len(consts) > 0 else f"{b_name}"
             print(case_name)
             print("RUNTIME")
-            print("{:10}    {:>10}    {:>10}    {:>10}    {:>10}".format("", "CirC", "CoBBl For", "Jolt", "CoBBl 100"))
+            print("{:10}    {:>10}    {:>10}    {:>10}    {:>10}    {:>10}".format("", "CirC", "CoBBl For", "Jolt", "CoBBl While", "CoBBL NoOpt"))
             t_name = ["Compiler", "Preprocess", "Prover", "Verifier"]
             for j in range(4):
                 print("{:10}".format(t_name[j]), end = '')
@@ -129,7 +129,7 @@ def parse_cobbl(b_name, jolt_result):
                 else:
                     print("    {:>10}".format("-"), end = '')
                 # CoBBl
-                for i in range(2, 3):
+                for i in range(2, 4):
                     if time_entries[i][j] != 0:
                         print("    {:10.2f}".format(time_entries[i][j]), end = '')
                     else:
@@ -137,12 +137,12 @@ def parse_cobbl(b_name, jolt_result):
                 print()
 
             print("--\nCONSTRAINTS")
-            print("{:10}    {:>10}    {:>10}    {:>10}".format("", "CirC", "CoBBl For", "CoBBl 100"))
+            print("{:10}    {:>10}    {:>10}    {:>10}    {:>10}".format("", "CirC", "CoBBl For", "CoBBl While", "CoBBl NoOpt"))
             t_name = ["Commit", "Var", "Exec", "Extra"]
             for j in range(4):
                 print("{:10}".format(t_name[j]), end = '')
                 # CirC & CoBBl
-                for i in range(3):
+                for i in range(4):
                     if cons_entries[i][j] != 0:
                         print("    {:>10}".format(cons_entries[i][j]), end = '')
                     else:
@@ -156,7 +156,7 @@ def parse_cobbl(b_name, jolt_result):
     f.close()
 
 # BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "find_min_ff", "mat_mult_ff", "sha256", "poseidon"]
-BENCHMARK = ["find_min", "sha256"]
+BENCHMARK = ["find_min"]
 jolt_result = parse_jolt()
 for b in BENCHMARK:
     parse_cobbl(b, jolt_result)

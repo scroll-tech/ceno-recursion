@@ -112,6 +112,7 @@ def preprocess(b_name):
             execute_baseline(b_name, f_result_name)
             execute_cobbl_for(b_name, f_result_name)
             execute_cobbl_while(b_name, f_result_name, 100)
+            execute_cobbl_no_opt(b_name, f_result_name, 100)
 
             """
             # v = 90% c
@@ -194,7 +195,23 @@ def execute_cobbl_while(b_name, f_name, perc):
                     -e 's/  \* SNARK::verify //p' \
                 >> ../{f_name}\"")
 
+def execute_cobbl_no_opt(b_name, f_name, perc):
+    b_name += "_cobbl"
+    print("COBBL - NO_OPT")
+    os.system(f"echo 'COBBL_NO_OPT {perc}' >> {f_name}")
+    os.system(f"timeout 300 bash -c \"cd circ_blocks && target/release/examples/zxc --no_opt {b_name} | \
+            sed -n 's/Compiler time: //p' \
+                >> ../{f_name}\"")
+    os.system(f"timeout 300 bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
+                sed -n -e 's/Preprocess time: //p' \
+                    -e 's/Total Inst Commit Size: //p' \
+                    -e 's/Total Var Commit Size: //p' \
+                    -e 's/Total Cons Exec Size: //p' \
+                    -e 's/  \* SNARK::prove //p' \
+                    -e 's/  \* SNARK::verify //p' \
+                >> ../{f_name}\"")
+
 # BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256"]
-BENCHMARK = ["sha256"]
+BENCHMARK = ["find_min"]
 for b in BENCHMARK:
     preprocess(b)

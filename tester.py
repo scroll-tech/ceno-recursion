@@ -1,7 +1,7 @@
 import os
 
-CONST_EXPAND = 1
-REPEAT = 5
+CONST_EXPAND = 3
+REPEAT = 1
 
 # Process A * B or A + B or A - B by reading A & B from consts
 def process_formula(consts, formula):
@@ -113,6 +113,7 @@ def preprocess(b_name):
             execute_cobbl_for(b_name, f_result_name)
             execute_cobbl_while(b_name, f_result_name, 100)
 
+            """
             # v = 90% c
             print("\nTesting V = 90% C...")
             for c in constants:
@@ -142,6 +143,7 @@ def preprocess(b_name):
                 f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
                 f_input.write("END")
             execute_cobbl_while(b_name, f_result_name, 50)
+            """
 
         for var in constants:
             constants[var] += constants_base[var]
@@ -151,6 +153,11 @@ def execute_baseline(b_name, f_name):
     os.system(f"echo 'BASELINE' >> {f_name}")
     os.system(f"timeout 300 bash -c \"cd circ_baseline && target/release/examples/circ --language zsharp {b_name} r1cs | \
                 sed -n -e 's/Compiler time: //p' \
+                    -e 's/Final R1cs size: //p' \
+                    -e 's/  \* number_of_variables //p' \
+                    -e 's/  \* number_non-zero_entries_A //p' \
+                    -e 's/  \* number_non-zero_entries_B //p' \
+                    -e 's/  \* number_non-zero_entries_C //p' \
                     -e 's/  \* SNARK::encode //p' \
                     -e 's/  \* SNARK::prove //p' \
                     -e 's/  \* SNARK::verify //p' \
@@ -164,6 +171,9 @@ def execute_cobbl_for(b_name, f_name):
                 >> ../{f_name}\"")
     os.system(f"timeout 300 bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
                 sed -n -e 's/Preprocess time: //p' \
+                    -e 's/Total Inst Commit Size: //p' \
+                    -e 's/Total Var Commit Size: //p' \
+                    -e 's/Total Cons Exec Size: //p' \
                     -e 's/  \* SNARK::prove //p' \
                     -e 's/  \* SNARK::verify //p' \
                 >> ../{f_name}\"")
@@ -177,11 +187,14 @@ def execute_cobbl_while(b_name, f_name, perc):
                 >> ../{f_name}\"")
     os.system(f"timeout 300 bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
                 sed -n -e 's/Preprocess time: //p' \
+                    -e 's/Total Inst Commit Size: //p' \
+                    -e 's/Total Var Commit Size: //p' \
+                    -e 's/Total Cons Exec Size: //p' \
                     -e 's/  \* SNARK::prove //p' \
                     -e 's/  \* SNARK::verify //p' \
                 >> ../{f_name}\"")
 
 # BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256"]
-BENCHMARK = ["poseidon"]
+BENCHMARK = ["sha256"]
 for b in BENCHMARK:
     preprocess(b)

@@ -1,7 +1,7 @@
 def main(u32 low, u32 b, u32 c, u32 high) -> u32:
-    u32[high] arr = [0; high]
+    u32[1200] arr = [0; 1200]
     u32 sum = 0
-    for u32 i in 0..high do
+    for u32 i in 0..1200 do
         sum = sum + i
         arr[i] = sum
     endfor
@@ -11,12 +11,14 @@ def main(u32 low, u32 b, u32 c, u32 high) -> u32:
     u32 min = arr[low]
     u32 min_idx = low
 
-    for u32 i in low + 1..high do
+    u32 i = low + 1
+    while i < high do
         if arr[i] < min then
             min = arr[i]
             min_idx = i
         endif
-    endfor
+        i = i + 1
+    endwhile
 
 
     return min + (min_idx + x) * c

@@ -1271,70 +1271,81 @@ impl<'ast> ZGen<'ast> {
         &self,
         mut bls: Vec<Block<'ast>>,
         mut entry_bl: usize,
-        inputs: Vec<(String, Ty)>
+        inputs: Vec<(String, Ty)>,
+        // When no_opt is set, DO NOT perform Merge / Spilling
+        no_opt: bool,
     ) -> (Vec<Block<'ast>>, usize) {
         println!("\n\n--\nOptimization:");
+        if !no_opt {
+            // Construct CFG
+            let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
+                self.construct_flow_graph(&bls, entry_bl);
+            if VERBOSE && CFG_VERBOSE {
+                print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+            }
+
+            // Liveness
+            bls = self.liveness_analysis(bls, &successor, &predecessor,  &predecessor_fn, &exit_bls);
+            // DBE
+            (bls, entry_bl, _) = self.dead_block_elimination(bls, entry_bl, predecessor);
+            if VERBOSE {
+                println!("\n\n--\nLiveness:");
+                print_bls(&bls, &entry_bl);
+            }
+
+            // Reconstruct CFG
+            let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
+                self.construct_flow_graph(&bls, entry_bl);
+            if VERBOSE && CFG_VERBOSE {
+                print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+            }
+
+            // Set Input Output
+            bls = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, inputs.clone());
+            if VERBOSE {
+                println!("\n\n--\nSet Input Output before Spilling:");
+                print_bls(&bls, &entry_bl);
+            }
+
+            // Resolve block merge
+            bls = self.resolve_block_merge(bls, &successor, &successor_fn, &predecessor_fn, &exit_bls_fn);
+            // Reconstruct CFG
+            let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
+                self.construct_flow_graph(&bls, entry_bl);
+            if VERBOSE && CFG_VERBOSE {
+                print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+            }
+            // DBE
+            (bls, entry_bl, _) = self.dead_block_elimination(bls, entry_bl, predecessor);
+            if VERBOSE {
+                println!("\n\n--\nBlock Merge:");
+                print_bls(&bls, &entry_bl);
+            }
+
+            // Reconstruct CFG
+            let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
+            self.construct_flow_graph(&bls, entry_bl);
+            if VERBOSE && CFG_VERBOSE {
+                print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+            }
+
+            // Spilling
+            // Obtain io_size = maximum # of variables in a transition state that belong to the current function & have different names
+            // Note that this value is not the final io_size as it does not include any reserved registers
+            let tmp_io_size = self.get_max_io_size(&bls, &inputs);
+            // Perform spilling
+            bls = self.resolve_spilling(bls, tmp_io_size, &predecessor, &successor, entry_bl, &entry_bls_fn, &predecessor_fn, &successor_fn);
+            if VERBOSE {
+                println!("\n\n--\nSpilling:");
+                print_bls(&bls, &entry_bl);
+            }
+        }
+
         // Construct CFG
-        let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
-            self.construct_flow_graph(&bls, entry_bl);
-        if VERBOSE && CFG_VERBOSE {
-            print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
-        }
-
-        // Liveness
-        bls = self.liveness_analysis(bls, &successor, &predecessor,  &predecessor_fn, &exit_bls);
-        // DBE
-        (bls, entry_bl, _) = self.dead_block_elimination(bls, entry_bl, predecessor);
-        if VERBOSE {
-            println!("\n\n--\nLiveness:");
-            print_bls(&bls, &entry_bl);
-        }
-
-        // Reconstruct CFG
-        let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
-            self.construct_flow_graph(&bls, entry_bl);
-        if VERBOSE && CFG_VERBOSE {
-            print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
-        }
-
-        // Set Input Output
-        bls = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, inputs.clone());
-        if VERBOSE {
-            println!("\n\n--\nSet Input Output before Spilling:");
-            print_bls(&bls, &entry_bl);
-        }
-
-        // Resolve block merge
-        bls = self.resolve_block_merge(bls, &successor, &successor_fn, &predecessor_fn, &exit_bls_fn);
-        // Reconstruct CFG
-        let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
-        self.construct_flow_graph(&bls, entry_bl);
-        if VERBOSE && CFG_VERBOSE {
-            print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
-        }
-        // DBE
-        (bls, entry_bl, _) = self.dead_block_elimination(bls, entry_bl, predecessor);
-        if VERBOSE {
-            println!("\n\n--\nBlock Merge:");
-            print_bls(&bls, &entry_bl);
-        }
-
-        // Reconstruct CFG
         let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
-        self.construct_flow_graph(&bls, entry_bl);
+            self.construct_flow_graph(&bls, entry_bl);
         if VERBOSE && CFG_VERBOSE {
             print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
-        }
-
-        // Spilling
-        // Obtain io_size = maximum # of variables in a transition state that belong to the current function & have different names
-        // Note that this value is not the final io_size as it does not include any reserved registers
-        let tmp_io_size = self.get_max_io_size(&bls, &inputs);
-        // Perform spilling
-        let mut bls = self.resolve_spilling(bls, tmp_io_size, &predecessor, &successor, entry_bl, &entry_bls_fn, &predecessor_fn, &successor_fn);
-        if VERBOSE {
-            println!("\n\n--\nSpilling:");
-            print_bls(&bls, &entry_bl);
         }
 
         // Liveness, mainly to remove %BP

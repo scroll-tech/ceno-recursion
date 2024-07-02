@@ -82,6 +82,10 @@ struct Options {
     #[arg(short = 'q')]
     /// quiet mode: don't print R1CS at the end
     quiet: bool,
+
+    #[arg(long = "no_opt")]
+    /// skip all block-level optimizations
+    no_opt: bool,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, ValueEnum)]
@@ -405,14 +409,16 @@ impl Ord for InstanceSortHelper {
 // Generate constraints and others
 // --
 fn get_compile_time_knowledge<const VERBOSE: bool>(
-    path: PathBuf
+    path: PathBuf,
+    options: &Options,
 ) -> (CompileTimeKnowledge, Vec<usize>, Vec<usize>, Vec<ProverData>) {
     println!("Generating Compiler Time Data...");
 
     let (cs, func_input_width, num_inputs_unpadded, live_io_list, block_num_mem_accesses, live_vm_list) = {
         let inputs = zsharp::Inputs {
             file: path.clone(),
-            mode: Mode::Proof
+            mode: Mode::Proof,
+            no_opt: options.no_opt
         };
         ZSharpFE::gen(inputs)
     };
@@ -629,6 +635,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 // --
 fn get_run_time_knowledge<const VERBOSE: bool>(
     path: PathBuf,
+    options: &Options,
     entry_regs: Vec<Integer>,
     ctk: &CompileTimeKnowledge,
     live_io_size: Vec<usize>,
@@ -645,7 +652,8 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     let (_, block_id_list, bl_outputs_list, bl_mems_list, bl_io_map_list, phy_mem_list, vir_mem_list) = {
         let inputs = zsharp::Inputs {
             file: path,
-            mode: Mode::Proof
+            mode: Mode::Proof,
+            no_opt: options.no_opt
         };
 
         ZSharpFE::interpret(inputs, &entry_regs)
@@ -906,7 +914,7 @@ fn main() {
     let benchmark_name = options.path.as_os_str().to_str().unwrap();
     let path = PathBuf::from(format!("../zok_tests/benchmarks/{}.zok", benchmark_name));
     let (ctk, live_io_size, live_mem_size, prover_data_list) = 
-        get_compile_time_knowledge::<false>(path.clone());
+        get_compile_time_knowledge::<false>(path.clone(), &options);
     let compiler_time = compiler_start.elapsed();
 
     // --
@@ -933,7 +941,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<true>(path.clone(), entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
+    let rtk = get_run_time_knowledge::<true>(path.clone(), &options, entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
     let witness_time = witness_start.elapsed();
 
     // --

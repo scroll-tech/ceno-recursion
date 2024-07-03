@@ -155,8 +155,8 @@ def parse_cobbl(b_name, jolt_result):
 
     f.close()
 
-# BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "find_min_ff", "mat_mult_ff", "sha256", "poseidon"]
-BENCHMARK = ["find_min"]
+BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "find_min_ff", "mat_mult_ff", "sha256", "poseidon"]
+# BENCHMARK = ["find_min"]
 jolt_result = parse_jolt()
 for b in BENCHMARK:
     parse_cobbl(b, jolt_result)

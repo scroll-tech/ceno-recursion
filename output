@@ -1,233 +1,425 @@
---
-U32
---
-
 find_min - max_high 400
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler          354.80         53.40       7513.00         50.40         49.00         49.20         48.20
-Preprocess       1721.37        226.40             -        215.20        215.00        215.20        215.60
-Prover          13184.78       1161.04        682.00       1055.15       1040.45       1043.53        959.55
-Verifier          105.28        133.40        143.00        132.02        130.90        130.86        131.08
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler           75.00          3.20       5841.00          3.00          1.80
+Preprocess       1776.17        157.00             -        146.60        150.00
+Prover          14388.65       1182.70        639.00       1067.87       1097.01
+Verifier          105.28        142.07        141.00        135.62        140.83
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit            592578          1780          1756          1820
+Var                65536        692992        692352        717888
+Exec               44126        199996        181813        177823
+Extra                  -          1204          1203          1602
 
 --
 
 find_min - max_high 800
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler          956.40        115.00       7911.00        103.40        105.00        103.00        102.40
-Preprocess       5780.64        317.60             -        311.00        311.80        311.40        309.40
-Prover          50383.39       2031.56        845.00       1855.99       1856.83       1851.97       1682.63
-Verifier          186.37        167.32        177.00        164.87        165.87        164.81        167.01
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler          202.60          3.20       5809.00          3.00          2.00
+Preprocess       5632.09        154.60             -        142.40        148.40
+Prover          52675.49       2026.76        818.00       1833.28       1860.25
+Verifier          185.52        154.88        177.00        148.78        154.52
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit           2144942          1794          1771          1820
+Var               131072       1384192       1383552       1434688
+Exec               88126        399596        363413        355423
+Extra                  -          2404          2403          3202
 
 --
 
 find_min - max_high 1200
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler         1827.40        196.00             -        175.00        178.40        175.60        177.60
-Preprocess      11002.17        393.00             -        363.80        363.20        362.20        362.20
-Prover         101967.39       3655.48             -       3191.66       3174.38       2843.72       2320.04
-Verifier          248.36        207.38             -        197.68        197.27        195.63        175.42
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler          621.80          3.20       5869.00          3.00          2.00
+Preprocess      10542.78        153.60             -        142.60        147.80
+Prover         104278.40       3331.27       1121.00       2971.79       2977.96
+Verifier          248.52        196.74        205.00        190.37        202.63
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit           4657174          1795          1756          1820
+Var               131072       2075392       2074752       2151488
+Exec              132126        599196        545013        533023
+Extra                  -          3604          3603          4802
 
 --
 
 mat_mult - max_n 2
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler            7.00         35.20       1497.00         25.20         25.00         25.00         25.00
-Preprocess         31.83        168.00             -        167.80        167.80        167.40        168.20
-Prover            174.15        432.45        440.00        421.25        285.04        285.92        285.75
-Verifier           19.90        112.98         84.00        109.73         81.12         81.19         81.20
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler            1.60          9.20       5824.00          6.80          4.80
+Preprocess         32.31        168.20             -        166.40        203.00
+Prover            173.51        431.06        414.00        424.68        459.05
+Verifier           19.91        110.56         80.00        108.87        114.91
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit              4569          2967          2767          3678
+Var                 2048         95040         94272         55488
+Exec                1379         23989         23427         12002
+Extra                  -         13134         13126            90
 
 --
 
 mat_mult - max_n 4
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler          240.00         40.00       1508.00         29.80         29.40         30.00         30.00
-Preprocess        825.90        172.80             -        171.80        172.00        171.00        170.80
-Prover           6678.43       1029.27        650.00        945.46        673.41        672.05        463.27
-Verifier           77.42        165.95        127.00        156.58        136.64        136.66        117.26
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler           48.60         10.20       5825.00          7.80          5.00
+Preprocess        833.57        170.20             -        169.00        201.40
+Prover           7494.98       1060.42        622.00       1039.54        873.75
+Verifier           78.06        170.79        125.00        168.67        156.85
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit            384478          3733          3560          3678
+Var                32768        743808        737664        360000
+Exec               28114        186472        182060         77192
+Extra                  -        105036        104972           558
 
 --
 
 mat_mult - max_n 6
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler               -         56.80       1514.00         35.20         35.00         35.00         35.20
-Preprocess             -        201.40             -        197.60        196.20        197.60        197.80
-Prover                 -       2431.14        878.00       2381.62       1541.69       1104.71        819.76
-Verifier               -        230.82        175.00        228.38        197.92        174.60        158.19
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler               -         13.40       5833.00          8.00          4.80
+Preprocess             -        204.80             -        203.20        204.00
+Prover                 -       2485.36        842.00       2442.29       1664.32
+Verifier               -        244.91        174.00        241.83        197.71
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -          3963          3763          3678
+Var                    -       2490048       2469312       1142208
+Exec                   -        623975        609161        244142
+Extra                  -        354474        354258          1746
 
 --
 
 kmp_search - max_n 160; max_m 16
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler          575.40         63.80       1515.00         53.60         53.40         54.20         53.20
-Preprocess       1725.02        239.80             -        238.80        239.80        236.80        238.80
-Prover          12877.04       1297.68        689.00       1267.96       1266.56       1028.60       1019.56
-Verifier          104.13        167.73        141.00        163.88        163.30        155.87        157.78
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler          129.00         12.60       5857.00         10.00          7.00
+Preprocess       1719.38        221.20             -        221.20        235.00
+Prover          15004.01       1410.49        677.00       1396.11       1366.97
+Verifier          103.60        178.92        142.00        174.66        183.80
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit           1026485          5398          5413          6264
+Var                65536        781632        703584        548352
+Exec               65197        179788        157097        147893
+Extra                  -           762           717           888
 
 --
 
 kmp_search - max_n 320; max_m 32
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler         1794.80         85.60       1513.00         75.20         76.20         76.00         75.20
-Preprocess      10315.54        304.80             -        301.00        303.40        304.80        300.80
-Prover         106022.96       2172.30        852.00       2132.54       2132.56       1632.69       1605.70
-Verifier          253.61        196.40        174.00        191.73        191.61        187.20        188.40
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler          369.60         12.40       5862.00         10.20          7.00
+Preprocess      10170.69        235.80             -        234.40        234.80
+Prover         110218.95       2377.56        790.00       2327.66       2211.11
+Verifier          253.43        221.15        178.00        217.59        215.81
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit           5421865          5604          5567          6264
+Var               262144       1589760       1434720       1093632
+Exec              149092        365232        319924        295221
+Extra                  -          1372          1295          1768
 
 --
 
 kmp_search - max_n 480; max_m 48
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler         3908.20        118.60             -        102.60        102.00        102.40        102.20
-Preprocess      21311.90        363.20             -        357.00        358.60        360.60        357.80
-Prover         206226.23       3414.78             -       2613.87       2478.81       2480.11       2120.55
-Verifier          345.73        239.51             -        219.81        212.12        211.74        214.56
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler               -         13.80       5863.00         10.20          7.20
+Preprocess      17487.84        241.00             -        234.80        235.20
+Prover         159890.56       3199.66       1134.00       2421.03       2505.32
+Verifier          276.40        241.73        210.00        221.22        222.55
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit          15432432          5606          5567          6264
+Var               262144       2382336       2150496       1638912
+Exec              251389        547295        479477        442549
+Extra                  -          1948          1839          2648
 
 --
 
 dna_align - max_n 10
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler        15299.00         88.40       1537.00         64.20         64.20         64.40         64.60
-Preprocess             -        300.80             -        287.00        287.20        286.80        288.20
-Prover                 -       1552.76        565.00       1379.03       1338.44       1048.11        877.92
-Verifier               -        169.95        119.00        165.21        163.30        143.51        135.17
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler         5459.20         17.60       1218.00         12.20         10.20
+Preprocess             -        297.00             -        292.60        305.20
+Prover                 -       1637.98        538.00       1508.80       1429.78
+Verifier               -        192.85        121.00        191.10        210.55
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -          8152          7517          9137
+Var                    -        763872        658560        673920
+Exec                   1        220700        195053        147497
+Extra                  -           575           520           916
 
 --
 
 dna_align - max_n 20
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler               -        231.00       1501.00        174.40        169.40        174.00        173.00
-Preprocess             -        443.80             -        418.60        420.00        420.80        416.60
-Prover                 -       4066.65        842.00       3464.09       3326.60       2267.10       1650.25
-Verifier               -        245.69        169.00        239.97        233.14        200.32        181.53
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler               -         21.20       1206.00         12.80         10.20
+Preprocess             -        311.60             -        296.20        306.80
+Prover                 -       4325.52        811.00       3515.22       3265.96
+Verifier               -        266.68        172.00        252.68        289.53
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -          8378          7748          9137
+Var                    -       3003744       2553312       2573760
+Exec                   -        870959        765417        566732
+Extra                  -          2145          1935          3426
 
 --
 
 dna_align - max_n 30
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler               -        609.60             -        471.40        479.20        483.60        470.60
-Preprocess             -        668.00             -        622.60        622.00        625.80        624.80
-Prover                 -       7808.29             -       6625.36       6336.74       4181.88       3297.06
-Verifier               -        297.37             -        286.33        276.32        255.25        230.39
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler               -         21.00       1211.00         12.60         10.20
+Preprocess             -        329.00             -        320.80        306.40
+Prover                 -       8094.31       1191.00       7029.71       5747.73
+Verifier               -        317.62        215.00        318.85        345.09
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -          8473          7828          9137
+Var                    -       6750816       5715264       5702400
+Exec                   -       1957699       1715614       1258267
+Extra                  -          4777          4312          7536
 
 --
 
 rle_codec - max_n 100
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler         1236.00         87.40       1449.00         68.80         68.80         68.80         69.40
-Preprocess             -        285.60             -        290.40        291.00        288.40        289.80
-Prover                 -       1436.93        645.00       1205.74       1203.50       1202.69       1046.79
-Verifier               -        183.10        131.00        175.13        175.05        175.25        166.91
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler          252.00         13.00       1215.00          9.20          6.60
+Preprocess             -        235.20             -        230.20        217.40
+Prover                 -       1512.02        625.00       1324.25       1378.05
+Verifier               -        206.51        132.00        204.14        199.83
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -          6061          5106          5004
+Var                    -        822272        642560        639648
+Exec              105328        212999        138727        140301
+Extra                  -          2288          1894          1153
 
 --
 
 rle_codec - max_n 200
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler         6806.20        138.00       1450.00        113.40        113.00        113.00        112.40
-Preprocess             -        367.20             -        371.00        375.80        370.80        373.40
-Prover                 -       2295.29        804.00       1923.28       1921.15       1913.58       1580.77
-Verifier               -        220.95        157.00        206.48        206.17        206.14        201.40
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler         1194.80         12.80       1212.00          9.20          6.60
+Preprocess             -        230.60             -        231.00        219.60
+Prover                 -       2357.54        795.00       2091.60       2141.88
+Verifier               -        237.97        161.00        234.58        236.05
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -          6046          5109          5004
+Var                    -       1633472       1265024       1257696
+Exec              331017        423350        272783        275445
+Extra                  -          3138          2706          2271
 
 --
 
 rle_codec - max_n 300
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler        18079.60        195.80             -        166.20        165.80        165.40        165.20
-Preprocess             -        444.00             -        443.00        445.00        443.60        440.20
-Prover                 -       3752.12             -       2678.39       2688.95       2357.84       2247.95
-Verifier               -        270.12             -        235.73        235.76        233.25        226.88
-
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler         3393.40         13.20       1220.00          9.40          6.60
+Preprocess             -        231.20             -        233.60        215.00
+Prover                 -       3959.42        808.00       3000.84       3008.13
+Verifier               -        289.44        170.00        261.66        265.37
 --
-FIELD
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -          6046          5107          5004
+Var                    -       2444672       1884800       1871808
+Exec              676739        633999        405787        409633
+Extra                  -          3988          3514          3384
+
 --
 
 find_min_ff - max_high 25
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler          227.20         36.00      11989.00         37.00         37.20         37.20         37.00
-Preprocess             -        334.80             -        277.60        275.60        276.20        276.00
-Prover                 -       1276.15      39619.00        740.48        740.76        740.30        639.69
-Verifier               -        105.29       1209.00         93.15         93.24         93.22         85.50
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler           45.80          7.80      12432.00          7.80          4.80
+Preprocess             -        335.20             -        274.80        284.80
+Prover                 -       1311.79      34104.00        755.31        795.70
+Verifier               -        106.59       1179.00         93.21        107.08
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -          8819          9367          9094
+Var                    -        617088        304352        322272
+Exec               38167        110029         77208         80498
+Extra                  -            27            50           102
 
 --
 
 find_min_ff - max_high 50
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler          505.40         41.80      12283.00         42.60         42.60         42.60         42.80
-Preprocess             -        345.40             -        287.20        285.20        286.00        287.60
-Prover                 -       1657.01      93450.00        958.32        939.85        938.39        752.48
-Verifier               -        113.02       1528.00        103.91         99.53         99.82         93.64
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler          117.80          9.00      12712.00          8.40          4.60
+Preprocess             -        345.20             -        279.00        284.20
+Prover                 -       1671.34      93239.00        998.30       1011.94
+Verifier               -        113.02       1531.00        107.32        112.44
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -          9469          9610          9094
+Var                    -       1233856        637312        650272
+Exec               76035        219954        160028        162423
+Extra                  -            52           151           202
 
 --
 
 find_min_ff - max_high 75
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler          781.20         46.80      12406.00         40.00         39.40         39.80         40.00
-Preprocess             -        346.00             -        289.00        286.20        285.60        287.20
-Prover                 -       2328.39     300995.00       1341.23       1340.54       1045.32       1039.90
-Verifier               -        123.76       2076.00        116.06        115.87        113.10        112.49
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler          281.00         10.20      12638.00          7.20          4.80
+Preprocess             -        345.20             -        285.80        283.80
+Prover                 -       2369.96     297766.00       1397.24       1391.75
+Verifier               -        124.67       2123.00        132.10        130.70
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -         10123          9094          9094
+Var                    -       1851392        978272        978272
+Exec              113884        330028        244348        244348
+Extra                  -            77           302           302
 
 --
 
 mat_mult_ff - max_n 2
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler           29.60         69.60      12718.00         65.60         66.00         66.00         65.60
-Preprocess             -        368.20             -        363.80        362.20        363.40        361.00
-Prover                 -       1018.71      18469.00       1009.96        833.54        832.02        835.24
-Verifier               -        140.38        872.00        137.72        107.37        107.53        107.37
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler            5.80         15.20      12989.00         14.00          9.20
+Preprocess             -        368.60             -        362.60        397.60
+Prover                 -       1029.26      17798.00       1006.29       1026.08
+Verifier               -        142.23        863.00        137.87        142.50
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -         14308         14214         14923
+Var                    -        175104        172800        131712
+Exec                7811         45737         45175         33353
+Extra                  -         13134         13126            90
 
 --
 
 mat_mult_ff - max_n 4
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler          528.00         75.20      11967.00         71.80         71.00         71.60         71.20
-Preprocess             -        369.80             -        367.60        366.60        365.60        371.20
-Prover                 -       1717.89     365264.00       1619.61       1315.51       1310.64       1019.54
-Verifier               -        196.27       2401.00        186.23        162.75        162.00        137.75
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler          119.20         16.40      12278.00         15.60          9.60
+Preprocess             -        379.20             -        378.40        397.00
+Prover                 -       1779.11     337493.00       1683.97       1559.12
+Verifier               -        202.57       2395.00        191.12        184.76
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -         15127         15033         14923
+Var                    -       1121760       1103328        730368
+Exec               90150        293235        288823        185023
+Extra                  -        105019        104955           558
 
 --
 
 mat_mult_ff - max_n 6
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler        16670.00         84.00             -         79.80         79.60         80.20         80.20
-Preprocess             -        383.20             -        377.80        375.60        376.00        376.40
-Prover                 -       3471.20             -       3386.14       2264.96       1634.82       1368.62
-Verifier               -        257.52             -        248.97        216.86        183.84        168.52
-
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler         4423.60         18.20             -         17.40          9.40
+Preprocess             -        386.40             -        384.80        413.60
+Prover                 -       3567.28             -       3498.45       2849.30
+Verifier               -        265.15             -        257.34        233.37
 --
-SPECIAL
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -         16167         16073         14923
+Var                    -       3530208       3468000       2183040
+Exec              464767        923527        908713        553165
+Extra                  -        354363        354147          1746
+
 --
 
 sha256 - max_n 4
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler               -        125.20       6266.00        110.00        108.80        109.00        109.00
-Preprocess             -        316.40             -        348.60        342.80        347.20        343.40
-Prover                 -       3966.07       1119.00       4063.86       3930.69       3931.41       2435.83
-Verifier               -        260.98        229.00        260.68        260.83        260.74        220.82
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler               -         28.40       6266.00         23.20         13.20
+Preprocess             -        304.80             -        298.60        296.40
+Prover                 -       3855.69       1119.00       3908.95       4553.87
+Verifier               -        267.76        229.00        266.30        281.34
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -         10444         10342          9450
+Var                    -       4202112       4203264       3904576
+Exec                   -       1195988       1195676        925524
+Extra                  -        586782        586778        295206
 
 --
 
 sha256 - max_n 8
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler               -        131.80       1219.00        109.00        108.80        109.00        109.00
-Preprocess             -        319.20             -        347.20        349.40        349.40        345.60
-Prover                 -       7060.49       1727.00       7254.10       7121.65       6939.96       3969.91
-Verifier               -        327.93        293.00        326.25        324.54        325.14        262.37
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler               -         28.20       1219.00         23.00         13.00
+Preprocess             -        306.40             -        302.00        296.00
+Prover                 -       7245.33       1727.00       7080.53       8160.26
+Verifier               -        339.80        293.00        340.88        379.01
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -         10408         10342          9450
+Var                    -       8403456       8405760       7807680
+Exec                   -       2391736       2391112       1850768
+Extra                  -       1173562       1173554        590410
 
 --
 
 sha256 - max_n 12
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler               -        140.00       1205.00        109.00        110.00        109.80        109.40
-Preprocess             -        318.00             -        347.60        346.80        348.60        351.40
-Prover                 -      13513.27       1897.00      13499.68      12485.37      10786.52       6895.25
-Verifier               -        401.59        317.00        404.59        392.87        371.06        323.61
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler               -         30.60       1205.00         23.40         13.00
+Preprocess             -        314.60             -        298.40        296.80
+Prover                 -      12564.92       1897.00      11886.72      13372.84
+Verifier               -        407.43        317.00        406.19        429.81
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -         10446         10342          9450
+Var                    -      12604800      12608256      11710784
+Exec                   -       3587484       3586548       2776012
+Extra                  -       1760342       1760330        885614
 
 --
 
 poseidon
-                    CirC     CoBBl For          Jolt     CoBBl 100      CoBBl 90      CoBBl 75      CoBBl 50
-Compiler               -        350.80       1292.00        229.20        226.40        232.60        233.60
-Preprocess             -        409.20             -        399.20        399.20        396.80        395.40
-Prover                 -       7063.80    >316412.00       7283.86       7180.29       7309.22       7302.40
-Verifier               -        384.22      >2226.00        403.57        407.09        404.23        404.83
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt
+Compiler               -         78.80       1292.00         54.40         34.80
+Preprocess             -        409.20             -        393.80        415.40
+Prover                 -       7552.06     316412.00       7891.71       7804.80
+Verifier               -        377.04       2226.00        397.34        332.05
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt
+Commit                 -         13224         11398         11817
+Var                    -       3453632       4181184       4002816
+Exec                   -       1088459       1066693       1080533
+Extra                  -        160164        149576         61198
 
 --
 

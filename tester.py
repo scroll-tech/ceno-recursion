@@ -1,7 +1,7 @@
 import os
 
 CONST_EXPAND = 3
-REPEAT = 1
+REPEAT = 5
 
 # Process A * B or A + B or A - B by reading A & B from consts
 def process_formula(consts, formula):
@@ -212,6 +212,6 @@ def execute_cobbl_no_opt(b_name, f_name, perc):
                 >> ../{f_name}\"")
 
 # BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256"]
-BENCHMARK = ["find_min"]
+BENCHMARK = ["find_min_ff", "mat_mult_ff", "poseidon"]
 for b in BENCHMARK:
     preprocess(b)

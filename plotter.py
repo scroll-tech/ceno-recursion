@@ -1,3 +1,5 @@
+import matplotlib.pyplot as plt
+
 def extract_time(f, l):
     # Jolt time_data contains 3 metrics: compiler, prover, verifier
     # CoBBl time_data contains 4 metrics: compiler, preprocessor, prover, verifier
@@ -155,8 +157,39 @@ def parse_cobbl(b_name, jolt_result):
 
     f.close()
 
+# Generate plots based on data
+# circ_data is of size 3 (Compiler, Prover, Verifier) x Num_Bench x 3 (100, 75, 50)
+# jolt_data is of size 3 (Compiler, Prover, Verifier) x Num_Bench x 2 (u32, ff)
+# constraint_data is of size 3 (Commit, Exec, Var) x 2 (Circ, CoBBl) x Num_Expand
+def gen_plots(circ_data): #, jolt_data, constraint_data, opt_data):
+    colors = [["maroon", "orangered", "salmon"], ["darkgreen", "seagreen", "yellowgreen"], ["steelblue", "dodgerblue", "skyblue"]]
+
+    # Runtime graphs: Percentage comparison between compiler, prover, verifier
+    runtime_benchmark_names = ["Find Min, N = 1000", "Mat Mult, N = 4x4"]
+    runtime_subplot_name = ["Compiler %", "Prover %", "Verifier %"]
+    circ_plot_name = "Circ - CoBBl"
+    for i in range(3):
+        plt.subplot(3, 1, i + 1)
+        for bench in range(len(runtime_benchmark_names)):
+            # 100, 75, 50
+            for j in range(3):
+                if j == 1:
+                    plt.bar(5 * bench + j, circ_data[i][bench][j], color=colors[i][j], tick_label=runtime_benchmark_names[bench])
+                else:
+                    plt.bar(5 * bench + j, circ_data[i][bench][j], color=colors[i][j])
+        ax = plt.gca()
+        ax.set_xticks([5 * bench + 1 for bench in range(len(runtime_benchmark_names))])
+        ax.set_xticklabels(runtime_benchmark_names)
+        plt.title(runtime_subplot_name[i])
+
+    plt.tight_layout()
+    plt.show()
+
+
 BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "find_min_ff", "mat_mult_ff", "sha256", "poseidon"]
 # BENCHMARK = ["find_min"]
-jolt_result = parse_jolt()
-for b in BENCHMARK:
-    parse_cobbl(b, jolt_result)
+# jolt_result = parse_jolt()
+# for b in BENCHMARK:
+#     parse_cobbl(b, jolt_result)
+circ_data = [[[15, 13, 11], [15, 13, 11]], [[16, 14, 12], [16, 14, 12]], [[120, 100, 80], [120, 100, 80]]]
+gen_plots(circ_data)

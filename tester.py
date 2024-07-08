@@ -1,6 +1,6 @@
 import os
 
-CONST_EXPAND = 3
+CONST_EXPAND = 8
 REPEAT = 5
 
 # Process A * B or A + B or A - B by reading A & B from consts
@@ -114,17 +114,6 @@ def preprocess(b_name):
             execute_cobbl_while(b_name, f_result_name, 100)
             execute_cobbl_no_opt(b_name, f_result_name, 100)
 
-            """
-            # v = 90% c
-            print("\nTesting V = 90% C...")
-            for c in constants:
-                v = c[4:]
-                inputs[v] = constants[c] * 9 // 10
-            with open(f"zok_tests/benchmarks/{b_name}_cobbl.input", "w") as f_input:
-                f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
-                f_input.write("END")
-            execute_cobbl_while(b_name, f_result_name, 90)
-
             # v = 75% c
             print("\nTesting V = 75% C...")
             for c in constants:
@@ -144,7 +133,6 @@ def preprocess(b_name):
                 f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
                 f_input.write("END")
             execute_cobbl_while(b_name, f_result_name, 50)
-            """
 
         for var in constants:
             constants[var] += constants_base[var]
@@ -211,7 +199,7 @@ def execute_cobbl_no_opt(b_name, f_name, perc):
                     -e 's/  \* SNARK::verify //p' \
                 >> ../{f_name}\"")
 
-# BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256"]
-BENCHMARK = ["find_min_ff", "mat_mult_ff", "poseidon"]
+# BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256", "find_min_ff", "mat_mult_ff", "poseidon"]
+BENCHMARK = ["find_min"]
 for b in BENCHMARK:
     preprocess(b)

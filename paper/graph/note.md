@@ -43,6 +43,7 @@
   * CoBBl has a higher witness and executed constraint size, as it copies the same variable across multiple blocks. However, the factor should be independent of the number of iterations.
   * For prover and verifier time, poly commitment is the dominant cost. Since instance size increases faster than witness size, we expect CoBBl's prover and verifier time to grow slower than those of CirC.
 * Question:
+  * Why is instance size of CoBBl not an exact constant?
   * Why does the CirC compiler runs in superlinear time (makes sense to some extend, since matrix size is quadratic)
 
 ### Optimization Graph

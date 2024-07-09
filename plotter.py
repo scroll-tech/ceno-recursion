@@ -438,7 +438,7 @@ def gen_circ_jolt_plots(circ_benchmark_names, circ_data, jolt_benchmark_names, j
     # Runtime graphs: Percentage comparison between compiler, prover, verifier
 
     # CIRC
-    runtime_subplot_name = ["Compiler Time (%)", "Prover Time (%)", "Verifier Time (%)"]
+    runtime_subplot_name = ["Compiler Time (% of CirC)", "Prover Time (% of CirC)", "Verifier Time (% of CirC)"]
     plt.figure(figsize=(14, 8)) 
     # Compiler, Prover, Verifier
     for i in range(3):
@@ -542,7 +542,7 @@ def gen_benchmark_plot(num_expand, runtime_data, constraint_data):
         plt.title(runtime_subplot_name[i])
         plt.legend(loc='upper left')
 
-    constraint_subplot_name = ["Instance Size (non-zero entries)", "Number of Variables", "Number of Executed Constraints"]
+    constraint_subplot_name = ["Instance Size (non-zero entries)", "Number of Witnesses", "Number of Executed Constraints"]
     # Compiler, Prover, Verifier
     for i in range(3):
         plt.subplot(2, 3, 3 + i + 1)
@@ -562,7 +562,7 @@ def gen_benchmark_plot(num_expand, runtime_data, constraint_data):
 def gen_opt_plot(opt_benchmark_names, opt_data):
     colors = [["maroon", "darkslategray", "steelblue"], ["salmon", "yellowgreen", "skyblue"]]
 
-    opt_subplot_name = ["Runtime (%)", "Proof Size (%)"]
+    opt_subplot_name = ["Runtime (% of CoBBl w/o Optimization)", "Proof Size (% of CoBBl w/o Optimization)"]
     labels = [["Compiler Time", "Prover Time", "Verifier Time"], ["Num Blocks", "Sumcheck Size", "Witness Size"]]
     plt.figure(figsize=(14, 8)) 
     # Runtime, Proof Size

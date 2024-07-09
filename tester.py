@@ -166,6 +166,7 @@ def execute_cobbl_for(b_name, f_name):
                 >> ../{f_name}\"")
     os.system(f"timeout 300 bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
                 sed -n -e 's/Preprocess time: //p' \
+                    -e 's/Total Num of Blocks: //p' \
                     -e 's/Total Inst Commit Size: //p' \
                     -e 's/Total Var Commit Size: //p' \
                     -e 's/Total Cons Exec Size: //p' \
@@ -182,6 +183,7 @@ def execute_cobbl_while(b_name, f_name, perc):
                 >> ../{f_name}\"")
     os.system(f"timeout 300 bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
                 sed -n -e 's/Preprocess time: //p' \
+                    -e 's/Total Num of Blocks: //p' \
                     -e 's/Total Inst Commit Size: //p' \
                     -e 's/Total Var Commit Size: //p' \
                     -e 's/Total Cons Exec Size: //p' \
@@ -198,6 +200,7 @@ def execute_cobbl_no_opt(b_name, f_name, perc):
                 >> ../{f_name}\"")
     os.system(f"timeout 300 bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
                 sed -n -e 's/Preprocess time: //p' \
+                    -e 's/Total Num of Blocks: //p' \
                     -e 's/Total Inst Commit Size: //p' \
                     -e 's/Total Var Commit Size: //p' \
                     -e 's/Total Cons Exec Size: //p' \
@@ -205,7 +208,8 @@ def execute_cobbl_no_opt(b_name, f_name, perc):
                     -e 's/  \* SNARK::verify //p' \
                 >> ../{f_name}\"")
 
-# BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256", "find_min_ff", "mat_mult_ff", "poseidon"]
+# BENCHMARK = ["mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256", "poseidon"]
+# BENCHMARK = ["find_min_ff", "mat_mult_ff"]
 BENCHMARK = ["find_min"]
 os.system(f"./setup.sh 2> /dev/null")
 for b in BENCHMARK:

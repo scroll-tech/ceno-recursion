@@ -6,9 +6,9 @@ Trace length: 8183
 
 --
 find_min - max_high 400
-5841ms
-639ms
-141ms
+1148ms
+2241ms
+331ms
 Trace length: 16186
 Trace length: 16186
 Trace length: 16186
@@ -17,9 +17,9 @@ Trace length: 16186
 
 --
 find_min - max_high 800
-5809ms
-818ms
-177ms
+1131ms
+3052ms
+369ms
 Trace length: 24188
 Trace length: 24188
 Trace length: 24188
@@ -28,9 +28,9 @@ Trace length: 24188
 
 --
 find_min - max_high 1200
-5869ms
-1121ms
-205ms
+1126ms
+4555ms
+501ms
 Trace length: 621
 Trace length: 621
 Trace length: 621
@@ -39,9 +39,9 @@ Trace length: 621
 
 --
 mat_mult - max_n 2
-5824ms
-414ms
-80ms
+1125ms
+1294ms
+130ms
 Trace length: 4293
 Trace length: 4293
 Trace length: 4293
@@ -50,9 +50,9 @@ Trace length: 4293
 
 --
 mat_mult - max_n 4
-5825ms
-622ms
-125ms
+1130ms
+2035ms
+280ms
 Trace length: 15111
 Trace length: 15111
 Trace length: 15111
@@ -61,9 +61,9 @@ Trace length: 15111
 
 --
 mat_mult - max_n 6
-5833ms
-842ms
-174ms
+1129ms
+3172ms
+411ms
 Trace length: 6987
 Trace length: 6987
 Trace length: 6987
@@ -72,9 +72,9 @@ Trace length: 6987
 
 --
 kmp_search - max_n 160; max_m 16
-5857ms
-677ms
-142ms
+1131ms
+2154ms
+353ms
 Trace length: 13578
 Trace length: 13578
 Trace length: 13578
@@ -83,9 +83,9 @@ Trace length: 13578
 
 --
 kmp_search - max_n 320; max_m 32
-5862ms
-790ms
-178ms
+1137ms
+3050ms
+394ms
 Trace length: 20328
 Trace length: 20328
 Trace length: 20328
@@ -94,9 +94,9 @@ Trace length: 20328
 
 --
 kmp_search - max_n 480; max_m 48
-5863ms
 1134ms
-210ms
+4585ms
+530ms
 Trace length: 3222
 Trace length: 3222
 Trace length: 3222
@@ -105,9 +105,9 @@ Trace length: 3222
 
 --
 dna_align - max_n 10
-1218ms
-538ms
-121ms
+1126ms
+1677ms
+217ms
 Trace length: 12168
 Trace length: 12168
 Trace length: 12168
@@ -116,9 +116,9 @@ Trace length: 12168
 
 --
 dna_align - max_n 20
-1206ms
-811ms
-172ms
+1133ms
+2951ms
+343ms
 Trace length: 27589
 Trace length: 27589
 Trace length: 27589
@@ -127,9 +127,9 @@ Trace length: 27589
 
 --
 dna_align - max_n 30
-1211ms
-1191ms
-215ms
+1127ms
+4867ms
+575ms
 Trace length: 4713
 Trace length: 4713
 Trace length: 4713
@@ -138,9 +138,9 @@ Trace length: 4713
 
 --
 rle_codec - max_n 100
-1215ms
-625ms
-132ms
+1131ms
+2015ms
+275ms
 Trace length: 8889
 Trace length: 8889
 Trace length: 8889
@@ -149,9 +149,9 @@ Trace length: 8889
 
 --
 rle_codec - max_n 200
-1212ms
-795ms
-161ms
+1132ms
+2725ms
+297ms
 Trace length: 13003
 Trace length: 13003
 Trace length: 13003
@@ -160,64 +160,9 @@ Trace length: 13003
 
 --
 rle_codec - max_n 300
-1220ms
-808ms
-170ms
-Trace length: 1449365
-Trace length: 1449365
-Trace length: 1449365
-Trace length: 1449365
-Trace length: 1449365
-
---
-find_min_ff - max_high 25
-12432ms
-34104ms
-1179ms
-Trace length: 2862072
-Trace length: 2862072
-Trace length: 2862072
-Trace length: 2862072
-Trace length: 2862072
-
---
-find_min_ff - max_high 50
-12712ms
-93239ms
-1531ms
-Trace length: 4278180
-Trace length: 4278180
-Trace length: 4278180
-Trace length: 4278180
-Trace length: 4278180
-
---
-find_min_ff - max_high 75
-12638ms
-297766ms
-2123ms
-Trace length: 815075
-Trace length: 815075
-Trace length: 815075
-Trace length: 815075
-Trace length: 815075
-
---
-mat_mult_ff - max_n 2
-12989ms
-17798ms
-863ms
-Trace length: 6150162
-Trace length: 6150162
-Trace length: 6150162
-Trace length: 6150162
-Trace length: 6150162
-
---
-mat_mult_ff - max_n 4
-12278ms
-337493ms
-2395ms
+1128ms
+2909ms
+349ms
 Trace length: 18844
 Trace length: 18844
 Trace length: 18844
@@ -226,9 +171,9 @@ Trace length: 18844
 
 --
 sha256 - max_n 4
-6266ms
-1119ms
-229ms
+12176ms
+4826ms
+635ms
 Trace length: 37620
 Trace length: 37620
 Trace length: 37620
@@ -237,9 +182,9 @@ Trace length: 37620
 
 --
 sha256 - max_n 8
-1219ms
-1727ms
-293ms
+1155ms
+8094ms
+701ms
 Trace length: 56396
 Trace length: 56396
 Trace length: 56396
@@ -248,9 +193,9 @@ Trace length: 56396
 
 --
 sha256 - max_n 12
-1205ms
-1897ms
-317ms
+1129ms
+9273ms
+879ms
 Trace length: 5298933
 Trace length: 5298933
 Trace length: 5298933
@@ -259,6 +204,6 @@ Trace length: 5298933
 
 --
 poseidon
-1292ms
-316412ms
-2226ms
+12316ms
+1232184ms
+8207ms

@@ -157,9 +157,14 @@ def parse_cobbl(b_name, jolt_result):
     f.close()
 
 # Only record benchmark cases included in requested_b_name_list
-def extract_circ_plot(b_name_list, requested_b_name_list):
+def extract_circ_jolt_plot(b_name_list, jolt_result, circ_b_name_list, jolt_b_name_list):
     # circ_data is of size 3 (Compiler, Prover, Verifier) x Num_Bench x 3 (100, 75, 50)
     circ_data = [[], [], []]
+    jolt_data = [[], [], []]
+
+    # When processing the u32 cases, record where each field case would fit in
+    # For JOLT
+    field_case_name_list = {}
     for b_name in b_name_list:
         f = open(f"zok_tests/raw/{b_name}_result.raw", 'r')
         line = f.readline().strip()
@@ -232,7 +237,7 @@ def extract_circ_plot(b_name_list, requested_b_name_list):
                     time_entries[e][t] /= repeat
 
             case_name = f"{b_name} - {consts}" if len(consts) > 0 else f"{b_name}"
-            if case_name in requested_b_name_list:
+            if case_name in circ_b_name_list:
                 # Compiler, Prover, Verifier
                 for j in range(3):
                     k = [0, 2, 3][j]
@@ -241,10 +246,21 @@ def extract_circ_plot(b_name_list, requested_b_name_list):
                         circ_data[j].append([0, 0, 0])
                     else:
                         circ_data[j].append([time_entries[1][k] / time_entries[0][k], time_entries[4][k] / time_entries[0][k], time_entries[5][k] / time_entries[0][k]])
+            
+            if case_name in jolt_b_name_list:
+                # Compiler, Prover, Verifier
+                for j in range(3):
+                    k = [0, 2, 3][j]
+                    # Jolt
+                    if case_name in jolt_result.keys():
+                        jolt_data[j].append([jolt_result[case_name][j], time_entries[2][k]])
+                    else:
+                        jolt_data[j].append([0, 0])
+
         line = f.readline().strip()
 
         f.close()
-    return (circ_data)
+    return (circ_data, jolt_data)
 
 def extract_benchmark_plot(b_name):
     f = open(f"zok_tests/raw/{b_name}_result.raw", 'r')
@@ -340,42 +356,95 @@ def extract_benchmark_plot(b_name):
 # Generate plots based on data
 # circ_data is of size 3 (Compiler, Prover, Verifier) x Num_Bench x 3 (100, 75, 50)
 # jolt_data is of size 3 (Compiler, Prover, Verifier) x Num_Bench x 2 (u32, ff)
-def gen_circ_jolt_plots(runtime_benchmark_names, circ_data): #, jolt_data, constraint_data, opt_data):
-    colors = [["maroon", "orangered", "salmon"], ["darkgreen", "seagreen", "yellowgreen"], ["steelblue", "dodgerblue", "skyblue"]]
+def gen_circ_jolt_plots(circ_benchmark_names, circ_data, jolt_benchmark_names, jolt_data):
+    colors = [["maroon", "orangered", "salmon"], ["darkslategray", "seagreen", "yellowgreen"], ["steelblue", "dodgerblue", "skyblue"]]
 
     # Runtime graphs: Percentage comparison between compiler, prover, verifier
-    runtime_subplot_name = ["Compiler %", "Prover %", "Verifier %"]
+
+    # CIRC
+    runtime_subplot_name = ["Compiler Time (%)", "Prover Time (%)", "Verifier Time (%)"]
     circ_plot_name = "Circ - CoBBl"
-    
     plt.figure(figsize=(14, 8)) 
     # Compiler, Prover, Verifier
     for i in range(3):
         plt.subplot(3, 1, i + 1)
-        for bench in range(len(runtime_benchmark_names)):
+        for bench in range(len(circ_benchmark_names)):
             # 100, 75, 50
             for j in range(3):
+                if bench == 0:
+                    if j == 0:
+                        plt.bar(5 * bench + j, circ_data[i][bench][j], color=colors[i][j], label='CoBBl 100')
+                    elif j == 1:
+                        plt.bar(5 * bench + j, circ_data[i][bench][j], color=colors[i][j], tick_label=circ_benchmark_names[bench], label='CoBBl 75')
+                    elif j == 2:
+                        plt.bar(5 * bench + j, circ_data[i][bench][j], color=colors[i][j], label='CoBBl 50')
                 if j == 1:
-                    plt.bar(5 * bench + j, circ_data[i][bench][j], color=colors[i][j], tick_label=runtime_benchmark_names[bench])
+                    plt.bar(5 * bench + j, circ_data[i][bench][j], color=colors[i][j], tick_label=circ_benchmark_names[bench])
                 else:
                     plt.bar(5 * bench + j, circ_data[i][bench][j], color=colors[i][j])
-                plt.annotate((f"%0.2f" % (circ_data[i][bench][j] * 100)), (5 * bench + j - 0.4, circ_data[i][bench][j] + (0.02 if i == 2 else 0.002)))
+                plt.annotate((f"%0.2f" % (circ_data[i][bench][j] * 100)), (5 * bench + j, circ_data[i][bench][j]), horizontalalignment='center',)
         if i == 2:
             plt.axhline(y=1, linestyle='--', color="red")
         ax = plt.gca()
-        ax.set_xticks([5 * bench + 1 for bench in range(len(runtime_benchmark_names))])
-        ax.set_xticklabels(runtime_benchmark_names)
+        ax.set_xticks([5 * bench + 1 for bench in range(len(circ_benchmark_names))])
+        ax.set_xticklabels(circ_benchmark_names)
         vals = ax.get_yticks()
         ax.set_yticklabels(['{:,.0%}'.format(x) for x in vals])
         plt.title(runtime_subplot_name[i])
+        plt.legend(loc='upper left')
 
     plt.tight_layout()
     plt.savefig('paper/graph/fig_eval_circ.png')
+
+    # JOLT
+    runtime_subplot_name = ["Compiler Time", "Prover Time", "Verifier Time"]
+    jolt_plot_name = "Jolt - CoBBl"
+    fig, ax = plt.subplots(3, 2, gridspec_kw={'width_ratios': [6, 1]}, figsize=(14, 8))
+    # Compiler, Prover, Verifier
+    for i in range(3):
+        axi = ax[i][0]
+        # Separate out the final benchmark (Poseidon) into a standalone graph
+        for bench in range(len(jolt_benchmark_names) - 1):
+            # Jolt, CoBBl
+            for j in range(2):
+                if bench == 0:
+                    if j == 0:
+                        axi.bar(4 * bench + j, jolt_data[i][bench][j], color=colors[i][j], label="Jolt")
+                    elif j == 1:
+                        axi.bar(4 * bench + j, jolt_data[i][bench][j], color=colors[i][j], tick_label=jolt_benchmark_names[bench], label="CoBBl")
+                elif j == 1:
+                    axi.bar(4 * bench + j, jolt_data[i][bench][j], color=colors[i][j], tick_label=jolt_benchmark_names[bench])
+                else:
+                    axi.bar(4 * bench + j, jolt_data[i][bench][j], color=colors[i][j])
+                axi.annotate((f"%0.1f" % (jolt_data[i][bench][j])), (4 * bench + j, jolt_data[i][bench][j]), horizontalalignment='center', verticalalignment='bottom')
+        axi.set_xticks([4 * bench + 0.5 for bench in range(len(jolt_benchmark_names) - 1)])
+        axi.set_xticklabels(jolt_benchmark_names[:-1])
+        axi.title.set_text(runtime_subplot_name[i])
+        axi.legend(loc='upper left')
+
+        # Final Benchmark (Poseidon)
+        axi = ax[i][1]
+        bench = len(jolt_benchmark_names) - 1
+        # Jolt, CoBBl
+        for j in range(2):
+            if j == 0:
+                axi.bar(j, jolt_data[i][bench][j], color=colors[i][j], label="Jolt")
+            elif j == 1:
+                axi.bar(j, jolt_data[i][bench][j], color=colors[i][j], tick_label=jolt_benchmark_names[bench], label="CoBBl")
+            axi.annotate((f"%0.1f" % (jolt_data[i][bench][j])), (j, jolt_data[i][bench][j]), horizontalalignment='center', verticalalignment='bottom')
+        axi.set_xticks([0.5])
+        axi.set_xticklabels(jolt_benchmark_names[-1:])
+        axi.set_xlim([-1.5, 2.5])
+        # plt.title(runtime_subplot_name[i])
+
+    plt.tight_layout()
+    plt.savefig('paper/graph/fig_eval_jolt.png')
 
 # runtime_data is of size 3 (Compiler, Prover, Verifier) x 2 (CirC, CoBBl) x Num_Expand
 # constraint_data is of size 3 (Commit, Exec, Var) x 2 (CirC, CoBBl) x Num_Expand
 def gen_benchmark_plot(num_expand, runtime_data, constraint_data):
     benchmark_runtime_name = "Runtime Comparison for Find Min"
-    x_data = [200 * x for x in range(num_expand)]
+    x_data = [200 * (x + 1) for x in range(num_expand)]
     runtime_subplot_name = ["Compile Time (ms)", "Prove Time (ms)", "Verification Time (ms)"]
     plt.figure(figsize=(14, 8)) 
     # Compiler, Prover, Verifier
@@ -388,7 +457,7 @@ def gen_benchmark_plot(num_expand, runtime_data, constraint_data):
         for j, txt in enumerate(runtime_data[i][1]):
             plt.annotate(f"%0.0f" % txt, (x_data[j] * 1.02, runtime_data[i][1][j] * 0.98))
         plt.title(runtime_subplot_name[i])
-        plt.legend()
+        plt.legend(loc='upper left')
 
     constraint_subplot_name = ["Instance Size (non-zero entries)", "Number of Variables", "Number of Executed Constraints"]
     # Compiler, Prover, Verifier
@@ -401,7 +470,7 @@ def gen_benchmark_plot(num_expand, runtime_data, constraint_data):
         for j, txt in enumerate(constraint_data[i][1]):
             plt.annotate(f"%0.0f" % txt, (x_data[j] * 1.02, constraint_data[i][1][j] * 0.98))
         plt.title(constraint_subplot_name[i])
-        plt.legend()
+        plt.legend(loc='upper left')
     
     plt.tight_layout()
     plt.savefig('paper/graph/fig_eval_find_min.png')
@@ -413,8 +482,8 @@ jolt_result = parse_jolt()
 for b in BENCHMARK:
     parse_cobbl(b, jolt_result)
 
-# Graph 1
-requested_b_name_list = [
+# CirC & Jolt Graph
+circ_b_name_list = [
     "find_min - max_high 1000", 
     "mat_mult - max_n 4", 
     "kmp_search - max_n 480; max_m 48",
@@ -423,19 +492,36 @@ requested_b_name_list = [
     "sha256 - max_n 4",
     "poseidon"
 ]
-runtime_benchmark_names = [
+jolt_b_name_list = [
+    "find_min - max_high 1200", 
+    "mat_mult - max_n 4", 
+    "kmp_search - max_n 480; max_m 48",
+    "dna_align - max_n 10",
+    "rle_codec - max_n 300",
+    "sha256 - max_n 4",
+    "poseidon"
+]
+(circ_data, jolt_data) = extract_circ_jolt_plot(BENCHMARK, jolt_result, circ_b_name_list, jolt_b_name_list)
+circ_benchmark_names = [
     "Find Min, len = 1000", 
-    "Matrix Mult, size = 4x4",
-    "Pattern Match, len = 480 / 48",
+    "Mat Mult, size = 4x4",
+    "Pat Match, len = 480 / 48",
     "LCS, len = 10",
     "RLE, len = 300",
     "Sha256, len = 4",
     "Poseidon, len = 8"
 ]
-circ_data = extract_circ_plot(BENCHMARK, requested_b_name_list)
-print(circ_data)
-gen_circ_jolt_plots(runtime_benchmark_names, circ_data)
+jolt_benchmark_names = [
+    "Find Min, len = 1200", 
+    "Mat Mult, size = 4x4",
+    "Pat Match, len = 480 / 48",
+    "LCS, len = 10",
+    "RLE, len = 300",
+    "Sha256, len = 4",
+    "Poseidon, len = 8"
+]
+gen_circ_jolt_plots(circ_benchmark_names, circ_data, jolt_benchmark_names, jolt_data)
 
-# Graph 2
+# Benchmark Graph
 (num_expand, runtime_data, constraint_data) = extract_benchmark_plot("find_min")
 gen_benchmark_plot(num_expand, runtime_data, constraint_data)

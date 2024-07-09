@@ -109,11 +109,17 @@ def preprocess(b_name):
             with open(f"zok_tests/benchmarks/{b_name}_cobbl.input", "w") as f_input:
                 f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
                 f_input.write("END")
+
+            # Default multicore to compare with CirC
             execute_baseline(b_name, f_result_name)
             execute_cobbl_for(b_name, f_result_name)
+            # Disable multicore to compare with Jolt
+            os.system(f"cd spartan_parallel && RUSTFLAGS=\"-C target_cpu=native\" cargo build --release --features profile --example interface 2> /dev/null")
             execute_cobbl_while(b_name, f_result_name, 100)
             execute_cobbl_no_opt(b_name, f_result_name, 100)
 
+            # Enable multicore again to compare with CirC
+            os.system(f"cd spartan_parallel && RUSTFLAGS=\"-C target_cpu=native\" cargo build --release --features multicore,profile --example interface 2> /dev/null")
             # v = 75% c
             print("\nTesting V = 75% C...")
             for c in constants:
@@ -201,5 +207,6 @@ def execute_cobbl_no_opt(b_name, f_name, perc):
 
 # BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256", "find_min_ff", "mat_mult_ff", "poseidon"]
 BENCHMARK = ["find_min"]
+os.system(f"./setup.sh 2> /dev/null")
 for b in BENCHMARK:
     preprocess(b)

@@ -614,7 +614,7 @@ circ_b_name_list = [
     "kmp_search - max_n 480; max_m 48",
     "dna_align - max_n 10",
     "rle_codec - max_n 20",
-    "sha256 - max_n 2",
+    "sha256 - max_n 1",
     "poseidon"
 ]
 jolt_b_name_list = [
@@ -633,7 +633,7 @@ circ_benchmark_names = [
     "Pat Match, len = 480 / 48",
     "LCS, len = 10",
     "RLE, len = 20",
-    "Sha256, len = 2",
+    "Sha256, len = 1",
     "Poseidon, len = 8"
 ]
 jolt_benchmark_names = [

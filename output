@@ -338,6 +338,23 @@ Exec                   -         93310         84989         85929         73057
 
 --
 
+sha256 - max_n 1
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt      CoBBl 75      CoBBl 50
+Compiler         4620.60         28.20             -         24.00         13.00         24.00         23.40
+Preprocess      58839.31        300.80             -        875.80        875.20        306.00        296.00
+Prover         617883.31       1510.36             -       3374.84       3633.43        456.88        455.03
+Verifier          493.56        187.26             -        190.08        202.32         71.91         72.46
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt      CoBBl 75      CoBBl 50
+Block           33110683            24            23            29            21            21
+Commit            262144         10374         10342          9450         10342         10342
+Var               249128       1051104       1051392        977248           768           768
+Exec                   -        299177        299099        231591           240           240
+
+--
+
 sha256 - max_n 2
 RUNTIME
                     CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt      CoBBl 75      CoBBl 50

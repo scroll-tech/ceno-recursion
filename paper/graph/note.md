@@ -11,7 +11,8 @@
   * Since the CoBBl prover commits to a much smaller instance than CirC, it should also show significant speedup.
   * The CoBBl verifier opens a smaller instance commitment but a larger variable commitment. Since instance size grows faster than variable size, CoBBl verifier should be faster than CirC if number of iterations is large enough.
 * Question:
-  * Why is CoBBl compiler time not constant?
+  * Why is CoBBl compiler time not constant?  
+  > XXX: This is because 100% uses for loops while 75% uses while loops
 
 ### Jolt Graph
 * Experiment Setup:

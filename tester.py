@@ -1,7 +1,8 @@
 import os
 
-CONST_EXPAND = 8
+CONST_EXPAND = 3
 REPEAT = 5
+TIMEOUT = 3000
 
 # Process A * B or A + B or A - B by reading A & B from consts
 def process_formula(consts, formula):
@@ -146,7 +147,7 @@ def preprocess(b_name):
 def execute_baseline(b_name, f_name):
     print("BASELINE")
     os.system(f"echo 'BASELINE' >> {f_name}")
-    os.system(f"timeout 300 bash -c \"cd circ_baseline && target/release/examples/circ --language zsharp {b_name} r1cs | \
+    os.system(f"timeout {TIMEOUT} bash -c \"cd circ_baseline && target/release/examples/circ --language zsharp {b_name} r1cs | \
                 sed -n -e 's/Compiler time: //p' \
                     -e 's/Final R1cs size: //p' \
                     -e 's/  \* number_of_variables //p' \
@@ -161,10 +162,10 @@ def execute_baseline(b_name, f_name):
 def execute_cobbl_for(b_name, f_name):
     print("COBBL - FOR")
     os.system(f"echo 'COBBL_FOR' >> {f_name}")
-    os.system(f"timeout 300 bash -c \"cd circ_blocks && target/release/examples/zxc {b_name} | \
+    os.system(f"timeout {TIMEOUT} bash -c \"cd circ_blocks && target/release/examples/zxc {b_name} | \
             sed -n 's/Compiler time: //p' \
                 >> ../{f_name}\"")
-    os.system(f"timeout 300 bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
+    os.system(f"timeout {TIMEOUT} bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
                 sed -n -e 's/Preprocess time: //p' \
                     -e 's/Total Num of Blocks: //p' \
                     -e 's/Total Inst Commit Size: //p' \
@@ -178,10 +179,10 @@ def execute_cobbl_while(b_name, f_name, perc):
     b_name += "_cobbl"
     print("COBBL - WHILE")
     os.system(f"echo 'COBBL_WHILE {perc}' >> {f_name}")
-    os.system(f"timeout 300 bash -c \"cd circ_blocks && target/release/examples/zxc {b_name} | \
+    os.system(f"timeout {TIMEOUT} bash -c \"cd circ_blocks && target/release/examples/zxc {b_name} | \
             sed -n 's/Compiler time: //p' \
                 >> ../{f_name}\"")
-    os.system(f"timeout 300 bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
+    os.system(f"timeout {TIMEOUT} bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
                 sed -n -e 's/Preprocess time: //p' \
                     -e 's/Total Num of Blocks: //p' \
                     -e 's/Total Inst Commit Size: //p' \
@@ -195,10 +196,10 @@ def execute_cobbl_no_opt(b_name, f_name, perc):
     b_name += "_cobbl"
     print("COBBL - NO_OPT")
     os.system(f"echo 'COBBL_NO_OPT {perc}' >> {f_name}")
-    os.system(f"timeout 300 bash -c \"cd circ_blocks && target/release/examples/zxc --no_opt {b_name} | \
+    os.system(f"timeout {TIMEOUT} bash -c \"cd circ_blocks && target/release/examples/zxc --no_opt {b_name} | \
             sed -n 's/Compiler time: //p' \
                 >> ../{f_name}\"")
-    os.system(f"timeout 300 bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
+    os.system(f"timeout {TIMEOUT} bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
                 sed -n -e 's/Preprocess time: //p' \
                     -e 's/Total Num of Blocks: //p' \
                     -e 's/Total Inst Commit Size: //p' \
@@ -210,7 +211,7 @@ def execute_cobbl_no_opt(b_name, f_name, perc):
 
 # BENCHMARK = ["mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256", "poseidon"]
 # BENCHMARK = ["find_min_ff", "mat_mult_ff"]
-BENCHMARK = ["find_min"]
+BENCHMARK = ["dna_align"]
 os.system(f"./setup.sh 2> /dev/null")
 for b in BENCHMARK:
     preprocess(b)

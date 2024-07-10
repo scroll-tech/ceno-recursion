@@ -1,5 +1,7 @@
 import matplotlib.pyplot as plt
 
+TIMEOUT = 3000
+
 def extract_time(f, l):
     # Jolt time_data contains 3 metrics: compiler, prover, verifier
     # CoBBl time_data contains 4 metrics: compiler, preprocessor, prover, verifier
@@ -235,6 +237,9 @@ def extract_circ_jolt_plot(b_name_list, jolt_result, circ_b_name_list, jolt_b_na
                 for j in range(3):
                     k = [0, 2, 3][j]
                     # CirC
+                    # Timeout can occur on Compiler and Prover
+                    if time_entries[0][k] == 0 and j != 2:
+                        time_entries[0][k] = TIMEOUT * 1000
                     if time_entries[0][k] == 0:
                         circ_data[j].append([0, 0, 0])
                     else:
@@ -603,31 +608,49 @@ for b in BENCHMARK:
     parse_cobbl(b, jolt_result)
 
 # CirC & Jolt Graph
-b_name_list = [
+circ_b_name_list = [
     "find_min - max_high 1200", 
     "mat_mult - max_n 4", 
     "kmp_search - max_n 480; max_m 48",
     "dna_align - max_n 10",
-    "rle_codec - max_n 300",
-    "sha256 - max_n 4",
+    "rle_codec - max_n 20",
+    "sha256 - max_n 2",
     "poseidon"
 ]
-(circ_data, jolt_data) = extract_circ_jolt_plot(BENCHMARK, jolt_result, b_name_list, b_name_list)
-benchmark_names = [
+jolt_b_name_list = [
+    "find_min - max_high 1200", 
+    "mat_mult - max_n 4", 
+    "kmp_search - max_n 480; max_m 48",
+    "dna_align - max_n 30",
+    "rle_codec - max_n 60",
+    "sha256 - max_n 6",
+    "poseidon"
+]
+(circ_data, jolt_data) = extract_circ_jolt_plot(BENCHMARK, jolt_result, circ_b_name_list, jolt_b_name_list)
+circ_benchmark_names = [
     "Find Min, len = 1200", 
     "Mat Mult, size = 4x4",
     "Pat Match, len = 480 / 48",
     "LCS, len = 10",
-    "RLE, len = 300",
-    "Sha256, len = 4",
+    "RLE, len = 20",
+    "Sha256, len = 2",
     "Poseidon, len = 8"
 ]
-gen_circ_jolt_plots(benchmark_names, circ_data, benchmark_names, jolt_data)
+jolt_benchmark_names = [
+    "Find Min, len = 1200", 
+    "Mat Mult, size = 4x4",
+    "Pat Match, len = 480 / 48",
+    "LCS, len = 30",
+    "RLE, len = 60",
+    "Sha256, len = 6",
+    "Poseidon, len = 8"
+]
+gen_circ_jolt_plots(circ_benchmark_names, circ_data, jolt_benchmark_names, jolt_data)
 
 # Benchmark Graph
 (num_expand, runtime_data, constraint_data) = extract_benchmark_plot("find_min")
 gen_benchmark_plot(num_expand, runtime_data, constraint_data)
 
 # Opt Graph
-opt_data = extract_opt_plot(BENCHMARK, b_name_list)
-gen_opt_plot(benchmark_names, opt_data)
+opt_data = extract_opt_plot(BENCHMARK, jolt_b_name_list)
+gen_opt_plot(jolt_benchmark_names, opt_data)

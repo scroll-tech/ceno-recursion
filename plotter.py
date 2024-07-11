@@ -615,7 +615,7 @@ circ_b_name_list = [
     "dna_align - max_n 10",
     "rle_codec - max_n 20",
     "sha256 - max_n 1",
-    "poseidon"
+    "poseidon - max_n 2"
 ]
 jolt_b_name_list = [
     "find_min - max_high 1200", 
@@ -624,7 +624,7 @@ jolt_b_name_list = [
     "dna_align - max_n 30",
     "rle_codec - max_n 60",
     "sha256 - max_n 6",
-    "poseidon"
+    "poseidon - max_n 6"
 ]
 (circ_data, jolt_data) = extract_circ_jolt_plot(BENCHMARK, jolt_result, circ_b_name_list, jolt_b_name_list)
 circ_benchmark_names = [
@@ -634,7 +634,7 @@ circ_benchmark_names = [
     "LCS, len = 10",
     "RLE, len = 20",
     "Sha256, len = 1",
-    "Poseidon, len = 8"
+    "Poseidon, len = 2"
 ]
 jolt_benchmark_names = [
     "Find Min, len = 1200", 
@@ -643,7 +643,7 @@ jolt_benchmark_names = [
     "LCS, len = 30",
     "RLE, len = 60",
     "Sha256, len = 6",
-    "Poseidon, len = 8"
+    "Poseidon, len = 6"
 ]
 gen_circ_jolt_plots(circ_benchmark_names, circ_data, jolt_benchmark_names, jolt_data)
 

@@ -1,12 +1,12 @@
 CONST:
+max_n 2
 
 INPUT:
-n 6
 
 PROGRAM:
-def ark(u32 n, field[7] state, field[455] c, u32 it) -> field[7]:
+def ark(u32 n, field[{max_n} + 1] state, field[455] c, u32 it) -> field[{max_n} + 1]:
     // BASELINE
-    for u32 i in 0..6 do
+    for u32 i in 0..{max_n} do
         if i < n then
             state[i] = state[i] + c[it + i]
         endif
@@ -20,10 +20,10 @@ def ark(u32 n, field[7] state, field[455] c, u32 it) -> field[7]:
     // END_SPLIT
     return state
 
-def sbox(u32 n, field[7] state, u32 f, u32 p, u32 r) -> field[7]:
+def sbox(u32 n, field[{max_n} + 1] state, u32 f, u32 p, u32 r) -> field[{max_n} + 1]:
     state[0] = state[0]**5
     // BASELINE
-    for u32 i in 1..6 do
+    for u32 i in 1..{max_n} do
         if i < n then
             state[i] = ((r < f/2) || (r >= f/2 + p)) ? state[i]**5 : state[i]
         endif
@@ -37,15 +37,15 @@ def sbox(u32 n, field[7] state, u32 f, u32 p, u32 r) -> field[7]:
     // END_SPLIT
     return state
 
-def mix(u32 n, field[7] state, field[49] m) -> field[7]:
-    field[7] out = [0; 7]
+def mix(u32 n, field[{max_n} + 1] state, field[49] m) -> field[{max_n} + 1]:
+    field[{max_n} + 1] out = [0; {max_n} + 1]
     // BASELINE
-    for u32 i in 0..6 do
+    for u32 i in 0..{max_n} do
         if i < n then
             field acc = 0
-            for u32 j in 0..6 do
+            for u32 j in 0..{max_n} do
                 if j < n then
-                    acc = acc + (state[j] * m[i * 7 + j])
+                    acc = acc + (state[j] * m[i * {max_n} + 1 + j])
                 endif
                 out[i] = acc
             endfor
@@ -57,7 +57,7 @@ def mix(u32 n, field[7] state, field[49] m) -> field[7]:
         field acc = 0
         u32 j = 0
         while j < n do
-            acc = acc + (state[j] * m[i * 7 + j])
+            acc = acc + (state[j] * m[i * {max_n} + 1 + j])
             j = j + 1
         endwhile
         out[i] = acc
@@ -66,7 +66,7 @@ def mix(u32 n, field[7] state, field[49] m) -> field[7]:
     // END_SPLIT
     return out
 
-def poseidon(u32 n, field[6] inputs) -> field:
+def poseidon(u32 n, field[{max_n}] inputs) -> field:
     field[455] POSEIDON_C = [
         6102929899913997120028526874925676104844758924303424659933606352399117208470,
         6241576116551563299583110165591268824843574050316410672639976081232485352845,
@@ -591,9 +591,9 @@ def poseidon(u32 n, field[6] inputs) -> field:
     field[455] c = POSEIDON_C
     field[49] m = POSEIDON_M
 
-    field[7] state = [0; 7]
+    field[{max_n} + 1] state = [0; {max_n} + 1]
     // BASELINE
-    for u32 i in 1..7 do
+    for u32 i in 1..{max_n} + 1 do
         if i < t then
             state[i] = inputs[i - 1]
         endif
@@ -626,9 +626,9 @@ def poseidon(u32 n, field[6] inputs) -> field:
 
 def main(u32 n) -> field:
 
-    field[6] padded_message = [0; 6]
+    field[{max_n}] padded_message = [0; {max_n}]
     field sum = 0
-    for field i in 0..6 do
+    for field i in 0..{max_n} do
         sum = sum + i
         padded_message[i] = sum
     endfor

@@ -406,47 +406,30 @@ Exec                   -       1793862       1793394       1388146       1195676
 
 --
 
-poseidon
+poseidon - max_n 2
+RUNTIME
+                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt      CoBBl 75      CoBBl 50
+Compiler          439.40         72.80             -         53.80         38.40         54.20         53.20
+Preprocess      43939.81        380.00             -       1307.00       1431.00        391.00        391.00
+Prover         498261.73       2449.50             -       6413.44       6550.94       2288.06       2284.91
+Verifier          498.41        253.32             -        303.75        326.67        255.71        255.69
+--
+CONSTRAINTS
+                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt      CoBBl 75      CoBBl 50
+Block           17114088            22            27            35            27            27
+Commit            262144         11365         11192         11813         11192         11192
+Var               182297       1074176       1481856       1173888       1087872       1087872
+Exec                   -        280018        365977        304609        269082        269082
+
+--
+
+poseidon - max_n 6
 RUNTIME
                     CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt      CoBBl 75      CoBBl 50
 Compiler               -         78.40      12960.00         55.00         35.20         55.20         55.00
 Preprocess             -        407.40             -       1334.60       1447.20        395.80        393.80
 Prover                 -       7184.09    1254297.00      15917.81      16182.86       7427.03       7269.77
 Verifier               -        380.98       8308.00        409.09        421.60        398.83        395.69
---
-CONSTRAINTS
-                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt      CoBBl 75      CoBBl 50
-Block                  -            24            27            35            27            27
-Commit                 -         13224         11398         11817         11398         11398
-Var                    -       3453632       4181184       4002816       4181184       4181184
-Exec                   -       1088459       1066693       1080533       1066693       1066693
-
---
-
-poseidon
-RUNTIME
-                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt      CoBBl 75      CoBBl 50
-Compiler               -         76.80      12960.00         55.20         35.00         55.40         54.60
-Preprocess             -        409.00             -       1334.60       1449.60        396.80        396.20
-Prover                 -       7329.14    1254297.00      15852.62      16344.35       7396.74       7351.84
-Verifier               -        382.74       8308.00        407.00        422.54        396.11        396.46
---
-CONSTRAINTS
-                    CirC     CoBBl For    CoBBl While    CoBBl NoOpt      CoBBl 75      CoBBl 50
-Block                  -            24            27            35            27            27
-Commit                 -         13224         11398         11817         11398         11398
-Var                    -       3453632       4181184       4002816       4181184       4181184
-Exec                   -       1088459       1066693       1080533       1066693       1066693
-
---
-
-poseidon
-RUNTIME
-                    CirC     CoBBl For          Jolt    CoBBl While    CoBBL NoOpt      CoBBl 75      CoBBl 50
-Compiler               -         78.60      12960.00         56.00         35.20         55.40         55.00
-Preprocess             -        407.60             -       1333.60       1454.60        394.00        397.60
-Prover                 -       7268.16    1254297.00      15785.67      16451.64       7299.68       7254.29
-Verifier               -        376.17       8308.00        411.35        425.96        394.70        393.04
 --
 CONSTRAINTS
                     CirC     CoBBl For    CoBBl While    CoBBl NoOpt      CoBBl 75      CoBBl 50

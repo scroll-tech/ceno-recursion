@@ -456,7 +456,7 @@ def gen_circ_jolt_plots(circ_benchmark_names, circ_data, jolt_benchmark_names, j
             for j in range(3):
                 if bench == 0:
                     if j == 0:
-                        plt.bar(5 * bench + j, circ_data[i][bench][j], color=colors[i][j], label='CoBBl 100')
+                        plt.bar(5 * bench + j, circ_data[i][bench][j], color=colors[i][j], label='CoBBl For')
                     elif j == 1:
                         plt.bar(5 * bench + j, circ_data[i][bench][j], color=colors[i][j], tick_label=circ_benchmark_names[bench], label='CoBBl 75')
                     elif j == 2:

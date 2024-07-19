@@ -1,5 +1,5 @@
 CONST:
-max_n 20
+max_n 20 60
 
 INPUT:
 x 0

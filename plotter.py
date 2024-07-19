@@ -92,7 +92,7 @@ def parse_cobbl(b_name, jolt_result):
             # CoBBl: Compiler Time, (Num NNZ, Num Vars, Num Cons) x3, Preprocess Time, Prover Time, Verifier Time
             for e in range(1, 6):
                 # read entry name
-                f.readline()
+                tmp = f.readline()
                 tmp_time = extract_time(f, 1)
                 time_entries[e][0] = tmp_time[0]
                 

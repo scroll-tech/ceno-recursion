@@ -3,25 +3,25 @@
  * length m and the other of length n in O(m*n) time
  */
 def main(u32 x, u32 n) -> u32:
-    u32[20] A = [0; 20]
-    u32[20] B = [0; 20]
-    u32[20] LCS = [0; 20]
-    u32 arr_size = 20
+    u32[30] A = [0; 30]
+    u32[30] B = [0; 30]
+    u32[30] LCS = [0; 30]
+    u32 arr_size = 30
 
     // Dynamic programming memo
-    u32[400] LL = [0; 400]
+    u32[900] LL = [0; 900]
     // Hold choices made at each step, for use when backtracking
-    u32[400] choices = [0; 400]
+    u32[900] choices = [0; 900]
     // Used when backtracking
     u32 diag = 0
     u32 down = 0
     u32 right = 0
 
     u32 i = n - 1
-    for u32 count_i in 0..20 do
+    for u32 count_i in 0..30 do
         if i + 1 > 0 then
             u32 j = n - 1
-            for u32 count_j in 0..20 do
+            for u32 count_j in 0..30 do
                 if j + 1 > 0 then
                     if A[i] == B[j] then
                         if i+1 < n && j+1 < n then
@@ -66,10 +66,10 @@ def main(u32 x, u32 n) -> u32:
     u32 iPtr = 0
     u32 jPtr = 0 // Pointers to where in LL we are with respect to backtracking
 
-    for u32 i in 0..20 do
+    for u32 i in 0..30 do
         if i < n then
             LCS[i] = 0 //If A[i] is not in the LCS, this remains 0.
-            for u32 j in 0..20 do
+            for u32 j in 0..30 do
                 if j < n then
                     if i == iPtr && j == jPtr then // Loop until we meet up with the iPtr and jPtr
                         if choices[i * arr_size + j] == 0 then // we made a diagonal jump here
@@ -90,10 +90,10 @@ def main(u32 x, u32 n) -> u32:
     endfor
 
     // Now move any string terminator (\0) characters in LCS to the end ala insertion sort
-    for u32 i in 1..20 do
+    for u32 i in 1..30 do
         if i < n then
             u32 inserted = 0
-            for u32 j in 0..20 do
+            for u32 j in 0..30 do
                 if j < i then
                     if LCS[j] == 0 && inserted == 0 then
                         // Swap LCS[j] and LCS[i].

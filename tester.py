@@ -1,6 +1,5 @@
 import os
 
-CONST_EXPAND = 1
 REPEAT = 1
 TIMEOUT = 3000
 
@@ -30,12 +29,20 @@ def preprocess(b_name):
 
     # Read constants
     constants = {}
+    const_expand = 0
     while line != "INPUT:":
         line = f.readline().strip()
 
         components = line.split(' ')
-        if len(components) == 2:
-            constants[components[0]] = int(components[1])
+        if len(components) >= 2:
+            constants[components[0]] = []
+            if const_expand == 0:
+                const_expand = len(components) - 1
+            else:
+                # Assert all constants have the same length
+                assert(const_expand == len(components) - 1)
+            for i in range(1, len(components)):
+                constants[components[0]].append(int(components[i]))
 
     # Read inputs
     inputs = {}
@@ -83,27 +90,30 @@ def preprocess(b_name):
     f.close()
     
     f_result_name = f"zok_tests/raw/{b_name}_result.raw"
-    os.system(f"echo \"{b_name} {CONST_EXPAND} {REPEAT}\" > {f_result_name}")
-    constants_base = dict(constants)
-    # Process programs for each constant
-    for _ in range(CONST_EXPAND):
-        const_list = "; ".join([str(k) + " " + str(constants[k]) for k in constants])
+    os.system(f"echo \"{b_name} {const_expand} {REPEAT}\" > {f_result_name}")
+    # Process programs for each constant value
+    for i in range(const_expand):
+        cur_const = {}
+        for k in constants:
+            cur_const[k] = constants[k][i]
+
+        const_list = "; ".join([str(k) + " " + str(cur_const[k]) for k in cur_const])
         print(f"\n---\nCONSTANTS: {const_list}")
         os.system(f"echo \"{const_list}\" >> {f_result_name}")
 
         # Produce code
         with open(f"zok_tests/benchmarks/{b_name}.zok", "w") as f_baseline:
-            f_baseline.write(baseline(constants))
+            f_baseline.write(baseline(cur_const))
         with open(f"zok_tests/benchmarks/{b_name}_cobbl.zok", "w") as f_cobbl:
-            f_cobbl.write(cobbl(constants))
+            f_cobbl.write(cobbl(cur_const))
 
         for _ in range(REPEAT):
             # Produce variables. Each constant is of form max_XX, where XX is a variable
             # v = c
             print("\nTesting V = C...")
-            for c in constants:
+            for c in cur_const:
                 v = c[4:]
-                inputs[v] = constants[c]
+                inputs[v] = cur_const[c]
             with open(f"zok_tests/benchmarks/{b_name}.input", "w") as f_input:
                 f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
                 f_input.write("END")
@@ -123,9 +133,9 @@ def preprocess(b_name):
             os.system(f"cd spartan_parallel && RUSTFLAGS=\"-C target_cpu=native\" cargo build --release --features multicore,profile --example interface 2> /dev/null")
             # v = 75% c
             print("\nTesting V = 75% C...")
-            for c in constants:
+            for c in cur_const:
                 v = c[4:]
-                inputs[v] = constants[c] * 3 // 4
+                inputs[v] = cur_const[c] * 3 // 4
             with open(f"zok_tests/benchmarks/{b_name}_cobbl.input", "w") as f_input:
                 f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
                 f_input.write("END")
@@ -133,16 +143,13 @@ def preprocess(b_name):
 
             # v = 50% c
             print("\nTesting V = 50% C...")
-            for c in constants:
+            for c in cur_const:
                 v = c[4:]
-                inputs[v] = constants[c] // 2
+                inputs[v] = cur_const[c] // 2
             with open(f"zok_tests/benchmarks/{b_name}_cobbl.input", "w") as f_input:
                 f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
                 f_input.write("END")
             execute_cobbl_while(b_name, f_result_name, 50)
-
-        for var in constants:
-            constants[var] += constants_base[var]
 
 def execute_baseline(b_name, f_name):
     print("BASELINE")
@@ -211,7 +218,7 @@ def execute_cobbl_no_opt(b_name, f_name, perc):
 
 # BENCHMARK = ["mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256", "poseidon"]
 # BENCHMARK = ["find_min_ff", "mat_mult_ff"]
-BENCHMARK = ["poseidon"]
+BENCHMARK = ["rle_codec"]
 os.system(f"./setup.sh 2> /dev/null")
 for b in BENCHMARK:
     preprocess(b)

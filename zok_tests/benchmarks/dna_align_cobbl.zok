@@ -3,15 +3,15 @@
  * length m and the other of length n in O(m*n) time
  */
 def main(u32 x, u32 n) -> u32:
-    u32[20] A = [0; 20]
-    u32[20] B = [0; 20]
-    u32[20] LCS = [0; 20]
-    u32 arr_size = 20
+    u32[30] A = [0; 30]
+    u32[30] B = [0; 30]
+    u32[30] LCS = [0; 30]
+    u32 arr_size = 30
 
     // Dynamic programming memo
-    u32[400] LL = [0; 400]
+    u32[900] LL = [0; 900]
     // Hold choices made at each step, for use when backtracking
-    u32[400] choices = [0; 400]
+    u32[900] choices = [0; 900]
     // Used when backtracking
     u32 diag = 0
     u32 down = 0

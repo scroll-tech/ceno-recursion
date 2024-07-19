@@ -1,6 +1,6 @@
 CONST:
-max_n 160
-max_m 16
+max_n 480
+max_m 48
 
 INPUT:
 b 0

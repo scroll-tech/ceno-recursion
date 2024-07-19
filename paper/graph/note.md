@@ -57,3 +57,14 @@
   * Optimizations should generally decrease the number of blocks. Since witness commitment & opening is linear to number of blocks, this allows optimized CoBBl to outperform the unoptimized one.
   * Optimization would always increase sumcheck size (due to wasted constraints and added memory operations). However such an increase should contribute little to final runtime.
   * Depending on the effectiveness of the optimizations, number of variables may or may not decrease. This directly determines whether optimized CoBBl can outperform the unoptimized one.
+
+# Suggestions:
+* Plot graph 1 in terms of speed up (logarithmic?) instead of savings
+* Use Serde to check proof size (serialize / deserialize data structure to messagepact / bincode), measured in bytes
+* Can swap underlying poly commitment scheme and build const-size recursive proof
+# Large Benchmark:
+* Verify compact certificate (a tree of signatures)
+  * Jolt-friendly for Jolt
+  * Jolt-friendly for CoBBl
+  * CoBBl-friendly for CoBBl
+* Recursive verifiers are generally a great application for CoBBl

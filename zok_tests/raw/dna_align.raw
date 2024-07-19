@@ -1,5 +1,5 @@
 CONST:
-max_n 10
+max_n 10 30
 
 INPUT:
 x 0

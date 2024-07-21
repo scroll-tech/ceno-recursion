@@ -1,4 +1,4 @@
-def compress(u32 n, u32[[20, 60]] txt, u32[[20, 60, 20, 60]] compr) -> u32:
+def compress(u32 n, u32[60] txt, u32[120] compr) -> u32:
     // worst case is no compression, in which case we actually double
     // the size of the string!  Note that we could avoid this with a
     // different encoding strategy, but for our purposes the *performance*
@@ -29,7 +29,7 @@ def compress(u32 n, u32[[20, 60]] txt, u32[[20, 60, 20, 60]] compr) -> u32:
     
     return next_c
 
-def decompress(u32 m, u32[[20, 60, 20, 60]] compr, u32[[20, 60]] out) -> u32:
+def decompress(u32 m, u32[120] compr, u32[60] out) -> u32:
     u32 next_c = 0
     u32 next_t = 0
 
@@ -47,12 +47,12 @@ def decompress(u32 m, u32[[20, 60, 20, 60]] compr, u32[[20, 60]] out) -> u32:
     return next_t
 
 def main(u32 x, u32 y, u32 n) -> u32:
-    u32[[20, 60]] txt = [0; [20, 60]]
+    u32[60] txt = [0; 60]
 
     // Initialize array
     u32 next_gap = 1
     u32 gap = next_gap
-    for u32 i in 0..[20, 60] do
+    for u32 i in 0..60 do
         txt[i] = next_gap
         gap = gap - 1
         if gap == 0 then
@@ -62,13 +62,13 @@ def main(u32 x, u32 y, u32 n) -> u32:
     endfor
 
     // compress
-    u32[[20, 60, 20, 60]] compr = [0; [20, 60, 20, 60]]
+    u32[120] compr = [0; 120]
 
     u32 m = compress(n, txt, compr)
 
 
     // decompress
-    u32[[20, 60]] out = [0; [20, 60]]
+    u32[60] out = [0; 60]
 
     u32 p = decompress(m, compr, out)
 

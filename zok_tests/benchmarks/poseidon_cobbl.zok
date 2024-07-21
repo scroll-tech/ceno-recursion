@@ -1,4 +1,4 @@
-def ark(u32 n, field[2 + 1] state, field[455] c, u32 it) -> field[2 + 1]:
+def ark(u32 n, field[6 + 1] state, field[455] c, u32 it) -> field[6 + 1]:
     u32 i = 0
     while i < n do
         state[i] = state[i] + c[it + i]
@@ -6,7 +6,7 @@ def ark(u32 n, field[2 + 1] state, field[455] c, u32 it) -> field[2 + 1]:
     endwhile
     return state
 
-def sbox(u32 n, field[2 + 1] state, u32 f, u32 p, u32 r) -> field[2 + 1]:
+def sbox(u32 n, field[6 + 1] state, u32 f, u32 p, u32 r) -> field[6 + 1]:
     state[0] = state[0]**5
     u32 i = 1
     while i < n do
@@ -15,14 +15,14 @@ def sbox(u32 n, field[2 + 1] state, u32 f, u32 p, u32 r) -> field[2 + 1]:
     endwhile
     return state
 
-def mix(u32 n, field[2 + 1] state, field[49] m) -> field[2 + 1]:
-    field[2 + 1] out = [0; 2 + 1]
+def mix(u32 n, field[6 + 1] state, field[49] m) -> field[6 + 1]:
+    field[6 + 1] out = [0; 6 + 1]
     u32 i = 0
     while i < n do
         field acc = 0
         u32 j = 0
         while j < n do
-            acc = acc + (state[j] * m[i * 2 + 1 + j])
+            acc = acc + (state[j] * m[i * 6 + 1 + j])
             j = j + 1
         endwhile
         out[i] = acc
@@ -30,7 +30,7 @@ def mix(u32 n, field[2 + 1] state, field[49] m) -> field[2 + 1]:
     endwhile
     return out
 
-def poseidon(u32 n, field[2] inputs) -> field:
+def poseidon(u32 n, field[6] inputs) -> field:
     field[455] POSEIDON_C = [
         6102929899913997120028526874925676104844758924303424659933606352399117208470,
         6241576116551563299583110165591268824843574050316410672639976081232485352845,
@@ -555,7 +555,7 @@ def poseidon(u32 n, field[2] inputs) -> field:
     field[455] c = POSEIDON_C
     field[49] m = POSEIDON_M
 
-    field[2 + 1] state = [0; 2 + 1]
+    field[6 + 1] state = [0; 6 + 1]
     u32 i = 1
     while i < t do
         state[i] = inputs[i - 1]
@@ -574,9 +574,9 @@ def poseidon(u32 n, field[2] inputs) -> field:
 
 def main(u32 n) -> field:
 
-    field[2] padded_message = [0; 2]
+    field[6] padded_message = [0; 6]
     field sum = 0
-    for field i in 0..2 do
+    for field i in 0..6 do
         sum = sum + i
         padded_message[i] = sum
     endfor

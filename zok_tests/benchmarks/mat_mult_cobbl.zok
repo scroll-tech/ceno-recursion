@@ -2,11 +2,11 @@ def get_index(u32 i, u32 j, u32 n) -> u32:
     return n * i + j
 
 def main(u32 x, u32 y, u32 z, u32 n) -> u32:
-    u32[36] A = [0; 36]
-    u32[36] B = [0; 36]
-    u32[36] C = [0; 36]
+    u32[16] A = [0; 16]
+    u32[16] B = [0; 16]
+    u32[16] C = [0; 16]
 
-    for u32 i in 0..36 do
+    for u32 i in 0..16 do
         A[i] = i
         B[i] = 2 * i
     endfor

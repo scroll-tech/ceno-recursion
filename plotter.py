@@ -40,6 +40,76 @@ def parse_jolt():
     f.close()
     return jolt_result
 
+# parse one benchmark
+def parse_benchmark(f, repeat):
+    # first line is a list of [const_name, val]
+    consts = f.readline().strip()
+    # Record time entries for BASELINE, COBBL_FOR, COBBL_WHILE, COBBL_NO_OPT, COBBL_75, COBBL_50
+    # Entries: Compiler Time, Preprocess Time, Prover Time, Verifier Time
+    time_entries = [[0.0] * 4 for _ in range(6)]
+    # Record constraint entries for BASELINE, COBBL_FOR, COBBL_WHILE, COBBL_NO_OPT, COBBL_75, COBBL_50
+    # Entries: Num Blocks, Commit Size, Var Size, Exec Size, Proof Size
+    cons_entries = [[0] * 5 for _ in range(6)]
+    for _ in range(repeat):
+        # Circ Baseline: Num Cons, Compiler Time, Num Vars, Num NNZ (x3), Preprocess Time, Prover Time, Verifier Time, Proof Size
+        # read entry name
+        e = 0
+        f.readline()
+        last_pos = f.tell()
+        t = f.readline().strip()
+        try:
+            cons_entries[e][3] = int(t) # Num Cons
+        except:
+            f.seek(last_pos)
+        tmp_time = extract_time(f, 1)
+        time_entries[e][0] = tmp_time[0]
+        last_pos = f.tell()
+        t = f.readline().strip()
+        try:
+            cons_entries[e][2] = int(t) # Num Vars
+        except:
+            f.seek(last_pos)
+        last_pos = f.tell()
+        t1 = f.readline().strip()
+        t2 = f.readline().strip()
+        t3 = f.readline().strip()
+        try:
+            cons_entries[e][1] = max(int(t1), int(t2), int(t3)) # Num NNZ (x3)
+        except:
+            f.seek(last_pos)
+        tmp_time = extract_time(f, 3)
+        for t in range(3):
+            time_entries[e][t + 1] += tmp_time[t]
+        last_pos = f.tell()
+        t = f.readline().strip()
+        try:
+            cons_entries[e][4] = int(t) # Proof Size
+        except:
+            f.seek(last_pos)
+
+        # CoBBl: Compiler Time, (Num NNZ, Num Vars, Num Cons) x3, Preprocess Time, Prover Time, Verifier Time
+        for e in range(1, 6):
+            # read entry name
+            f.readline()
+            tmp_time = extract_time(f, 1)
+            time_entries[e][0] = tmp_time[0]
+            
+            cons_entries[e] = [0] * 5
+            for _ in range(3):
+                cons_entries[e][0] += int(f.readline().strip()) # Num Blocks
+                cons_entries[e][1] += int(f.readline().strip()) # Num NNZ
+                cons_entries[e][2] += int(f.readline().strip()) # Num Vars
+                cons_entries[e][3] += int(f.readline().strip()) # Num Cons
+
+            tmp_time = extract_time(f, 3)
+            for t in range(3):
+                time_entries[e][t + 1] += tmp_time[t]
+            cons_entries[e][4] = int(f.readline().strip()) # Proof Size
+    for e in range(6):
+        for t in range(4):
+            time_entries[e][t] /= repeat
+    return (consts, time_entries, cons_entries)
+
 # parse raw/XXX_result.raw
 def parse_cobbl(b_name, jolt_result):
     f = open(f"zok_tests/raw/{b_name}_result.raw", 'r')
@@ -51,64 +121,7 @@ def parse_cobbl(b_name, jolt_result):
     repeat = int(line[2])
 
     for _ in range(c_expand):
-        # first line is a list of [const_name, val]
-        consts = f.readline().strip()
-        # Record time entries for BASELINE, COBBL_FOR, COBBL_WHILE, COBBL_NO_OPT, COBBL_75, COBBL_50
-        # Entries: Compiler Time, Preprocess Time, Prover Time, Verifier Time
-        time_entries = [[0.0] * 4 for _ in range(6)]
-        # Record constraint entries for BASELINE, COBBL_FOR, COBBL_WHILE, COBBL_NO_OPT, COBBL_75, COBBL_50
-        # Entries: Num Blocks, Commit Size, Var Size, Exec Size
-        cons_entries = [[0] * 4 for _ in range(6)]
-        for _ in range(repeat):
-            # Circ Baseline: Num Cons, Compiler Time, Num Vars, Num NNZ (x3), Preprocess Time, Prover Time, Verifier Time
-            # read entry name
-            e = 0
-            f.readline()
-            last_pos = f.tell()
-            t = f.readline().strip()
-            try:
-                cons_entries[e][2] = int(t) # Num Cons
-            except:
-                f.seek(last_pos)
-            tmp_time = extract_time(f, 1)
-            time_entries[e][0] = tmp_time[0]
-            last_pos = f.tell()
-            t = f.readline().strip()
-            try:
-                cons_entries[e][1] = int(t) # Num Vars
-            except:
-                f.seek(last_pos)
-            last_pos = f.tell()
-            t1 = f.readline().strip()
-            t2 = f.readline().strip()
-            t3 = f.readline().strip()
-            try:
-                cons_entries[e][0] = max(int(t1), int(t2), int(t3)) # Num NNZ (x3)
-            except:
-                f.seek(last_pos)
-            tmp_time = extract_time(f, 3)
-            for t in range(3):
-                time_entries[e][t + 1] += tmp_time[t]
-            # CoBBl: Compiler Time, (Num NNZ, Num Vars, Num Cons) x3, Preprocess Time, Prover Time, Verifier Time
-            for e in range(1, 6):
-                # read entry name
-                tmp = f.readline()
-                tmp_time = extract_time(f, 1)
-                time_entries[e][0] = tmp_time[0]
-                
-                cons_entries[e] = [0] * 4
-                for i in range(3):
-                    cons_entries[e][0] += int(f.readline().strip()) # Num Blocks
-                    cons_entries[e][1] += int(f.readline().strip()) # Num NNZ
-                    cons_entries[e][2] += int(f.readline().strip()) # Num Vars
-                    cons_entries[e][3] += int(f.readline().strip()) # Num Cons
-
-                tmp_time = extract_time(f, 3)
-                for t in range(3):
-                    time_entries[e][t + 1] += tmp_time[t]
-        for e in range(6):
-            for t in range(4):
-                time_entries[e][t] /= repeat
+        (consts, time_entries, cons_entries) = parse_benchmark(f, repeat)
 
         # Print out the result
         case_name = f"{b_name} - {consts}" if len(consts) > 0 else f"{b_name}"
@@ -137,10 +150,10 @@ def parse_cobbl(b_name, jolt_result):
                     print("    {:>10}".format("-"), end = '')
             print()
 
-        print("--\nCONSTRAINTS")
+        print("--\nSIZES")
         print("{:10}    {:>10}    {:>10}    {:>10}    {:>10}    {:>10}    {:>10}".format("", "CirC", "CoBBl For", "CoBBl While", "CoBBl NoOpt", "CoBBl 75", "CoBBl 50"))
-        t_name = ["Block", "Commit", "Var", "Exec"]
-        for j in range(4):
+        t_name = ["Block", "Commit", "Var", "Exec", "Proof"]
+        for j in range(5):
             print("{:10}".format(t_name[j]), end = '')
             # CirC & CoBBl
             for i in range(6):
@@ -172,64 +185,7 @@ def extract_circ_jolt_plot(b_name_list, jolt_result, circ_b_name_list, jolt_b_na
         repeat = int(line[2])
 
         for _ in range(c_expand):
-            # first line is a list of [const_name, val]
-            consts = f.readline().strip()
-            # Record time entries for BASELINE, COBBL_FOR, COBBL_WHILE, COBBL_NO_OPT, COBBL_75, COBBL_50
-            # Entries: Compiler Time, Preprocess Time, Prover Time, Verifier Time
-            time_entries = [[0.0] * 4 for _ in range(6)]
-            # Record constraint entries for BASELINE, COBBL_FOR, COBBL_WHILE, COBBL_NO_OPT, COBBL_75, COBBL_50
-            # Entries: Num Blocks, Commit Size, Var Size, Exec Size
-            cons_entries = [[0] * 4 for _ in range(6)]
-            for _ in range(repeat):
-                # Circ Baseline: Num Cons, Compiler Time, Num Vars, Num NNZ (x3), Preprocess Time, Prover Time, Verifier Time
-                # read entry name
-                e = 0
-                f.readline()
-                last_pos = f.tell()
-                t = f.readline().strip()
-                try:
-                    cons_entries[e][3] = int(t) # Num Cons
-                except:
-                    f.seek(last_pos)
-                tmp_time = extract_time(f, 1)
-                time_entries[e][0] = tmp_time[0]
-                last_pos = f.tell()
-                t = f.readline().strip()
-                try:
-                    cons_entries[e][2] = int(t) # Num Vars
-                except:
-                    f.seek(last_pos)
-                last_pos = f.tell()
-                t1 = f.readline().strip()
-                t2 = f.readline().strip()
-                t3 = f.readline().strip()
-                try:
-                    cons_entries[e][1] = max(int(t1), int(t2), int(t3)) # Num NNZ (x3)
-                except:
-                    f.seek(last_pos)
-                tmp_time = extract_time(f, 3)
-                for t in range(3):
-                    time_entries[e][t + 1] += tmp_time[t]
-                # CoBBl: Compiler Time, (Num NNZ, Num Vars, Num Cons) x3, Preprocess Time, Prover Time, Verifier Time
-                for e in range(1, 6):
-                    # read entry name
-                    f.readline()
-                    tmp_time = extract_time(f, 1)
-                    time_entries[e][0] = tmp_time[0]
-                    
-                    cons_entries[e] = [0] * 4
-                    for i in range(3):
-                        cons_entries[e][0] += int(f.readline().strip()) # Num Blocks
-                        cons_entries[e][1] += int(f.readline().strip()) # Num NNZ
-                        cons_entries[e][2] += int(f.readline().strip()) # Num Vars
-                        cons_entries[e][3] += int(f.readline().strip()) # Num Cons
-
-                    tmp_time = extract_time(f, 3)
-                    for t in range(3):
-                        time_entries[e][t + 1] += tmp_time[t]
-            for e in range(6):
-                for t in range(4):
-                    time_entries[e][t] /= repeat
+            (consts, time_entries, _) = parse_benchmark(f, repeat)
 
             case_name = f"{b_name} - {consts}" if len(consts) > 0 else f"{b_name}"
             if case_name in circ_b_name_list:
@@ -276,64 +232,7 @@ def extract_benchmark_plot(b_name):
     constraint_data = [[[], []], [[], []], [[], []]]
 
     for _ in range(c_expand):
-        # first line is a list of [const_name, val]
-        consts = f.readline().strip()
-        # Record time entries for BASELINE, COBBL_FOR, COBBL_WHILE, COBBL_NO_OPT, COBBL_75, COBBL_50
-        # Entries: Compiler Time, Preprocess Time, Prover Time, Verifier Time
-        time_entries = [[0.0] * 4 for _ in range(6)]
-        # Record constraint entries for BASELINE, COBBL_FOR, COBBL_WHILE, COBBL_NO_OPT, COBBL_75, COBBL_50
-        # Entries: Num Blocks, Commit Size, Var Size, Exec Size
-        cons_entries = [[0] * 4 for _ in range(6)]
-        for _ in range(repeat):
-            # Circ Baseline: Num Cons, Compiler Time, Num Vars, Num NNZ (x3), Preprocess Time, Prover Time, Verifier Time
-            # read entry name
-            e = 0
-            f.readline()
-            last_pos = f.tell()
-            t = f.readline().strip()
-            try:
-                cons_entries[e][3] = int(t) # Num Cons
-            except:
-                f.seek(last_pos)
-            tmp_time = extract_time(f, 1)
-            time_entries[e][0] = tmp_time[0]
-            last_pos = f.tell()
-            t = f.readline().strip()
-            try:
-                cons_entries[e][2] = int(t) # Num Vars
-            except:
-                f.seek(last_pos)
-            last_pos = f.tell()
-            t1 = f.readline().strip()
-            t2 = f.readline().strip()
-            t3 = f.readline().strip()
-            try:
-                cons_entries[e][1] = max(int(t1), int(t2), int(t3)) # Num NNZ (x3)
-            except:
-                f.seek(last_pos)
-            tmp_time = extract_time(f, 3)
-            for t in range(3):
-                time_entries[e][t + 1] += tmp_time[t]
-            # CoBBl: Compiler Time, (Num NNZ, Num Vars, Num Cons) x3, Preprocess Time, Prover Time, Verifier Time
-            for e in range(1, 6):
-                # read entry name
-                f.readline()
-                tmp_time = extract_time(f, 1)
-                time_entries[e][0] = tmp_time[0]
-                
-                cons_entries[e] = [0] * 4
-                for i in range(3):
-                    cons_entries[e][0] += int(f.readline().strip()) # Num Blocks
-                    cons_entries[e][1] += int(f.readline().strip()) # Num NNZ
-                    cons_entries[e][2] += int(f.readline().strip()) # Num Vars
-                    cons_entries[e][3] += int(f.readline().strip()) # Num Cons
-
-                tmp_time = extract_time(f, 3)
-                for t in range(3):
-                    time_entries[e][t + 1] += tmp_time[t]
-        for e in range(6):
-            for t in range(4):
-                time_entries[e][t] /= repeat
+        (_, time_entries, cons_entries) = parse_benchmark(f, repeat)
 
         # Compiler, Prover, Verifier
         for j in range(3):
@@ -363,64 +262,7 @@ def extract_opt_plot(b_name_list, opt_b_name_list):
         repeat = int(line[2])
 
         for _ in range(c_expand):
-            # first line is a list of [const_name, val]
-            consts = f.readline().strip()
-            # Record time entries for BASELINE, COBBL_FOR, COBBL_WHILE, COBBL_NO_OPT, COBBL_75, COBBL_50
-            # Entries: Compiler Time, Preprocess Time, Prover Time, Verifier Time
-            time_entries = [[0.0] * 4 for _ in range(6)]
-            # Record constraint entries for BASELINE, COBBL_FOR, COBBL_WHILE, COBBL_NO_OPT, COBBL_75, COBBL_50
-            # Entries: Num Blocks, Commit Size, Var Size, Exec Size
-            cons_entries = [[0] * 4 for _ in range(6)]
-            for _ in range(repeat):
-                # Circ Baseline: Num Cons, Compiler Time, Num Vars, Num NNZ (x3), Preprocess Time, Prover Time, Verifier Time
-                # read entry name
-                e = 0
-                f.readline()
-                last_pos = f.tell()
-                t = f.readline().strip()
-                try:
-                    cons_entries[e][3] = int(t) # Num Cons
-                except:
-                    f.seek(last_pos)
-                tmp_time = extract_time(f, 1)
-                time_entries[e][0] = tmp_time[0]
-                last_pos = f.tell()
-                t = f.readline().strip()
-                try:
-                    cons_entries[e][2] = int(t) # Num Vars
-                except:
-                    f.seek(last_pos)
-                last_pos = f.tell()
-                t1 = f.readline().strip()
-                t2 = f.readline().strip()
-                t3 = f.readline().strip()
-                try:
-                    cons_entries[e][1] = max(int(t1), int(t2), int(t3)) # Num NNZ (x3)
-                except:
-                    f.seek(last_pos)
-                tmp_time = extract_time(f, 3)
-                for t in range(3):
-                    time_entries[e][t + 1] += tmp_time[t]
-                # CoBBl: Compiler Time, (Num NNZ, Num Vars, Num Cons) x3, Preprocess Time, Prover Time, Verifier Time
-                for e in range(1, 6):
-                    # read entry name
-                    f.readline()
-                    tmp_time = extract_time(f, 1)
-                    time_entries[e][0] = tmp_time[0]
-                    
-                    cons_entries[e] = [0] * 4
-                    for i in range(3):
-                        cons_entries[e][0] += int(f.readline().strip()) # Num Blocks
-                        cons_entries[e][1] += int(f.readline().strip()) # Num NNZ
-                        cons_entries[e][2] += int(f.readline().strip()) # Num Vars
-                        cons_entries[e][3] += int(f.readline().strip()) # Num Cons
-
-                    tmp_time = extract_time(f, 3)
-                    for t in range(3):
-                        time_entries[e][t + 1] += tmp_time[t]
-            for e in range(6):
-                for t in range(4):
-                    time_entries[e][t] /= repeat
+            (consts, time_entries, cons_entries) = parse_benchmark(f, repeat)
 
             case_name = f"{b_name} - {consts}" if len(consts) > 0 else f"{b_name}"
             if case_name in opt_b_name_list:

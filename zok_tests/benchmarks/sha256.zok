@@ -97,7 +97,7 @@ def main(u32 m, u32 n) -> u32:
     ]
     u32 hash = 0
 
-    for u32 i in 0..1 do
+    for u32 i in 0..6 do
         if i < n then
             u32[16] padded_message = [0; 16]
             u32 sum = 0

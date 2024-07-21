@@ -1,6 +1,6 @@
 import os
 
-REPEAT = 1
+REPEAT = 5
 TIMEOUT = 3000
 
 # Process A * B or A + B or A - B by reading A & B from consts
@@ -164,6 +164,7 @@ def execute_baseline(b_name, f_name):
                     -e 's/  \* SNARK::encode //p' \
                     -e 's/  \* SNARK::prove //p' \
                     -e 's/  \* SNARK::verify //p' \
+                    -e 's/Total Proof Size: //p' \
                 >> ../{f_name}\"")
 
 def execute_cobbl_for(b_name, f_name):
@@ -180,6 +181,7 @@ def execute_cobbl_for(b_name, f_name):
                     -e 's/Total Cons Exec Size: //p' \
                     -e 's/  \* SNARK::prove //p' \
                     -e 's/  \* SNARK::verify //p' \
+                    -e 's/Total Proof Size: //p' \
                 >> ../{f_name}\"")
 
 def execute_cobbl_while(b_name, f_name, perc):
@@ -197,6 +199,7 @@ def execute_cobbl_while(b_name, f_name, perc):
                     -e 's/Total Cons Exec Size: //p' \
                     -e 's/  \* SNARK::prove //p' \
                     -e 's/  \* SNARK::verify //p' \
+                    -e 's/Total Proof Size: //p' \
                 >> ../{f_name}\"")
 
 def execute_cobbl_no_opt(b_name, f_name, perc):
@@ -214,11 +217,12 @@ def execute_cobbl_no_opt(b_name, f_name, perc):
                     -e 's/Total Cons Exec Size: //p' \
                     -e 's/  \* SNARK::prove //p' \
                     -e 's/  \* SNARK::verify //p' \
+                    -e 's/Total Proof Size: //p' \
                 >> ../{f_name}\"")
 
-# BENCHMARK = ["mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256", "poseidon"]
+BENCHMARK = ["find_min"] #, "mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256", "poseidon"]
 # BENCHMARK = ["find_min_ff", "mat_mult_ff"]
-BENCHMARK = ["rle_codec"]
+# BENCHMARK = ["rle_codec"]
 os.system(f"./setup.sh 2> /dev/null")
 for b in BENCHMARK:
     preprocess(b)

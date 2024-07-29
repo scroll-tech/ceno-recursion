@@ -6,18 +6,26 @@ TIMEOUT = 3000
 # Process A * B or A + B or A - B by reading A & B from consts
 def process_formula(consts, formula):
     form_segs = formula.split(' ')
-    if len(form_segs) == 1:
-        return consts[form_segs[0]]
-    assert(len(form_segs) <= 3)
-    lhs = consts[form_segs[0]]
-    rhs = consts[form_segs[2]]
-    match form_segs[1]:
-        case "+":
-            return lhs + rhs
-        case "-":
-            return lhs - rhs
-        case "*":
-            return lhs * rhs
+    # form_segs is [const, op, const, op, const, ...]
+    lhs = form_segs[0]
+    try:
+        lhs = int(lhs)
+    except:
+        lhs = consts[lhs]
+    for i in range(1, len(form_segs), 2):
+        rhs = form_segs[i + 1]
+        try:
+            rhs = int(rhs)
+        except:
+            rhs = consts[rhs]
+        match form_segs[i]:
+            case "+":
+                lhs = lhs + rhs
+            case "-":
+                lhs = lhs - rhs
+            case "*":
+                lhs = lhs * rhs
+    return lhs
 
 # Convert a .raw file to a sequence of .zok & .input files and test them
 def preprocess(b_name):
@@ -220,9 +228,9 @@ def execute_cobbl_no_opt(b_name, f_name, perc):
                     -e 's/Total Proof Size: //p' \
                 >> ../{f_name}\"")
 
-BENCHMARK = ["find_min"] #, "mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256", "poseidon"]
+# BENCHMARK = ["find_min"] #, "mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256", "poseidon"]
 # BENCHMARK = ["find_min_ff", "mat_mult_ff"]
-# BENCHMARK = ["rle_codec"]
+BENCHMARK = ["dna_align"]
 os.system(f"./setup.sh 2> /dev/null")
 for b in BENCHMARK:
     preprocess(b)

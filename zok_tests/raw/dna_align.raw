@@ -1,5 +1,5 @@
 CONST:
-max_n 10 30
+max_n 5 30
 
 INPUT:
 x 0
@@ -12,13 +12,21 @@ PROGRAM:
 def main(u32 x, u32 n) -> u32:
     u32[{max_n}] A = [0; {max_n}]
     u32[{max_n}] B = [0; {max_n}]
+
+    u32 sum = 0
+    for u32 i in 0..{max_n} do
+        sum = sum + i
+        A[i] = sum
+        B[i] = {max_n + max_n} - sum
+    endfor
+
     u32[{max_n}] LCS = [0; {max_n}]
     u32 arr_size = {max_n}
 
     // Dynamic programming memo
-    u32[{max_n * max_n}] LL = [0; {max_n * max_n}]
+    u32[{max_n * max_n + max_n + 1}] LL = [0; {max_n * max_n + max_n + 1}]
     // Hold choices made at each step, for use when backtracking
-    u32[{max_n * max_n}] choices = [0; {max_n * max_n}]
+    u32[{max_n * max_n + max_n + 1}] choices = [0; {max_n * max_n + max_n + 1}]
     // Used when backtracking
     u32 diag = 0
     u32 down = 0

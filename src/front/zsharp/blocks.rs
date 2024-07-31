@@ -425,13 +425,23 @@ impl VarScopeInfo {
     // Given a variable, return "<var_name>.<func_name>.<scope>.<version>" and its type
     fn reference_var(&self, var_name: &str, fn_name: &str) -> Result<(String, Ty), String> {
         let name = &(var_name.to_string(), fn_name.to_string());
+        // Check whether the variable is local
         if let Some(stack) = self.var_stack.get(&name) {
             let depth = stack.len() - 1;
             let version = self.var_version.get(&name).unwrap()[depth];
             let ty = stack[depth].1.clone();
             Ok((format!("{}.{}.{}.{}", var_name, fn_name, depth, version), ty))
         } else {
-            Err(format!("reference_var failed: variable {} does not exist in function {}", var_name, fn_name))
+            // Otherwise check if variable is a constant
+            let name = &(var_name.to_string(), "const".to_string());
+            if let Some(stack) = self.var_stack.get(&name) {
+                let depth = stack.len() - 1;
+                let version = self.var_version.get(&name).unwrap()[depth];
+                let ty = stack[depth].1.clone();
+                Ok((format!("{}.{}.{}.{}", var_name, "const", depth, version), ty))
+            } else {
+                Err(format!("reference_var failed: variable {} does not exist in function {}", var_name, fn_name))
+            }
         }
     }
 
@@ -556,26 +566,25 @@ impl<'ast> ZGen<'ast> {
         // Initialize %AS for allocating arrays
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS", &Ty::Field)));
 
-        let inputs: Vec<(String, Ty)>;
-        (blks, blks_len, inputs) = self.bl_gen_function_init_::<true>(blks, blks_len, f_file.clone(), f_name)
-            .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
-
         // Create a mapping from each function name to the beginning of their blocks
         let mut func_blk_map = BTreeMap::new();
         func_blk_map.insert("main".to_string(), 0);
-        // Generate blocks for other functions
-        for decls in &self.asts[&f_file].declarations {
-            if let SymbolDeclaration::Function(func) = decls {
-                let f_name = func.id.value.clone();
-                if f_name != "main".to_string() {
-                    if self.functions.get(&f_file).and_then(|m| m.get(&f_name)) == None {
-                        panic!(
-                            "No function '{:?}//{}' attempting entry_fn",
-                            &f_file, &f_name
-                        );
-                    }
+        // Create global variable scope info
+        let mut var_scope_info: VarScopeInfo = VarScopeInfo::new();
+        // constants
+        let files = &self.asts.iter().map(|(p, _)| p).collect();
+        (blks, blks_len, var_scope_info) = self.bl_gen_constants(blks, blks_len, &files, var_scope_info)
+            .unwrap_or_else(|e| panic!("gen_constants failed: {}", e));
+        // main functions
+        let inputs: Vec<(String, Ty)>;
+        (blks, blks_len, inputs, var_scope_info) = self.bl_gen_function_init_::<true>(blks, blks_len, f_file.clone(), f_name, var_scope_info)
+            .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+        // other functions
+        for (func_file, funcs) in &self.functions {
+            for (f_name, _) in funcs {
+                if f_name != "main" {
                     func_blk_map.insert(f_name.to_string(), blks_len);
-                    (blks, blks_len, _) = self.bl_gen_function_init_::<false>(blks, blks_len, f_file.clone(), f_name)
+                    (blks, blks_len, _, var_scope_info) = self.bl_gen_function_init_::<false>(blks, blks_len, func_file.clone(), f_name.to_string(), var_scope_info)
                         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 }
             }
@@ -594,6 +603,44 @@ impl<'ast> ZGen<'ast> {
         (new_blks, 0, inputs)
     }
 
+    fn bl_gen_constants(
+        &'ast self,
+        mut blks: Vec<Block<'ast>>,
+        mut blks_len: usize,
+        files: &Vec<&PathBuf>,
+        mut var_scope_info: VarScopeInfo
+    ) -> Result<(Vec<Block>, usize, VarScopeInfo), String> {
+        // Initialize a new constant block
+        // Push all constant declarations into it
+        blks.push(Block::new(blks_len, 1, "const".to_string(), 0));
+        blks_len += 1;
+
+        for p in files {
+            for d in &self.asts.get(*p).unwrap().declarations {
+                match d {
+                    ast::SymbolDeclaration::Constant(c) => {
+                        debug!("processing decl: const {} in {}", c.id.value, p.display());
+                        // Convert the constant definition into definition statement
+                        let d = DefinitionStatement {
+                            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                                array_metadata: c.array_metadata.clone(),
+                                ty: c.ty.clone(),
+                                identifier: c.id.clone(),
+                                span: Span::new("", 0, 0).unwrap()
+                            })],
+                            expression: c.expression.clone(),
+                            span: Span::new("", 0, 0).unwrap()
+                        };
+                        (blks, blks_len, var_scope_info) = self.bl_gen_assign_::<true>(blks, blks_len, &d, "const", 0, var_scope_info)?;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        Ok((blks, blks_len, var_scope_info))
+    }
+
     // Convert each function to blocks
     // Generic: IS_MAIN determines if we are in the main function, which has two properties:
     //   1. We don't need to push %RP when doing function calls in MAIN, since %RP is undefined
@@ -607,7 +654,8 @@ impl<'ast> ZGen<'ast> {
         mut blks_len: usize,
         f_path: PathBuf,
         f_name: String,
-    ) -> Result<(Vec<Block>, usize, Vec<(String, Ty)>), String> {
+        mut var_scope_info: VarScopeInfo
+    ) -> Result<(Vec<Block>, usize, Vec<(String, Ty)>, VarScopeInfo), String> {
         debug!("Block Gen Function init: {} {:?}", f_name, f_path);
 
         let f = self
@@ -644,9 +692,6 @@ impl<'ast> ZGen<'ast> {
             blks.push(Block::new(blks_len, 1, f_name.to_string(), 0));
             blks_len += 1;
 
-            // Every time a variable is assigned a value at a specific scope, it receives a new version number
-            // Use var_scope_info to record the version number of each (var_name, fn_name) at each scope
-            let mut var_scope_info: VarScopeInfo = VarScopeInfo::new();
             for p in f.parameters.clone().into_iter() {
                 let p_id = p.id.value.clone();
                 let p_ty = self.type_impl_::<false>(&p.ty)?;
@@ -668,7 +713,7 @@ impl<'ast> ZGen<'ast> {
             }
         }
 
-        Ok((blks, blks_len, inputs))
+        Ok((blks, blks_len, inputs, var_scope_info))
     }
 
     // TODO: Error handling in function call

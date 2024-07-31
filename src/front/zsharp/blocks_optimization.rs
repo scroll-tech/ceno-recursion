@@ -2530,8 +2530,8 @@ impl<'ast> ZGen<'ast> {
                             }
                         }
                     }
-                    // Also push in %RP if caller is not main
-                    if caller_name != "main" {
+                    // Also push in %RP if caller is not main nor const
+                    if caller_name != "main" && caller_name != "const" {
                         if sp_offset == 0 {
                             // %PHY[%SP + 0] = %BP
                             new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));

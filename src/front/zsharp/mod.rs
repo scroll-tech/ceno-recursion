@@ -21,8 +21,7 @@ use crate::front::zsharp::prover::MemOp;
 use log::{debug, info, trace, warn};
 use rug::Integer;
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
-use std::collections::BTreeMap;
+use std::collections::{HashMap, BTreeMap};
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -34,7 +33,7 @@ use zvisit::{ZConstLiteralRewriter, ZGenericInf, ZStatementWalker, ZVisitorMut};
 
 // garbage collection increment for adaptive GC threshold
 const GC_INC: usize = 32;
-const GEN_VERBOSE: bool = false;
+const GEN_VERBOSE: bool = true;
 const INTERPRET_VERBOSE: bool = false;
 
 /// Inputs to the Z# compiler
@@ -263,16 +262,16 @@ struct ZGen<'ast> {
     asts: HashMap<PathBuf, ast::File<'ast>>,
     file_stack: RefCell<Vec<PathBuf>>,
     generics_stack: RefCell<Vec<HashMap<String, T>>>,
-    functions: HashMap<PathBuf, HashMap<String, ast::FunctionDefinition<'ast>>>,
+    functions: BTreeMap<PathBuf, BTreeMap<String, ast::FunctionDefinition<'ast>>>,
     // We use a single map for both type definitions and structures.
-    structs_and_tys: HashMap<
+    structs_and_tys: BTreeMap<
         PathBuf,
-        HashMap<String, Result<ast::StructDefinition<'ast>, ast::TypeDefinition<'ast>>>,
+        BTreeMap<String, Result<ast::StructDefinition<'ast>, ast::TypeDefinition<'ast>>>,
     >,
-    constants: HashMap<PathBuf, HashMap<String, (ast::Type<'ast>, T)>>,
+    constants: BTreeMap<PathBuf, BTreeMap<String, (ast::Type<'ast>, T)>>,
     import_map: HashMap<PathBuf, HashMap<String, (PathBuf, String)>>,
     mode: Mode,
-    cvars_stack: RefCell<Vec<Vec<BTreeMap<String, T>>>>,
+    cvars_stack: RefCell<Vec<Vec<HashMap<String, T>>>>,
     crets_stack: RefCell<Vec<T>>,
     lhs_ty: RefCell<Option<Ty>>,
     ret_ty_stack: RefCell<Vec<Ty>>,
@@ -344,9 +343,9 @@ impl<'ast> ZGen<'ast> {
             stdlib,
             file_stack: Default::default(),
             generics_stack: Default::default(),
-            functions: HashMap::new(),
-            structs_and_tys: HashMap::new(),
-            constants: HashMap::new(),
+            functions: BTreeMap::new(),
+            structs_and_tys: BTreeMap::new(),
+            constants: BTreeMap::new(),
             import_map: HashMap::new(),
             mode,
             cvars_stack: Default::default(),
@@ -1697,7 +1696,7 @@ impl<'ast> ZGen<'ast> {
             .borrow_mut()
             .last_mut()
             .unwrap()
-            .push(BTreeMap::new());
+            .push(HashMap::new());
     }
 
     fn exit_scope_impl_<const IS_CNST: bool>(&self) {
@@ -2088,9 +2087,9 @@ impl<'ast> ZGen<'ast> {
         let mut t = std::mem::take(&mut self.asts);
         let mut clr = ZConstLiteralRewriter::new(None);
         for p in files {
-            self.constants.insert(p.clone(), HashMap::new());
-            self.structs_and_tys.insert(p.clone(), HashMap::new());
-            self.functions.insert(p.clone(), HashMap::new());
+            self.constants.insert(p.clone(), BTreeMap::new());
+            self.structs_and_tys.insert(p.clone(), BTreeMap::new());
+            self.functions.insert(p.clone(), BTreeMap::new());
             self.file_stack_push(p.clone());
             for d in t.get_mut(&p).unwrap().declarations.iter_mut() {
                 match d {

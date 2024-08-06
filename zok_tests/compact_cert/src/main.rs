@@ -77,7 +77,7 @@ impl Sig {
     }
 }
 
-// Proof Entry
+// Reveal Proof Entry
 struct T {
     i: usize,
     s: [u8; 32],
@@ -121,10 +121,6 @@ fn trusted_setup(
     Ok((root, merkle_tree))
 }
 
-fn prover_check_signature(_signature: [u8; 24]) -> bool {
-    return true;
-}
-
 fn prover(
     attestors: &Vec<Attestor>, 
     proven_weight: usize,
@@ -143,7 +139,8 @@ fn prover(
     for a in attestors {
         if !signers_list.contains(&a.label) {
             signers_list.insert(a.label);
-            assert!(prover_check_signature(a.signature));
+            // Check signature
+            assert!(att_tree.leaves().unwrap()[i][..24] == a.signature);
             signed_weight += a.weight;
             
             collected_list[i] = true;

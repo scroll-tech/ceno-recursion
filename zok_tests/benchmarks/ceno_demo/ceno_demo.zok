@@ -1,0 +1,50 @@
+from "transcript" import Transcript, append_message_u32, append_message_field
+from "sumcheck_structs" import SumcheckProof, IOPProverMessage, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState
+from "sumcheck_verifier" import verify_round_and_update_state, interpolate_uni_poly, check_and_generate_subclaim, verify_sumcheck
+from "gkr_structs" import PointAndEval, LayeredPointAndEval, GkrIOPVerifierState
+from "gkr_verifier" import verifier_init_parallel
+
+def main(u32 num_vars, u32 max_degree, u32 i) -> field:
+    // Generate polynomials
+    array_decl field[max_degree + 1] pr0
+    array_decl field[max_degree + 1] pr1
+    array_decl field[max_degree + 1] pr2
+    pr0[0] = 1
+    pr0[1] = 2
+    pr0[2] = 3
+    pr1[0] = 6
+    pr1[1] = 6
+    pr1[2] = 6
+    pr2[0] = 3
+    pr2[1] = 3
+    pr2[2] = 5
+    IOPProverMessage pm0 = IOPProverMessage {
+        evaluations: pr0
+    }
+    IOPProverMessage pm1 = IOPProverMessage {
+        evaluations: pr1
+    }
+    IOPProverMessage pm2 = IOPProverMessage {
+        evaluations: pr2
+    }
+
+    // Generate structs
+    field claimed_sum = 3
+    SumcheckProof proof = SumcheckProof {
+        points: [11; num_vars],
+        proofs: [pm0; num_vars]
+    }
+    proof.points[1] = 29
+    proof.proofs[1] = pm1
+    proof.points[2] = 40
+    proof.proofs[2] = pm2
+    VPAuxInfo aux_info = VPAuxInfo {
+        max_degree: max_degree,
+        num_variables: num_vars,
+    }
+    Transcript t = Transcript {
+        hash: 0
+    }
+
+    SumCheckSubClaim sc = verify_sumcheck(claimed_sum, proof, aux_info, t)
+    return sc.point[i] * 1000 + sc.expected_evaluation

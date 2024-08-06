@@ -1,0 +1,40 @@
+const usize MSG_LEN = 15
+const usize NUM_ATTESTORS = 10
+const usize PROVEN_WEIGHT = 8
+const usize KNOWLEDGE_SOUNDNESS = 10 // knowledge soundness of 2^{-k}
+const usize MAX_NUM_REVEALS = 2 // num reveals 2^q
+
+struct MerkleProof {
+    field[0] internal_nodes
+}
+
+// Reveal Proof Entry
+struct T {
+    u32 i
+    field s
+    MerkleProof pi_s
+    field p
+    MerkleProof pi_p
+}
+
+struct CompactCertProof {
+    field sig_root
+    u32 signed_weight
+    T[0] t_list
+}
+
+// Verifier of a compact certificate function
+def verifier(
+    CompactCertProof compact_cert_proof,
+    u32 proven_weight,
+    u32 k,
+    u32 q,
+    u8[0] message,
+    u32 att_len,
+    field att_root
+) -> bool:
+    u32 signed_weight = compact_cert_proof.signed_weight
+    assert(signed_weight > proven_weight)
+    
+
+def main(u32 n) -> u32:

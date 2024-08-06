@@ -1,0 +1,32 @@
+struct SumcheckProof {
+    field[0] points
+    IOPProverMessage[0] proofs
+}
+
+struct IOPProverMessage {
+    field[0] evaluations
+}
+
+struct VPAuxInfo {
+    u32 max_degree
+    u32 num_variables
+}
+
+struct SumCheckSubClaim {
+    field[0] point
+    field expected_evaluation    
+}
+
+struct PointAndEval {
+    field[0] point
+    field eval
+}
+
+struct SumcheckIOPVerifierState {
+    u32 round
+    u32 num_vars
+    u32 max_degree
+    bool finished
+    field[0][0] polynomials_received
+    field[0] challenges
+}

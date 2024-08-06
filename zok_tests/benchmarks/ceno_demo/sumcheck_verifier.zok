@@ -1,46 +1,7 @@
-struct SumcheckProof {
-    field[0] points
-    IOPProverMessage[0] proofs
-}
+from "transcript" import Transcript, append_message_u32, append_message_field
+from "sumcheck_structs" import SumcheckProof, IOPProverMessage, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState
 
-struct IOPProverMessage {
-    field[0] evaluations
-}
-
-struct VPAuxInfo {
-    u32 max_degree
-    u32 num_variables
-}
-
-struct Transcript {
-    field hash
-}
-
-struct SumCheckSubClaim {
-    field[0] point
-    field expected_evaluation    
-}
-
-struct IOPVerifierState {
-    u32 round
-    u32 num_vars
-    u32 max_degree
-    bool finished
-    field[0][0] polynomials_received
-    field[0] challenges
-}
-
-def append_message_u32(Transcript t, u32 f) -> Transcript:
-    // BLOCK 6
-    t.hash = t.hash + (F)f
-    return t
-
-def append_message_field(Transcript t, field f) -> Transcript:
-    // BLOCK 7
-    t.hash = t.hash + f
-    return t
-
-def verify_round_and_update_state(IOPVerifierState self, IOPProverMessage prover_msg, Transcript transcript) -> IOPVerifierState:
+def verify_round_and_update_state(SumcheckIOPVerifierState self, IOPProverMessage prover_msg, Transcript transcript) -> SumcheckIOPVerifierState:
     // BLOCK 8
     assert(!self.finished)
 
@@ -105,7 +66,7 @@ def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
     // BLOCK 15
     return res
 
-def check_and_generate_subclaim(IOPVerifierState self, field asserted_sum) -> SumCheckSubClaim:
+def check_and_generate_subclaim(SumcheckIOPVerifierState self, field asserted_sum) -> SumCheckSubClaim:
     // BLOCK 16
     assert(self.finished)
     // assert(self.polynomials_received.len() == self.num_vars)
@@ -142,7 +103,7 @@ def check_and_generate_subclaim(IOPVerifierState self, field asserted_sum) -> Su
         expected_evaluation: expected_vec[self.num_vars]
     }
 
-def verify(field claimed_sum, SumcheckProof proof, VPAuxInfo aux_info, Transcript t) -> SumCheckSubClaim:
+def verify_sumcheck(field claimed_sum, SumcheckProof proof, VPAuxInfo aux_info, Transcript t) -> SumCheckSubClaim:
     // BLOCK 22
     if aux_info.num_variables == 0 then
         return SumCheckSubClaim {
@@ -156,7 +117,7 @@ def verify(field claimed_sum, SumcheckProof proof, VPAuxInfo aux_info, Transcrip
     t = append_message_u32(t, aux_info.max_degree)
 
     // BLOCK 25
-    IOPVerifierState vs = IOPVerifierState {
+    SumcheckIOPVerifierState vs = SumcheckIOPVerifierState {
         round: 1,
         num_vars: aux_info.num_variables,
         max_degree: aux_info.max_degree,
@@ -227,5 +188,5 @@ def main(u32 num_vars, u32 max_degree, u32 i) -> field:
         hash: 0
     }
 
-    SumCheckSubClaim sc = verify(claimed_sum, proof, aux_info, t)
+    SumCheckSubClaim sc = verify_sumcheck(claimed_sum, proof, aux_info, t)
     return sc.point[i] * 1000 + sc.expected_evaluation

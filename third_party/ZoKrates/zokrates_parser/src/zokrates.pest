@@ -81,7 +81,7 @@ typed_identifier_or_assignee_list = _{ typed_identifier_or_assignee ~ ("," ~ typ
 typed_identifier_or_assignee = { typed_identifier | assignee } // we don't use { ty? ~ identifier } as with a single token, it gets parsed as `ty` but we want `identifier`
 
 // Expressions
-expression_list = _{(expression ~ ("," ~ expression)*)?}
+expression_list = _{(expression ~ ("," ~ NEWLINE? ~ expression)*)?}
 
 expression = { unaried_term ~ (op_binary ~ unaried_term)* }
 unaried_term = { op_unary? ~ powered_term }
@@ -97,7 +97,7 @@ conditional_expression = { "if" ~ expression ~ "then" ~ expression ~ "else" ~ ex
 postfix_expression = { identifier ~ access+ } // we force there to be at least one access, otherwise this matches single identifiers
 access = { array_access | call_access | member_access }
 array_access = { "[" ~ range_or_expression ~ "]" }
-call_access = { ("::" ~ explicit_generics)? ~ "(" ~ arguments ~ ")" }
+call_access = { ("::" ~ explicit_generics)? ~ "(" ~ NEWLINE? ~ arguments ~ NEWLINE? ~ ")" }
 arguments = { expression_list }
 explicit_generics = { "<" ~ constant_generics_values ~ ">" }
 constant_generics_values = _{ constant_generics_value ~ ("," ~ constant_generics_value)* }

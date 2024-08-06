@@ -103,7 +103,7 @@ fn access_to_offset(ty: &Ty, acc: &[MemberAccess]) -> (usize, usize){
                 offset += m_offset;
                 acc_encountered = true;
             } else {
-                let (m_size, _) = access_to_offset(m_ty, acc);
+                let (m_size, _) = access_to_offset(m_ty, &[]);
                 size += m_size;
                 if !acc_encountered { offset += m_size };
             }
@@ -1154,8 +1154,6 @@ impl<'ast> ZGen<'ast> {
                 let arr_name = a.id.value.to_string();
                 let arr_extended_name = var_scope_info.declare_var(&arr_name, f_name, cur_scope, arr_ty.clone());
                 if let Type::Array(aty) = &a.ty {
-                    // Only support one-dimensional array
-                    assert_eq!(aty.dimensions.len(), 1);
                     let index_ty = self.bl_gen_type_(&aty.dimensions[0], f_name, &var_scope_info)?;
                     let new_len_expr: Expression;
                     (blks, blks_len, var_scope_info, new_len_expr, _, _, _, _) = 

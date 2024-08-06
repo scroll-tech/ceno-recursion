@@ -1,8 +1,8 @@
 from "transcript" import Transcript, append_message_u32, append_message_field
 from "sumcheck_structs" import SumcheckProof, IOPProverMessage, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState
 from "sumcheck_verifier" import verify_round_and_update_state, interpolate_uni_poly, check_and_generate_subclaim, verify_sumcheck
-from "gkr_structs" import PointAndEval, LayeredPointAndEval, GkrIOPVerifierState
-from "gkr_verifier" import verifier_init_parallel
+from "gkr_structs" import PointAndEval, LayeredPointAndEval, GkrIOPVerifierState, Layer, Circuit, IOPProverStepMessage, IOPProof, GKRInputClaims
+from "gkr_verifier" import verifier_parallel, verifier_init_parallel
 
 def main(u32 num_vars, u32 max_degree, u32 i) -> field:
     // Generate polynomials

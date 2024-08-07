@@ -6,6 +6,7 @@
 //       Can try eliminate ternaries with a constant condition
 //       What would happen if block 0 is a loop to itself? Many analyses would break down!!!
 
+use circ_hc::Id;
 use log::{debug, warn};
 
 use zokrates_pest_ast::*;
@@ -14,8 +15,7 @@ use crate::front::zsharp::ZGen;
 use crate::front::zsharp::Ty;
 use crate::front::zsharp::PathBuf;
 use crate::front::zsharp::pretty::*;
-use std::collections::HashMap;
-use std::collections::BTreeMap;
+use std::collections::{HashMap, BTreeMap, BTreeSet};
 use std::convert::TryInto;
 use crate::front::zsharp::*;
 
@@ -357,13 +357,16 @@ pub struct VarScopeInfo {
     // For each (var_name, fn_name), record all scopes that it has been defined
     // i.e., [0, 2, 3] means the variables has been defined in scope 0, 2, 3
     var_stack: HashMap<(String, String), Vec<(usize, Ty)>>,
+    // Set of names of all of the constants
+    constants: BTreeSet<(String, Ty)>,
 }
 
 impl VarScopeInfo {
     fn new() -> VarScopeInfo {
         VarScopeInfo {
             var_version: HashMap::new(),
-            var_stack: HashMap::new()
+            var_stack: HashMap::new(),
+            constants: BTreeSet::new(),
         }
     }
 
@@ -432,17 +435,12 @@ impl VarScopeInfo {
             let ty = stack[depth].1.clone();
             Ok((format!("{}.{}.{}.{}", var_name, fn_name, depth, version), ty))
         } else {
-            // Otherwise check if variable is a constant
-            let name = &(var_name.to_string(), "const".to_string());
-            if let Some(stack) = self.var_stack.get(&name) {
-                let depth = stack.len() - 1;
-                let version = self.var_version.get(&name).unwrap()[depth];
-                let ty = stack[depth].1.clone();
-                Ok((format!("{}.{}.{}.{}", var_name, "const", depth, version), ty))
-            } else {
-                Err(format!("reference_var failed: variable {} does not exist in function {}", var_name, fn_name))
-            }
+            Err(format!("reference_var failed: variable {} does not exist in function {}", var_name, fn_name))
         }
+    }
+
+    fn add_constant(&mut self, const_name: &str, const_ty: Ty) {
+        self.constants.insert((const_name.to_string(), const_ty));
     }
 
     // exit the current scope
@@ -603,6 +601,10 @@ impl<'ast> ZGen<'ast> {
         (new_blks, 0, inputs)
     }
 
+    // Treat constants as normal variables and pass all of them along every function call
+    // Unused constants will be eliminated by liveness analysis
+    // Every constant is always the 0.0 version in each function, local variables might shadow them afterwards
+    // First declare constants as variables of the main function
     fn bl_gen_constants(
         &'ast self,
         mut blks: Vec<Block<'ast>>,
@@ -612,7 +614,7 @@ impl<'ast> ZGen<'ast> {
     ) -> Result<(Vec<Block>, usize, VarScopeInfo), String> {
         // Initialize a new constant block
         // Push all constant declarations into it
-        blks.push(Block::new(blks_len, 1, "const".to_string(), 0));
+        blks.push(Block::new(blks_len, 1, "main".to_string(), 0));
         blks_len += 1;
 
         for p in files {
@@ -631,7 +633,8 @@ impl<'ast> ZGen<'ast> {
                             expression: c.expression.clone(),
                             span: Span::new("", 0, 0).unwrap()
                         };
-                        (blks, blks_len, var_scope_info) = self.bl_gen_assign_::<true>(blks, blks_len, &d, "const", 0, var_scope_info)?;
+                        (blks, blks_len, var_scope_info) = self.bl_gen_assign_::<true>(blks, blks_len, &d, "main", 0, var_scope_info)?;
+                        var_scope_info.add_constant(&c.id.value, self.type_impl_::<false>(&c.ty)?);
                     }
                     _ => {}
                 }
@@ -692,11 +695,19 @@ impl<'ast> ZGen<'ast> {
             blks.push(Block::new(blks_len, 1, f_name.to_string(), 0));
             blks_len += 1;
 
+            // Declare all parameters
             for p in f.parameters.clone().into_iter() {
                 let p_id = p.id.value.clone();
                 let p_ty = self.type_impl_::<false>(&p.ty)?;
                 var_scope_info.declare_var(&p_id, &f_name, 0, p_ty);
                 inputs.push(var_scope_info.reference_var(&p_id, &f_name)?.clone());     
+            }
+            // Declare all constants, if not main
+            // Constants of main function are already declared in bl_gen_constants
+            if !IS_MAIN {
+                for (c_name, c_ty) in var_scope_info.constants.clone() {
+                    var_scope_info.declare_var(&c_name, &f_name, 0, c_ty);
+                }
             }
 
             // Iterate through Stmts
@@ -798,6 +809,18 @@ impl<'ast> ZGen<'ast> {
                 let p_ty = self.type_impl_::<false>(&p.ty)?;
                 var_scope_info.declare_var(&p_id, &f_name, 0, p_ty.clone());
                 (blks, blks_len) = self.bl_gen_def_stmt_(blks, blks_len, &p_id, &a, &p_ty, &f_name, &caller_name, &var_scope_info)?;
+            }
+            // Assign all constants from one function to another
+            for (c_name, c_ty) in var_scope_info.constants.clone() {
+                var_scope_info.declare_var(&c_name, &f_name, 0, c_ty.clone());
+                let const_expr = Expression::Identifier(IdentifierExpression {
+                    value: c_name.to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                });
+                let new_const_expr: Expression;
+                (blks, blks_len, var_scope_info, new_const_expr, _, _, _, _) = 
+                    self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &const_expr, &caller_name, func_count, 0, 0, 0, var_scope_info)?;
+                (blks, blks_len) = self.bl_gen_def_stmt_(blks, blks_len, &c_name, &new_const_expr, &c_ty, &f_name, &caller_name, &var_scope_info)?;
             }
 
             // %RP has been pushed to stack before function call
@@ -1171,6 +1194,33 @@ impl<'ast> ZGen<'ast> {
         Ok((blks, blks_len, var_scope_info))
     }
 
+    // Given two types of an assignment statement, determine whether RHS can "fit" into LHS
+    // RHS "fits" if it either matches LHS, or for every array in LHS with dynamic length (len = 0), RHS provides the same array with a fixed length
+    fn bl_gen_type_check(
+        lhs: &Ty,
+        rhs: &Ty
+    ) -> bool {
+        match (lhs, rhs) {
+            (Ty::Array(lhs_len, lhs_entry_ty), Ty::Array(rhs_len, rhs_entry_ty)) => {
+                let entry_ty_check = Self::bl_gen_type_check(lhs_entry_ty, rhs_entry_ty);
+                let len_check = lhs_len == rhs_len || *lhs_len == 0;
+                entry_ty_check && len_check
+            }
+            (Ty::Struct(lhs_name, lhs_field_ty), Ty::Struct(rhs_name, rhs_field_ty)) => {
+                if lhs_name != rhs_name {
+                    false
+                } else {
+                    lhs_field_ty.fields().zip(rhs_field_ty.fields())
+                        .map(|(lhs_field, rhs_field)| lhs_field.0 == rhs_field.0 && Self::bl_gen_type_check(&lhs_field.1, &rhs_field.1))
+                        .fold(true, |acc, b| acc && b)
+                }
+            }
+            _ => {
+                lhs == rhs
+            }
+        }
+    }
+
     // Generate blocks from an assignment
     // Assignment LHS to RHS expression
     // If LHS is array, perform pointer (field) assignment
@@ -1220,6 +1270,7 @@ impl<'ast> ZGen<'ast> {
                                     let struct_ty = *entry_ty.clone();
                                     let mut entry_ty = *entry_ty.clone();
                                     // assert_eq!(entry_ty, rhs_ty);
+                                    Self::bl_gen_type_check(&entry_ty, &rhs_ty);
                                     skip_stmt_gen = true;
                                     if let RangeOrExpression::Expression(e) = &s.expression {
                                         // For all subsequent struct member accesses, compute index and rhs
@@ -1269,7 +1320,8 @@ impl<'ast> ZGen<'ast> {
                     // If array is dynamically bounded, cannot use type_impl_ because bound might involve variables undefined in circ
                     let l_name = l.identifier.value.to_string();
                     let lhs_ty = self.type_impl_::<false>(&l.ty)?;
-                    assert_eq!(lhs_ty, rhs_ty);
+                    // assert_eq!(lhs_ty, rhs_ty);
+                    Self::bl_gen_type_check(&lhs_ty, &rhs_ty);
                     var_scope_info.declare_var(&l_name, f_name, cur_scope, lhs_ty.clone());
                     (blks, blks_len) = 
                         self.bl_gen_def_stmt_(blks, blks_len, &l_name, &rhs_expr, &rhs_ty, f_name, f_name, &var_scope_info)?;
@@ -1296,8 +1348,7 @@ impl<'ast> ZGen<'ast> {
         var_scope_info: &VarScopeInfo,
     ) -> Result<(Vec<Block>, usize), String> {
         debug!("Block Gen Def Stmt: {} = {}", l, new_r_expr.span().as_str());
-
-        // declare lhs
+        // reference lhs
         // if LHS is %RET or its members, only append function name
         let new_l = if l.len() >= 4 && &l[..4] == "%RET" {
             format!("{}.{}", l, l_f_name)

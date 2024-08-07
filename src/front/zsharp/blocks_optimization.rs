@@ -2265,6 +2265,7 @@ impl<'ast> ZGen<'ast> {
         // As long as any block has spill_size > 0, keep vote out the candidate that can reduce the most total_spill_size
         let mut total_spill_size = spill_size.iter().fold(0, |a, b| a + b);
         let mut spills: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+
         while total_spill_size > 0 {
             // Compute vote score for each candidate, use BTreeMap to make ranking deterministic
             // Scores records all blocks where the spilling of the candidate can affect spill_size
@@ -2284,6 +2285,11 @@ impl<'ast> ZGen<'ast> {
             }
             let mut scores = Vec::from_iter(scores);
             scores.sort_by(|(_, a), (_, b)| b.len().cmp(&a.len()));
+
+            // println!("TOTAL SPILL SIZE: {:?}", total_spill_size);
+            // println!("SPILL SIZE: {:?}", spill_size);
+            // println!("SCORES: {:?}", scores.len());
+
             // Pick the #0 candidate
             let ((shadower, var, _, _), _) = &scores[0];
             // Add the candidate to spills
@@ -2530,8 +2536,8 @@ impl<'ast> ZGen<'ast> {
                             }
                         }
                     }
-                    // Also push in %RP if caller is not main nor const
-                    if caller_name != "main" && caller_name != "const" {
+                    // Also push in %RP if caller is not main
+                    if caller_name != "main" {
                         if sp_offset == 0 {
                             // %PHY[%SP + 0] = %BP
                             new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));

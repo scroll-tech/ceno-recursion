@@ -490,24 +490,22 @@ fn is_bp_update(s: &Statement) -> bool {
 // Liveness analysis
 // GEN all variables in gen
 fn la_gen(
-    mut state: BTreeSet<String>,
+    state: &mut BTreeSet<String>,
     gen: &BTreeSet<String>
-) -> BTreeSet<String> {
+) {
     // Add all gens to state
     state.extend(gen.clone());
-    state
 }
 
 // KILL all variables in kill
 fn la_kill(
-    mut state: BTreeSet<String>,
+    state: &mut BTreeSet<String>,
     kill: &BTreeSet<String>
-) -> BTreeSet<String> {
+) {
     // Remove all kills to state
     for v in kill {
         state.remove(v);
     }
-    state
 }
 
 // Decide if var is alive in the current scope given state
@@ -922,9 +920,12 @@ fn tydef_to_assignee_stmt<'ast, const IN_BRANCH: bool>(
 
 // Liveness Analysis
 fn la_inst<'ast>(
+    // Overall live variable set
     mut state: BTreeSet<String>,
+    // One live variable set per each function call trace, expressed as a BTreeMap
+    mut state_per_call_trace: BTreeMap<Vec<usize>, BTreeSet<String>>,
     inst: &Vec<BlockContent<'ast>>
-) -> (BTreeSet<String>, Vec<BlockContent<'ast>>) {
+) -> (BTreeSet<String>, BTreeMap<Vec<usize>, BTreeSet<String>>, Vec<BlockContent<'ast>>) {
     let mut new_instructions = Vec::new();
     for i in inst.iter().rev() {
         match i {
@@ -933,6 +934,10 @@ fn la_inst<'ast>(
                 new_instructions.insert(0, i.clone());
                 state.insert(var.to_string());
                 state.insert("%SP".to_string());
+                for (_, s) in state_per_call_trace.iter_mut() {
+                    s.insert(var.to_string());
+                    s.insert("%SP".to_string());
+                }
             }
             BlockContent::MemPop((var, _, _)) => {
                 if is_alive(&state, var) {
@@ -940,16 +945,25 @@ fn la_inst<'ast>(
                 }
                 state.remove(var);
                 state.insert("%BP".to_string());
+                for (_, s) in state_per_call_trace.iter_mut() {
+                    s.remove(var);
+                    s.insert("%BP".to_string());
+                }
             }
             // NOTE: Due to pointer aliasing, cannot remove any vm statements
             // If there is an array initialization, then the array is dead but %AS is alive
             BlockContent::ArrayInit((arr, _, len)) => {
                 // if is_alive(&state, arr) {
-                    let gen = expr_find_val(&len);
-                    state = la_gen(state, &gen);
                     new_instructions.insert(0, i.clone());
+                    let gen = expr_find_val(&len);
+                    la_gen(&mut state, &gen);
                     state.remove(arr);
                     state.insert("%AS".to_string());
+                    for (_, s) in state_per_call_trace.iter_mut() {
+                        la_gen(s, &gen);
+                        s.remove(arr);
+                        s.insert("%AS".to_string());
+                    }
                 // }
             }
             // If there is a store, then keep the statement if array is alive
@@ -957,11 +971,17 @@ fn la_inst<'ast>(
                 // if is_alive(&state, arr) {
                     new_instructions.insert(0, i.clone());
                     state.insert(arr.to_string());
-                    let gen = expr_find_val(val_expr);
-                    state = la_gen(state, &gen);
-                    let gen = expr_find_val(id_expr);
-                    state = la_gen(state, &gen);
+                    let val_gen = expr_find_val(val_expr);
+                    la_gen(&mut state, &val_gen);
+                    let id_gen = expr_find_val(id_expr);
+                    la_gen(&mut state, &id_gen);
                     state.insert("%TS".to_string());
+                    for (_, s) in state_per_call_trace.iter_mut() {
+                        s.insert(arr.to_string());
+                        la_gen(s, &val_gen);
+                        la_gen(s, &id_gen);
+                        s.insert("%TS".to_string());
+                    }
                 // }
             }
             // If there is a load, then keep the statement if val is alive
@@ -971,24 +991,43 @@ fn la_inst<'ast>(
                     state.remove(val);
                     state.insert(arr.to_string());
                     let gen = expr_find_val(id_expr);
-                    state = la_gen(state, &gen);
+                    la_gen(&mut state, &gen);
                     state.insert("%TS".to_string());
+                    for (_, s) in state_per_call_trace.iter_mut() {
+                        s.remove(val);
+                        s.insert(arr.to_string());
+                        la_gen(s, &gen);
+                        s.insert("%TS".to_string());
+                    }
                 }
             }
             // Do not reason about liveness of dummy loads, mark %TS as alive
             BlockContent::DummyLoad() => {
                 new_instructions.insert(0, i.clone());
                 state.insert("%TS".to_string());
+                for (_, s) in state_per_call_trace.iter_mut() {
+                    s.insert("%TS".to_string());
+                }
             }
             BlockContent::Branch((cond, if_inst, else_inst)) => {
                 // Liveness of branches
-                let (mut new_if_state, new_if_inst) = la_inst(state.clone(), if_inst);
-                let (new_else_state, new_else_inst) = la_inst(state.clone(), else_inst);
+                let (mut new_if_state, mut new_if_state_per_call_trace, new_if_inst) = 
+                    la_inst(state.clone(), state_per_call_trace.clone(), if_inst);
+                let (new_else_state, new_else_state_per_call_trace, new_else_inst) = 
+                    la_inst(state.clone(), state_per_call_trace.clone(), else_inst);
                 new_if_state.extend(new_else_state);
+                assert_eq!(new_if_state_per_call_trace.len(), new_else_state_per_call_trace.len());
+                for (entry_point, _) in new_if_state_per_call_trace.clone() {
+                    new_if_state_per_call_trace.get_mut(&entry_point).unwrap().extend(new_else_state_per_call_trace.get(&entry_point).unwrap().clone());
+                }
                 state = new_if_state;
+                state_per_call_trace = new_if_state_per_call_trace;
                 // Liveness of condition
                 let gen = expr_find_val(&cond);
-                state = la_gen(state, &gen);
+                la_gen(&mut state, &gen);
+                for (_, s) in state_per_call_trace.iter_mut() {
+                    la_gen(s, &gen);
+                }
                 // Branch is dead if both branches are empty
                 if new_if_inst.len() > 0 || new_else_inst.len() > 0 {
                     new_instructions.insert(0, BlockContent::Branch((cond.clone(), new_if_inst, new_else_inst)));
@@ -1000,14 +1039,18 @@ fn la_inst<'ast>(
                 // mark the variable dead and append gen to state
                 // Otherwise remove the statement
                 if kill.is_empty() || kill.iter().fold(false, |c, x| c || is_alive(&state, x)) {
-                    state = la_kill(state, &kill);
-                    state = la_gen(state, &gen);
+                    la_kill(&mut state, &kill);
+                    la_gen(&mut state, &gen);
+                    for (_, s) in state_per_call_trace.iter_mut() {
+                        la_kill(s, &kill);
+                        la_gen(s, &gen);
+                    }
                     new_instructions.insert(0, i.clone());
                 }
             }
         }
     }
-    (state, new_instructions)
+    (state, state_per_call_trace, new_instructions)
 }
 
 // Typing
@@ -1278,8 +1321,17 @@ impl<'ast> ZGen<'ast> {
         println!("\n\n--\nOptimization:");
         if !no_opt {
             // Construct CFG
-            let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
-                self.construct_flow_graph(&bls, entry_bl);
+            let (
+                successor, 
+                predecessor, 
+                exit_bls, 
+                entry_bls_fn, 
+                successor_fn, 
+                predecessor_fn, 
+                exit_bls_fn,
+                _,
+                _
+            ) = self.construct_flow_graph(&bls, entry_bl);
             if VERBOSE && CFG_VERBOSE {
                 print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
             }
@@ -1294,14 +1346,23 @@ impl<'ast> ZGen<'ast> {
             }
 
             // Reconstruct CFG
-            let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
-                self.construct_flow_graph(&bls, entry_bl);
+            let (
+                successor, 
+                predecessor, 
+                exit_bls, 
+                entry_bls_fn, 
+                successor_fn, 
+                predecessor_fn, 
+                exit_bls_fn,
+                _,
+                call_exit_entry_map
+            ) = self.construct_flow_graph(&bls, entry_bl);
             if VERBOSE && CFG_VERBOSE {
                 print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
             }
 
             // Set Input Output
-            bls = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, inputs.clone());
+            bls = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, &entry_bls_fn, &exit_bls_fn, &call_exit_entry_map, inputs.clone());
             if VERBOSE {
                 println!("\n\n--\nSet Input Output before Spilling:");
                 print_bls(&bls, &entry_bl);
@@ -1310,8 +1371,17 @@ impl<'ast> ZGen<'ast> {
             // Resolve block merge
             bls = self.resolve_block_merge(bls, &successor, &successor_fn, &predecessor_fn, &exit_bls_fn);
             // Reconstruct CFG
-            let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
-                self.construct_flow_graph(&bls, entry_bl);
+            let (
+                successor, 
+                predecessor, 
+                exit_bls, 
+                entry_bls_fn, 
+                successor_fn, 
+                predecessor_fn, 
+                exit_bls_fn,
+                _,
+                _
+            ) = self.construct_flow_graph(&bls, entry_bl);
             if VERBOSE && CFG_VERBOSE {
                 print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
             }
@@ -1323,8 +1393,17 @@ impl<'ast> ZGen<'ast> {
             }
 
             // Reconstruct CFG
-            let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
-            self.construct_flow_graph(&bls, entry_bl);
+            let (
+                successor, 
+                predecessor, 
+                exit_bls, 
+                entry_bls_fn, 
+                successor_fn, 
+                predecessor_fn, 
+                exit_bls_fn,
+                _,
+                _
+            ) = self.construct_flow_graph(&bls, entry_bl);
             if VERBOSE && CFG_VERBOSE {
                 print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
             }
@@ -1342,14 +1421,23 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Construct CFG
-        let (successor, mut predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = 
-            self.construct_flow_graph(&bls, entry_bl);
+        let (
+            successor, 
+            mut predecessor, 
+            exit_bls, 
+            entry_bls_fn, 
+            successor_fn, 
+            predecessor_fn, 
+            exit_bls_fn,
+            _,
+            _
+        ) = self.construct_flow_graph(&bls, entry_bl);
         if VERBOSE && CFG_VERBOSE {
             print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
         }
 
         // Liveness, mainly to remove %BP
-        bls = self.liveness_analysis(bls, &successor, &predecessor, &predecessor_fn, &exit_bls);
+        bls = self.liveness_analysis(bls, &successor, &predecessor,  &predecessor_fn, &exit_bls);
         // EBE
         (_, predecessor, bls) = self.empty_block_elimination(bls, exit_bls, successor, predecessor, &entry_bls_fn, &exit_bls_fn);
         // DBE
@@ -1360,14 +1448,23 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Construct CFG again after DBE
-        let (successor, predecessor, exit_bls, _, successor_fn, predecessor_fn, exit_bls_fn) = 
-            self.construct_flow_graph(&bls, entry_bl);
+        let (
+            successor, 
+            predecessor, 
+            exit_bls, 
+            entry_bls_fn, 
+            successor_fn, 
+            predecessor_fn, 
+            exit_bls_fn,
+            _,
+            call_exit_entry_map
+        ) = self.construct_flow_graph(&bls, entry_bl);
         if VERBOSE && CFG_VERBOSE {
             print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
         }
 
         // Set I/O again after optimizations
-        bls = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, inputs.clone());
+        bls = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, &entry_bls_fn, &exit_bls_fn, &call_exit_entry_map, inputs.clone());
         if VERBOSE {
             println!("\n\n--\nSet Input Output after Spilling:");
             print_bls(&bls, &entry_bl);
@@ -1437,20 +1534,12 @@ impl<'ast> ZGen<'ast> {
     }
 
     // Construct a flow graph from a set of blocks
-    // Return value:
-    // ret[0]: map from block to all its successors (no need to use BTreeMap since every block should exists right now)
-    // ret[1]: map from block to all its predecessors
-    // ret[2]: list of all blocks that ends with ProgTerm
-    // ret[3]: list of entry blocks of all reachable functions
-    // ret[4]: map from block to all its successors, with function calls redirected to %RP and function return as temination
-    // ret[5]: map from block to all its predecessors, with same tweak as ret[4]
-    // ret[6]: list of all blocks that ends with ProgTerm or Rp
-    // ret[7]: is this block part of the main function
+    // Return value: successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn, call_entry_exit_map, call_exit_entry_map
     fn construct_flow_graph(
         &self,
         bls: &Vec<Block>,
         entry_bl: usize
-    ) -> (Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, BTreeSet<usize>, BTreeSet<usize>, Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, BTreeSet<usize>) {
+    ) -> (Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, BTreeSet<usize>, BTreeSet<usize>, Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, BTreeSet<usize>, BTreeMap<usize, usize>, BTreeMap<usize, usize>) {
         let bl_size = bls.len();
         
         // list of all blocks that ends with ProgTerm
@@ -1476,6 +1565,11 @@ impl<'ast> ZGen<'ast> {
         let mut successor_fn: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); bl_size];
         let mut predecessor_fn: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); bl_size];
 
+        // call_entry_exit_map maps the caller of each function to the return block
+        // call_exit_entry_map stores the reverse
+        let mut call_entry_exit_map: BTreeMap<usize, usize> = BTreeMap::new();
+        let mut call_exit_entry_map: BTreeMap<usize, usize> = BTreeMap::new();
+
         let mut next_bls: VecDeque<usize> = VecDeque::new();
         let _ = std::mem::replace(&mut visited[entry_bl], true);
         next_bls.push_back(entry_bl);
@@ -1498,6 +1592,8 @@ impl<'ast> ZGen<'ast> {
             if rp_slot != 0 {
                 (successor, rp_successor, successor_fn, visited, next_bls) = 
                     self.flow_graph_transition::<true>(cur_bl, &NextBlock::Label(rp_slot), rp_slot, successor, rp_successor, successor_fn, visited, next_bls);
+                call_entry_exit_map.insert(cur_bl, rp_slot);
+                call_exit_entry_map.insert(rp_slot, cur_bl);
             }
 
             // Append everything in the terminator of cur_bl to next_bls
@@ -1543,7 +1639,7 @@ impl<'ast> ZGen<'ast> {
                 predecessor_fn[*j].insert(i);
             }
         }
-        return (successor, predecessor, exit_bls, entry_bl_fn, successor_fn, predecessor_fn, exit_bls_fn);
+        return (successor, predecessor, exit_bls, entry_bl_fn, successor_fn, predecessor_fn, exit_bls_fn, call_entry_exit_map, call_exit_entry_map);
     }
 
     // Standard Liveness Analysis
@@ -1569,7 +1665,6 @@ impl<'ast> ZGen<'ast> {
         predecessor_fn: &Vec<BTreeSet<usize>>,
         exit_bls: &BTreeSet<usize>,
     ) -> Vec<Block<'ast>> {
-
         let mut visited: Vec<bool> = vec![false; bls.len()];
         // MEET is union, so IN and OUT are Empty Set
         let mut bl_in: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
@@ -1613,7 +1708,9 @@ impl<'ast> ZGen<'ast> {
                 }
 
                 // KILL and GEN within the block
-                (state, _) = la_inst(state, &bls[cur_bl].instructions);
+                // We do not need to worry about state_per_trace in liveness analysis
+                // Only useful in set_input_output
+                (state, _, _) = la_inst(state, BTreeMap::new(), &bls[cur_bl].instructions);
                 bl_in[cur_bl] = state;
 
                 // Block Transition
@@ -1655,7 +1752,7 @@ impl<'ast> ZGen<'ast> {
                     BlockTerminator::ProgTerm => {}            
                 }
 
-                (_, new_instructions) = la_inst(state, &bls[cur_bl].instructions);
+                (_, _, new_instructions) = la_inst(state, BTreeMap::new(), &bls[cur_bl].instructions);
                 bls[cur_bl].instructions = new_instructions;
 
                 // Block Transition
@@ -1684,6 +1781,9 @@ impl<'ast> ZGen<'ast> {
         predecessor_fn: &Vec<BTreeSet<usize>>,
         entry_bl: &usize,
         exit_bls: &BTreeSet<usize>,
+        entry_bls_fn: &BTreeSet<usize>,
+        exit_bls_fn: &BTreeSet<usize>,
+        call_exit_entry_map: &BTreeMap<usize, usize>,
         inputs: Vec<(String, Ty)>
     ) -> Vec<Block<'ast>> {
         // Liveness
@@ -1691,6 +1791,9 @@ impl<'ast> ZGen<'ast> {
         // MEET is union, so IN and OUT are Empty Set
         let mut bl_in: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
         let mut bl_out: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
+        // Program states per function call trace, if exist
+        let mut bl_in_per_call_trace: Vec<BTreeMap<Vec<usize>, BTreeSet<String>>> = vec![BTreeMap::new(); bls.len()];
+        let mut bl_out_per_call_trace: Vec<BTreeMap<Vec<usize>, BTreeSet<String>>> = vec![BTreeMap::new(); bls.len()];
         
         // Can this ever happen?
         if exit_bls.is_empty() { 
@@ -1703,37 +1806,86 @@ impl<'ast> ZGen<'ast> {
             next_bls.push_back(*eb);
         }
         // Backward analysis!
-        while !next_bls.is_empty() { 
-
-            let cur_bl = next_bls.pop_front().unwrap();   
+        while !next_bls.is_empty() {
+            let cur_bl = next_bls.pop_front().unwrap();
 
             // State is the union of all successors
             let mut state: BTreeSet<String> = BTreeSet::new();
-            for s in &successor[cur_bl] {
-                state.extend(bl_in[*s].clone());
-            }
+            // State per function call trace
+            let mut state_per_trace: BTreeMap<Vec<usize>, BTreeSet<String>> = BTreeMap::new();
             // program exit block
             if exit_bls.contains(&cur_bl) {
                 state.insert("%RET.main".to_string());
+                state_per_trace.insert(Vec::new(), BTreeSet::from(["%RET.main".to_string()]));
+            }
+            if exit_bls_fn.contains(&cur_bl) {
+                for s in &successor[cur_bl] {
+                    state.extend(bl_in[*s].clone());
+                    // If function exit block, update function call trace
+                    // Append the corresponding entry_bls_fn to the traces
+                    let entry_bl = call_exit_entry_map.get(s).unwrap();
+                    for (trace, s_state) in bl_in_per_call_trace[*s].clone() {
+                        let new_trace = [trace, vec![*entry_bl]].concat();
+                        if state_per_trace.contains_key(&new_trace) {
+                            state_per_trace.get_mut(&new_trace).unwrap().extend(s_state.clone());
+                        } else {
+                            state_per_trace.insert(new_trace, s_state.clone());
+                        }
+                    }
+                }
+            } else {
+                for s in &successor[cur_bl] {
+                    if entry_bls_fn.contains(s) {
+                        // If s is a function entry block, update function call trace
+                        // Only include the traces that end with cur_bl
+                        for (trace, s_state) in bl_in_per_call_trace[*s].clone() {
+                            if trace[trace.len() - 1] == cur_bl {
+                                state.extend(s_state.clone());
+                                let new_trace = trace[..trace.len() - 1].to_vec();
+                                if state_per_trace.contains_key(&new_trace) {
+                                    state_per_trace.get_mut(&new_trace).unwrap().extend(s_state.clone());
+                                } else {
+                                    state_per_trace.insert(new_trace, s_state.clone());
+                                }
+                            }
+                        }
+                    } else {
+                        // Otherwise simply copy all state_per_trace
+                        state.extend(bl_in[*s].clone());
+                        for (trace, s_state) in bl_in_per_call_trace[*s].clone() {
+                            if state_per_trace.contains_key(&trace) {
+                                state_per_trace.get_mut(&trace).unwrap().extend(s_state.clone());
+                            } else {
+                                state_per_trace.insert(trace, s_state.clone());
+                            }
+                        }
+                    }
+                }
             }
 
             // Only analyze if never visited before or OUT changes
             if !visited[cur_bl] || state != bl_out[cur_bl] {
                 
                 bl_out[cur_bl] = state.clone();
+                bl_out_per_call_trace[cur_bl] = state_per_trace.clone();
                 visited[cur_bl] = true;
-                
+
                 // KILL and GEN within the terminator
                 match &bls[cur_bl].terminator {
-                    BlockTerminator::Transition(e) => { state.extend(expr_find_val(&e)); }
+                    BlockTerminator::Transition(e) => { 
+                        state.extend(expr_find_val(&e)); 
+                        for (_, s) in state_per_trace.iter_mut() {
+                            s.extend(expr_find_val(&e)); 
+                        }
+                    }
                     BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
                     BlockTerminator::ProgTerm => {}            
                 }
 
                 // KILL and GEN within the block
-                // We assume that liveness analysis has been performed, don't reason about whether variables should actually be alive
-                (state, _) = la_inst(state, &bls[cur_bl].instructions);
+                (state, state_per_trace, _) = la_inst(state, state_per_trace, &bls[cur_bl].instructions);
                 bl_in[cur_bl] = state;
+                bl_in_per_call_trace[cur_bl] = state_per_trace.clone();
 
                 // Block Transition
                 for tmp_bl in &predecessor[cur_bl] {
@@ -1744,7 +1896,7 @@ impl<'ast> ZGen<'ast> {
                         next_bls.push_back(*tmp_bl);
                     }
                 }
-            }    
+            }
         }
 
         let input_lst = bl_in;
@@ -2286,9 +2438,9 @@ impl<'ast> ZGen<'ast> {
             let mut scores = Vec::from_iter(scores);
             scores.sort_by(|(_, a), (_, b)| b.len().cmp(&a.len()));
 
-            // println!("TOTAL SPILL SIZE: {:?}", total_spill_size);
-            // println!("SPILL SIZE: {:?}", spill_size);
-            // println!("SCORES: {:?}", scores.len());
+            println!("TOTAL SPILL SIZE: {:?}", total_spill_size);
+            println!("SPILL SIZE: {:?}", spill_size);
+            println!("SCORES: {:?}", scores.len());
 
             // Pick the #0 candidate
             let ((shadower, var, _, _), _) = &scores[0];
@@ -2724,7 +2876,17 @@ impl<'ast> ZGen<'ast> {
         println!("\n\n--\nPost-Processing:");
         // Construct a new CFG for the program
         // Note that this is the CFG after DBE, and might be different from the previous CFG
-        let (successor, predecessor, exit_bls, entry_bls_fn, successor_fn, predecessor_fn, exit_bls_fn) = self.construct_flow_graph(&bls, entry_bl);
+        let (
+            successor, 
+            predecessor, 
+            exit_bls, 
+            entry_bls_fn, 
+            successor_fn, 
+            predecessor_fn, 
+            exit_bls_fn,
+            _,
+            _
+        ) = self.construct_flow_graph(&bls, entry_bl);
         if VERBOSE && CFG_VERBOSE {
             print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
         }

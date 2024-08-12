@@ -1,0 +1,28 @@
+from "./poseidon.zok" import poseidon, ark, sbox, mix
+
+struct MerkleProof {
+    field[0] path
+}
+
+def verify_merkle(MerkleProof proof, field root, field signature, u32 index, u32 depth) -> bool:
+    field cur_node = signature
+    for u32 i in 0..depth do
+        // Depending on index, cur_node and proof[i] will be on two sides of the inputs
+        field[2] inputs = index % 2 == 0 ? [cur_node, proof.path[i]] : [proof.path[i], cur_node]
+        index = index / 2
+        cur_node = poseidon(2, inputs)
+    endfor
+    return cur_node == root
+
+def main(u32 size, u32 depth, u32 index) -> u32:
+    array_decl field[size] leaves
+    for u32 i in 0..size do
+        leaves[i] = (F)i
+    endfor
+    // construct proof for size = 4, depth = 2, index = 2
+    MerkleProof proof = MerkleProof {
+        path: [3, 7121464417763735006592707814251572945342586864498788058439982172554542974067]
+    }
+    field root = 6557402194359837861476389430607372929947595767345627156196280805068646904526
+    assert(verify_merkle(proof, root, leaves[index], index, depth))
+    return 1

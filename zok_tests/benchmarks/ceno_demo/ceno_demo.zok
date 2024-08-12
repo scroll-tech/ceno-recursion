@@ -1,10 +1,12 @@
 from "transcript" import Transcript, append_message_u32, append_message_field
 from "sumcheck_structs" import SumcheckProof, IOPProverMessage, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState
 from "sumcheck_verifier" import verify_round_and_update_state, interpolate_uni_poly, check_and_generate_subclaim, verify_sumcheck
-from "gkr_structs" import PointAndEval, LayeredPointAndEval, GkrIOPVerifierState, Layer, Circuit, IOPProverStepMessage, IOPProof, GKRInputClaims
-from "gkr_verifier" import verifier_parallel, verifier_init_parallel
+from "gkr_structs" import PointAndEval, LayeredPointAndEval, GkrIOPVerifierState, Layer, Circuit, IOPProverStepMessage, IOPProof, GkrInputClaims
+from "gkr_verifier" import verify_parallel, verifier_init_parallel
+from "phase1" import verify_and_update_state_phase1_step1
 
 def main(u32 num_vars, u32 max_degree, u32 i) -> field:
+    // Start by awkwardly generate sumcheck_proof -> gkr_proof
     // Generate polynomials
     array_decl field[max_degree + 1] pr0
     array_decl field[max_degree + 1] pr1
@@ -28,23 +30,67 @@ def main(u32 num_vars, u32 max_degree, u32 i) -> field:
         evaluations: pr2
     }
 
-    // Generate structs
+    // Generate Proofs
     field claimed_sum = 3
-    SumcheckProof proof = SumcheckProof {
+    SumcheckProof sumcheck_proof = SumcheckProof {
         points: [11; num_vars],
         proofs: [pm0; num_vars]
     }
-    proof.points[1] = 29
-    proof.proofs[1] = pm1
-    proof.points[2] = 40
-    proof.proofs[2] = pm2
-    VPAuxInfo aux_info = VPAuxInfo {
-        max_degree: max_degree,
-        num_variables: num_vars,
+    sumcheck_proof.points[1] = 29
+    sumcheck_proof.proofs[1] = pm1
+    sumcheck_proof.points[2] = 40
+    sumcheck_proof.proofs[2] = pm2
+    IOPProverStepMessage i = IOPProverStepMessage {
+        sumcheck_proof: sumcheck_proof,
+        sumcheck_eval_values: [claimed_sum]
+    }
+    IOPProof iop_proof = IOPProof {
+        sumcheck_proofs: [i]
+    }
+
+    Layer layer_0 = Layer {
+        layer_id: 0,
+        num_sumcheck_steps: 0,
+        sumcheck_steps: [],
+        num_vars: 0,
+
+        // Gates. Should be all None if it's the input layer.
+        add_consts: [],
+        adds: []
+    }
+    // Generate everything else
+    Circuit circuit = Circuit {
+        num_layers: 1,
+        layers: [layer_0],
+        n_witness_in: 0,
+        n_witness_out: 0,
+        paste_from_wits_in: [],
+        paste_from_counter_in: [],
+        paste_from_consts_in: [],
+        copy_to_wits_out: [],
+        assert_consts: [],
+        max_wit_in_num_vars: 0
     }
     Transcript t = Transcript {
         hash: 0
     }
+    PointAndEval output = PointAndEval {
+        d: 3,
+        point: [0, 1, 2],
+        eval: 3
+    }
 
-    SumCheckSubClaim sc = verify_sumcheck(claimed_sum, proof, aux_info, t)
-    return sc.point[i] * 1000 + sc.expected_evaluation
+    // SumCheckSubClaim sc = verify_sumcheck(claimed_sum, sumcheck_proof, aux_info, t)
+    GkrInputClaims claims = verify_parallel(
+        max_degree + 1,
+        circuit,
+        [],
+        1,
+        [output],
+        0,
+        [],
+        iop_proof,
+        num_vars,
+        t
+    )
+    return claims.point_and_evals[0].eval

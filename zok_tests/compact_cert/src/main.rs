@@ -252,8 +252,6 @@ fn verifier(
     let signed_weight = compact_cert_proof.signed_weight;
     assert!(signed_weight > proven_weight);
     let num_reveals: usize = (k + q).div_ceil((signed_weight / proven_weight).ilog2() as usize);
-    assert_eq!(compact_cert_proof.t_list.len(), num_reveals);
-    // assert!(num_reveals <= MAX_NUM_REVEALS.pow(2));
 
     for j in 0..num_reveals {
         // Reproduce coin

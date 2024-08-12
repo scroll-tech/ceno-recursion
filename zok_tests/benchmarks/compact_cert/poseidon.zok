@@ -1,0 +1,62 @@
+from "./poseidon_constants.zok" import POSEIDON_C, POSEIDON_M
+
+def ark(u32 N, field[0] state, field[441] c, u32 it) -> field[N]:
+    for u32 i in 0..N do
+        state[i] = state[i] + c[it + i]
+    endfor
+    return state
+
+def sbox(u32 N, field[0] state, u32 f, u32 p, u32 r) -> field[N]:
+    state[0] = state[0]**5
+    for u32 i in 1..N do
+        state[i] = ((r < f/2) || (r >= f/2 + p)) ? state[i]**5 : state[i]
+    endfor
+    return state
+
+def mix(u32 N, field[0] state, field[81] m) -> field[N]:
+    field[N] out = [0; N]
+    for u32 i in 0..N do
+        field acc = 0
+        for u32 j in 0..N do
+            acc = acc + (state[j] * m[i * 9 + j])
+        endfor
+        out[i] = acc
+    endfor
+    return out
+
+def poseidon(u32 N, field[0] inputs) -> field:
+    assert(N > 0 && N <= 6) // max 6 inputs
+
+    u32 t = N + 1
+    u32[7] rounds_p = [56, 57, 56, 60, 60, 63, 64, 63]
+
+    u32 f = 8
+    u32 p = rounds_p[(t - 2)]
+
+    // Constants are padded with zeroes to the maximum value calculated by
+    // t * (f + p) = 497, where `t` (number of inputs + 1) is a max of 7.
+    // This is done to keep the function generic, as resulting array size depends on `t`
+    // and we do not want callers passing down constants.
+    // This should be revisited once compiler limitations are gone.
+
+    field[441]  c = POSEIDON_C
+    field[81] m = POSEIDON_M
+
+    field[t] state = [0; t]
+    for u32 i in 1..t do
+        state[i] = inputs[i - 1]
+    endfor
+
+    for u32 r in 0..f+p do
+        state = ark(t, state, c, r * t)
+        state = sbox(t, state, f, p, r)
+        state = mix(t, state, m)
+    endfor
+
+    return state[0]
+
+def main() -> field:
+    field[2] inputs = [7121464417763735006592707814251572945342586864498788058439982172554542974067, 1428594528010450612937857703952089201158883202823751715514217423328547116350 ]
+    field hash = poseidon(2, inputs)
+
+    return hash

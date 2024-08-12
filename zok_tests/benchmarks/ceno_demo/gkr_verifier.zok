@@ -1,5 +1,7 @@
 from "transcript" import Transcript, append_message_u32, append_message_field
-from "gkr_structs" import PointAndEval, LayeredPointAndEval, GkrIOPVerifierState, Layer, Circuit, IOPProverStepMessage, IOPProof, GKRInputClaims
+from "gkr_structs" import PointAndEval, LayeredPointAndEval, GkrIOPVerifierState, Layer, Circuit, IOPProverStepMessage, IOPProof, GkrInputClaims
+from "gkr_structs" import OutputPhase1Step1, OutputPhase1Step2, Phase1Step1, Phase2Step1, Phase2Step2, Phase2Step2NoStep3, Phase2Step3, LinearPhase2Step1, InputPhase2Step1, Undefined
+from "phase1" import verify_and_update_state_phase1_step1
 
 /// Initialize verifying state for data parallel circuits.
 def verifier_init_parallel(
@@ -14,6 +16,7 @@ def verifier_init_parallel(
     Transcript t,
     u32 output_wit_num_vars
 ) -> GkrIOPVerifierState:
+    u32[n_layers] subset_point_and_evals_len = [0; n_layers]
     array_decl LayeredPointAndEval[n_layers][0] subset_point_and_evals
     PointAndEval to_next_step_point_and_eval = PointAndEval {
         d: 0,
@@ -31,6 +34,7 @@ def verifier_init_parallel(
         t = append_message_field(t, 30159617365440157229391638132)
         assert_point[i] = t.hash
     endfor
+    u32 to_next_phase_point_and_evals_len = output_len
     PointAndEval[output_len] to_next_phase_point_and_evals = output_evals
     
     // subset_point_and_evals[0] <- wires_out_evals.into_iter().map(|p| (0, p)).collect()
@@ -45,7 +49,9 @@ def verifier_init_parallel(
     subset_point_and_evals[0] = subset_point_and_evals_0
 
     return GkrIOPVerifierState {
+        to_next_phase_point_and_evals_len: to_next_phase_point_and_evals_len,
         to_next_phase_point_and_evals: to_next_phase_point_and_evals,
+        subset_point_and_evals_len: subset_point_and_evals_len,
         subset_point_and_evals: subset_point_and_evals,
         to_next_step_point_and_eval: to_next_step_point_and_eval,
 
@@ -73,7 +79,7 @@ def verify_parallel(
     IOPProof proof,
     u32 instance_num_vars,
     Transcript t
-) -> GKRInputClaims:
+) -> GkrInputClaims:
     // let challenges = circuit.generate_basefield_challenges(challenges);
 
     GkrIOPVerifierState verifier_state = verifier_init_parallel(
@@ -86,7 +92,7 @@ def verify_parallel(
         wires_out_evals,
         instance_num_vars,
         t,
-        circuit.layer_num_vars + instance_num_vars
+        circuit.layers[0].num_vars + instance_num_vars
     )
 
     for u32 layer_id in 0..circuit.num_layers do
@@ -96,6 +102,9 @@ def verify_parallel(
         for u32 i in 0..layer.num_sumcheck_steps do
             field step = layer.sumcheck_steps[i]
             IOPProverStepMessage step_proof = proof.sumcheck_proofs[i]
+            if step == Phase1Step1 then
+                assert(verify_and_update_state_phase1_step1(verifier_state, circuit, step_proof, t))
+            endif
             /*
             match step {
                 SumcheckStepType::OutputPhase1Step1 => verifier_state
@@ -135,6 +144,6 @@ def verify_parallel(
     endfor
 
 
-    return GKRInputClaims {
+    return GkrInputClaims {
         point_and_evals: verifier_state.to_next_phase_point_and_evals,
     }

@@ -13,7 +13,9 @@ struct LayeredPointAndEval {
 
 struct GkrIOPVerifierState {
     u32 layer_id
+    u32 to_next_phase_point_and_evals_len
     PointAndEval[0] to_next_phase_point_and_evals
+    u32[0] subset_point_and_evals_len
     LayeredPointAndEval[0][0] subset_point_and_evals
     field[0][0] challenges
     u32 instance_num_vars
@@ -87,7 +89,6 @@ struct Counter {
 
 struct Circuit {
     u32 num_layers
-    u32 layer_num_vars
     Layer[0] layers
     u32 n_witness_in
     u32 n_witness_out
@@ -112,6 +113,6 @@ struct IOPProof {
     IOPProverStepMessage[0] sumcheck_proofs
 }
 
-struct GKRInputClaims {
+struct GkrInputClaims {
     PointAndEval[0] point_and_evals
 }

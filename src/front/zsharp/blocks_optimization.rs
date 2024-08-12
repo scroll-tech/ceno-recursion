@@ -19,6 +19,8 @@ use crate::front::zsharp::cfg;
 
 use crate::front::zsharp::ZSharp;
 
+use super::pretty::pretty_stmt;
+
 const MIN_BLOCK_SIZE: usize = 1024;
 const CFG_VERBOSE: bool = false;
 
@@ -1862,8 +1864,7 @@ impl<'ast> ZGen<'ast> {
             }
 
             // Only analyze if never visited before or OUT changes
-            if !visited[cur_bl] || state != bl_out[cur_bl] {
-                
+            if !visited[cur_bl] || state != bl_out[cur_bl] || state_per_trace != bl_out_per_call_trace[cur_bl] {
                 bl_out[cur_bl] = state.clone();
                 bl_out_per_call_trace[cur_bl] = state_per_trace.clone();
                 visited[cur_bl] = true;
@@ -1882,6 +1883,7 @@ impl<'ast> ZGen<'ast> {
 
                 // KILL and GEN within the block
                 (state, state_per_trace, _) = la_inst(state, state_per_trace, &bls[cur_bl].instructions);
+
                 bl_in[cur_bl] = state;
                 bl_in_per_call_trace[cur_bl] = state_per_trace.clone();
 

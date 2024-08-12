@@ -401,6 +401,8 @@ impl<'ast> ZGen<'ast> {
         mut phy_mem: Vec<T>,
         mut vir_mem: Vec<Option<T>>
     ) -> Result<(usize, Vec<T>, Vec<Option<T>>, bool, Vec<MemOp>, Vec<MemOp>), String> {
+        debug!("Block eval impl: {}", bl.name);
+
         let mut phy_mem_op: Vec<MemOp> = Vec::new();
         let mut vir_mem_op: Vec<MemOp> = Vec::new();
 
@@ -427,6 +429,7 @@ impl<'ast> ZGen<'ast> {
         mut vir_mem_op: Vec<MemOp>,
     ) -> Result<(Vec<T>, Vec<Option<T>>, Vec<MemOp>, Vec<MemOp>), String> {
         for s in inst {
+            debug!("Block eval inst impl: {:?}", s);
             match s {
                 BlockContent::MemPush((var, _, offset)) => {
                     let sp_t = self.cvar_lookup(W_SP).ok_or(format!("Push to %PHY failed: %SP is uninitialized."))?;
@@ -535,6 +538,7 @@ impl<'ast> ZGen<'ast> {
                     let addr = self.t_to_usize(addr_t.clone())?;
 
                     // Declare the variable
+                    println!("ADDR: {}", addr);
                     let mut val_t = vir_mem[addr].clone().ok_or(format!("LOAD failed: entry {} is uninitialized.", addr))?;
                     let entry_ty = val_t.type_();
                     if ty != entry_ty {

@@ -1818,11 +1818,12 @@ impl<'ast> ZGen<'ast> {
                 state.insert("%RET.main".to_string());
                 state_per_trace.insert(Vec::new(), BTreeSet::from(["%RET.main".to_string()]));
             }
-            if exit_bls_fn.contains(&cur_bl) {
-                for s in &successor[cur_bl] {
-                    state.extend(bl_in[*s].clone());
-                    // If function exit block, update function call trace
+            for s in &successor[cur_bl] {
+                if exit_bls_fn.contains(&cur_bl) && bls[*s].fn_name != bls[cur_bl].fn_name {
+                    // If function exit, update function call trace
                     // Append the corresponding entry_bls_fn to the traces
+                    // It's a function exit only if cur_bl is a function exit block & succ is in a different function
+                    state.extend(bl_in[*s].clone());
                     let entry_bl = call_exit_entry_map.get(s).unwrap();
                     for (trace, s_state) in bl_in_per_call_trace[*s].clone() {
                         let new_trace = [trace, vec![*entry_bl]].concat();
@@ -1832,32 +1833,29 @@ impl<'ast> ZGen<'ast> {
                             state_per_trace.insert(new_trace, s_state.clone());
                         }
                     }
-                }
-            } else {
-                for s in &successor[cur_bl] {
-                    if entry_bls_fn.contains(s) {
-                        // If s is a function entry block, update function call trace
-                        // Only include the traces that end with cur_bl
-                        for (trace, s_state) in bl_in_per_call_trace[*s].clone() {
-                            if trace[trace.len() - 1] == cur_bl {
-                                state.extend(s_state.clone());
-                                let new_trace = trace[..trace.len() - 1].to_vec();
-                                if state_per_trace.contains_key(&new_trace) {
-                                    state_per_trace.get_mut(&new_trace).unwrap().extend(s_state.clone());
-                                } else {
-                                    state_per_trace.insert(new_trace, s_state.clone());
-                                }
+                } else if entry_bls_fn.contains(s) && bls[*s].fn_name != bls[cur_bl].fn_name {
+                    // If function entry, update function call trace
+                    // Only include the traces that end with cur_bl
+                    // It's a function exit only if succ is a function entrance & in a different function
+                    for (trace, s_state) in bl_in_per_call_trace[*s].clone() {
+                        if trace[trace.len() - 1] == cur_bl {
+                            state.extend(s_state.clone());
+                            let new_trace = trace[..trace.len() - 1].to_vec();
+                            if state_per_trace.contains_key(&new_trace) {
+                                state_per_trace.get_mut(&new_trace).unwrap().extend(s_state.clone());
+                            } else {
+                                state_per_trace.insert(new_trace, s_state.clone());
                             }
                         }
-                    } else {
-                        // Otherwise simply copy all state_per_trace
-                        state.extend(bl_in[*s].clone());
-                        for (trace, s_state) in bl_in_per_call_trace[*s].clone() {
-                            if state_per_trace.contains_key(&trace) {
-                                state_per_trace.get_mut(&trace).unwrap().extend(s_state.clone());
-                            } else {
-                                state_per_trace.insert(trace, s_state.clone());
-                            }
+                    }
+                } else {
+                    // Otherwise simply copy all state_per_trace
+                    state.extend(bl_in[*s].clone());
+                    for (trace, s_state) in bl_in_per_call_trace[*s].clone() {
+                        if state_per_trace.contains_key(&trace) {
+                            state_per_trace.get_mut(&trace).unwrap().extend(s_state.clone());
+                        } else {
+                            state_per_trace.insert(trace, s_state.clone());
                         }
                     }
                 }
@@ -2307,7 +2305,7 @@ impl<'ast> ZGen<'ast> {
             let mut stack = {
                 let mut stack = BTreeSet::new();
                 // if a function entry block, union over all predecessors
-                if predecessor_fn[cur_bl].len() == 0 {
+                if entry_bls_fn.contains(&cur_bl) {
                     for p in &predecessor[cur_bl] {
                         stack.extend(stack_out[*p].clone());
                     }
@@ -2344,7 +2342,7 @@ impl<'ast> ZGen<'ast> {
                             let (gen, _) = stmt_find_val(stmt);
                             for shadower in &gen {
                                 let shadower_alive = bls[cur_bl].outputs.iter().fold(false, |a, b| a || &b.0 == shadower);
-                                // Proceed if the shadower live till the end of the block
+                                // Proceed if the shadower lives till the end of the block
                                 if shadower_alive && shadower.chars().next().unwrap() != '%' {
                                     let shadower_vsi = VarSpillInfo::new(shadower.to_string());
                                     // Iterate through outputs of cur_bl (live variables)
@@ -2412,6 +2410,9 @@ impl<'ast> ZGen<'ast> {
                 for succ in &successor[cur_bl] {
                     next_bls.push_back(*succ);
                 }
+                for succ in &successor_fn[cur_bl] {
+                    next_bls.push_back(*succ);
+                }
             }
         }
         // As long as any block has spill_size > 0, keep vote out the candidate that can reduce the most total_spill_size
@@ -2437,10 +2438,6 @@ impl<'ast> ZGen<'ast> {
             }
             let mut scores = Vec::from_iter(scores);
             scores.sort_by(|(_, a), (_, b)| b.len().cmp(&a.len()));
-
-            println!("TOTAL SPILL SIZE: {:?}", total_spill_size);
-            println!("SPILL SIZE: {:?}", spill_size);
-            println!("SCORES: {:?}", scores.len());
 
             // Pick the #0 candidate
             let ((shadower, var, _, _), _) = &scores[0];

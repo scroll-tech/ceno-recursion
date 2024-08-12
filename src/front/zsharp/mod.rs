@@ -33,7 +33,7 @@ use zvisit::{ZConstLiteralRewriter, ZGenericInf, ZStatementWalker, ZVisitorMut};
 
 // garbage collection increment for adaptive GC threshold
 const GC_INC: usize = 32;
-const GEN_VERBOSE: bool = true;
+const GEN_VERBOSE: bool = false;
 const INTERPRET_VERBOSE: bool = false;
 
 /// Inputs to the Z# compiler
@@ -1758,6 +1758,15 @@ impl<'ast> ZGen<'ast> {
 
     fn cvar_declare(&self, name: String, ty: &Ty) -> Result<(), String> {
         self.cvar_declare_init(name, ty, ty.default())
+    }
+
+    // Remove a variable from cvar_stack, used by block transition to remove %o
+    fn cvar_remove(&self, name: &String) {
+        for f in self.cvars_stack.borrow_mut().iter_mut() {
+            for s in f.iter_mut() {
+                s.remove(name);
+            }
+        }
     }
 
     fn cvar_lookup(&self, name: &str) -> Option<T> {

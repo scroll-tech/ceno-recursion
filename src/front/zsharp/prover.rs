@@ -125,8 +125,9 @@ impl<'ast> ZGen<'ast> {
         
         for (key, value) in all_vars {
             print!("{} = ", pretty_name(key));
-            value.pretty(&mut std::io::stdout().lock())
-            .expect("error pretty-printing value");
+            value.pretty(&mut std::io::stdout().lock()).unwrap_or({
+                print!("_");
+            });
             println!();
         }
     }
@@ -312,6 +313,12 @@ impl<'ast> ZGen<'ast> {
                     bl_exec_state[tr_size - 1].reg_out[i] = self.cvar_lookup(&format!("%o{:06}", i));
                     if bl_exec_state[tr_size - 1].reg_out[i].is_none() {
                         bl_exec_state[tr_size - 1].reg_out[i] = self.cvar_lookup(&format!("%i{:06}", i));
+                    }
+                }
+                // Remove all %o registers from the previous block (if exist)
+                if bl_exec_state.len() > 1 {
+                    for (name, _) in &bls[bl_exec_state[bl_exec_state.len() - 2].blk_id].outputs {
+                        self.cvar_remove(name);
                     }
                 }
             }

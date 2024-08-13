@@ -1,5 +1,5 @@
-from "./poseidon.zok" import poseidon, ark, sbox, mix
-from "./merkle.zok" import MerkleProof, verify_merkle
+from "./compact_cert/poseidon.zok" import poseidon, ark, sbox, mix
+from "./compact_cert/merkle.zok" import MerkleProof, verify_merkle
 
 // Reveal Proof Entry
 struct T {

@@ -538,7 +538,6 @@ impl<'ast> ZGen<'ast> {
                     let addr = self.t_to_usize(addr_t.clone())?;
 
                     // Declare the variable
-                    println!("ADDR: {}", addr);
                     let mut val_t = vir_mem[addr].clone().ok_or(format!("LOAD failed: entry {} is uninitialized.", addr))?;
                     let entry_ty = val_t.type_();
                     if ty != entry_ty {

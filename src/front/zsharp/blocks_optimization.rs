@@ -15,11 +15,7 @@ use std::iter::FromIterator;
 use crate::front::zsharp::ZGen;
 use crate::front::Computations;
 use crate::target::r1cs::trans::to_r1cs;
-use crate::front::zsharp::cfg;
-
-use crate::front::zsharp::ZSharp;
-
-use super::pretty::pretty_stmt;
+use crate::front::zsharp::{cfg, ZSharp};
 
 const MIN_BLOCK_SIZE: usize = 1024;
 const CFG_VERBOSE: bool = false;

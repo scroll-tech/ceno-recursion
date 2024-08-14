@@ -433,6 +433,154 @@ fn stmt_find_val(s: &Statement) -> (BTreeSet<String>, BTreeSet<String>) {
     }
 }
 
+// Given an expression, replace all variables of old_f_name with new_f_name, plus scope_diff offset in scope
+fn expr_replace_fn(e: &Expression, old_f_name: &String, new_f_name: &String, scope_diff: usize) -> Expression {
+    match e {
+        Expression::Ternary(t) => {
+            let new_first = expr_replace_fn(&t.first, old_f_name, new_f_name, scope_diff);
+            let new_second = expr_replace_fn(&t.second, old_f_name, new_f_name, scope_diff);
+            let new_third = expr_replace_fn(&t.third, old_f_name, new_f_name, scope_diff);
+            Expression::Ternary(TernaryExpression {
+                first: Box::new(new_first),
+                second: Box::new(new_second),
+                third: Box::new(new_third),
+                span: Span::new("", 0, 0).unwrap()
+            })
+        }
+        Expression::Binary(b) => {
+            let new_left = expr_replace_fn(&b.left, old_f_name, new_f_name, scope_diff);
+            let new_right = expr_replace_fn(&b.right, old_f_name, new_f_name, scope_diff);
+            Expression::Binary(BinaryExpression {
+                op: b.op.clone(),
+                left: Box::new(new_left),
+                right: Box::new(new_right),
+                span: Span::new("", 0, 0).unwrap()
+            })
+        }
+        Expression::Unary(u) => {
+            let new_expr = expr_replace_fn(&u.expression, old_f_name, new_f_name, scope_diff);
+            Expression::Unary(UnaryExpression {
+                op: u.op.clone(),
+                expression: Box::new(new_expr),
+                span: Span::new("", 0, 0).unwrap()
+            })
+        },
+        Expression::Postfix(p) => {
+            // Identifier
+            let new_id = var_fn_merge(&p.id.value, old_f_name, new_f_name, scope_diff);
+            // Accesses
+            let mut new_accesses = Vec::new();
+            for aa in &p.accesses {
+                if let Access::Select(a) = aa {
+                    if let RangeOrExpression::Expression(e) = &a.expression {
+                        let new_expr = expr_replace_fn(e, old_f_name, new_f_name, scope_diff);
+                        new_accesses.push(Access::Select(ArrayAccess {
+                            expression: RangeOrExpression::Expression(new_expr),
+                            span: Span::new("", 0, 0).unwrap()
+                        }))
+                    } else {
+                        panic!("Range access not supported.")
+                    }
+                } else {
+                    panic!("Unsupported membership access.")
+                }
+            }
+            Expression::Postfix(PostfixExpression {
+                id: IdentifierExpression {
+                    value: new_id,
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                accesses: new_accesses,
+                span: Span::new("", 0, 0).unwrap()
+            })
+        }
+        Expression::Identifier(i) => {
+            Expression::Identifier(IdentifierExpression {
+                value: var_fn_merge(&i.value, old_f_name, new_f_name, scope_diff),
+                span: Span::new("", 0, 0).unwrap()
+            })
+        }
+        Expression::Literal(_) => e.clone(),
+        _ => {
+            panic!("Unsupported Expression.");
+        }
+    }
+}
+
+// Given a statement, replace all variables of old_f_name with new_f_name, plus scope_diff offset in scope
+fn stmt_replace_fn(s: &Statement, old_f_name: &String, new_f_name: &String, scope_diff: usize) -> Statement {
+    match s {
+        Statement::Return(_) => {
+            panic!("Blocks should not contain return statements.")
+        }
+        Statement::Definition(d) => {
+            let mut new_lhs = Vec::new();
+            for l in &d.lhs {
+                match l {
+                    TypedIdentifierOrAssignee::Assignee(p) => {
+                        let new_id = var_fn_merge(&p.id.value, old_f_name, new_f_name, scope_diff);
+                        let mut new_accesses = Vec::new();
+                        for aa in &p.accesses {
+                            if let AssigneeAccess::Select(a) = aa {
+                                if let RangeOrExpression::Expression(e) = &a.expression {
+                                    let new_expr = expr_replace_fn(e, old_f_name, new_f_name, scope_diff);
+                                    new_accesses.push(AssigneeAccess::Select(ArrayAccess {
+                                        expression: RangeOrExpression::Expression(new_expr),
+                                        span: Span::new("", 0, 0).unwrap()
+                                    }))
+                                } else {
+                                    panic!("Range access not supported.")
+                                }
+                            } else {
+                                panic!("Unsupported membership access.")
+                            }
+                        }
+                        new_lhs.push(TypedIdentifierOrAssignee::Assignee(Assignee {
+                            id: IdentifierExpression {
+                                value: new_id,
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            accesses: new_accesses,
+                            span: Span::new("", 0, 0).unwrap()
+                        }));
+                    }
+                    TypedIdentifierOrAssignee::TypedIdentifier(ti) => {
+                        new_lhs.push(TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                            array_metadata: ti.array_metadata.clone(),
+                            ty: ti.ty.clone(),
+                            identifier: IdentifierExpression {
+                                value: var_fn_merge(&ti.identifier.value, old_f_name, new_f_name, scope_diff),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            span: Span::new("", 0, 0).unwrap()
+                        }))
+                    }
+                }
+            }
+            let new_expr = expr_replace_fn(&d.expression, old_f_name, new_f_name, scope_diff);
+            Statement::Definition(DefinitionStatement {
+                lhs: new_lhs,
+                expression: new_expr,
+                span: Span::new("", 0, 0).unwrap()
+            })
+        }
+        Statement::Assertion(a) => {
+            let new_expr = expr_replace_fn(&a.expression, old_f_name, new_f_name, scope_diff);
+            Statement::Assertion(AssertionStatement {
+                expression: new_expr,
+                message: a.message.clone(),
+                span: Span::new("", 0, 0).unwrap()
+            })
+        },
+        Statement::Conditional(_c) => { panic!("Blocks should not contain conditional statements.") }
+        Statement::Iteration(_) => { panic!("Blocks should not contain iteration statements.") }
+        Statement::WhileLoop(_) => { panic!("Blocks should not contain while loop statements.") }
+        Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
+        Statement::Witness(_) => { panic!("Witness statements unsupported.") }
+        Statement::ArrayDecl(_) => { panic!("Blocks should not contain array declaration statements.") }
+    }
+}
+
 // Given a statement, decide if it is of form %SP = %SP + x
 fn is_sp_push(s: &Statement) -> bool {
     if let Statement::Definition(d) = s {
@@ -512,6 +660,47 @@ fn is_alive(
     var: &String
 ) -> bool {
     state.get(var) != None
+}
+
+// Convert a variable of old_f_name to new_f_name, with scope increase by scope_diff
+fn var_fn_merge(
+    var: &String,
+    old_f_name: &String,
+    new_f_name: &String,
+    scope_diff: usize
+) -> String {
+    let parts = var.split(".").collect::<Vec<&str>>();
+    // Parts should either have length 1 (reserved), 2 (%RET), or 4 (others)
+    match parts.len() {
+        1 => { return var.to_string(); },
+        2 => {
+            if parts[1] == old_f_name {
+                let mut new_var_name = parts[0].to_string();
+                new_var_name.push_str(".");
+                new_var_name.push_str(new_f_name);
+                return new_var_name;
+            } else {
+                return var.to_string();
+            }
+        }
+        4 => {
+            if parts[1] == old_f_name {
+                let mut new_var_name = parts[0].to_string();
+                new_var_name.push_str(".");
+                new_var_name.push_str(new_f_name);
+                new_var_name.push_str(".");
+                let mut scope = parts[2].parse::<usize>().unwrap();
+                scope += scope_diff;
+                new_var_name.push_str(&scope.to_string());
+                new_var_name.push_str(".");
+                new_var_name.push_str(parts[2]);
+                return new_var_name;
+            } else {
+                return var.to_string();
+            }
+        }
+        _ => { panic!("Cannot parse variable: {}", var) }
+    }
 }
 
 // Join for block merge
@@ -1089,6 +1278,58 @@ fn ty_inst<'ast>(
     }
     state
 }
+
+// Function Merge
+// Convert all variables of old_f_name to new_f_name, with scope increase by scope_diff
+fn fm_inst<'ast>(
+    inst: &Vec<BlockContent<'ast>>,
+    old_f_name: &String,
+    new_f_name: &String,
+    scope_diff: usize,
+) -> Vec<BlockContent<'ast>> {
+    let mut new_instr = Vec::new();
+    for i in inst.iter().rev() {
+        match i {
+            BlockContent::MemPush((name, ty, offset)) => {
+                new_instr.push(BlockContent::MemPush((var_fn_merge(name, old_f_name, new_f_name, scope_diff), ty.clone(), *offset)));
+            }
+            BlockContent::MemPop((id, ty, offset)) => {
+                new_instr.push(BlockContent::MemPop((var_fn_merge(id, old_f_name, new_f_name, scope_diff), ty.clone(), *offset)));
+            }
+            BlockContent::ArrayInit((arr, ty, expr)) => {
+                let new_arr = var_fn_merge(arr, old_f_name, new_f_name, scope_diff);
+                let new_expr = expr_replace_fn(expr, old_f_name, new_f_name, scope_diff);
+                new_instr.push(BlockContent::ArrayInit((new_arr, ty.clone(), new_expr)));
+            }
+            BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
+                let new_val_expr = expr_replace_fn(val_expr, old_f_name, new_f_name, scope_diff);
+                let new_arr = var_fn_merge(arr, old_f_name, new_f_name, scope_diff);
+                let new_id_expr = expr_replace_fn(id_expr, old_f_name, new_f_name, scope_diff);
+                new_instr.push(BlockContent::Store((new_val_expr, ty.clone(), new_arr, new_id_expr, *init)));
+            }
+            BlockContent::Load((val, ty, arr, id_expr)) => {
+                let new_val = var_fn_merge(val, old_f_name, new_f_name, scope_diff);
+                let new_arr = var_fn_merge(arr, old_f_name, new_f_name, scope_diff);
+                let new_id_expr = expr_replace_fn(id_expr, old_f_name, new_f_name, scope_diff);
+                new_instr.push(BlockContent::Load((new_val, ty.clone(), new_arr, new_id_expr)));
+            }
+            BlockContent::DummyLoad() => {
+                new_instr.push(BlockContent::DummyLoad());
+            }
+            BlockContent::Branch((cond, if_inst, else_inst)) => {
+                let new_cond = expr_replace_fn(cond, old_f_name, new_f_name, scope_diff);
+                let new_if_inst = fm_inst(if_inst, old_f_name, new_f_name, scope_diff);
+                let new_else_inst = fm_inst(else_inst, old_f_name, new_f_name, scope_diff);
+                new_instr.push(BlockContent::Branch((new_cond, new_if_inst, new_else_inst)));
+            }
+            BlockContent::Stmt(s) => {
+                new_instr.push(BlockContent::Stmt(stmt_replace_fn(s, old_f_name, new_f_name, scope_diff)));
+            }
+        }
+    }
+    new_instr
+}
+
 
 // Var -> Reg
 fn vtr_inst<'ast>(

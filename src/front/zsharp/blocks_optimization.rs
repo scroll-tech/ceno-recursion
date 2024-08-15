@@ -434,7 +434,7 @@ fn stmt_find_val(s: &Statement) -> (BTreeSet<String>, BTreeSet<String>) {
 }
 
 // Given an expression, replace all variables of old_f_name with new_f_name, plus scope_diff offset in scope
-fn expr_replace_fn(e: &Expression, old_f_name: &String, new_f_name: &String, scope_diff: usize) -> Expression {
+fn expr_replace_fn<'ast>(e: &Expression<'ast>, old_f_name: &String, new_f_name: &String, scope_diff: usize) -> Expression<'ast> {
     match e {
         Expression::Ternary(t) => {
             let new_first = expr_replace_fn(&t.first, old_f_name, new_f_name, scope_diff);
@@ -508,7 +508,7 @@ fn expr_replace_fn(e: &Expression, old_f_name: &String, new_f_name: &String, sco
 }
 
 // Given a statement, replace all variables of old_f_name with new_f_name, plus scope_diff offset in scope
-fn stmt_replace_fn(s: &Statement, old_f_name: &String, new_f_name: &String, scope_diff: usize) -> Statement {
+fn stmt_replace_fn<'ast>(s: &Statement<'ast>, old_f_name: &String, new_f_name: &String, scope_diff: usize) -> Statement<'ast> {
     match s {
         Statement::Return(_) => {
             panic!("Blocks should not contain return statements.")
@@ -662,12 +662,14 @@ fn is_alive(
     state.get(var) != None
 }
 
-// Convert a variable of old_f_name to new_f_name, with scope increase by scope_diff
+// Convert a variable of old_f_name to new_f_name, with scope increase by scope_diff and version increase by max_ver
+// a.old_f_name.scope.ver -> a@old_f_name.new_f_name.<scope + scope_diff>.ver
+// Return the new var name and updated max_ver
 fn var_fn_merge(
     var: &String,
     old_f_name: &String,
     new_f_name: &String,
-    scope_diff: usize
+    scope_diff: usize,
 ) -> String {
     let parts = var.split(".").collect::<Vec<&str>>();
     // Parts should either have length 1 (reserved), 2 (%RET), or 4 (others)
@@ -675,6 +677,7 @@ fn var_fn_merge(
         1 => { return var.to_string(); },
         2 => {
             if parts[1] == old_f_name {
+                // %RET is still %RET, no need to change that
                 let mut new_var_name = parts[0].to_string();
                 new_var_name.push_str(".");
                 new_var_name.push_str(new_f_name);
@@ -686,6 +689,8 @@ fn var_fn_merge(
         4 => {
             if parts[1] == old_f_name {
                 let mut new_var_name = parts[0].to_string();
+                new_var_name.push_str("@");
+                new_var_name.push_str(old_f_name);
                 new_var_name.push_str(".");
                 new_var_name.push_str(new_f_name);
                 new_var_name.push_str(".");
@@ -693,7 +698,7 @@ fn var_fn_merge(
                 scope += scope_diff;
                 new_var_name.push_str(&scope.to_string());
                 new_var_name.push_str(".");
-                new_var_name.push_str(parts[2]);
+                new_var_name.push_str(&parts[3].to_string());
                 return new_var_name;
             } else {
                 return var.to_string();
@@ -1291,39 +1296,39 @@ fn fm_inst<'ast>(
     for i in inst.iter().rev() {
         match i {
             BlockContent::MemPush((name, ty, offset)) => {
-                new_instr.push(BlockContent::MemPush((var_fn_merge(name, old_f_name, new_f_name, scope_diff), ty.clone(), *offset)));
+                new_instr.insert(0, BlockContent::MemPush((var_fn_merge(name, old_f_name, new_f_name, scope_diff), ty.clone(), *offset)));
             }
             BlockContent::MemPop((id, ty, offset)) => {
-                new_instr.push(BlockContent::MemPop((var_fn_merge(id, old_f_name, new_f_name, scope_diff), ty.clone(), *offset)));
+                new_instr.insert(0, BlockContent::MemPop((var_fn_merge(id, old_f_name, new_f_name, scope_diff), ty.clone(), *offset)));
             }
             BlockContent::ArrayInit((arr, ty, expr)) => {
                 let new_arr = var_fn_merge(arr, old_f_name, new_f_name, scope_diff);
                 let new_expr = expr_replace_fn(expr, old_f_name, new_f_name, scope_diff);
-                new_instr.push(BlockContent::ArrayInit((new_arr, ty.clone(), new_expr)));
+                new_instr.insert(0, BlockContent::ArrayInit((new_arr, ty.clone(), new_expr)));
             }
             BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
                 let new_val_expr = expr_replace_fn(val_expr, old_f_name, new_f_name, scope_diff);
                 let new_arr = var_fn_merge(arr, old_f_name, new_f_name, scope_diff);
                 let new_id_expr = expr_replace_fn(id_expr, old_f_name, new_f_name, scope_diff);
-                new_instr.push(BlockContent::Store((new_val_expr, ty.clone(), new_arr, new_id_expr, *init)));
+                new_instr.insert(0, BlockContent::Store((new_val_expr, ty.clone(), new_arr, new_id_expr, *init)));
             }
             BlockContent::Load((val, ty, arr, id_expr)) => {
                 let new_val = var_fn_merge(val, old_f_name, new_f_name, scope_diff);
                 let new_arr = var_fn_merge(arr, old_f_name, new_f_name, scope_diff);
                 let new_id_expr = expr_replace_fn(id_expr, old_f_name, new_f_name, scope_diff);
-                new_instr.push(BlockContent::Load((new_val, ty.clone(), new_arr, new_id_expr)));
+                new_instr.insert(0, BlockContent::Load((new_val, ty.clone(), new_arr, new_id_expr)));
             }
             BlockContent::DummyLoad() => {
-                new_instr.push(BlockContent::DummyLoad());
+                new_instr.insert(0, BlockContent::DummyLoad());
             }
             BlockContent::Branch((cond, if_inst, else_inst)) => {
                 let new_cond = expr_replace_fn(cond, old_f_name, new_f_name, scope_diff);
                 let new_if_inst = fm_inst(if_inst, old_f_name, new_f_name, scope_diff);
                 let new_else_inst = fm_inst(else_inst, old_f_name, new_f_name, scope_diff);
-                new_instr.push(BlockContent::Branch((new_cond, new_if_inst, new_else_inst)));
+                new_instr.insert(0, BlockContent::Branch((new_cond, new_if_inst, new_else_inst)));
             }
             BlockContent::Stmt(s) => {
-                new_instr.push(BlockContent::Stmt(stmt_replace_fn(s, old_f_name, new_f_name, scope_diff)));
+                new_instr.insert(0, BlockContent::Stmt(stmt_replace_fn(s, old_f_name, new_f_name, scope_diff)));
             }
         }
     }
@@ -1574,7 +1579,25 @@ impl<'ast> ZGen<'ast> {
             if VERBOSE && CFG_VERBOSE {
                 print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
             }
+            // Func Merge
+            bls = self.func_merge(bls, &predecessor, successor_fn, entry_bls_fn, exit_bls_fn);
+            if VERBOSE {
+                println!("\n\n--\nFunc Merge:");
+                print_bls(&bls, &entry_bl);
+            }
 
+            // Reconstruct CFG
+            let (
+                successor, 
+                predecessor, 
+                exit_bls, 
+                _, 
+                _, 
+                predecessor_fn, 
+                _,
+                _,
+                _
+            ) = self.construct_flow_graph(&bls, entry_bl);
             // Liveness
             bls = self.liveness_analysis(bls, &successor, &predecessor,  &predecessor_fn, &exit_bls);
             // DBE
@@ -2004,6 +2027,93 @@ impl<'ast> ZGen<'ast> {
                     }
                 }
             }    
+        }
+
+        return bls;
+    }
+
+    // If a function is called only once, merge that function with its caller, which includes:
+    // - Change the function name & scope of all blocks and variables
+    // - Update CFG
+    // - Remove reference to %RP
+    // Assume that each function only has one entry point, which should be true for all unoptimized CFG
+    fn func_merge(
+        &self,
+        mut bls: Vec<Block<'ast>>,
+        predecessor: &Vec<BTreeSet<usize>>,
+        mut successor_fn: Vec<BTreeSet<usize>>,
+        mut entry_bls_fn: BTreeSet<usize>,
+        mut exit_bls_fn: BTreeSet<usize>,
+    ) -> Vec<Block<'ast>> {
+        // Iterate through CFG, find all functions that are called once
+        for callee in 0..bls.len() {
+            if entry_bls_fn.contains(&callee) && predecessor[callee].len() == 1 {
+                let caller = predecessor[callee].first().unwrap().clone();
+                let caller_fn = &bls[caller].fn_name.clone();
+                let callee_fn = &bls[callee].fn_name.clone();
+                let scope_diff = bls[caller].scope + 1;
+                // Find func call exit block
+                assert_eq!(successor_fn[caller].len(), 1);
+                let caller_exit = successor_fn[caller].first().unwrap().clone();
+                // Update CFG
+                successor_fn[caller] = BTreeSet::from([callee]);
+                entry_bls_fn.remove(&callee);
+                
+                // Merge callee with caller
+                // First on caller (to deal with call parameters)
+                bls[caller].instructions = fm_inst(&bls[caller].instructions, callee_fn, caller_fn, scope_diff);
+                // Then on callee
+                let mut visited: Vec<bool> = vec![false; bls.len()];
+                let mut next_bls: VecDeque<usize> = VecDeque::new();
+                next_bls.push_back(callee);
+                while !next_bls.is_empty() {
+                    let cur_bl = next_bls.pop_front().unwrap();
+                    // Only visit each block once
+                    if !visited[cur_bl] {
+                        visited[cur_bl] = true;
+                        assert_eq!(&bls[cur_bl].fn_name, callee_fn);
+                        bls[cur_bl].fn_name = caller_fn.clone();
+                        bls[cur_bl].scope += scope_diff;
+                        bls[cur_bl].instructions = fm_inst(&bls[cur_bl].instructions, callee_fn, caller_fn, scope_diff);
+                        // Update terminator
+                        if let BlockTerminator::Transition(e) = &bls[cur_bl].terminator {
+                            bls[cur_bl].terminator = BlockTerminator::Transition(expr_replace_fn(e, callee_fn, caller_fn, scope_diff));
+                        } else {
+                            unreachable!();
+                        }
+
+                        // Update terminator and push in successors
+                        if exit_bls_fn.contains(&cur_bl) {
+                            // Update CFG
+                            exit_bls_fn.remove(&cur_bl);
+                            assert_eq!(successor_fn[cur_bl].len(), 0);
+                            successor_fn[cur_bl] = BTreeSet::from([caller_exit]);
+                            // Assert terminator is %RP and replace it with caller_exit
+                            if let BlockTerminator::Transition(Expression::Identifier(ie)) = &bls[cur_bl].terminator {
+                                assert_eq!(ie.value, "%RP");
+                                bls[cur_bl].terminator = BlockTerminator::Transition(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                                    value: DecimalNumber {
+                                        value: format!("{}", caller_exit),
+                                        span: Span::new("", 0, 0).unwrap()
+                                    },
+                                    suffix: Some(ty_to_dec_suffix(&Type::Basic(BasicType::Field(FieldType {
+                                        span: Span::new("", 0, 0).unwrap()
+                                    })))),
+                                    span: Span::new("", 0, 0).unwrap()
+                                })))
+                            } else {
+                                unreachable!();
+                            }
+                        } else {
+                            for s in &successor_fn[cur_bl] {
+                                next_bls.push_back(*s);
+                            }
+                        }
+                    }
+                }
+                // Finally on caller_exit
+                bls[caller_exit].instructions = fm_inst(&bls[caller_exit].instructions, callee_fn, caller_fn, scope_diff);
+            }
         }
 
         return bls;

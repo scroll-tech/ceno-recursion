@@ -2,7 +2,7 @@ from "transcript" import Transcript, append_message_u32, append_message_field
 from "sumcheck_structs" import SumcheckProof, IOPProverMessage, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState
 
 def verify_round_and_update_state(SumcheckIOPVerifierState self, IOPProverMessage prover_msg, Transcript transcript) -> SumcheckIOPVerifierState:
-    // BLOCK 8
+    // BLOCK 15
     assert(!self.finished)
 
     // In an interactive protocol, the verifier should
@@ -26,33 +26,29 @@ def verify_round_and_update_state(SumcheckIOPVerifierState self, IOPProverMessag
     return self
 
 def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
-    // BLOCK 9
+    // BLOCK 10
     u32 len = p_i_len
     array_decl field[len] evals
+
+    // Combine `prod = \prod_{j} (eval_at - j)`
+    // with `denom_up = field_factorial(len - 1)`
     field prod = eval_at
     evals[0] = eval_at
-
-    // `prod = \prod_{j} (eval_at - j)`
+    field res = 0
+    field denom_up = 1
     for u32 e in 1..len do
-        // BLOCK 10, for loop
+        // BLOCK 11, for loop
         field tmp = eval_at - (F)e
         evals[e] = tmp
         prod = prod * tmp
+        denom_up = denom_up * (F)e
     endfor
-    // BLOCK 11
-    field res = 0
-    // denom_up = field_factorial(len - 1)
-    field denom_up = 1
-    for u32 i in 2..len do
-        // BLOCK 12, for loop
-        denom_up = denom_up * (F)i
-    endfor
-    // BLOCK 13
+    // BLOCK 12
     field denom_down = 1
 
     u32 it = len
     while it > 0 do
-        // BLOCK 14, while loop
+        // BLOCK 13, while loop
         u32 i = it - 1
         res = res + p_i[i] * prod * denom_down / (denom_up * evals[i])
 
@@ -63,11 +59,11 @@ def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
         endif
         it = it - 1
     endwhile
-    // BLOCK 15
+    // BLOCK 14
     return res
 
 def check_and_generate_subclaim(SumcheckIOPVerifierState self, field asserted_sum) -> SumCheckSubClaim:
-    // BLOCK 16
+    // BLOCK 6
     assert(self.finished)
     // assert(self.polynomials_received.len() == self.num_vars)
 
@@ -75,75 +71,68 @@ def check_and_generate_subclaim(SumcheckIOPVerifierState self, field asserted_su
     // 2. set `expected` to P(r)`
 
     array_decl field[self.num_vars + 1] expected_vec
+    // insert the asserted_sum to the first position of the expected vector
+    expected_vec[0] = asserted_sum
+    // generate and verify expected_vec in the same loop
     for u32 i in 0..self.num_vars do
-        // BLOCK 17
+        // BLOCK 7, for loop
         field[self.max_degree + 1] evaluations = self.polynomials_received[i]
         field challenge = self.challenges[i]
         // assert(evaluations.len() == self.max_degree + 1)
         expected_vec[i + 1] = interpolate_uni_poly(self.max_degree + 1, evaluations, challenge)
-        // BLOCK 18, handle function return
-    endfor
-
-    // BLOCK 19
-    // insert the asserted_sum to the first position of the expected vector
-    expected_vec[0] = asserted_sum
-
-    for u32 i in 0..self.num_vars do
-        // BLOCK 20, for loop
-        field[self.max_degree + 1] evaluations = self.polynomials_received[i]
+        // BLOCK 8, after function call
         field expected = expected_vec[i]
         assert(evaluations[0] + evaluations[1] == expected)
     endfor
 
-    // BLOCK 21
+    // BLOCK 9
     return SumCheckSubClaim {
         point: self.challenges,
-        // the last expected value (not checked within this function) will be included in the
-        // subclaim
+        // the last expected value (not checked within this function) will be included in the subclaim
         expected_evaluation: expected_vec[self.num_vars]
     }
 
 def verify_sumcheck(field claimed_sum, SumcheckProof proof, VPAuxInfo aux_info, Transcript t) -> SumCheckSubClaim:
-    // BLOCK 22
+    // BLOCK 16
     if aux_info.num_variables == 0 then
         return SumCheckSubClaim {
             point: [],
             expected_evaluation: claimed_sum
         }
     endif
-    // BLOCK 23
+    // BLOCK 17
     t = append_message_u32(t, aux_info.num_variables)
-    // BLOCK 24
+    // BLOCK 18, after func call
     t = append_message_u32(t, aux_info.max_degree)
 
-    // BLOCK 25
+    // BLOCK 19, after func call
+    array_decl field[aux_info.num_variables] challenges
+    array_decl field[aux_info.num_variables][0] polynomials_received
     SumcheckIOPVerifierState vs = SumcheckIOPVerifierState {
         round: 1,
         num_vars: aux_info.num_variables,
         max_degree: aux_info.max_degree,
         finished: false,
-        // BLOCK 26, 27, 28, 29, 30 handles constructions of polynomial_received & challenges
         // There are probably more efficient ways to do this (maybe skip initialization altogether?)
-        polynomials_received: [[0; aux_info.max_degree + 1]; aux_info.num_variables],
-        challenges: [0; aux_info.num_variables]
+        polynomials_received: polynomials_received,
+        challenges: challenges
     }
-    // BLOCK 31, copies all initialized values to vs, initialize outer loop
     for u32 i in 0..aux_info.num_variables do
-        // BLOCK 32, initialize inner loop
+        // BLOCK 20, outer for loop
         IOPProverMessage prover_msg = proof.proofs[i]
         for u32 j in 0..aux_info.max_degree + 1 do
-            // BLOCK 33, handle function call
+            // BLOCK 21, inner for loop
             t = append_message_field(t, prover_msg.evaluations[j])
-            // BLOCK 34, handle function return
+            // BLOCK 22, after func call
         endfor
-        // BLOCK 35, handle function call parameters (self = vs)
+        // BLOCK 23
         vs = verify_round_and_update_state(vs, prover_msg, t)
-        // BLOCK 36, handle function return (vs = ret)
+        // BLOCK 24, after func call
     endfor
 
-    // BLOCK 37, handle function call parameters (self = vs)
+    // BLOCK 25
     SumCheckSubClaim sc = check_and_generate_subclaim(vs, claimed_sum)
-    // BLOCK 38, handle function return (sc = ret)
+    // BLOCK 26, after func call
     return sc
 
 def main(u32 num_vars, u32 max_degree, u32 i) -> field:

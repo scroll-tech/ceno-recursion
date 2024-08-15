@@ -5,6 +5,8 @@ struct MerkleProof {
     field[3] leaf
     // All internal nodes on the path
     field[0] path
+    // Bit split of the index
+    bool[0] bits
 }
 
 def verify_merkle(MerkleProof proof, field root, u32 index, field[3] entry, u32 depth) -> bool:

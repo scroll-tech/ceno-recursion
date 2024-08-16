@@ -1,0 +1,10 @@
+def mle_evaluate(field[0] self, u32 mle_len, field[0] point, u32 point_len) -> field:
+    // TODO: what if length of self is not a power of 2?
+    assert(2 ** point_len == mle_len)
+    for u32 i in 0..point_len do
+        mle_len = mle_len / 2
+        for u32 j in 0..mle_len do
+            self[j] = (1 - point[i]) * self[j] + point * self[mle_len + j]
+        endfor
+    endfor
+    return self[0]

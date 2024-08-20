@@ -10,7 +10,6 @@ use bellman::Circuit;
 use bls12_381::{Bls12, Scalar};
 */
 use core::cmp::min;
-use core::cmp::max;
 use rug::Integer;
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
@@ -38,8 +37,8 @@ use core::cmp::Ordering;
 use std::time::*;
 
 // How many reserved variables (EXCLUDING V) are in front of the actual input / output?
-// %BN, %RET, %TS, %AS, %RP, %SP, %BP
-const NUM_RESERVED_VARS: usize = 7;
+// %BN, %RET, %TS, %AS, %SP, %BP
+const NUM_RESERVED_VARS: usize = 6;
 // Which index in the output (INCLUDING V) denotes %RET?
 const OUTPUT_OFFSET: usize = 2;
 // What is the maximum width (# of bits) of %TS?

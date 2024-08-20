@@ -96,29 +96,38 @@ fn print_bls(bls: &Vec<Block>, entry_bl: &usize) {
 // HELPER FUNCTIONS
 // --
 
-// If bc is a statement of form field %RP = val,
+// Is this variable rp@? If so, return its function name
+fn is_rp(var: &String) -> Option<String> {
+    if var.split(".").collect::<Vec<&str>>()[0] == "rp@" {
+        Some(var.split(".").collect::<Vec<&str>>()[1].to_string())
+    } else {
+        None
+    }
+}
+
+// If bc is a statement of form field rp@ = val,
 // return val
-fn rp_find_val(bc: BlockContent) -> Option<usize> {
+fn rp_find_val(bc: &BlockContent) -> Option<usize> {
     // We can ignore memory for now
-    // The only case currently is %RP on the left & constant on the right
+    // The only case currently is rp@ on the left & constant on the right
     if let BlockContent::Stmt(Statement::Definition(d)) = bc {
         if let TypedIdentifierOrAssignee::TypedIdentifier(ty) = &d.lhs[0] {
-            if ty.identifier.value == "%RP".to_string() {
+            if is_rp(&ty.identifier.value).is_some() {
                 if let Expression::Literal(LiteralExpression::DecimalLiteral(dle)) = &d.expression {
-                    let tmp_bl: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: %RP is assigned to a non-constant value");
+                    let tmp_bl: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: rp@ is assigned to a non-constant value");
                     return Some(tmp_bl);
                 } else {
-                    panic!("Dead Block Elimination failed: %RP is assigned to a non-constant value")
+                    panic!("Dead Block Elimination failed: rp@ is assigned to a non-constant value")
                 }
             }
         }
         if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
-            if a.id.value == "%RP".to_string() {
+            if is_rp(&a.id.value).is_some() {
                 if let Expression::Literal(LiteralExpression::DecimalLiteral(dle)) = &d.expression {
-                    let tmp_bl: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: %RP is assigned to a non-constant value");
+                    let tmp_bl: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: rp@ is assigned to a non-constant value");
                     return Some(tmp_bl);
                 } else {
-                    panic!("Dead Block Elimination failed: %RP is assigned to a non-constant value")
+                    panic!("Dead Block Elimination failed: rp@ is assigned to a non-constant value")
                 }
             }
         }
@@ -126,22 +135,25 @@ fn rp_find_val(bc: BlockContent) -> Option<usize> {
     return None;
 }
 
-// If bc is a statement of form %RP = old_val and old_val is a key in val_map,
-// replace it with %RP = val_map[val]
+// If bc is a statement of form rp@ = old_val and old_val is a key in val_map,
+// replace it with rp@ = val_map[val]
 fn rp_replacement_stmt(bc: BlockContent, val_map: BTreeMap<usize, usize>) -> Option<BlockContent> {
     if let BlockContent::Stmt(Statement::Definition(d)) = bc {
-        let mut is_rp = false;
+        let mut var_is_rp = false;
+        let mut rp_var = "".to_string(); // the actual name: rp@.<f_name>
         if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
-            if a.id.value == "%RP".to_string() {
-                is_rp = true;
+            if is_rp(&a.id.value).is_some() {
+                var_is_rp = true;
+                rp_var = a.id.value.to_string();
             }
         }
         if let TypedIdentifierOrAssignee::TypedIdentifier(ty) = &d.lhs[0] {
-            if ty.identifier.value == "%RP".to_string() {
-                is_rp = true;
+            if is_rp(&ty.identifier.value).is_some() {
+                var_is_rp = true;
+                rp_var = ty.identifier.value.to_string();
             }
         }
-        if is_rp {
+        if var_is_rp {
             if let Expression::Literal(LiteralExpression::DecimalLiteral(dle)) = &d.expression {
                 let tmp_bl: usize = dle.value.value.trim().parse().unwrap();
                 if let Some(new_bl) = val_map.get(&tmp_bl) {
@@ -152,7 +164,7 @@ fn rp_replacement_stmt(bc: BlockContent, val_map: BTreeMap<usize, usize>) -> Opt
                                 span: Span::new("", 0, 0).unwrap()
                             })),
                             identifier: IdentifierExpression {
-                                value: "%RP".to_string(),
+                                value: rp_var,
                                 span: Span::new("", 0, 0).unwrap()
                             },
                             span: Span::new("", 0, 0).unwrap()
@@ -178,7 +190,7 @@ fn rp_replacement_stmt(bc: BlockContent, val_map: BTreeMap<usize, usize>) -> Opt
 }
 
 // Given an expression consisted of only ternary, literals, and identifiers,
-// Find all the literal values and %RP it mentioned
+// Find all the literal values and rp@ it mentioned
 fn bl_trans_find_val(e: &Expression) -> Vec<NextBlock> {
     match e {
         Expression::Ternary(te) => {
@@ -188,13 +200,13 @@ fn bl_trans_find_val(e: &Expression) -> Vec<NextBlock> {
         }
         Expression::Literal(le) => {
             if let LiteralExpression::DecimalLiteral(dle) = le {
-                let val: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: %RP is assigned to a non-constant value");
+                let val: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: rp@ is assigned to a non-constant value");
                 return vec![NextBlock::Label(val)];
             } else { panic!("Unexpected value in Block Transition") }
         }
         Expression::Identifier(ie) => {
-            if ie.value == "%RP".to_string() {
-                return vec![NextBlock::Rp]
+            if let Some(f_name) = is_rp(&ie.value) {
+                return vec![NextBlock::Rp(f_name)]
             } else {
                 panic!("Unexpected variable in Block Transition")
             }
@@ -205,7 +217,7 @@ fn bl_trans_find_val(e: &Expression) -> Vec<NextBlock> {
 
 // Given an expression consisted of only ternary, literals, and identifiers,
 // Replace all literal values according to label_map
-// Skip all %RP or other references to variables
+// Skip all rp@ or other references to variables
 fn bl_trans_map<'ast>(e: &Expression<'ast>, label_map: &BTreeMap<usize, usize>) -> Expression<'ast> {
     match e {
         Expression::Ternary(te) => {
@@ -224,7 +236,7 @@ fn bl_trans_map<'ast>(e: &Expression<'ast>, label_map: &BTreeMap<usize, usize>) 
         }
         Expression::Literal(le) => {
             if let LiteralExpression::DecimalLiteral(dle) = le {
-                let val: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: %RP is assigned to a non-constant value");
+                let val: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: rp@ is assigned to a non-constant value");
                 return bl_coda(NextBlock::Label(*label_map.get(&val).unwrap()));
             } else { panic!("Unexpected value in Block Transition") }
         }
@@ -256,7 +268,7 @@ fn bl_trans_replace<'ast>(e: &Expression<'ast>, old_val: usize, new_val: &Expres
         }
         Expression::Literal(le) => {
             if let LiteralExpression::DecimalLiteral(dle) = le {
-                let val: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: %RP is assigned to a non-constant value");
+                let val: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: rp@ is assigned to a non-constant value");
                 if val == old_val {
                     return new_val.clone();
                 } else {
@@ -731,7 +743,7 @@ fn term_to_instr<'ast>(
     // There are three cases for the terminator
     // A ternary should be converted to a branching instruction
     // A constant literal should be converted to the corresponding instruction list x looping
-    // Any reference to %RP should result in the termination of the conversion
+    // Any reference to rp@ should result in the termination of the conversion
     match term {
         Expression::Ternary(t) => {
             let (mut left_instr, left_vm_count, left_repeat) = term_to_instr(bls, &t.second, instr_list, vm_count_list, cur_bl);
@@ -777,14 +789,14 @@ fn term_to_instr<'ast>(
             }
         }
         Expression::Identifier(_) => {
-            panic!("Terminator to instruction failed: cannot merge blocks terminating in %RP")
+            panic!("Terminator to instruction failed: cannot merge blocks terminating in rp@")
         }
-        _ => { panic!("Terminator to instruction failed: terminator must be ternary, literal, or %RP") }
+        _ => { panic!("Terminator to instruction failed: terminator must be ternary, literal, or rp@") }
     }
 }
 
 // New io map with only reserved registers
-// Reserve registers 0 - 7 for _, %BN, %RET, %TS, %AS, %RP, %SP, and %BP
+// Reserve registers 0 - 6 for _, %BN, %RET, %TS, %AS, %SP, and %BP
 fn new_io_map() -> BTreeMap<String, usize> {
     let mut io_map: BTreeMap<String, usize> = BTreeMap::new();
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("_".to_string(), io_map);
@@ -792,7 +804,6 @@ fn new_io_map() -> BTreeMap<String, usize> {
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RET".to_string(), io_map);
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("%TS".to_string(), io_map);
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("%AS".to_string(), io_map);
-    (_, io_map, _) = var_name_to_reg_id_expr::<1>("%RP".to_string(), io_map);
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("%SP".to_string(), io_map);
     (_, io_map, _) = var_name_to_reg_id_expr::<1>("%BP".to_string(), io_map);
 
@@ -800,13 +811,12 @@ fn new_io_map() -> BTreeMap<String, usize> {
 }
 
 // New witness map with only reserved registers
-// Reserve registers 0 - 5 for _, %TS, %AS, %RP, %SP, and %BP
+// Reserve registers 0 - 4 for _, %TS, %AS, %SP, and %BP
 fn new_witness_map() -> BTreeMap<String, usize> {
     let mut witness_map: BTreeMap<String, usize> = BTreeMap::new();
     (_, witness_map, _) = var_name_to_reg_id_expr::<0>("_".to_string(), witness_map);
     (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%TS".to_string(), witness_map);
     (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%AS".to_string(), witness_map);
-    (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%RP".to_string(), witness_map);
     (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%SP".to_string(), witness_map);
     (_, witness_map, _) = var_name_to_reg_id_expr::<0>("%BP".to_string(), witness_map);
 
@@ -1286,7 +1296,8 @@ fn ty_inst<'ast>(
 
 // Function Merge
 // Convert all variables of old_f_name to new_f_name, with scope increase by scope_diff
-fn fm_inst<'ast>(
+// If applying to the callee, remove all rp@ = X
+fn fm_inst<'ast, const IS_CALLER: bool>(
     inst: &Vec<BlockContent<'ast>>,
     old_f_name: &String,
     new_f_name: &String,
@@ -1323,12 +1334,14 @@ fn fm_inst<'ast>(
             }
             BlockContent::Branch((cond, if_inst, else_inst)) => {
                 let new_cond = expr_replace_fn(cond, old_f_name, new_f_name, scope_diff);
-                let new_if_inst = fm_inst(if_inst, old_f_name, new_f_name, scope_diff);
-                let new_else_inst = fm_inst(else_inst, old_f_name, new_f_name, scope_diff);
+                let new_if_inst = fm_inst::<IS_CALLER>(if_inst, old_f_name, new_f_name, scope_diff);
+                let new_else_inst = fm_inst::<IS_CALLER>(else_inst, old_f_name, new_f_name, scope_diff);
                 new_instr.insert(0, BlockContent::Branch((new_cond, new_if_inst, new_else_inst)));
             }
             BlockContent::Stmt(s) => {
-                new_instr.insert(0, BlockContent::Stmt(stmt_replace_fn(s, old_f_name, new_f_name, scope_diff)));
+                if !IS_CALLER || rp_find_val(i).is_none() {
+                    new_instr.insert(0, BlockContent::Stmt(stmt_replace_fn(s, old_f_name, new_f_name, scope_diff)));
+                }
             }
         }
     }
@@ -1530,8 +1543,8 @@ impl VarSpillInfo {
         let var_segs = var.split('.').collect::<Vec<&str>>();
         let var_name = var_segs[0].to_string();
         let fn_name = var_segs[1].to_string();
-        let scope: usize = var_segs[2].to_string().parse().unwrap();
-        let version: usize = var_segs[3].to_string().parse().unwrap();
+        let scope: usize = if var_segs.len() < 3 { 0 } else { var_segs[2].to_string().parse().unwrap() };
+        let version: usize = if var_segs.len() < 4 { 0 } else { var_segs[3].to_string().parse().unwrap() };
     
         VarSpillInfo {
             var_name,
@@ -1781,9 +1794,9 @@ impl<'ast> ZGen<'ast> {
                     next_bls.push_back(*tmp_bl);
                 }
             }
-            NextBlock::Rp => {
+            NextBlock::Rp(_) => {
                 if rp_successor.len() == 0 {
-                    panic!("Control flow graph construction fails: reaching end of function point but %RP not set!")
+                    panic!("Control flow graph construction fails: reaching end of function point but rp@ not set!")
                 }
                 // Add everything in rp_successor of cur_bl to successor of cur_bl
                 for i in rp_successor[cur_bl].iter() {
@@ -1814,7 +1827,7 @@ impl<'ast> ZGen<'ast> {
         let mut exit_bls_fn: BTreeSet<usize> = BTreeSet::new();
         
         // Start from entry_bl, do a BFS, add all blocks in its terminator to its successor
-        // When we reach a function call (i.e., %RP is set), add %RP to the callee's rp_successor
+        // When we reach a function call (i.e., rp@ is set), add rp@ to the callee's rp_successor
         // Propagate rp_successor until we reach an rp() terminator, at that point, append rp_successor to successor
         // We don't care about blocks that won't be touched by BFS, they'll get eliminated anyways
         let mut successor: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); bl_size];
@@ -1823,7 +1836,7 @@ impl<'ast> ZGen<'ast> {
         // predecessor is just the inverse of successor
         let mut predecessor: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); bl_size];
 
-        // successor & predecessor within a function, ignoring function calls (which is redirected to %RP)
+        // successor & predecessor within a function, ignoring function calls (which is redirected to rp@)
         let mut successor_fn: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); bl_size];
         let mut predecessor_fn: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); bl_size];
 
@@ -1838,14 +1851,13 @@ impl<'ast> ZGen<'ast> {
         while !next_bls.is_empty() {
             let cur_bl = next_bls.pop_front().unwrap();
 
-            // If we encounter any %RP = <counter>, record down <counter> to rp_slot
-            // By definition, %RP cannot be 0
-            // There shouldn't be multiple %RP's, but if there is, we only care about the last one
+            // If we encounter any rp@ = <counter>, record down <counter> to rp_slot
+            // By definition, rp@ cannot be 0
+            // There shouldn't be multiple rp@'s, but if there is, we only care about the last one
             let mut rp_slot = 0;
             
             for i in 0..bls[cur_bl].instructions.len() {
-                let bc = bls[cur_bl].instructions[i].clone();
-                if let Some(tmp_bl) = rp_find_val(bc) {
+                if let Some(tmp_bl) = rp_find_val(&bls[cur_bl].instructions[i]) {
                     rp_slot = tmp_bl;
                 }
             }
@@ -1867,20 +1879,20 @@ impl<'ast> ZGen<'ast> {
                         (successor, rp_successor, successor_fn, visited, next_bls) = 
                             self.flow_graph_transition::<false>(cur_bl, b, rp_slot, successor, rp_successor, successor_fn, visited, next_bls);
                     }
-                    // if %RP is set, the next block must be a function entrance
+                    // if rp@ is set, the next block must be a function entrance
                     if rp_slot != 0 {
                         for b in &branches {
                             if let NextBlock::Label(l) = b {
                                 entry_bl_fn.insert(*l);
                             } else {
-                                panic!("Blocks {} invokes function calls and cannot terminate to %RP block.", cur_bl)
+                                panic!("Blocks {} invokes function calls and cannot terminate to rp@ block.", cur_bl)
                             }
                         }
 
                     }
-                    // If block terminates to %RP, add it to exit_bls_fn
+                    // If block terminates to rp@, add it to exit_bls_fn
                     for b in branches {
-                        if b == NextBlock::Rp {
+                        if let NextBlock::Rp(_) = b {
                             exit_bls_fn.insert(cur_bl);
                         }
                     }
@@ -2035,7 +2047,7 @@ impl<'ast> ZGen<'ast> {
     // If a function is called only once, merge that function with its caller, which includes:
     // - Change the function name & scope of all blocks and variables
     // - Update CFG
-    // - Remove reference to %RP
+    // - Remove reference to rp@
     // Assume that each function only has one entry point, which should be true for all unoptimized CFG
     fn func_merge(
         &self,
@@ -2061,7 +2073,7 @@ impl<'ast> ZGen<'ast> {
                 
                 // Merge callee with caller
                 // First on caller (to deal with call parameters)
-                bls[caller].instructions = fm_inst(&bls[caller].instructions, callee_fn, caller_fn, scope_diff);
+                bls[caller].instructions = fm_inst::<true>(&bls[caller].instructions, callee_fn, caller_fn, scope_diff);
                 // Then on callee
                 let mut visited: Vec<bool> = vec![false; bls.len()];
                 let mut next_bls: VecDeque<usize> = VecDeque::new();
@@ -2074,7 +2086,7 @@ impl<'ast> ZGen<'ast> {
                         assert_eq!(&bls[cur_bl].fn_name, callee_fn);
                         bls[cur_bl].fn_name = caller_fn.clone();
                         bls[cur_bl].scope += scope_diff;
-                        bls[cur_bl].instructions = fm_inst(&bls[cur_bl].instructions, callee_fn, caller_fn, scope_diff);
+                        bls[cur_bl].instructions = fm_inst::<false>(&bls[cur_bl].instructions, callee_fn, caller_fn, scope_diff);
                         // Update terminator
                         if let BlockTerminator::Transition(e) = &bls[cur_bl].terminator {
                             bls[cur_bl].terminator = BlockTerminator::Transition(expr_replace_fn(e, callee_fn, caller_fn, scope_diff));
@@ -2088,9 +2100,9 @@ impl<'ast> ZGen<'ast> {
                             exit_bls_fn.remove(&cur_bl);
                             assert_eq!(successor_fn[cur_bl].len(), 0);
                             successor_fn[cur_bl] = BTreeSet::from([caller_exit]);
-                            // Assert terminator is %RP and replace it with caller_exit
+                            // Assert terminator is rp@ and replace it with caller_exit
                             if let BlockTerminator::Transition(Expression::Identifier(ie)) = &bls[cur_bl].terminator {
-                                assert_eq!(ie.value, "%RP");
+                                assert!(is_rp(&ie.value).is_some());
                                 bls[cur_bl].terminator = BlockTerminator::Transition(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
                                     value: DecimalNumber {
                                         value: format!("{}", caller_exit),
@@ -2112,7 +2124,7 @@ impl<'ast> ZGen<'ast> {
                     }
                 }
                 // Finally on caller_exit
-                bls[caller_exit].instructions = fm_inst(&bls[caller_exit].instructions, callee_fn, caller_fn, scope_diff);
+                bls[caller_exit].instructions = fm_inst::<false>(&bls[caller_exit].instructions, callee_fn, caller_fn, scope_diff);
             }
         }
 
@@ -2865,7 +2877,7 @@ impl<'ast> ZGen<'ast> {
                 let mut oos = BTreeSet::new();
                 let mut stack = Vec::new();
                 // OOS of all predecessors should either be the same or empty
-                // the first cur_scope + 1 entries of all predecessors should either be the same of empty
+                // the first cur_scope + 1 entries of all predecessors should either be the same or empty
                 // any other entries should always be empty
                 for p in &predecessor_fn[cur_bl] {
                     if oos.len() == 0 {
@@ -2997,7 +3009,7 @@ impl<'ast> ZGen<'ast> {
                     assert_eq!(successor_fn[cur_bl].len(), 1);
                     stack.push(Vec::new());
 
-                    // the last instruction is %RP = ?, which should appear after scope change
+                    // the last instruction is rp@ = ?, which should appear after scope change
                     let rp_update_inst = new_instructions.pop().unwrap();
 
                     // %SP = %SP + ?
@@ -3034,22 +3046,7 @@ impl<'ast> ZGen<'ast> {
                             }
                         }
                     }
-                    // Also push in %RP if caller is not main
-                    if caller_name != "main" {
-                        if sp_offset == 0 {
-                            // %PHY[%SP + 0] = %BP
-                            new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));
-                            // %BP = %SP
-                            new_instructions.push(BlockContent::Stmt(bp_update_stmt.clone()));
-                            stack[cur_frame].push(("%BP".to_string(), Ty::Field));
-                            sp_offset += 1;
-                        }
-                        // %PHY[%SP + ?] = %RP
-                        new_instructions.push(BlockContent::MemPush(("%RP".to_string(), Ty::Field, sp_offset)));
-                        stack[cur_frame].push(("%RP".to_string(), Ty::Field));
-                        sp_offset += 1;
-                    }
-                    // %RP = ?
+                    // rp@ = ?
                     new_instructions.push(rp_update_inst);
                 }
                 // %SP = %SP + ?
@@ -3069,12 +3066,12 @@ impl<'ast> ZGen<'ast> {
     }
 
     // EBE: Backward analysis
-    // If a block is empty and its terminator is a coda (to another block or %RP)
+    // If a block is empty and its terminator is a coda (to another block or rp@)
     // replace all the reference to it in its predecessors with that terminator
     // If a block terminates with a branching and both branches to the same block, eliminate the branching
     // If a block only has one successor and that successor only has one predecessor, merge the two blocks
     //
-    // We assume that something would happen after the function call, so we do not change the value of any %RP
+    // We assume that something would happen after the function call, so we do not change the value of any rp@
     // This would not affect correctness. Worst case it might make DBE later inefficient.
     //
     // CFG will be DESTROYED after this! Only do it after all statement analyses.
@@ -3186,10 +3183,10 @@ impl<'ast> ZGen<'ast> {
         let new_entry_bl = *label_map.get(&entry_bl).unwrap();
         let new_size = new_label;
 
-        // Iterate through all new blocks again, update %RP and Block Terminator
+        // Iterate through all new blocks again, update rp@ and Block Terminator
         for cur_bl in 0..new_size {
 
-            // If we encounter any %RP = <counter>, update <counter> to label_map[<counter>]
+            // If we encounter any rp@ = <counter>, update <counter> to label_map[<counter>]
             for i in 0..new_bls[cur_bl].instructions.len() {
                 let bc = new_bls[cur_bl].instructions[i].clone();
                 if let Some(new_bc) = rp_replacement_stmt(bc, label_map.clone()) {

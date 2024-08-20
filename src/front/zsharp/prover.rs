@@ -24,8 +24,8 @@ const LOAD: usize = 1;
 const O_RET: &str = "%o000002";
 const W_TS: &str = "%w1";
 const W_AS: &str = "%w2";
-const W_SP: &str = "%w4";
-const W_BP: &str = "%w5";
+const W_SP: &str = "%w3";
+const W_BP: &str = "%w4";
 
 #[derive(Debug, Clone)]
 pub struct MemOp {

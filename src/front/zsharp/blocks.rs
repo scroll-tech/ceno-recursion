@@ -6,8 +6,7 @@
 //       Can try eliminate ternaries with a constant condition
 //       What would happen if block 0 is a loop to itself? Many analyses would break down!!!
 
-use circ_hc::Id;
-use log::{debug, warn};
+use log::debug;
 
 use zokrates_pest_ast::*;
 use crate::front::field_list::FieldList;
@@ -26,8 +25,8 @@ const DUMMY_LOAD: usize = 3;
 
 const W_TS: &str = "%w1";
 const W_AS: &str = "%w2";
-const W_SP: &str = "%w4";
-const W_BP: &str = "%w5";
+const W_SP: &str = "%w3";
+const W_BP: &str = "%w4";
 
 fn cond_expr<'ast>(ident: IdentifierExpression<'ast>, condition: Expression<'ast>) -> Expression<'ast> {
     let ce = Expression::Binary(BinaryExpression {
@@ -129,8 +128,8 @@ pub fn bl_coda<'ast>(nb: NextBlock) -> Expression<'ast> {
             })))),
             span: Span::new("", 0, 0).unwrap()
         })),
-        NextBlock::Rp => Expression::Identifier(IdentifierExpression {
-            value: "%RP".to_string(),
+        NextBlock::Rp(f_name) => Expression::Identifier(IdentifierExpression {
+            value: format!("rp@.{}", f_name),
             span: Span::new("", 0, 0).unwrap()
         })
     }
@@ -242,17 +241,17 @@ pub enum BlockContent<'ast> {
 #[derive(Clone)]
 // Coda is the number of total types of blocks
 pub enum BlockTerminator<'ast> {
-    Transition(Expression<'ast>), // Expression that should be evaluated to either a const int or "%RP"
+    Transition(Expression<'ast>), // Expression that should be evaluated to either a const int or "rp@"
     FuncCall(String), // Placeholders before blocks corresponding to each function has been determined
     ProgTerm // The program terminates
 }
 
 #[derive(Clone, PartialEq)]
-// The next block either has a usize label or is pointed by %RP
+// The next block either has a usize label or is pointed by rp@
 // Used to construct Block Transition
 pub enum NextBlock {
     Label(usize),
-    Rp
+    Rp(String) // String refer to the name of the CALLEE
 }
 
 impl<'ast> Block<'ast> {
@@ -646,9 +645,8 @@ impl<'ast> ZGen<'ast> {
 
     // Convert each function to blocks
     // Generic: IS_MAIN determines if we are in the main function, which has two properties:
-    //   1. We don't need to push %RP when doing function calls in MAIN, since %RP is undefined
-    //   2. We don't update the exit block of MAIN to %RP
-    //   3. Return value of main is not a struct & stored in %RET, return value of every function, if struct, is stored in ret@
+    //   1. We don't update the exit block of MAIN to rp@
+    //   2. Return value of main is not a struct & stored in %RET, return value of every function, if struct, is stored in ret@
     // Return type:
     // Blks, blks_len
     fn bl_gen_function_init_<const IS_MAIN: bool>(
@@ -716,11 +714,11 @@ impl<'ast> ZGen<'ast> {
                 (blks, blks_len, var_scope_info) = self.bl_gen_stmt_::<IS_MAIN>(blks, blks_len, s, &ret_ty, &f_name, var_scope_info, 1, 0)?;
             }
 
-            // Set terminator to ProgTerm if in main, point to %RP otherwise
+            // Set terminator to ProgTerm if in main, point to rp@ otherwise
             if IS_MAIN {
                 blks[blks_len - 1].terminator = BlockTerminator::ProgTerm;
             } else {
-                blks[blks_len - 1].terminator = BlockTerminator::Transition(bl_coda(NextBlock::Rp));
+                blks[blks_len - 1].terminator = BlockTerminator::Transition(bl_coda(NextBlock::Rp(blks[blks_len - 1].fn_name.clone())));
             }
         }
 
@@ -773,36 +771,6 @@ impl<'ast> ZGen<'ast> {
             let caller_name = blks[blks_len - 1].fn_name.to_string();
             let caller_scope = blks[blks_len - 1].scope;
 
-            // Push %RP onto the stack if not in main
-            if !IS_MAIN {
-                // push %BP onto STACK
-                blks[blks_len - 1].instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, 0)));
-                // %BP = %SP
-                let bp_update_stmt = Statement::Definition(DefinitionStatement {
-                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                        array_metadata: None,
-                        ty: Type::Basic(BasicType::Field(FieldType {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        identifier: IdentifierExpression {
-                            value: "%BP".to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        span: Span::new("", 0, 0).unwrap()
-                    })],
-                    expression: Expression::Identifier(IdentifierExpression {
-                        value: "%SP".to_string(),
-                        span: Span::new("", 0, 0).unwrap()
-                    }),
-                    span: Span::new("", 0, 0).unwrap()
-                });
-                blks[blks_len - 1].instructions.push(BlockContent::Stmt(bp_update_stmt));
-                // Push %RP onto stack
-                blks[blks_len - 1].instructions.push(BlockContent::MemPush(("%RP".to_string(), Ty::Field, 1)));
-                // %SP = %SP + sp_offset
-                blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", 2, &Ty::Field)));
-            }
-        
             // Assign p^0 to a
             for (p, a) in f.parameters.clone().into_iter().zip(args) {
                 let p_id = p.id.value.clone();
@@ -823,8 +791,8 @@ impl<'ast> ZGen<'ast> {
                 (blks, blks_len) = self.bl_gen_def_stmt_(blks, blks_len, &c_name, &new_const_expr, &c_ty, &f_name, &caller_name, &var_scope_info)?;
             }
 
-            // %RP has been pushed to stack before function call
-            // Set up %RP and block terminator
+
+            // Set up rp@ and block terminator
             let rp_update_stmt = Statement::Definition(DefinitionStatement {
                 lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                     array_metadata: None,
@@ -832,7 +800,7 @@ impl<'ast> ZGen<'ast> {
                         span: Span::new("", 0, 0).unwrap()
                     })),
                     identifier: IdentifierExpression {
-                        value: "%RP".to_string(),
+                        value: format!("rp@.{}", f_name),
                         span: Span::new("", 0, 0).unwrap()
                     },
                     span: Span::new("", 0, 0).unwrap()
@@ -859,12 +827,6 @@ impl<'ast> ZGen<'ast> {
             let num_exec_bound = blks[blks_len - 1].fn_num_exec_bound;
             blks.push(Block::new(blks_len, num_exec_bound, caller_name.clone(), caller_scope));
             blks_len += 1; 
-            
-            // Exit scope & POP local variables out
-            if !IS_MAIN {
-                blks[blks_len - 1].instructions.push(BlockContent::MemPop(("%RP".to_string(), Ty::Field, 1)));
-                blks[blks_len - 1].instructions.push(BlockContent::MemPop(("%BP".to_string(), Ty::Field, 0)));
-            }
 
             // Store Return value to a temporary variable "ret^X"
             let ret_type = self
@@ -927,11 +889,11 @@ impl<'ast> ZGen<'ast> {
                 let ret_name = "%RET".to_string();
                 (blks, blks_len) = self.bl_gen_def_stmt_(blks, blks_len, &ret_name, &ret_expr, &ret_ty, f_name, f_name, &var_scope_info)?;
 
-                // Set terminator to ProgTerm if in main, point to %RP otherwise
+                // Set terminator to ProgTerm if in main, point to rp@ otherwise
                 if IS_MAIN {
                     blks[blks_len - 1].terminator = BlockTerminator::ProgTerm;
                 } else {
-                    blks[blks_len - 1].terminator = BlockTerminator::Transition(bl_coda(NextBlock::Rp));
+                    blks[blks_len - 1].terminator = BlockTerminator::Transition(bl_coda(NextBlock::Rp(blks[blks_len - 1].fn_name.clone())));
                 }
 
                 // Create a dummy block in case there are anything after return

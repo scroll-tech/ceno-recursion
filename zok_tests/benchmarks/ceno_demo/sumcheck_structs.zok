@@ -1,10 +1,10 @@
+struct IOPProverMessage {
+    field[0] evaluations
+}
+
 struct SumcheckProof {
     field[0] points
     IOPProverMessage[0] proofs
-}
-
-struct IOPProverMessage {
-    field[0] evaluations
 }
 
 struct VPAuxInfo {
@@ -15,11 +15,6 @@ struct VPAuxInfo {
 struct SumCheckSubClaim {
     field[0] point
     field expected_evaluation    
-}
-
-struct PointAndEval {
-    field[0] point
-    field eval
 }
 
 struct SumcheckIOPVerifierState {

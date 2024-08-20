@@ -1,6 +1,8 @@
 from "transcript" import Transcript, append_message_u32, append_message_field
-from "tower_struct" import TowerProofs, TowerVerifierOutput
+from "sumcheck_structs" import IOPProverMessage, SumcheckProof, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState
+from "sumcheck_verifier" import verify_round_and_update_state, interpolate_uni_poly, check_and_generate_subclaim, verify_sumcheck
 from "mle" import mle_evaluate
+from "tower_struct" import TowerProofs, TowerVerifierOutput, PointAndEval
 
 def tower_verify(
     field[0][0] initial_prod_evals,
@@ -8,12 +10,13 @@ def tower_verify(
     TowerProofs tower_proofs,
     u32 expected_max_round,
     u32 num_fanin,
-    Transcript t,
+    u32 log2_num_fanin,
+    Transcript t
 ) -> TowerVerifierOutput:
     // XXX to sumcheck batched product argument with logup, we limit num_product_fanin to 2
     // TODO mayber give a better naming?
     assert(num_fanin == 2)
-    u32 log2_num_fanin = 1
+    assert(log2_num_fanin == 1)
 
     // sanity check
     /*
@@ -33,21 +36,29 @@ def tower_verify(
 
     // get_challenge_pows
     // decimal expression of "combine subset evals"
+    
     t = append_message_field(t, 567674997755577675492904462386182052033524231283)
-    field alpha = t.hash
-    arr_decl field[initial_prod_evals_len + initial_logup_evals_len * 2] alpha_rows
+    /* --
+    // field alpha = t.hash
+    */
+
+    field alpha = 1
+    array_decl field[initial_prod_evals_len + initial_logup_evals_len * 2] alpha_rows
     field state = 1
     for u32 i in 0..initial_prod_evals_len + initial_logup_evals_len * 2 do
         alpha_rows[i] = state
         state = state * alpha
     endfor
 
-    arr_decl field[log2_num_fanin] initial_rt
-    for u32 i in 0..log2_num_fanin {
+    array_decl field[log2_num_fanin] initial_rt
+    for u32 i in 0..log2_num_fanin do
         // decimal expression of "product_sum"
         t = append_message_field(t, 135940096403279116418381165)
-        initial_rt[i] = t.hash
-    }
+        /* --
+        // initial_rt[i] = t.hash
+        */
+        initial_rt[i] = 0
+    endfor
 
     // --
 
@@ -55,26 +66,50 @@ def tower_verify(
     // out_j[rt] := (record_{j}[rt])
     // out_j[rt] := (logup_p{j}[rt])
     // out_j[rt] := (logup_q{j}[rt])
-    let initial_claim = izip!(initial_prod_evals, alpha_pows.iter())
-        .map(|(evals, alpha)| evals.into_mle().evaluate(&initial_rt) * alpha)
-        .sum::<E>()
-        + izip!(
-            initial_logup_evals,
-            alpha_pows[initial_prod_evals_len..].chunks(2)
-        )
-        .map(|(evals, alpha)| {
-            let (alpha_numerator, alpha_denominator) = (&alpha[0], &alpha[1]);
-            let (p1, p2, q1, q2) = (evals[0], evals[1], evals[2], evals[3]);
-            vec![p1, p2].into_mle().evaluate(&initial_rt) * alpha_numerator
-                + vec![q1, q2].into_mle().evaluate(&initial_rt) * alpha_denominator
-        })
-        .sum::<E>();
+    field initial_claim = 0
+    for u32 i in 0..initial_prod_evals_len do
+        field[0] evals = initial_prod_evals[i]
+        field alpha = alpha_rows[i]
+        initial_claim = initial_claim + mle_evaluate(evals, num_fanin, initial_rt, log2_num_fanin) * alpha
+    endfor
+    for u32 i in 0..initial_logup_evals_len do
+        field alpha_numerator = alpha_rows[initial_prod_evals_len + 2 * i]
+        field alpha_denominator = alpha_rows[initial_prod_evals_len + 2 * i + 1]
+        field[2] mle_numerator = [initial_logup_evals[i][0], initial_logup_evals[i][1]]
+        field[2] mle_denominator = [initial_logup_evals[i][2], initial_logup_evals[i][3]]
+        initial_claim = initial_claim + mle_evaluate(mle_numerator, num_fanin, initial_rt, log2_num_fanin) * alpha_numerator
+        initial_claim = initial_claim + mle_evaluate(mle_denominator, num_fanin, initial_rt, log2_num_fanin) * alpha_denominator
+    endfor
 
     // evaluation in the tower input layer
-    let mut prod_spec_input_layer_eval = vec![E::ZERO; tower_proofs.prod_spec_size()];
-    let mut logup_spec_p_input_layer_eval = vec![E::ZERO; tower_proofs.logup_spec_size()];
-    let mut logup_spec_q_input_layer_eval = vec![E::ZERO; tower_proofs.logup_spec_size()];
+    field[tower_proofs.prod_spec_size] prod_spec_input_layer_eval = [0; tower_proofs.prod_spec_size]
+    field[tower_proofs.logup_spec_size] logup_spec_p_input_layer_eval = [0; tower_proofs.logup_spec_size]
+    field[tower_proofs.logup_spec_size] logup_spec_q_input_layer_eval = [0; tower_proofs.logup_spec_size]
 
+    PointAndEval next_rt = PointAndEval {
+        point: initial_rt,
+        eval: initial_claim
+    }
+    for u32 round in 0..expected_max_round - 1 do
+        field[0] out_rt = next_rt.point
+        field out_claim = next_rt.eval
+        SumCheckSubClaim sumcheck_claim = verify_sumcheck(
+            out_claim,
+            SumcheckProof {
+                points: [], // final claimed point will be derive from sumcheck protocol
+                proofs: tower_proofs.proofs[round]
+            },
+            VPAuxInfo {
+                max_degree: num_fanin + 1, // + 1 for eq
+                num_variables: (round + 1) * log2_num_fanin
+            },
+            t
+        )
+
+        // check expected_evaluation
+    endfor
+
+    /*
     let next_rt = (0..(expected_max_round - 1)).try_fold(
         PointAndEval {
             point: initial_rt,
@@ -196,10 +231,33 @@ def tower_verify(
             })
         },
     )?;
+    */
 
-    Ok((
-        next_rt.point,
-        prod_spec_input_layer_eval,
-        logup_spec_p_input_layer_eval,
-        logup_spec_q_input_layer_eval,
-    ))
+    return TowerVerifierOutput {
+        rt_tower: next_rt.point,
+        record_evals: prod_spec_input_layer_eval,
+        logup_p_evals: logup_spec_p_input_layer_eval,
+        logup_q_evals: logup_spec_q_input_layer_eval
+    }
+
+def main() -> u32:
+    field[1][2] initial_prod_evals = [[1, 0]]
+    field[1][2] initial_logup_evals = [[1, 2, 1, 2]]
+    TowerProofs tower_proofs = TowerProofs {
+        prod_spec_size: 1,
+        logup_spec_size: 1,
+         proofs: [[IOPProverMessage {
+            evaluations: [1, 2, 3]
+        }; 3]],
+        prod_specs_eval: [],
+        logup_specs_eval: []
+    }
+    u32 expected_max_round = 2
+    u32 num_fanin = 2
+    u32 log2_num_fanin = 1
+    Transcript t = Transcript {
+        hash: 0
+    }
+    TowerVerifierOutput output = tower_verify(initial_prod_evals, initial_logup_evals, tower_proofs, expected_max_round, num_fanin, log2_num_fanin, t)
+
+    return 1

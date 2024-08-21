@@ -52,7 +52,7 @@ def build_eq_x_r_vec_sequential(u32 r_len, u32 r_len_pow2, field[0] r) -> field[
     endfor
     return evals
 
-/*
+
 def main(u32 mle_len, u32 point_len) -> field:
     // assert(2 ** point_len == mle_len)
     // Generate mle
@@ -63,8 +63,7 @@ def main(u32 mle_len, u32 point_len) -> field:
     // Generate point
     array_decl field[point_len] point
     for u32 i in 0..point_len do
-        point[i] = i
+        point[i] = (F)i
     endfor
 
-    return mle_evaluate(mle, mle_len, point, point_len)
-*/
+    return mle_eval(mle, mle_len, point, point_len)

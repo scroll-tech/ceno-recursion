@@ -112,21 +112,25 @@ def tower_verify(
         field[0] rt = sumcheck_claim.point
         field expected_evaluation = 0
         for u32 spec_index in 0..tower_proofs.prod_spec_size do
-            field alpha = alpha_pows[spec_index]
-            field prod = 1
-            for u32 i in 0..eval_len do
-                prod = prod * tower_proofs.prod_specs_eval[spec_index][round][i]
-            endfor
-            expected_evaluation = expected_evaluation + eq_eval(rt_len, out_rt, rt) * alpha * prod
+            if tower_proofs.layer_per_spec[spec_index] < round then
+                field alpha = alpha_pows[spec_index]
+                field prod = 1
+                for u32 i in 0..eval_len do
+                    prod = prod * tower_proofs.prod_specs_eval[spec_index][round][i]
+                endfor
+                expected_evaluation = expected_evaluation + eq_eval(rt_len, out_rt, rt) * alpha * prod
+            endif
         endfor
         for u32 spec_index in 0..tower_proofs.logup_spec_size do
-            field alpha_numerator = alpha_pows[initial_prod_evals_len + 2 * spec_index]
-            field alpha_denominator = alpha_pows[initial_prod_evals_len + 2 * spec_index + 1]
-            field p1 = tower_proofs.logup_specs_eval[spec_index][round][0]
-            field p2 = tower_proofs.logup_specs_eval[spec_index][round][1]
-            field q1 = tower_proofs.logup_specs_eval[spec_index][round][2]
-            field q2 = tower_proofs.logup_specs_eval[spec_index][round][3]
-            expected_evaluation = expected_evaluation + eq_eval(rt_len, out_rt, rt) * (alpha_numerator * (p1 * q2 + p2 * q1) + alpha_denominator * (q1 * q2))
+            if tower_proofs.layer_per_spec[spec_index] < round then
+                field alpha_numerator = alpha_pows[initial_prod_evals_len + 2 * spec_index]
+                field alpha_denominator = alpha_pows[initial_prod_evals_len + 2 * spec_index + 1]
+                field p1 = tower_proofs.logup_specs_eval[spec_index][round][0]
+                field p2 = tower_proofs.logup_specs_eval[spec_index][round][1]
+                field q1 = tower_proofs.logup_specs_eval[spec_index][round][2]
+                field q2 = tower_proofs.logup_specs_eval[spec_index][round][3]
+                expected_evaluation = expected_evaluation + eq_eval(rt_len, out_rt, rt) * (alpha_numerator * (p1 * q2 + p2 * q1) + alpha_denominator * (q1 * q2))
+            endif
         endfor
         assert(expected_evaluation == sumcheck_claim.expected_evaluation)
 
@@ -134,48 +138,46 @@ def tower_verify(
         // rt' = r_merge || rt
         // r_merge.len() == ceil_log2(num_product_fanin)
         array_decl field[log2_num_fanin] r_merge
-        for u32 i in 0..log2_num_fanin do
-            // decimal expression of "merge"
-            t = append_message_field(t, 469853431653)
-            r_merge[i] = t.hash
-        endfor
-        field[num_fanin] coeffs = build_eq_x_r_vec_sequential(log2_num_fanin, num_fanin, r_merge)
         array_decl field[rt_len + log2_num_fanin] rt_prime
         for u32 i in 0..rt_len do
             rt_prime[i] = rt[i]
         endfor
         for u32 i in 0..log2_num_fanin do
-            rt_prime[rt_len + i] = r_merge[i]
+            // decimal expression of "merge"
+            t = append_message_field(t, 469853431653)
+            r_merge[i] = t.hash
+            rt_prime[rt_len + i] = t.hash
         endfor
+        field[num_fanin] coeffs = build_eq_x_r_vec_sequential(log2_num_fanin, num_fanin, r_merge)
 
         field prod_spec_evals = 0
         for u32 spec_index in 0..tower_proofs.prod_spec_size do
-            // if round < tower_proofs.prod_specs_eval[spec_index].len()
-            field alpha = alpha_pows[spec_index]
-            field evals = 0
-            for u32 i in 0..eval_len do
-                evals = evals + tower_proofs.prod_specs_eval[spec_index][round][i] * coeffs[i]
-            endfor
-            prod_spec_input_layer_eval[spec_index] = evals
-            prod_spec_evals = prod_spec_evals + alpha * evals
-            // else { 
-            //     prod_spec_input_layer_eval[spec_index] = 0 
-            // }
+            if tower_proofs.layer_per_spec[spec_index] < round then
+                field alpha = alpha_pows[spec_index]
+                field evals = 0
+                for u32 i in 0..eval_len do
+                    evals = evals + tower_proofs.prod_specs_eval[spec_index][round][i] * coeffs[i]
+                endfor
+                prod_spec_input_layer_eval[spec_index] = evals
+                prod_spec_evals = prod_spec_evals + alpha * evals
+            else
+                prod_spec_input_layer_eval[spec_index] = 0 
+            endif
         endfor
         field logup_spec_evals = 0
         for u32 spec_index in 0..tower_proofs.logup_spec_size do
-            // if round < tower_proofs.logup_specs_eval[spec_index].len()
-            field alpha_numerator = alpha_pows[initial_prod_evals_len + 2 * spec_index]
-            field alpha_denominator = alpha_pows[initial_prod_evals_len + 2 * spec_index + 1]
-            field p_evals = tower_proofs.logup_specs_eval[spec_index][round][0] * coeffs[0] + tower_proofs.logup_specs_eval[spec_index][round][1] * coeffs[1]
-            field q_evals = tower_proofs.logup_specs_eval[spec_index][round][2] * coeffs[0] + tower_proofs.logup_specs_eval[spec_index][round][3] * coeffs[1]
-            logup_spec_p_input_layer_eval[spec_index] = p_evals
-            logup_spec_q_input_layer_eval[spec_index] = q_evals
-            logup_spec_evals = logup_spec_evals + alpha_numerator * p_evals + alpha_denominator * q_evals
-            // else { 
-            //     logup_spec_p_input_layer_eval[spec_index] = 0 
-            //     logup_spec_q_input_layer_eval[spec_index] = 0
-            // }
+            if tower_proofs.layer_per_spec[spec_index] < round then
+                field alpha_numerator = alpha_pows[initial_prod_evals_len + 2 * spec_index]
+                field alpha_denominator = alpha_pows[initial_prod_evals_len + 2 * spec_index + 1]
+                field p_evals = tower_proofs.logup_specs_eval[spec_index][round][0] * coeffs[0] + tower_proofs.logup_specs_eval[spec_index][round][1] * coeffs[1]
+                field q_evals = tower_proofs.logup_specs_eval[spec_index][round][2] * coeffs[0] + tower_proofs.logup_specs_eval[spec_index][round][3] * coeffs[1]
+                logup_spec_p_input_layer_eval[spec_index] = p_evals
+                logup_spec_q_input_layer_eval[spec_index] = q_evals
+                logup_spec_evals = logup_spec_evals + alpha_numerator * p_evals + alpha_denominator * q_evals
+            else 
+                logup_spec_p_input_layer_eval[spec_index] = 0 
+                logup_spec_q_input_layer_eval[spec_index] = 0
+            endif
         endfor
 
         field next_eval = prod_spec_evals + logup_spec_evals
@@ -199,9 +201,10 @@ def main() -> u32:
     TowerProofs tower_proofs = TowerProofs {
         prod_spec_size: 1,
         logup_spec_size: 1,
-         proofs: [[IOPProverMessage {
+        proofs: [[IOPProverMessage {
             evaluations: [1, 2, 3]
         }; 3]],
+        layer_per_spec: [],
         prod_specs_eval: [],
         logup_specs_eval: []
     }

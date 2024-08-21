@@ -1,6 +1,7 @@
 // Merkle tree leaves require hash of 6 inputs (sig_L, label_L, weight_L, sig_R, label_R, weight_R) or (sig_L, l_L, r_L, sig_R, l_R, r_R)
 // Merkle tree internal nodes require hash of 2 inputs (L, R)
 // Fiat-Shamir requires hash of 5 inputs (J, PROOF_ROOT, WEIGHT, MESSAGE, ATT_ROOT)
+// Schnoor verification requires hash of 3 inputs (MESSAGE, R.x, R.y)
 
 const field[441] POSEIDON_C = [
   758662019503705074,

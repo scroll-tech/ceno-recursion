@@ -1,0 +1,47 @@
+from "./poseidon.zok" import poseidon, ark, sbox, mix
+
+const A = 526
+const B = 265
+
+struct Point {
+    field x,
+    field y
+}
+
+def point_add(Point p1, Point p2) -> Point:
+    match (self.x, rhs.x) {
+        // Handle the case where the two points are additive inverses (that is, they have the same x but a different y, causing a vertical line)
+        // This should return the point at infinity
+        (Some(self_x), Some(rhs_x)) if self_x == rhs_x && self.y != rhs.y => {
+            return Self {
+                x: None,
+                y: None,
+                a: self.a,
+                b: self.b,
+            }
+        }
+        // self.x being None means that self is the point is the point at infinity, or the additive identity. Thus, we return rhs. 
+        (None, Some(_)) => return rhs,
+        // rhs.x being None means that rhs is the point at infinity, or the additive identity. Thus, we return self.
+        (Some(_), None) => return *self,
+        _ => Self {
+            x: self.x,
+            y: self.y,
+            a: self.a,
+            b: self.b,
+        }
+    }
+}
+
+struct PublicKey {
+    Curve c,
+    Point p,
+    Point q
+}
+
+def verify_signature(field msg, PublicKey pk, Point r, field s) -> bool:
+    field[3] inputs = [msg, r.x, r.y]
+    field e = poseidon(3, inputs)
+    // Compute Q^e
+
+    // Compute P^s

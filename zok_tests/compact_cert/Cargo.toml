@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 rs_merkle = "1.4"
 rand = "0.8"
+elliptic_curve = "0.13.8"

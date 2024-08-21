@@ -1,3 +1,6 @@
+mod curve;
+mod schnorr;
+
 use std::collections::HashSet;
 use rs_merkle::algorithms::Sha256;
 use rs_merkle::{MerkleTree, Hasher, MerkleProof};

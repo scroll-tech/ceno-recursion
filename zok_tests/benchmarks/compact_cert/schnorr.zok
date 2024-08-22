@@ -1,47 +1,79 @@
 from "./poseidon.zok" import poseidon, ark, sbox, mix
 
-const A = 526
-const B = 265
+const field A = 526
+const field B = 265
+const u32 WIDTH = 253
 
 struct Point {
     field x,
     field y
 }
 
-def point_add(Point p1, Point p2) -> Point:
-    match (self.x, rhs.x) {
-        // Handle the case where the two points are additive inverses (that is, they have the same x but a different y, causing a vertical line)
-        // This should return the point at infinity
-        (Some(self_x), Some(rhs_x)) if self_x == rhs_x && self.y != rhs.y => {
-            return Self {
-                x: None,
-                y: None,
-                a: self.a,
-                b: self.b,
-            }
-        }
-        // self.x being None means that self is the point is the point at infinity, or the additive identity. Thus, we return rhs. 
-        (None, Some(_)) => return rhs,
-        // rhs.x being None means that rhs is the point at infinity, or the additive identity. Thus, we return self.
-        (Some(_), None) => return *self,
-        _ => Self {
-            x: self.x,
-            y: self.y,
-            a: self.a,
-            b: self.b,
-        }
+def point_add(Point a, Point b) -> Point:
+    field m = a.x != b.x ? (b.y - a.y) / (b.x - a.x) : (3 * a.x * a.x + A) / (2 * a.y)
+    field x3 = m * m - a.x - b.x
+    field y3 = m * (a.x - x3) - b.y
+    return Point {
+        x: x3,
+        y: y3
     }
-}
+
+// k_bits is in big-endian of length 253
+// Use k_bits for multiplication while simultaneous check it matches k
+def point_mul(Point a, Field k, bool[0] k_bits) -> Point:
+    field k_assemb = 1
+    Point a_k = a
+    u32 i = 0
+    while !k_bits[i] do
+        i = i + 1
+    endwhile
+    i = i + 1
+    while i < WIDTH {
+        a_k = point_add(a_k, a_k)
+        k_assemb = k_assemb * 2
+        if k_bits[i] then
+            a_k = point_add(a_k, a)
+            k_assemb = k_assemb + 1 
+        endif
+        i = i + 1
+    }
+    assert(k_assemb == k)
+    return a_k
 
 struct PublicKey {
-    Curve c,
     Point p,
     Point q
 }
 
-def verify_signature(field msg, PublicKey pk, Point r, field s) -> bool:
-    field[3] inputs = [msg, r.x, r.y]
-    field e = poseidon(3, inputs)
-    // Compute Q^e
+struct Signature {
+    Point r,
+    field s,
+    bool[0] s_bits
+}
 
-    // Compute P^s
+def verify_signature(field msg, PublicKey pk, Signature sig, bool[0] e_bits) -> bool:
+    // Check all points are on the curve
+    assert(pk.p.y * pk.p.y = pk.p.x * pk.p.x * pk.p.x + A * pk.p.x + B);
+    assert(pk.q.y * pk.q.y = pk.q.x * pk.q.x * pk.q.x + A * pk.q.x + B);
+    assert(sig.r.y * sig.r.y = sig.r.x * sig.r.x * sig.r.x + A * sig.r.x + B);
+
+    field[3] inputs = [msg, sig.r.x, sig.r.y]
+    field e = poseidon(3, inputs)
+    // assert s_bits and e_bits add up to s and e
+    field s_assemb = 0
+    field e_assemb = 0
+    for u32 i in 0..WIDTH do
+        s_assemb = s_assemb * 2
+        e_assemb = e_assemb * 2
+        if sig.s_bits[i] then
+            s_assemb = s_assemb + 1
+        endif
+        if e_bits[i] then
+            e_assemb = e_assemb + 1
+        endif
+    endfor
+    assert(s_assemb == s)
+    assert(e_assemb == e)
+    Point eq = point_mul(pk.q, e)
+    Point sp = point_mul(pk.p, sig.s, sig.s_bits)
+    return curve_add(&sig.r, &eq) == sp

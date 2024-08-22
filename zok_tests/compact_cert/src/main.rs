@@ -5,48 +5,30 @@ use std::collections::HashSet;
 use rs_merkle::algorithms::Sha256;
 use rs_merkle::{MerkleTree, Hasher, MerkleProof};
 use rand::*;
+use serde::{Serialize, Deserialize};
+use crate::schnorr::*;
 
 // Attestor info
+#[derive(Serialize, Deserialize)]
 struct Attestor {
-    label: usize,
-    signature: [u8; 24],
+    signature: Signature,
     weight: usize
 }
 impl Attestor {
-    fn new(label: usize, signature: [u8; 24], weight: usize) -> Attestor {
+    fn new(signature: Signature, weight: usize) -> Attestor {
         Attestor {
-            label,
             signature,
             weight
         }
     }
-
-    //                   24        4         4
-    // Pack a Sig into: sig || label || weight
-    fn to_byte_array(&self) -> [u8; 32] {
-        let mut ret_bytes = [0; 32];
-        let mut i = 0;
-        for b in self.signature {
-            ret_bytes[i] = b;
-            i += 1;
-        }
-        for b in (self.label as u32).to_ne_bytes() {
-            ret_bytes[i] = b;
-            i += 1;
-        }
-        for b in (self.weight as u32).to_ne_bytes() {
-            ret_bytes[i] = b;
-            i += 1;
-        }
-        return ret_bytes;
-    }
 }
 
 // Signature Info
+#[derive(Serialize, Deserialize)]
 struct Sig {
     l: usize,
     r: usize,
-    sig: Option<[u8; 24]>
+    sig: Option<Signature>
 }
 impl Sig {
     fn new(l: usize, r: usize, sig: Option<[u8; 24]>) -> Sig {
@@ -56,40 +38,18 @@ impl Sig {
             sig
         }
     }
-
-    //                   24    4    4
-    // Pack a Sig into: sig || l || r
-    fn to_byte_array(&self) -> [u8; 32] {
-        let sig_bytes = if let Some(s) = self.sig { s } else { [0; 24] };
-
-        let mut ret_bytes = [0; 32];
-        let mut i = 0;
-        for b in sig_bytes {
-            ret_bytes[i] = b;
-            i += 1;
-        }
-        for b in (self.l as u32).to_ne_bytes() {
-            ret_bytes[i] = b;
-            i += 1;
-        }
-        for b in (self.r as u32).to_ne_bytes() {
-            ret_bytes[i] = b;
-            i += 1;
-        }
-        return ret_bytes;
-    }
 }
 
 // Reveal Proof Entry
 struct T {
     i: usize,
-    s: [u8; 32],
+    s: &[u8],
     pi_s: MerkleProof<Sha256>,
-    p: [u8; 32],
+    p: &[u8],
     pi_p: MerkleProof<Sha256>,
 }
 impl T {
-    fn new(i: usize, s: [u8; 32], pi_s: MerkleProof<Sha256>, p: [u8; 32], pi_p: MerkleProof<Sha256>) -> T {
+    fn new(i: usize, s: &[u8], pi_s: MerkleProof<Sha256>, p: &[u8], pi_p: MerkleProof<Sha256>) -> T {
         T {
             i,
             s,
@@ -117,13 +77,14 @@ const MAX_NUM_REVEALS: usize = 2; // num reveals 2^q
 fn trusted_setup(
     attestors: &Vec<Attestor>
 ) -> Result<([u8; 32], MerkleTree<Sha256>), String> {
-    let leaves: Vec<[u8; 32]> = attestors.iter().map(|i| i.to_byte_array()).collect();
+    let leaves: Vec<Vec<u8>> = attestors.iter().map(|att| bincode::serialize(&att).unwrap()).collect();
     let merkle_tree = MerkleTree::<Sha256>::from_leaves(&leaves);
     let root = merkle_tree.root().ok_or("couldn't get the merkle root")?;
 
     Ok((root, merkle_tree))
 }
 
+/*
 fn prover(
     attestors: &Vec<Attestor>, 
     proven_weight: usize,
@@ -285,30 +246,33 @@ fn verifier(
         assert!(l <= coin && coin < l + weight);
     }
 }
+*/
 
 fn main() {
-    let mut attestors = Vec::new();
-    for i in 0..NUM_ATTESTORS {
-        let mut attestor_sig = [0; 24];
-        for j in 0..8 {
-            attestor_sig[j] = i.to_ne_bytes()[j];
-        }
-        attestors.push(Attestor::new(i, attestor_sig, i));
-    }
-    let k = KNOWLEDGE_SOUNDNESS;
-    let q = MAX_NUM_REVEALS;
     // Generate message
     let mut rng = rand::thread_rng();
     let mut message: [u8; MSG_LEN] = [0; MSG_LEN];
     rng.try_fill(&mut message).unwrap();
 
+    // Generate attestors
+    let mut attestors = Vec::new();
+    for i in 0..NUM_ATTESTORS {
+        let (pk, sk) = gen();
+        let attestor_sig = sign(&sk, &message);
+        attestors.push(Attestor::new(attestor_sig, i));
+    }
+    let k = KNOWLEDGE_SOUNDNESS;
+    let q = MAX_NUM_REVEALS;
+
     // TRUSTED SETUP
     let (att_root, att_tree) = trusted_setup(&attestors).unwrap();
     
+    /*
     // PROVER
     let compact_cert_proof = prover(&attestors, PROVEN_WEIGHT, k, q, &message, &att_root, &att_tree).unwrap();
 
     // VERIFIER
     verifier(&compact_cert_proof, PROVEN_WEIGHT, k, q, &message, attestors.len(), att_root);
+    */
     println!("Verification Successful!")
 }

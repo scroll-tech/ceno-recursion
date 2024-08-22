@@ -1,6 +1,6 @@
 from "./poseidon_constants.zok" import POSEIDON_C, POSEIDON_M
 
-def ark(u32 N, field[0] state, field[441] c, u32 it) -> field[N]:
+def ark(u32 N, field[0] state, field[741] c, u32 it) -> field[N]:
     for u32 i in 0..N do
         state[i] = state[i] + c[it + i]
     endfor
@@ -13,7 +13,7 @@ def sbox(u32 N, field[0] state, u32 f, u32 p, u32 r) -> field[N]:
     endfor
     return state
 
-def mix(u32 N, field[0] state, field[81] m) -> field[N]:
+def mix(u32 N, field[0] state, field[100] m) -> field[N]:
     field[N] out = [0; N]
     for u32 i in 0..N do
         field acc = 0
@@ -25,13 +25,12 @@ def mix(u32 N, field[0] state, field[81] m) -> field[N]:
     return out
 
 def poseidon(u32 N, field[0] inputs) -> field:
-    assert(N > 0 && N <= 6) // max 6 inputs
+    assert(N > 0)
 
     u32 t = N + 1
-    u32[7] rounds_p = [56, 57, 56, 60, 60, 63, 64, 63]
 
     u32 f = 8
-    u32 p = rounds_p[(t - 2)]
+    u32 p = 63
 
     // Constants are padded with zeroes to the maximum value calculated by
     // t * (f + p) = 497, where `t` (number of inputs + 1) is a max of 7.
@@ -39,8 +38,8 @@ def poseidon(u32 N, field[0] inputs) -> field:
     // and we do not want callers passing down constants.
     // This should be revisited once compiler limitations are gone.
 
-    field[441]  c = POSEIDON_C
-    field[81] m = POSEIDON_M
+    field[741] c = POSEIDON_C
+    field[100] m = POSEIDON_M
 
     field[t] state = [0; t]
     for u32 i in 1..t do
@@ -57,7 +56,7 @@ def poseidon(u32 N, field[0] inputs) -> field:
 
 def main() -> field:
     u32 n = 2
-    field[n] inputs = [368191096817780402688216664640044494471463724502444509207532685924843993798, 4987682793450643737301756561296924932463644342307846743150842019815678868756]
+    field[n] inputs = [36100910961007780402688216664640044494471463724502444509207532685924843993798, 49876827934506437373017565612969249324636443423078467431508420191005678868756]
     field hash = poseidon(n, inputs)
 
     return hash

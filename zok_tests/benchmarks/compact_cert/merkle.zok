@@ -9,16 +9,16 @@ struct MerkleProof {
     u32[0] bits
 }
 
-def verify_merkle(MerkleProof proof, field root, u32 index, field[3] entry, u32 depth) -> bool:
+def verify_merkle(MerkleProof proof, field root, u32 index, field[5] entry, u32 depth) -> bool:
     // Verify proof.bits constructs index
     assert(proof.bits[depth - 1] * (1 - proof.bits[depth - 1]) == 0)
     u32 index_bits = proof.bits[depth - 1]
     // depth = 0: hash of leaf
-    field[6] inputs = proof.bits[0] == 0 ? [entry[0], entry[1], entry[2], proof.leaf[0], proof.leaf[1], proof.leaf[2]] : [proof.leaf[0], proof.leaf[1], proof.leaf[2], entry[0], entry[1], entry[2]]
-    field cur_node = poseidon(6, inputs)
+    field[6] inputs = proof.bits[0] == 0 ? [entry[0], entry[1], entry[2], entry[3], entry[4], proof.leaf[0], proof.leaf[1], proof.leaf[2], proof.leaf[3], proof.leaf[4]] : [proof.leaf[0], proof.leaf[1], proof.leaf[2], proof.leaf[3], proof.leaf[4], entry[0], entry[1], entry[2], entry[3], entry[4]]
+    field cur_node = poseidon(10, inputs)
     // depth = 1..: hash of internal nodes
     for u32 i in 1..depth do
-    assert(proof.bits[depth - 1 - i] * (1 - proof.bits[depth - 1 - i]) == 0)
+        assert(proof.bits[depth - 1 - i] * (1 - proof.bits[depth - 1 - i]) == 0)
         index_bits = index_bits * 2 + proof.bits[depth - 1 - i]
         // Depending on index, cur_node and proof[i] will be on two sides of the inputs
         field[2] inputs = proof.bits[i] == 0 ? [cur_node, proof.path[i - 1]] : [proof.path[i - 1], cur_node]

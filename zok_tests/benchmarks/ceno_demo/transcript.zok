@@ -2,12 +2,15 @@ struct Transcript {
     field hash
 }
 
+def new_transcript() -> Transcript:
+    return Transcript {
+        hash: 2
+    }
+
 def append_message_u32(Transcript t, u32 f) -> Transcript:
-    // BLOCK 28
-    t.hash = t.hash + (F)f
+    // t.hash = t.hash + (F)f
     return t
 
 def append_message_field(Transcript t, field f) -> Transcript:
-    // BLOCK 27
-    t.hash = t.hash + f
+    // t.hash = t.hash + f
     return t

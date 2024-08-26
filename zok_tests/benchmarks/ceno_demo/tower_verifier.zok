@@ -1,4 +1,4 @@
-from "transcript" import Transcript, append_message_u32, append_message_field
+from "transcript" import Transcript, new_transcript, append_message_u32, append_message_field
 from "sumcheck_structs" import IOPProverMessage, SumcheckProof, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState
 from "sumcheck_verifier" import verify_round_and_update_state, interpolate_uni_poly, check_and_generate_subclaim, verify_sumcheck
 from "mle" import mle_eval, eq_eval, build_eq_x_r_vec_sequential
@@ -38,11 +38,7 @@ def tower_verify(
     // get_challenge_pows
     // decimal expression of "combine subset evals"
     t = append_message_field(t, 567674997755577675492904462386182052033524231283)
-    /* --
-    // field alpha = t.hash
-    */
-
-    field alpha = 1
+    field alpha = t.hash
     array_decl field[initial_prod_evals_len + initial_logup_evals_len * 2] alpha_pows
     field state = 1
     for u32 i in 0..initial_prod_evals_len + initial_logup_evals_len * 2 do
@@ -54,10 +50,7 @@ def tower_verify(
     for u32 i in 0..log2_num_fanin do
         // decimal expression of "product_sum"
         t = append_message_field(t, 135940096403279116418381165)
-        /* --
         // initial_rt[i] = t.hash
-        */
-        initial_rt[i] = 0
     endfor
 
     // --
@@ -204,16 +197,14 @@ def main() -> u32:
         proofs: [[IOPProverMessage {
             evaluations: [1, 2, 3]
         }; 3]],
-        layer_per_spec: [],
-        prod_specs_eval: [],
-        logup_specs_eval: []
+        layer_per_spec: [1],
+        prod_specs_eval: [[[0]]],
+        logup_specs_eval: [[[0, 0, 0, 0]]]
     }
     u32 expected_max_round = 2
     u32 num_fanin = 2
     u32 log2_num_fanin = 1
-    Transcript t = Transcript {
-        hash: 0
-    }
+    Transcript t = new_transcript()
     TowerVerifierOutput output = tower_verify(initial_prod_evals, initial_logup_evals, tower_proofs, expected_max_round, num_fanin, log2_num_fanin, t)
 
     return 1

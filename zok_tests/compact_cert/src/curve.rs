@@ -11,6 +11,12 @@ use primitive_types::U512;
 #[PrimeFieldReprEndianness = "little"]
 pub struct Fp([u64; 4]);
 
+impl Fp {
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0.map(|i| i.to_ne_bytes()).concat().try_into().unwrap()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Point {
     pub x: Fp,

@@ -4,21 +4,20 @@ use rs_merkle::Hasher;
 use rand::Rng;
 use ff::PrimeField;
 use primitive_types::U512;
-use serde::{Serialize, Deserialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct PublicKey {
     pub p: Point,
     pub q: Point,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct SecretKey {
     pub a: U512,
     pub pk: PublicKey,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct Signature {
     pub r: Point,
     pub s: U512,
@@ -94,7 +93,7 @@ pub fn sign(sk: &SecretKey, m: &[u8]) -> Signature {
     }
 }
 
-pub fn verify(pk: &PublicKey, sig: &Signature, m: &[u8]) -> bool {
+pub fn verify_sig(pk: &PublicKey, sig: &Signature, m: &[u8]) -> bool {
     let order: U512 = U512::from_dec_str("7237005577332262213973186563042994240955753618821290553176770668684506720427").unwrap();
     // Produce hash
     let mut hin: Vec<u8> = Vec::new();

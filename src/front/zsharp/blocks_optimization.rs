@@ -3020,7 +3020,6 @@ impl<'ast> ZGen<'ast> {
 
                     let callee = Vec::from_iter(successor[cur_bl].clone())[0];
                     let callee_name = &bls[callee].fn_name;
-                    let caller_name = &bls[cur_bl].fn_name;
                     // Check if any variables need to be spilled
                     if let Some(vars) = spills.get(callee_name) {
                         for var in vars {

@@ -372,6 +372,19 @@ impl<'ast, 'ret> ZStatementWalker<'ast, 'ret> {
                     let lty = self.type_expression(&mut be.left, &mut expr_walker)?;
                     let rty = self.type_expression(&mut be.right, &mut expr_walker)?;
                     match (&lty, &rty) {
+                        // Disallow struct equality / inequality
+                        (Some(lt), _) if matches!(lt, Struct(_)) && matches!(&be.op, Eq | NotEq) =>
+                            Err(ZVisitorError(format!(
+                                "Equality not supported on struct type {:?}, of expr:\n{}",
+                                &lt,
+                                span_to_string(&be.span),
+                            ))),
+                        (_, Some(rt)) if matches!(rt, Struct(_)) && matches!(&be.op, Eq | NotEq) =>
+                            Err(ZVisitorError(format!(
+                                "Equality not supported on struct type {:?}, of expr:\n{}",
+                                &rt,
+                                span_to_string(&be.span),
+                            ))),
                         (Some(lt), None) if matches!(lt, Basic(_)) || matches!(&be.op, Eq | NotEq) =>
                             Ok((lty.clone().unwrap(), lty.unwrap())),
                         (None, Some(rt)) if matches!(rt, Basic(_)) || matches!(&be.op, Eq | NotEq) =>

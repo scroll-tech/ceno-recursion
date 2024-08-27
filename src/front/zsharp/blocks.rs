@@ -1231,7 +1231,6 @@ impl<'ast> ZGen<'ast> {
                                 if let Ty::Array(_, entry_ty) = arr_ty {
                                     let struct_ty = *entry_ty.clone();
                                     let mut entry_ty = *entry_ty.clone();
-                                    // assert_eq!(entry_ty, rhs_ty);
                                     Self::bl_gen_type_check(&entry_ty, &rhs_ty);
                                     skip_stmt_gen = true;
                                     if let RangeOrExpression::Expression(e) = &s.expression {
@@ -1258,9 +1257,8 @@ impl<'ast> ZGen<'ast> {
                                         let new_index_expr: Expression;
                                         (blks, blks_len, var_scope_info, new_index_expr, _, _, _, _) = 
                                             self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, 0, 0, var_scope_info)?;
-                                        let new_pointer_expr = self.bl_gen_pointer_offset_(new_index_expr, &member_accesses, &index_ty, &struct_ty)?;
                                         // Perform pointer arithmetics
-                                        (blks, blks_len) = self.bl_gen_store_(blks, blks_len, &new_l, &index_ty, &new_pointer_expr, &rhs_expr, &entry_ty, f_name, &var_scope_info, false, &entry_ty, &Vec::new())?;
+                                        (blks, blks_len) = self.bl_gen_store_(blks, blks_len, &new_l, &index_ty, &new_index_expr, &rhs_expr, &entry_ty, f_name, &var_scope_info, false, &struct_ty, &member_accesses)?;
                                     } else {
                                         return Err(format!("Array range access not implemented!"));
                                     }
@@ -1272,7 +1270,7 @@ impl<'ast> ZGen<'ast> {
                         }
                         acc_counter += 1;
                     }
-                    assert_eq!(lhs_ty, rhs_ty);
+                    Self::bl_gen_type_check(&lhs_ty, &rhs_ty);
                     if !skip_stmt_gen {
                         (blks, blks_len) = 
                             self.bl_gen_def_stmt_(blks, blks_len, &l_name, &rhs_expr, &rhs_ty, f_name, f_name, &var_scope_info)?;
@@ -1282,7 +1280,6 @@ impl<'ast> ZGen<'ast> {
                     // If array is dynamically bounded, cannot use type_impl_ because bound might involve variables undefined in circ
                     let l_name = l.identifier.value.to_string();
                     let lhs_ty = self.type_impl_::<false>(&l.ty)?;
-                    // assert_eq!(lhs_ty, rhs_ty);
                     Self::bl_gen_type_check(&lhs_ty, &rhs_ty);
                     var_scope_info.declare_var(&l_name, f_name, cur_scope, lhs_ty.clone());
                     (blks, blks_len) = 
@@ -1620,7 +1617,6 @@ impl<'ast> ZGen<'ast> {
                                 let new_index_expr: Expression;
                                 (blks, blks_len, var_scope_info, new_index_expr, func_count, array_count, struct_count, load_count) = 
                                     self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
-                                let new_pointer_expr = self.bl_gen_pointer_offset_(new_index_expr, &member_accesses, &index_ty, &struct_ty)?;
                                 // Perform pointer arithmetics
                                 (blks, blks_len) = self.bl_gen_load_(
                                     blks, 
@@ -1628,12 +1624,12 @@ impl<'ast> ZGen<'ast> {
                                     &load_name,
                                     &arr_extended_name,
                                     &index_ty, 
-                                    &new_pointer_expr, 
+                                    &new_index_expr, 
                                     &load_ty, 
                                     f_name, 
                                     &var_scope_info, 
-                                    &load_ty,
-                                    &Vec::new()
+                                    &struct_ty,
+                                    &member_accesses
                                 )?;
                                 load_count += 1;
                                 ret_name = load_name;
@@ -1828,11 +1824,13 @@ impl<'ast> ZGen<'ast> {
 
         // Start by declaring all init^X to unique_contents
         for i in 0..array_init_info.unique_contents.len() {
-            let init_name = format!("init^{}", i);
-            var_scope_info.declare_var(&init_name, &f_name, cur_scope, entry_ty.clone());
+            // First process the content
             let content_expr: Expression;
             (blks, blks_len, var_scope_info, content_expr, func_count, array_count, struct_count, load_count) = 
                 self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &array_init_info.unique_contents[i], f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
+            // Then assign it to a temporary variable init^X
+            let init_name = format!("init^{}", i);
+            var_scope_info.declare_var(&init_name, &f_name, cur_scope, entry_ty.clone());
             (blks, blks_len) = self.bl_gen_def_stmt_(blks, blks_len, &init_name, &content_expr, &entry_ty, f_name, f_name, &var_scope_info)?;
         }
 

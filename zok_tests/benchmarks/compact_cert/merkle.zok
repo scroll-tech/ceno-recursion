@@ -23,7 +23,7 @@ def verify_merkle(MerkleProof proof, field root, u32 index, field[5] entry, u32 
     assert(cur_node == root)
     return 1
 
-def main() -> u32:
+def main() -> bool:
     // construct proof for depth = 2, index = 2
     u32 depth = 2
     u32 index = 2

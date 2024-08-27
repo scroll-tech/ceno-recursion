@@ -1,5 +1,6 @@
 from "./poseidon.zok" import poseidon, ark, sbox, mix
 from "./merkle.zok" import MerkleProof, verify_merkle
+from "./schnorr.zok" import WIDTH, Point, PublicKey, Signature, verify_signature
 
 // Reveal Proof Entry
 struct T {
@@ -25,6 +26,7 @@ def verifier(
     u32 merkle_depth,
     field att_root,
     bool[0][0] e_bits_list,
+    bool[0][0] s_bits_list
 ) -> u32:
     u32 signed_weight = compact_cert_proof.signed_weight
     assert(signed_weight > proven_weight)
@@ -35,13 +37,13 @@ def verifier(
         field[5] inputs = [(F)j, compact_cert_proof.sig_root, (F)proven_weight, message, att_root]
         field coin_hash = poseidon(5, inputs)
         // field coin = coin_hash % (F)signed_weight
-        field coin = 5
+        field coin = 7
 
         T t = compact_cert_proof.t_list[j]
         // Sig Opening
-        assert(verify_merkle(t.pi_s, compact_cert_proof.sig_root, t.i, t.s, merkle_depth))
+        assert(verify_merkle(t.pi_s, compact_cert_proof.sig_root, t.i, t.s, merkle_depth) == 1)
         // Att Opening
-        assert(verify_merkle(t.pi_p, att_root, t.i, t.p, merkle_depth))
+        assert(verify_merkle(t.pi_p, att_root, t.i, t.p, merkle_depth) == 1)
         // Validity of signature
         PublicKey pk = PublicKey {
             p: Point { x: t.p[0], y: t.p[1] },
@@ -49,9 +51,10 @@ def verifier(
         }
         Signature sig = Signature {
             r: Point{ x: t.s[0], y: t.s[1] },
-            s: Point{ t.s[2] }
+            s: t.s[2],
+            s_bits: s_bits_list[j]
         }
-        verify_signature(message, pk, sig, e_bits_list[j])
+        assert(verify_signature(message, pk, sig, e_bits_list[j]) == 1)
         // L < coin <= L + Weight
         assert(t.s[3] <= coin && coin < t.s[3] + t.p[4])
     endfor
@@ -59,46 +62,79 @@ def verifier(
     return 1
 
 def main() -> u32:
-    field message = 798
-    // attestors: [0, 0, 1], [1, 1, 2], [2, 2, 3], [3, 3, 4]
-    // att internals: [368191096817780402688216664640044494471463724502444509207532685924843993798, 4987682793450643737301756561296924932463644342307846743150842019815678868756]
-    field att_root = 7199931385403621423989853091721173338948015710744744776965348678666432056017
-    // sigs: [0, 0, 1], [1, 1, 3], [2, 3, 6], [3, 6, 10]
-    // sig internals: [981393290388939892298576508269309645432298498866464364767232692132970656763, 2559145465398517868851519407883502523317753908862093834922805078206432530660]
-    field sig_root = 1363862103427411396879257859619074537598816635279934461296185382254981660079
-    u32 merkle_depth = 2
+    field message = 6908441180828167112785246881494320159273940089327447106269949444716788494909
 
-    u32 proven_weight = 7
-    u32 signed_weight = 10
-    // Coin is poseidon(0, sig_root, proven_weight, message, att_root) % signed_weight
-    field coin = 5
-    // Coin 5 corresponds to attestor 2, generate sig_proof and att_proof
-    T t_0 = T {
-        i: 2,
-        s: [2, 3, 6],
-        pi_s: MerkleProof {
-            leaf: [3, 6, 10],
-            path: [981393290388939892298576508269309645432298498866464364767232692132970656763],
-            bits: [0, 1]
-        },
-        p: [2, 2, 3],
-        pi_p: MerkleProof {
-            leaf: [3, 3, 4],
-            path: [368191096817780402688216664640044494471463724502444509207532685924843993798],
-            bits: [0, 1]
+    // Let all attestors use the same pk & weight, does not affect performance
+    u32 num_attestors = 8
+    u32 weight = 5
+    u32 proven_weight = num_attestors * weight - 1
+    u32 signed_weight = num_attestors * weight
+    array_decl PublicKey[num_attestors] pk_list
+    array_decl Signature[num_attestors] sig_list
+    for u32 i in 0..num_attestors do
+        pk_list[i] = PublicKey {
+            p: Point {
+                x: 2023776050662786605020065854616777351003832247628992350849206310281785027488,
+                y: 1079270832837170318396516616249394502719834190979906495690419930531357954746
+            },
+            q: Point {
+                x: 7101684830137506950821434332972100736705268320764486193269722119377250644660,
+                y: 1764840689618624173098512281158161439147043396136846829753116276022936136130
+            }
         }
-    }
+        sig_list[i] = Signature {
+            r: Point {
+                x: 5824293800188062938533237344790739102726705128562220570802448947038150657007,
+                y: 340848841123394720212279364279745606262149681372696003943728267198931244360
+            },
+            s: 4415915127126372096757067153593537022657929051278082364476489088715040314973,
+            s_bits: [false, true, false, false, true, true, true, false, false, false, false, true, true, false, true, false, true, false, false, false, true, true, true, false, false, false, false, true, true, true, false, false, false, false, false, false, true, false, false, true, false, false, true, true, true, false, true, true, false, true, false, false, true, true, true, true, false, true, true, true, true, true, false, false, true, false, true, true, false, false, true, false, true, true, true, true, true, true, false, false, true, false, false, true, true, true, false, true, false, false, true, false, false, false, false, true, true, true, false, true, true, false, false, true, true, true, true, true, false, false, false, true, false, true, true, true, true, false, true, false, true, true, false, false, true, false, false, false, false, true, false, false, false, true, true, true, true, false, true, true, false, false, false, true, true, false, false, false, true, false, true, true, true, false, true, true, true, false, true, false, false, true, true, false, false, true, false, false, false, false, true, true, false, true, false, true, false, false, false, true, true, false, true, true, false, true, true, false, true, true, true, false, true, true, false, true, false, true, true, false, true, true, true, false, true, true, false, false, true, true, false, false, true, false, true, false, false, false, false, true, false, false, true, false, true, true, true, true, true, false, false, false, true, false, false, false, true, false, true, false, true, false, true, true, false, false, true, false, true, true, true, false, true]
+        }
+    endfor
+    // Pre-compute merkle tree
+    field att_l3 = 3568540802966646228682833257557760865097881745527951700421217637177394578913
+    field att_l2 = 2484212816056817413898735043111201825935337234900653303346593633698983423094
+    field att_l1 = 5903852974969142884799701163972075918012827147993384813454715036777418930530
+    field att_root = 5370923878175693173927301385262983018969346333984379995904147798742460333298
+    field[8] sig_l3 = [2143011384822392262595217693211276733745818975285573378412503830433633959080, 5158845522944913588713567773900368475672965537784145747547478088857012853666, 5894431764744941209369386797811063446586114379583965613751294306331542502696, 3667283647262791680030373214327691510807066264550220904438401348778560171091, 1932762137729700956492443572973924935698339638272997763907569306777878106609, 1418160613934592350074019113722063326372415219334378482966622875040143984418, 1123602082019234105093136610853837217580120360581368113294785447946335970166, 677162234791219704923474809188832072777286476135280817077786787139967839874]
+    field[4] sig_l2 = [4160497668328416341124388728115946100594341504290452585444083838585144458368, 1786009993478681170835177129397965607571769106910016212295375778662767436399, 6323428707993845638065745016939134132792346703598261115088661703160553949516, 1179006504278106626617144731083403287975523722023953894416803973871305137607]
+    field[2] sig_l1 = [2082031909420678479574926408191366694068435842853798548085170995138065656765, 2509162190273150374531803693747128200974026349740956653847078957273579771806]
+    field sig_root = 2845540671766269799140204035187166219383492292318390575781563565945781070871
+    u32 merkle_depth = 3
+
+    u32 num_reveals = 1
+    // coin = [7, 30, 34]
+    // entry = [1, 6, 6]
+    bool[num_reveals][WIDTH] s_bits_list = [sig_list[1].s_bits]
+    bool[num_reveals][WIDTH] e_bits_list = [[false, false, false, false, true, false, true, true, true, false, true, true, true, true, true, true, false, false, false, true, false, true, false, false, true, false, false, true, true, true, false, true, false, true, true, true, false, false, true, false, false, true, false, false, false, true, true, false, false, false, true, false, false, false, false, true, true, false, false, false, true, false, false, false, false, true, false, false, true, true, true, true, false, true, false, true, false, false, true, true, false, true, false, false, false, true, false, true, false, false, false, false, true, false, true, true, false, false, false, false, true, false, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, true, false, true, true, true, false, true, false, true, false, true, true, true, true, true, true, false, false, false, true, false, true, false, false, true, false, false, false, true, true, false, false, true, false, false, true, false, false, false, true, false, false, false, true, false, false, true, true, true, false, false, false, true, true, true, false, false, false, false, false, true, true, true, false, true, true, false, true, false, true, false, true, false, true, false, false, true, true, false, false, false, false, true, true, false, false, false, false, true, false, true, true, false, true, false, false, true, true, true, false, true, false, true, true, true, true, false, true, true, false, false, true, false, false, true, false, false, false, true, false, false, false, false, false, false, true, false, true, true, false, true, true, false, false, true]; num_reveals]
+
     CompactCertProof compact_cert_proof = CompactCertProof {
         sig_root: sig_root,
         signed_weight: signed_weight,
-        t_list: [t_0]
+        t_list: [
+            T {
+                i: 1,
+                s: [sig_list[1].r.x, sig_list[1].r.y, sig_list[1].s, 5, 10],
+                pi_s: MerkleProof {
+                    path: [sig_l3[0], sig_l2[1], sig_l1[1]],
+                    bits: [false, false, true]
+                },
+                p: [pk_list[1].p.x, pk_list[1].p.y, pk_list[1].q.x, pk_list[1].q.y, (F)weight],
+                pi_p: MerkleProof {
+                    path: [att_l3, att_l2, att_l1],
+                    bits: [false, false, true]
+                }
+            }
+        ]
     }
 
     return verifier(
         compact_cert_proof,
         proven_weight,
-        1,
+        num_reveals,
         message,
         merkle_depth,
-        att_root
+        att_root,
+        e_bits_list,
+        s_bits_list
     )

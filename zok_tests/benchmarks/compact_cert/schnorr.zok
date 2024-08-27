@@ -12,7 +12,7 @@ struct Point {
 def point_add(Point a, Point b) -> Point:
     field m = a.x != b.x ? (b.y - a.y) / (b.x - a.x) : (3 * a.x * a.x + A) / (2 * a.y)
     field x3 = m * m - a.x - b.x
-    field y3 = m * (a.x - x3) - b.y
+    field y3 = m * (a.x - x3) - a.y
     return Point {
         x: x3,
         y: y3
@@ -53,7 +53,7 @@ struct Signature {
     bool[0] s_bits
 }
 
-def verify_signature(field msg, PublicKey pk, Signature sig, bool[0] e_bits) -> bool:
+def verify_signature(field msg, PublicKey pk, Signature sig, bool[0] e_bits) -> u32:
     // Check all points are on the curve
     assert(pk.p.y * pk.p.y == pk.p.x * pk.p.x * pk.p.x + A * pk.p.x + B)
     assert(pk.q.y * pk.q.y == pk.q.x * pk.q.x * pk.q.x + A * pk.q.x + B)
@@ -78,15 +78,17 @@ def verify_signature(field msg, PublicKey pk, Signature sig, bool[0] e_bits) -> 
     assert(e_assemb == e)
     Point eq = point_mul(pk.q, e, e_bits)
     Point sp = point_mul(pk.p, sig.s, sig.s_bits)
-    return point_add(sig.r, eq) == sp
+    Point res = point_add(sig.r, eq)
+    assert(res.x == sp.x && res.y == sp.y)
+    return 1
 
-def main() -> bool:
+def main() -> field:
     field msg = 6908441180828167112785246881494320159273940089327447106269949444716788494909
 
     // Generate a pk / sk pair
     Point p = Point {
-        x: 5224649158254629166531145520020028967396982552917883291462419602125892370796,
-        y: 2657073167882686408592130700096674158430895730050592636326640117131745333160
+        x: 2023776050662786605020065854616777351003832247628992350849206310281785027488,
+        y: 1079270832837170318396516616249394502719834190979906495690419930531357954746
     }
     field a = 6663691457994429232637728556709855123400985295737706519097842870836531302493
     bool[WIDTH] a_bits = [false, true, true, true, false, true, false, true, true, true, false, true, true, true, false, false, false, false, true, false, false, false, false, false, false, false, true, false, true, false, true, true, false, true, true, false, false, false, false, true, true, true, false, true, false, false, false, false, true, true, false, true, true, true, true, true, true, false, true, false, false, false, false, false, false, true, true, true, true, true, false, false, false, false, true, false, true, true, true, false, true, true, true, true, true, false, false, false, false, false, true, true, false, false, false, true, false, true, true, false, true, false, true, true, true, true, true, true, false, true, false, true, true, true, false, false, false, false, true, true, true, true, false, false, false, false, false, true, true, true, false, false, true, false, true, false, false, true, true, false, false, true, false, false, true, true, true, false, false, false, true, false, false, true, false, true, true, true, false, false, false, false, true, true, false, false, false, false, false, true, false, false, true, false, true, false, false, false, false, true, true, true, false, false, false, true, false, true, true, false, false, true, true, false, true, true, true, true, false, true, false, false, false, false, true, false, true, true, true, true, true, true, false, false, true, false, true, true, true, true, true, true, true, false, true, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false, true, true, true, false, true]
@@ -99,12 +101,12 @@ def main() -> bool:
 
     field[3] inputs = [msg, r.x, r.y]
     field e = poseidon(3, inputs)
-    // e = 1521556379260191900098267580239969524054700725354114762359260713829252709552 
-    bool[WIDTH] e_bits = [false, false, false, true, true, false, true, false, true, true, true, false, true, false, false, true, false, true, false, true, true, true, false, false, true, true, true, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, false, true, false, false, false, false, true, false, true, false, true, true, false, false, true, false, true, false, false, true, false, true, true, true, true, false, true, true, true, false, true, false, false, true, true, true, false, false, true, true, false, true, true, true, false, true, false, true, true, false, false, false, true, false, false, true, false, true, true, true, false, true, false, false, false, false, true, true, false, false, false, true, true, true, false, true, true, false, true, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, false, false, true, true, false, false, true, true, true, false, false, false, true, true, true, true, false, false, true, false, false, true, true, true, false, false, true, false, false, true, false, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, false, false, false, true, true, true, false, true, false, false, true, true, false, false, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, false, true, false, true, false, true, true, false, true, false, true, false, false, false, false, false, true, true, true, true, true, true, false, true, true, true, true, false, false, true, false, true, true, false, false, false, false]
+    // e = 664131425432701962192269875939376285542062040011815922607402886695788544729 
+    bool[WIDTH] e_bits = [false, false, false, false, true, false, true, true, true, false, true, true, true, true, true, true, false, false, false, true, false, true, false, false, true, false, false, true, true, true, false, true, false, true, true, true, false, false, true, false, false, true, false, false, false, true, true, false, false, false, true, false, false, false, false, true, true, false, false, false, true, false, false, false, false, true, false, false, true, true, true, true, false, true, false, true, false, false, true, true, false, true, false, false, false, true, false, true, false, false, false, false, true, false, true, true, false, false, false, false, true, false, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, true, false, true, true, true, false, true, false, true, false, true, true, true, true, true, true, false, false, false, true, false, true, false, false, true, false, false, false, true, true, false, false, true, false, false, true, false, false, false, true, false, false, false, true, false, false, true, true, true, false, false, false, true, true, true, false, false, false, false, false, true, true, true, false, true, true, false, true, false, true, false, true, false, true, false, false, true, true, false, false, false, false, true, true, false, false, false, false, true, false, true, true, false, true, false, false, true, true, true, false, true, false, true, true, true, true, false, true, true, false, false, true, false, false, true, false, false, false, true, false, false, false, false, false, false, true, false, true, true, false, true, true, false, false, true]
 
-    field s = k + a * e
-    // s = 253294999597713183590858403791743516149761964605603027590918106447285982865 
-    bool[WIDTH] s_bits = [false, false, false, false, false, true, false, false, false, true, true, true, true, false, true, false, true, true, true, false, false, false, false, true, false, false, false, false, true, true, false, true, true, false, true, false, false, false, true, false, true, false, true, true, true, true, false, true, false, false, false, false, false, false, false, false, true, false, true, true, false, true, false, true, false, false, false, true, false, false, false, true, false, false, false, true, false, true, false, false, true, false, false, true, true, true, false, false, false, false, false, true, true, false, false, false, false, false, false, false, true, false, false, true, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, false, true, false, true, true, false, true, true, true, true, false, true, false, true, true, false, false, false, false, true, true, false, true, false, false, false, true, false, true, true, false, true, true, false, false, true, false, true, false, true, false, true, true, false, true, true, false, false, true, true, true, false, true, false, false, false, false, false, false, true, true, false, false, false, true, true, true, false, true, false, true, false, false, true, false, false, false, true, true, true, false, false, true, false, true, false, true, true, true, true, true, true, true, true, false, true, false, true, false, true, false, true, true, false, true, false, true, true, false, true, true, false, true, false, false, true, false, false, false, false, true, false, true, true, false, true, false, false, true, false, false, false, true]
+    // s = k + a * e in (mod 7237005577332262213973186563042994240955753618821290553176770668684506720427)
+    field s = 4415915127126372096757067153593537022657929051278082364476489088715040314973
+    bool[WIDTH] s_bits = [false, true, false, false, true, true, true, false, false, false, false, true, true, false, true, false, true, false, false, false, true, true, true, false, false, false, false, true, true, true, false, false, false, false, false, false, true, false, false, true, false, false, true, true, true, false, true, true, false, true, false, false, true, true, true, true, false, true, true, true, true, true, false, false, true, false, true, true, false, false, true, false, true, true, true, true, true, true, false, false, true, false, false, true, true, true, false, true, false, false, true, false, false, false, false, true, true, true, false, true, true, false, false, true, true, true, true, true, false, false, false, true, false, true, true, true, true, false, true, false, true, true, false, false, true, false, false, false, false, true, false, false, false, true, true, true, true, false, true, true, false, false, false, true, true, false, false, false, true, false, true, true, true, false, true, true, true, false, true, false, false, true, true, false, false, true, false, false, false, false, true, true, false, true, false, true, false, false, false, true, true, false, true, true, false, true, true, false, true, true, true, false, true, true, false, true, false, true, true, false, true, true, true, false, true, true, false, false, true, true, false, false, true, false, true, false, false, false, false, true, false, false, true, false, true, true, true, true, true, false, false, false, true, false, false, false, true, false, true, false, true, false, true, true, false, false, true, false, true, true, true, false, true]
 
     PublicKey pk = PublicKey {
         p: p,
@@ -115,4 +117,4 @@ def main() -> bool:
         s: s,
         s_bits: s_bits
     }
-    return verify_signature(msg, pk, sig, e_bits)
+    return r.y

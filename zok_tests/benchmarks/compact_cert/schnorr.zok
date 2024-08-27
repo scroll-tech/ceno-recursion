@@ -5,7 +5,7 @@ const field B = 265
 const u32 WIDTH = 253
 
 struct Point {
-    field x,
+    field x
     field y
 }
 
@@ -20,15 +20,17 @@ def point_add(Point a, Point b) -> Point:
 
 // k_bits is in big-endian of length 253
 // Use k_bits for multiplication while simultaneous check it matches k
-def point_mul(Point a, Field k, bool[0] k_bits) -> Point:
+def point_mul(Point a, field k, bool[0] k_bits) -> Point:
     field k_assemb = 1
     Point a_k = a
     u32 i = 0
-    while !k_bits[i] do
+    bool bit = k_bits[i]
+    while !bit do
         i = i + 1
+        bit = k_bits[i]
     endwhile
     i = i + 1
-    while i < WIDTH {
+    while i < WIDTH do
         a_k = point_add(a_k, a_k)
         k_assemb = k_assemb * 2
         if k_bits[i] then
@@ -36,26 +38,26 @@ def point_mul(Point a, Field k, bool[0] k_bits) -> Point:
             k_assemb = k_assemb + 1 
         endif
         i = i + 1
-    }
+    endwhile
     assert(k_assemb == k)
     return a_k
 
 struct PublicKey {
-    Point p,
+    Point p
     Point q
 }
 
 struct Signature {
-    Point r,
-    field s,
+    Point r
+    field s
     bool[0] s_bits
 }
 
 def verify_signature(field msg, PublicKey pk, Signature sig, bool[0] e_bits) -> bool:
     // Check all points are on the curve
-    assert(pk.p.y * pk.p.y = pk.p.x * pk.p.x * pk.p.x + A * pk.p.x + B);
-    assert(pk.q.y * pk.q.y = pk.q.x * pk.q.x * pk.q.x + A * pk.q.x + B);
-    assert(sig.r.y * sig.r.y = sig.r.x * sig.r.x * sig.r.x + A * sig.r.x + B);
+    assert(pk.p.y * pk.p.y == pk.p.x * pk.p.x * pk.p.x + A * pk.p.x + B)
+    assert(pk.q.y * pk.q.y == pk.q.x * pk.q.x * pk.q.x + A * pk.q.x + B)
+    assert(sig.r.y * sig.r.y == sig.r.x * sig.r.x * sig.r.x + A * sig.r.x + B)
 
     field[3] inputs = [msg, sig.r.x, sig.r.y]
     field e = poseidon(3, inputs)
@@ -72,8 +74,45 @@ def verify_signature(field msg, PublicKey pk, Signature sig, bool[0] e_bits) -> 
             e_assemb = e_assemb + 1
         endif
     endfor
-    assert(s_assemb == s)
+    assert(s_assemb == sig.s)
     assert(e_assemb == e)
-    Point eq = point_mul(pk.q, e)
+    Point eq = point_mul(pk.q, e, e_bits)
     Point sp = point_mul(pk.p, sig.s, sig.s_bits)
-    return curve_add(&sig.r, &eq) == sp
+    return point_add(sig.r, eq) == sp
+
+def main() -> bool:
+    field msg = 6908441180828167112785246881494320159273940089327447106269949444716788494909
+
+    // Generate a pk / sk pair
+    Point p = Point {
+        x: 5224649158254629166531145520020028967396982552917883291462419602125892370796,
+        y: 2657073167882686408592130700096674158430895730050592636326640117131745333160
+    }
+    field a = 6663691457994429232637728556709855123400985295737706519097842870836531302493
+    bool[WIDTH] a_bits = [false, true, true, true, false, true, false, true, true, true, false, true, true, true, false, false, false, false, true, false, false, false, false, false, false, false, true, false, true, false, true, true, false, true, true, false, false, false, false, true, true, true, false, true, false, false, false, false, true, true, false, true, true, true, true, true, true, false, true, false, false, false, false, false, false, true, true, true, true, true, false, false, false, false, true, false, true, true, true, false, true, true, true, true, true, false, false, false, false, false, true, true, false, false, false, true, false, true, true, false, true, false, true, true, true, true, true, true, false, true, false, true, true, true, false, false, false, false, true, true, true, true, false, false, false, false, false, true, true, true, false, false, true, false, true, false, false, true, true, false, false, true, false, false, true, true, true, false, false, false, true, false, false, true, false, true, true, true, false, false, false, false, true, true, false, false, false, false, false, true, false, false, true, false, true, false, false, false, false, true, true, true, false, false, false, true, false, true, true, false, false, true, true, false, true, true, true, true, false, true, false, false, false, false, true, false, true, true, true, true, true, true, false, false, true, false, true, true, true, true, true, true, true, false, true, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false, true, true, true, false, true]
+    Point q = point_mul(p, a, a_bits)
+
+    // Generate a signature
+    field k = 3955954614002644556381158561434471324488805491866623303867037346350176036901
+    bool[WIDTH] k_bits = [false, true, false, false, false, true, false, true, true, true, true, true, false, true, true, true, true, true, true, false, true, true, false, true, false, true, true, true, true, true, true, false, true, true, true, false, false, false, true, true, false, true, false, false, true, true, true, false, false, false, true, false, true, false, true, false, false, false, true, false, true, false, false, true, false, true, true, true, false, true, true, false, false, false, false, true, false, true, false, false, true, false, false, false, false, false, true, false, false, false, false, true, false, false, false, false, true, false, true, true, true, false, false, false, false, false, true, true, true, true, false, false, false, true, true, false, false, true, false, false, false, true, false, false, false, true, false, false, true, false, false, false, true, false, false, false, true, true, true, false, true, true, true, true, true, false, false, false, true, true, true, false, false, false, false, true, false, false, false, true, true, false, true, false, true, false, false, true, false, true, true, false, true, false, true, false, false, false, false, true, true, true, false, false, true, false, false, false, false, false, true, true, false, true, true, true, true, false, false, false, false, false, false, false, true, true, false, true, false, false, true, false, true, false, true, true, true, true, true, true, true, true, false, false, false, false, true, false, true, true, true, true, true, false, false, true, false, false, true, true, false, true, false, false, false, false, false, true, false, false, true, false, true]
+    Point r = point_mul(p, k, k_bits)
+
+    field[3] inputs = [msg, r.x, r.y]
+    field e = poseidon(3, inputs)
+    // e = 1521556379260191900098267580239969524054700725354114762359260713829252709552 
+    bool[WIDTH] e_bits = [false, false, false, true, true, false, true, false, true, true, true, false, true, false, false, true, false, true, false, true, true, true, false, false, true, true, true, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, false, true, false, false, false, false, true, false, true, false, true, true, false, false, true, false, true, false, false, true, false, true, true, true, true, false, true, true, true, false, true, false, false, true, true, true, false, false, true, true, false, true, true, true, false, true, false, true, true, false, false, false, true, false, false, true, false, true, true, true, false, true, false, false, false, false, true, true, false, false, false, true, true, true, false, true, true, false, true, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, false, false, true, true, false, false, true, true, true, false, false, false, true, true, true, true, false, false, true, false, false, true, true, true, false, false, true, false, false, true, false, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, false, false, false, true, true, true, false, true, false, false, true, true, false, false, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, false, true, false, true, false, true, true, false, true, false, true, false, false, false, false, false, true, true, true, true, true, true, false, true, true, true, true, false, false, true, false, true, true, false, false, false, false]
+
+    field s = k + a * e
+    // s = 253294999597713183590858403791743516149761964605603027590918106447285982865 
+    bool[WIDTH] s_bits = [false, false, false, false, false, true, false, false, false, true, true, true, true, false, true, false, true, true, true, false, false, false, false, true, false, false, false, false, true, true, false, true, true, false, true, false, false, false, true, false, true, false, true, true, true, true, false, true, false, false, false, false, false, false, false, false, true, false, true, true, false, true, false, true, false, false, false, true, false, false, false, true, false, false, false, true, false, true, false, false, true, false, false, true, true, true, false, false, false, false, false, true, true, false, false, false, false, false, false, false, true, false, false, true, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, false, true, false, true, true, false, true, true, true, true, false, true, false, true, true, false, false, false, false, true, true, false, true, false, false, false, true, false, true, true, false, true, true, false, false, true, false, true, false, true, false, true, true, false, true, true, false, false, true, true, true, false, true, false, false, false, false, false, false, true, true, false, false, false, true, true, true, false, true, false, true, false, false, true, false, false, false, true, true, true, false, false, true, false, true, false, true, true, true, true, true, true, true, true, false, true, false, true, false, true, false, true, true, false, true, false, true, true, false, true, true, false, true, false, false, true, false, false, false, false, true, false, true, true, false, true, false, false, true, false, false, false, true]
+
+    PublicKey pk = PublicKey {
+        p: p,
+        q: q
+    }
+    Signature sig = Signature {
+        r: r,
+        s: s,
+        s_bits: s_bits
+    }
+    return verify_signature(msg, pk, sig, e_bits)

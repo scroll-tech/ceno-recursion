@@ -1,41 +1,35 @@
 from "./poseidon.zok" import poseidon, ark, sbox, mix
 
 struct MerkleProof {
-    // The other leaf on the path
-    field[3] leaf
     // All internal nodes on the path
     field[0] path
     // Bit split of the index, in little endian
-    u32[0] bits
+    bool[0] bits
 }
 
-def verify_merkle(MerkleProof proof, field root, u32 index, field[5] entry, u32 depth) -> bool:
-    // Verify proof.bits constructs index
-    assert(proof.bits[depth - 1] * (1 - proof.bits[depth - 1]) == 0)
-    u32 index_bits = proof.bits[depth - 1]
-    // depth = 0: hash of leaf
-    field[6] inputs = proof.bits[0] == 0 ? [entry[0], entry[1], entry[2], entry[3], entry[4], proof.leaf[0], proof.leaf[1], proof.leaf[2], proof.leaf[3], proof.leaf[4]] : [proof.leaf[0], proof.leaf[1], proof.leaf[2], proof.leaf[3], proof.leaf[4], entry[0], entry[1], entry[2], entry[3], entry[4]]
-    field cur_node = poseidon(10, inputs)
-    // depth = 1..: hash of internal nodes
-    for u32 i in 1..depth do
-        assert(proof.bits[depth - 1 - i] * (1 - proof.bits[depth - 1 - i]) == 0)
-        index_bits = index_bits * 2 + proof.bits[depth - 1 - i]
+def verify_merkle(MerkleProof proof, field root, u32 index, field[5] entry, u32 depth) -> u32:
+    u32 index_bits = 0
+    // hash of leaf
+    field cur_node = poseidon(5, entry)
+    // hash of internal nodes
+    for u32 i in 0..depth do
+        u32 next_bit = !proof.bits[depth - i - 1] ? 0 : 1
+        index_bits = index_bits * 2 + next_bit
         // Depending on index, cur_node and proof[i] will be on two sides of the inputs
-        field[2] inputs = proof.bits[i] == 0 ? [cur_node, proof.path[i - 1]] : [proof.path[i - 1], cur_node]
+        field[2] inputs = !proof.bits[i] ? [cur_node, proof.path[i]] : [proof.path[i], cur_node]
         cur_node = poseidon(2, inputs)
     endfor
     assert(index_bits == index)
-    return cur_node == root
+    assert(cur_node == root)
+    return 1
 
 def main() -> u32:
     // construct proof for depth = 2, index = 2
     u32 depth = 2
     u32 index = 2
     MerkleProof proof = MerkleProof {
-        leaf: [3, 3, 3],
-        path: [1456623673339096257817090108755639590551884867406093321072892464683931189590],
-        bits: [1, 0]
+        path: [1456623673339096257817090108755639590551884867406093321072892464683931189590, 511154968495907440281207254976660066699316103824895525946267243518485200632],
+        bits: [false, true]
     }
-    field root = 5614637387698599511130117795541669718584168502075238283514014523186204602525
-    assert(verify_merkle(proof, root, index, [2, 2, 2], depth))
-    return 1
+    field root = 4025061991628092675460898405984409787580357548626371141566464220460064800482
+    return verify_merkle(proof, root, index, [1, 2, 3, 4, 5], depth) == 1

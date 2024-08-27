@@ -6,7 +6,7 @@ struct T {
     u32 i
     field[5] s // sig_r_x, sig_r_y, sig_s, l, r
     MerkleProof pi_s
-    field[5] p // sig_r_x, sig_r_y, sig_s, weight, 0
+    field[5] p // pk_p_x, pk_p_y, pk_q_x, pk_q_y, w
     MerkleProof pi_p
 }
 
@@ -24,7 +24,7 @@ def verifier(
     field message,
     u32 merkle_depth,
     field att_root,
-    Signature[0] sigs,
+    bool[0][0] e_bits_list,
 ) -> u32:
     u32 signed_weight = compact_cert_proof.signed_weight
     assert(signed_weight > proven_weight)
@@ -42,12 +42,18 @@ def verifier(
         assert(verify_merkle(t.pi_s, compact_cert_proof.sig_root, t.i, t.s, merkle_depth))
         // Att Opening
         assert(verify_merkle(t.pi_p, att_root, t.i, t.p, merkle_depth))
-        // Correspondence of signature
-        assert(t.s[0] == t.p[0])
         // Validity of signature
-        
+        PublicKey pk = PublicKey {
+            p: Point { x: t.p[0], y: t.p[1] },
+            q: Point { x: t.p[2], y: t.p[3] }
+        }
+        Signature sig = Signature {
+            r: Point{ x: t.s[0], y: t.s[1] },
+            s: Point{ t.s[2] }
+        }
+        verify_signature(message, pk, sig, e_bits_list[j])
         // L < coin <= L + Weight
-        assert(t.s[1] <= coin && coin < t.s[1] + t.p[2])
+        assert(t.s[3] <= coin && coin < t.s[3] + t.p[4])
     endfor
 
     return 1

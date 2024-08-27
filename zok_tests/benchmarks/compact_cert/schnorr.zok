@@ -50,10 +50,9 @@ struct PublicKey {
 struct Signature {
     Point r
     field s
-    bool[0] s_bits
 }
 
-def verify_signature(field msg, PublicKey pk, Signature sig, bool[0] e_bits) -> u32:
+def verify_signature(field msg, PublicKey pk, Signature sig, bool[0] e_bits, bool[0] s_bits) -> u32:
     // Check all points are on the curve
     assert(pk.p.y * pk.p.y == pk.p.x * pk.p.x * pk.p.x + A * pk.p.x + B)
     assert(pk.q.y * pk.q.y == pk.q.x * pk.q.x * pk.q.x + A * pk.q.x + B)
@@ -67,7 +66,7 @@ def verify_signature(field msg, PublicKey pk, Signature sig, bool[0] e_bits) -> 
     for u32 i in 0..WIDTH do
         s_assemb = s_assemb * 2
         e_assemb = e_assemb * 2
-        if sig.s_bits[i] then
+        if s_bits[i] then
             s_assemb = s_assemb + 1
         endif
         if e_bits[i] then
@@ -77,12 +76,12 @@ def verify_signature(field msg, PublicKey pk, Signature sig, bool[0] e_bits) -> 
     assert(s_assemb == sig.s)
     assert(e_assemb == e)
     Point eq = point_mul(pk.q, e, e_bits)
-    Point sp = point_mul(pk.p, sig.s, sig.s_bits)
+    Point sp = point_mul(pk.p, sig.s, s_bits)
     Point res = point_add(sig.r, eq)
     assert(res.x == sp.x && res.y == sp.y)
     return 1
 
-def main() -> field:
+def main() -> u32:
     field msg = 6908441180828167112785246881494320159273940089327447106269949444716788494909
 
     // Generate a pk / sk pair
@@ -114,7 +113,6 @@ def main() -> field:
     }
     Signature sig = Signature {
         r: r,
-        s: s,
-        s_bits: s_bits
+        s: s
     }
-    return r.y
+    return verify_signature(msg, pk, sig, e_bits, s_bits)

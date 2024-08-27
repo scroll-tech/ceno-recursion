@@ -1,4 +1,5 @@
 /// Evaluate mle polynomial
+// Block 8 - 12
 def mle_eval(field[0] self, u32 mle_len, field[0] point, u32 point_len) -> field:
     // TODO: what if length of self is not a power of 2?
     // assert(2 ** point_len == mle_len)
@@ -11,6 +12,7 @@ def mle_eval(field[0] self, u32 mle_len, field[0] point, u32 point_len) -> field
     return self[0]
 
 /// Evaluate eq polynomial.
+// Block 5 - 7
 def eq_eval(u32 len, field[0] x, field[0] y) -> field:
     field res = 1
     for u32 i in 0..len do

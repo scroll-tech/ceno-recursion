@@ -1,6 +1,6 @@
 from "./poseidon.zok" import poseidon, ark, sbox, mix
 from "./merkle.zok" import MerkleProof, verify_merkle
-from "./schnorr.zok" import WIDTH, Point, PublicKey, Signature, verify_signature
+from "./schnorr.zok" import WIDTH, Point, PublicKey, Signature, verify_signature, point_add, point_mul
 
 // Reveal Proof Entry
 struct T {
@@ -51,10 +51,9 @@ def verifier(
         }
         Signature sig = Signature {
             r: Point{ x: t.s[0], y: t.s[1] },
-            s: t.s[2],
-            s_bits: s_bits_list[j]
+            s: t.s[2]
         }
-        assert(verify_signature(message, pk, sig, e_bits_list[j]) == 1)
+        assert(verify_signature(message, pk, sig, e_bits_list[j], s_bits_list[j]) == 1)
         // L < coin <= L + Weight
         assert(t.s[3] <= coin && coin < t.s[3] + t.p[4])
     endfor
@@ -87,8 +86,7 @@ def main() -> u32:
                 x: 5824293800188062938533237344790739102726705128562220570802448947038150657007,
                 y: 340848841123394720212279364279745606262149681372696003943728267198931244360
             },
-            s: 4415915127126372096757067153593537022657929051278082364476489088715040314973,
-            s_bits: [false, true, false, false, true, true, true, false, false, false, false, true, true, false, true, false, true, false, false, false, true, true, true, false, false, false, false, true, true, true, false, false, false, false, false, false, true, false, false, true, false, false, true, true, true, false, true, true, false, true, false, false, true, true, true, true, false, true, true, true, true, true, false, false, true, false, true, true, false, false, true, false, true, true, true, true, true, true, false, false, true, false, false, true, true, true, false, true, false, false, true, false, false, false, false, true, true, true, false, true, true, false, false, true, true, true, true, true, false, false, false, true, false, true, true, true, true, false, true, false, true, true, false, false, true, false, false, false, false, true, false, false, false, true, true, true, true, false, true, true, false, false, false, true, true, false, false, false, true, false, true, true, true, false, true, true, true, false, true, false, false, true, true, false, false, true, false, false, false, false, true, true, false, true, false, true, false, false, false, true, true, false, true, true, false, true, true, false, true, true, true, false, true, true, false, true, false, true, true, false, true, true, true, false, true, true, false, false, true, true, false, false, true, false, true, false, false, false, false, true, false, false, true, false, true, true, true, true, true, false, false, false, true, false, false, false, true, false, true, false, true, false, true, true, false, false, true, false, true, true, true, false, true]
+            s: 4415915127126372096757067153593537022657929051278082364476489088715040314973
         }
     endfor
     // Pre-compute merkle tree
@@ -105,7 +103,7 @@ def main() -> u32:
     u32 num_reveals = 1
     // coin = [7, 30, 34]
     // entry = [1, 6, 6]
-    bool[num_reveals][WIDTH] s_bits_list = [sig_list[1].s_bits]
+    bool[num_reveals][WIDTH] s_bits_list = [[false, true, false, false, true, true, true, false, false, false, false, true, true, false, true, false, true, false, false, false, true, true, true, false, false, false, false, true, true, true, false, false, false, false, false, false, true, false, false, true, false, false, true, true, true, false, true, true, false, true, false, false, true, true, true, true, false, true, true, true, true, true, false, false, true, false, true, true, false, false, true, false, true, true, true, true, true, true, false, false, true, false, false, true, true, true, false, true, false, false, true, false, false, false, false, true, true, true, false, true, true, false, false, true, true, true, true, true, false, false, false, true, false, true, true, true, true, false, true, false, true, true, false, false, true, false, false, false, false, true, false, false, false, true, true, true, true, false, true, true, false, false, false, true, true, false, false, false, true, false, true, true, true, false, true, true, true, false, true, false, false, true, true, false, false, true, false, false, false, false, true, true, false, true, false, true, false, false, false, true, true, false, true, true, false, true, true, false, true, true, true, false, true, true, false, true, false, true, true, false, true, true, true, false, true, true, false, false, true, true, false, false, true, false, true, false, false, false, false, true, false, false, true, false, true, true, true, true, true, false, false, false, true, false, false, false, true, false, true, false, true, false, true, true, false, false, true, false, true, true, true, false, true]; num_reveals]
     bool[num_reveals][WIDTH] e_bits_list = [[false, false, false, false, true, false, true, true, true, false, true, true, true, true, true, true, false, false, false, true, false, true, false, false, true, false, false, true, true, true, false, true, false, true, true, true, false, false, true, false, false, true, false, false, false, true, true, false, false, false, true, false, false, false, false, true, true, false, false, false, true, false, false, false, false, true, false, false, true, true, true, true, false, true, false, true, false, false, true, true, false, true, false, false, false, true, false, true, false, false, false, false, true, false, true, true, false, false, false, false, true, false, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, true, false, true, true, true, false, true, false, true, false, true, true, true, true, true, true, false, false, false, true, false, true, false, false, true, false, false, false, true, true, false, false, true, false, false, true, false, false, false, true, false, false, false, true, false, false, true, true, true, false, false, false, true, true, true, false, false, false, false, false, true, true, true, false, true, true, false, true, false, true, false, true, false, true, false, false, true, true, false, false, false, false, true, true, false, false, false, false, true, false, true, true, false, true, false, false, true, true, true, false, true, false, true, true, true, true, false, true, true, false, false, true, false, false, true, false, false, false, true, false, false, false, false, false, false, true, false, true, true, false, true, true, false, false, true]; num_reveals]
 
     CompactCertProof compact_cert_proof = CompactCertProof {

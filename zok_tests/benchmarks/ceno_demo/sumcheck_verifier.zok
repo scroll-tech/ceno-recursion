@@ -35,15 +35,18 @@ def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
     field res = 0
     field denom_up = 1
     for u32 e in 1..len do
+        // BLOCK 15
         field tmp = eval_at - (F)e
         evals[e] = tmp
         prod = prod * tmp
         denom_up = denom_up * (F)e
     endfor
+    // BLOCK 16
     field denom_down = 1
 
     u32 it = len
     while it > 0 do
+        // BLOCK 17
         u32 i = it - 1
         res = res + p_i[i] * prod * denom_down / (denom_up * evals[i])
 
@@ -54,6 +57,7 @@ def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
         endif
         it = it - 1
     endwhile
+    // BLOCK 18
     return res
 
 def check_and_generate_subclaim(SumcheckIOPVerifierState self, field asserted_sum) -> SumCheckSubClaim:
@@ -68,6 +72,7 @@ def check_and_generate_subclaim(SumcheckIOPVerifierState self, field asserted_su
     expected_vec[0] = asserted_sum
     // generate and verify expected_vec in the same loop
     for u32 i in 0..self.num_vars do
+        // BLOCK 13 - 18
         field[self.max_degree + 1] evaluations = self.polynomials_received[i]
         field challenge = self.challenges[i]
         // assert(evaluations.len() == self.max_degree + 1)
@@ -76,6 +81,7 @@ def check_and_generate_subclaim(SumcheckIOPVerifierState self, field asserted_su
         assert(evaluations[0] + evaluations[1] == expected)
     endfor
 
+    // BLOCK 14
     return SumCheckSubClaim {
         point: self.challenges,
         // the last expected value (not checked within this function) will be included in the subclaim
@@ -83,14 +89,18 @@ def check_and_generate_subclaim(SumcheckIOPVerifierState self, field asserted_su
     }
 
 def verify_sumcheck(field claimed_sum, SumcheckProof proof, VPAuxInfo aux_info, Transcript t) -> SumCheckSubClaim:
+    // BLOCK 19
     if aux_info.num_variables == 0 then
         return SumCheckSubClaim {
             point: [],
             expected_evaluation: claimed_sum
         }
     endif
+    // BLOCK 20
     t = append_message_u32(t, aux_info.num_variables)
+    // BLOCK 21
     t = append_message_u32(t, aux_info.max_degree)
+    // BLOCK 22
 
     array_decl field[aux_info.num_variables] challenges
     array_decl field[aux_info.num_variables][0] polynomials_received
@@ -104,13 +114,18 @@ def verify_sumcheck(field claimed_sum, SumcheckProof proof, VPAuxInfo aux_info, 
         challenges: challenges
     }
     for u32 i in 0..aux_info.num_variables do
+        // BLOCK 23
         IOPProverMessage prover_msg = proof.proofs[i]
         for u32 j in 0..aux_info.max_degree + 1 do
+            // BLOCK 24
             t = append_message_field(t, prover_msg.evaluations[j])
+            // BLOCK 25
         endfor
+        // BLOCK 26, FOLDED verify_round_and_update_state
         vs = verify_round_and_update_state(vs, prover_msg, t)
     endfor
 
+    // BLOCK 27
     SumCheckSubClaim sc = check_and_generate_subclaim(vs, claimed_sum)
     return sc
 
@@ -133,4 +148,4 @@ def main() -> field:
     Transcript t = new_transcript()
 
     SumCheckSubClaim sc = verify_sumcheck(claimed_sum, proof, aux_info, t)
-    return sc.point[i] * 1000 + sc.expected_evaluation
+    return sc.point[0] * 1000 + sc.expected_evaluation

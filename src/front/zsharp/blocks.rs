@@ -1813,8 +1813,8 @@ impl<'ast> ZGen<'ast> {
         
         // Initialize array
         // Process the index
-        let len_expr = array_init_info.len_as_expr(&Ty::Uint(32));
-        let index_ty = self.bl_gen_type_(&len_expr, f_name, &var_scope_info)?;
+        let index_ty = Ty::Uint(32);
+        let len_expr = array_init_info.len_as_expr(&index_ty);
         let new_len_expr: Expression;
         (blks, blks_len, var_scope_info, new_len_expr, func_count, array_count, struct_count, load_count) = 
             self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &len_expr, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
@@ -1908,9 +1908,7 @@ impl<'ast> ZGen<'ast> {
                         value: index.to_string(),
                         span: Span::new("", 0, 0).unwrap()
                     },
-                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
+                    suffix: Some(ty_to_dec_suffix(&ty_to_type(&index_ty).unwrap())),
                     span: Span::new("", 0, 0).unwrap()
                 }));
                 (blks, blks_len) = self.bl_gen_store_(blks, blks_len, &arr_extended_name, &index_ty, &new_index_expr, &new_entry_expr, &entry_ty, f_name, &var_scope_info, is_alloc, &entry_ty, &Vec::new())?;

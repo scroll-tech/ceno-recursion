@@ -1,0 +1,159 @@
+from "transcript" import Transcript, new_transcript, append_message_u32, append_message_field
+from "sumcheck_structs" import SumcheckProof, IOPProverMessage, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState
+
+def verify_round_and_update_state(SumcheckIOPVerifierState self, IOPProverMessage prover_msg, Transcript transcript) -> SumcheckIOPVerifierState:
+    assert(!self.finished)
+
+    // In an interactive protocol, the verifier should
+    //
+    // 1. check if the received 'P(0) + P(1) = expected`.
+    // 2. set `expected` to P(r)`
+    //
+    // When we turn the protocol to a non-interactive one, it is sufficient to defer
+    // such checks to `check_and_generate_subclaim` after the last round.
+    field challenge = transcript.hash
+    self.challenges[self.round - 1] = challenge
+    self.polynomials_received[self.round - 1] = prover_msg.evaluations
+
+    if self.round == self.num_vars then
+        // accept and close
+        self.finished = true
+    else
+        // proceed to the next round
+        self.round = self.round + 1
+    endif
+    return self
+
+def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
+    u32 len = p_i_len
+    array_decl field[len] evals
+
+    // Combine `prod = \prod_{j} (eval_at - j)`
+    // with `denom_up = field_factorial(len - 1)`
+    field prod = eval_at
+    evals[0] = eval_at
+    field res = 0
+    field denom_up = 1
+    for u32 e in 1..len do
+        field tmp = eval_at - (F)e
+        evals[e] = tmp
+        prod = prod * tmp
+        denom_up = denom_up * (F)e
+    endfor
+    field denom_down = 1
+
+    u32 it = len
+    while it > 0 do
+        u32 i = it - 1
+        res = res + p_i[i] * prod * denom_down / (denom_up * evals[i])
+        // compute denom for the next step is current_denom * (len-i)/i
+        if i != 0 then
+            denom_up = -1 * denom_up * (F)(len - i)
+            denom_down = denom_down * (F)i
+        endif
+        it = it - 1
+    endwhile
+    return res
+
+def check_and_generate_subclaim(SumcheckIOPVerifierState self, field asserted_sum) -> SumCheckSubClaim:
+    assert(self.finished)
+    // assert(self.polynomials_received.len() == self.num_vars)
+
+    // the deferred check during the interactive phase:
+    // 2. set `expected` to P(r)`
+
+    array_decl field[self.num_vars + 1] expected_vec
+    // insert the asserted_sum to the first position of the expected vector
+    expected_vec[0] = asserted_sum
+    // generate and verify expected_vec in the same loop
+    for u32 i in 0..self.num_vars do
+        field[self.max_degree + 1] evaluations = self.polynomials_received[i]
+        field challenge = self.challenges[i]
+        // assert(evaluations.len() == self.max_degree + 1)
+        expected_vec[i + 1] = interpolate_uni_poly(self.max_degree + 1, evaluations, challenge)
+        field expected = expected_vec[i]
+        assert(evaluations[0] + evaluations[1] == expected)
+    endfor
+
+    return SumCheckSubClaim {
+        point: self.challenges,
+        // the last expected value (not checked within this function) will be included in the subclaim
+        expected_evaluation: expected_vec[self.num_vars]
+    }
+
+// t_list, msg_list, next_t, t_len are used to verify the correct generation of transcript
+// store msg_list[0] as the index to the next cell
+// Perform one check on the entire t_list at the very end
+def verify_sumcheck(
+    field claimed_sum, 
+    SumcheckProof proof, 
+    VPAuxInfo aux_info, 
+    Transcript[0] t_list,
+    field[0] msg_list
+) -> SumCheckSubClaim:
+    if aux_info.num_variables == 0 then
+        return SumCheckSubClaim {
+            point: [],
+            expected_evaluation: claimed_sum
+        }
+    endif
+    // t = append_message_u32(t, aux_info.num_variables)
+    field next_t = msg_list[0]
+    msg_list[next_t] = (F)aux_info.num_variables
+    next_t = next_t + 1
+    Transcript t = t_list[next_t]
+    // t = append_message_u32(t, aux_info.max_degree)
+    msg_list[next_t] = (F)aux_info.max_degree
+    next_t = next_t + 1
+    t = t_list[next_t]
+
+    array_decl field[aux_info.num_variables] challenges
+    array_decl field[aux_info.num_variables][0] polynomials_received
+    SumcheckIOPVerifierState vs = SumcheckIOPVerifierState {
+        round: 1,
+        num_vars: aux_info.num_variables,
+        max_degree: aux_info.max_degree,
+        finished: false,
+        // There are probably more efficient ways to do this (maybe skip initialization altogether?)
+        polynomials_received: polynomials_received,
+        challenges: challenges
+    }
+    for u32 i in 0..aux_info.num_variables do
+        IOPProverMessage prover_msg = proof.proofs[i]
+        for u32 j in 0..aux_info.max_degree + 1 do
+            // t = append_message_field(t, prover_msg.evaluations[j])
+            msg_list[next_t] = prover_msg.evaluations[j]
+            next_t = next_t + 1
+            t = t_list[next_t]
+        endfor
+        vs = verify_round_and_update_state(vs, prover_msg, t)
+    endfor
+
+    SumCheckSubClaim sc = check_and_generate_subclaim(vs, claimed_sum)
+    msg_list[0] = next_t
+    return sc
+
+def main() -> field:
+    u32 num_vars = 1
+    u32 max_degree = 3
+
+    // Generate structs
+    field claimed_sum = 3
+    SumcheckProof proof = SumcheckProof {
+        points: [0; num_vars],
+        proofs: [IOPProverMessage {
+            evaluations: [2, 0, 2, 0, 2, 0]
+        }; num_vars]
+    }
+    VPAuxInfo aux_info = VPAuxInfo {
+        max_degree: max_degree,
+        num_variables: num_vars,
+    }
+    Transcript[6] t_list = [Transcript{
+        hash: 2
+    }; 6]
+    array_decl field[6] msg_list
+    msg_list[0] = 1
+
+    SumCheckSubClaim sc = verify_sumcheck(claimed_sum, proof, aux_info, t_list, msg_list)
+    return sc.point[0] * 1000 + sc.expected_evaluation

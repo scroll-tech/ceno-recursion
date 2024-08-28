@@ -10,7 +10,10 @@ struct Point {
 }
 
 def point_add(Point a, Point b) -> Point:
-    field m = a.x != b.x ? (b.y - a.y) / (b.x - a.x) : (3 * a.x * a.x + A) / (2 * a.y)
+    // Compute numerator & denominator separately to avoid division by 0
+    field m_num = a.x != b.x ? (b.y - a.y) : (3 * a.x * a.x + A)
+    field m_denom = a.x != b.x ? (b.x - a.x) : (2 * a.y)
+    field m = m_num / m_denom
     field x3 = m * m - a.x - b.x
     field y3 = m * (a.x - x3) - a.y
     return Point {

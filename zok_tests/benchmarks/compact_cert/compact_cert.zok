@@ -5,6 +5,7 @@ from "./schnorr.zok" import WIDTH, Point, PublicKey, Signature, verify_signature
 // Reveal Proof Entry
 struct T {
     u32 i
+    bool[0] i_bits
     field[5] s // sig_r_x, sig_r_y, sig_s, l, r
     MerkleProof pi_s
     field[5] p // pk_p_x, pk_p_y, pk_q_x, pk_q_y, w
@@ -31,19 +32,20 @@ def verifier(
     u32 signed_weight = compact_cert_proof.signed_weight
     assert(signed_weight > proven_weight)
     // let num_reveals: usize = (k + q).div_ceil((signed_weight / proven_weight).ilog2() as usize);
+    field[num_reveals] coins = [7, 30, 34]
 
     for u32 j in 0..num_reveals do
         // Reproduce coin
         field[5] inputs = [(F)j, compact_cert_proof.sig_root, (F)proven_weight, message, att_root]
         field coin_hash = poseidon(5, inputs)
         // field coin = coin_hash % (F)signed_weight
-        field coin = 7
+        field coin = coins[j]
 
         T t = compact_cert_proof.t_list[j]
         // Sig Opening
-        assert(verify_merkle(t.pi_s, compact_cert_proof.sig_root, t.i, t.s, merkle_depth) == 1)
+        assert(verify_merkle(t.pi_s, compact_cert_proof.sig_root, t.i, t.i_bits, t.s, merkle_depth) == 1)
         // Att Opening
-        assert(verify_merkle(t.pi_p, att_root, t.i, t.p, merkle_depth) == 1)
+        assert(verify_merkle(t.pi_p, att_root, t.i, t.i_bits, t.p, merkle_depth) == 1)
         // Validity of signature
         PublicKey pk = PublicKey {
             p: Point { x: t.p[0], y: t.p[1] },
@@ -100,9 +102,10 @@ def main() -> u32:
     field sig_root = 2845540671766269799140204035187166219383492292318390575781563565945781070871
     u32 merkle_depth = 3
 
-    u32 num_reveals = 1
+    u32 num_reveals = 3
     // coin = [7, 30, 34]
     // entry = [1, 6, 6]
+    // All bits in big endian
     bool[num_reveals][WIDTH] s_bits_list = [[false, true, false, false, true, true, true, false, false, false, false, true, true, false, true, false, true, false, false, false, true, true, true, false, false, false, false, true, true, true, false, false, false, false, false, false, true, false, false, true, false, false, true, true, true, false, true, true, false, true, false, false, true, true, true, true, false, true, true, true, true, true, false, false, true, false, true, true, false, false, true, false, true, true, true, true, true, true, false, false, true, false, false, true, true, true, false, true, false, false, true, false, false, false, false, true, true, true, false, true, true, false, false, true, true, true, true, true, false, false, false, true, false, true, true, true, true, false, true, false, true, true, false, false, true, false, false, false, false, true, false, false, false, true, true, true, true, false, true, true, false, false, false, true, true, false, false, false, true, false, true, true, true, false, true, true, true, false, true, false, false, true, true, false, false, true, false, false, false, false, true, true, false, true, false, true, false, false, false, true, true, false, true, true, false, true, true, false, true, true, true, false, true, true, false, true, false, true, true, false, true, true, true, false, true, true, false, false, true, true, false, false, true, false, true, false, false, false, false, true, false, false, true, false, true, true, true, true, true, false, false, false, true, false, false, false, true, false, true, false, true, false, true, true, false, false, true, false, true, true, true, false, true]; num_reveals]
     bool[num_reveals][WIDTH] e_bits_list = [[false, false, false, false, true, false, true, true, true, false, true, true, true, true, true, true, false, false, false, true, false, true, false, false, true, false, false, true, true, true, false, true, false, true, true, true, false, false, true, false, false, true, false, false, false, true, true, false, false, false, true, false, false, false, false, true, true, false, false, false, true, false, false, false, false, true, false, false, true, true, true, true, false, true, false, true, false, false, true, true, false, true, false, false, false, true, false, true, false, false, false, false, true, false, true, true, false, false, false, false, true, false, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, true, false, true, true, true, false, true, false, true, false, true, true, true, true, true, true, false, false, false, true, false, true, false, false, true, false, false, false, true, true, false, false, true, false, false, true, false, false, false, true, false, false, false, true, false, false, true, true, true, false, false, false, true, true, true, false, false, false, false, false, true, true, true, false, true, true, false, true, false, true, false, true, false, true, false, false, true, true, false, false, false, false, true, true, false, false, false, false, true, false, true, true, false, true, false, false, true, true, true, false, true, false, true, true, true, true, false, true, true, false, false, true, false, false, true, false, false, false, true, false, false, false, false, false, false, true, false, true, true, false, true, true, false, false, true]; num_reveals]
 
@@ -112,15 +115,38 @@ def main() -> u32:
         t_list: [
             T {
                 i: 1,
+                i_bits: [false, false, true],
                 s: [sig_list[1].r.x, sig_list[1].r.y, sig_list[1].s, 5, 10],
                 pi_s: MerkleProof {
-                    path: [sig_l3[0], sig_l2[1], sig_l1[1]],
-                    bits: [false, false, true]
+                    path: [sig_l3[0], sig_l2[1], sig_l1[1]]
                 },
                 p: [pk_list[1].p.x, pk_list[1].p.y, pk_list[1].q.x, pk_list[1].q.y, (F)weight],
                 pi_p: MerkleProof {
-                    path: [att_l3, att_l2, att_l1],
-                    bits: [false, false, true]
+                    path: [att_l3, att_l2, att_l1]
+                }
+            },
+            T {
+                i: 6,
+                i_bits: [true, true, false],
+                s: [sig_list[6].r.x, sig_list[6].r.y, sig_list[6].s, 30, 35],
+                pi_s: MerkleProof {
+                    path: [sig_l3[7], sig_l2[2], sig_l1[0]]
+                },
+                p: [pk_list[6].p.x, pk_list[6].p.y, pk_list[6].q.x, pk_list[6].q.y, (F)weight],
+                pi_p: MerkleProof {
+                    path: [att_l3, att_l2, att_l1]
+                }
+            },
+            T {
+                i: 6,
+                i_bits: [true, true, false],
+                s: [sig_list[6].r.x, sig_list[6].r.y, sig_list[6].s, 30, 35],
+                pi_s: MerkleProof {
+                    path: [sig_l3[7], sig_l2[2], sig_l1[0]]
+                },
+                p: [pk_list[6].p.x, pk_list[6].p.y, pk_list[6].q.x, pk_list[6].q.y, (F)weight],
+                pi_p: MerkleProof {
+                    path: [att_l3, att_l2, att_l1]
                 }
             }
         ]

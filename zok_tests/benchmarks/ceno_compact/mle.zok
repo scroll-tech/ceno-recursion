@@ -1,18 +1,18 @@
 /// Evaluate mle polynomial
-// Block 8 - 12
 def mle_eval(field[0] self, u32 mle_len, field[0] point, u32 point_len) -> field:
     // TODO: what if length of self is not a power of 2?
     // assert(2 ** point_len == mle_len)
-    for u32 i in 0..point_len do
+    u32 i = 0
+    while i != point_len do
         mle_len = mle_len / 2
+        i = i + 1
         for u32 j in 0..mle_len do
-            self[j] = (1 - point[i]) * self[j] + point[i] * self[mle_len + j]
+            self[j] = (1 - point[i - 1]) * self[j] + point[i - 1] * self[mle_len + j]
         endfor
-    endfor
+    endwhile
     return self[0]
 
 /// Evaluate eq polynomial.
-// Block 5 - 7
 def eq_eval(u32 len, field[0] x, field[0] y) -> field:
     field res = 1
     for u32 i in 0..len do
@@ -37,8 +37,8 @@ def build_eq_x_r_vec_sequential(u32 r_len, u32 r_len_pow2, field[0] r) -> field[
     array_decl field[r_len_pow2] evals
     evals[0] = 1
     u32 next_size = 1
-    for u32 i in 0..r_len do
-        // BLOCK 1
+    u32 i = 0
+    while i != r_len do
         field r_i = r[r_len - 1 - i]
         // suppose at the previous step we processed buf [0..size]
         // for the current step we are populating new buf[0..2*size]
@@ -46,18 +46,15 @@ def build_eq_x_r_vec_sequential(u32 r_len, u32 r_len_pow2, field[0] r) -> field[
         // buf[2*j + 1] = r * buf[j]
         // buf[2*j] = (1 - r) * buf[j]
         u32 j = next_size
+        next_size = next_size * 2
+        i = i + 1
         while j != 0 do
-            // BLOCK 2
             j = j - 1
             evals[2 * j + 1] = r_i * evals[j]
             evals[2 * j] = (1 - r_i) * evals[j]
         endwhile
-        // BLOCK 3
-        next_size = next_size * 2
-    endfor
-    // BLOCK 4
+    endwhile
     return evals
-
 
 def main(u32 mle_len, u32 point_len) -> field:
     // assert(2 ** point_len == mle_len)

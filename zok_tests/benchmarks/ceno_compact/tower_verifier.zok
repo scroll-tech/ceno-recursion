@@ -1,4 +1,4 @@
-from "transcript" import Transcript, new_transcript, append_message_u32, append_message_field
+from "transcript" import Transcript, new_transcript, append_message_field, verify_transcript
 from "sumcheck_structs" import IOPProverMessage, SumcheckProof, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState
 from "sumcheck_verifier" import verify_round_and_update_state, interpolate_uni_poly, check_and_generate_subclaim, verify_sumcheck
 from "mle" import mle_eval, eq_eval, build_eq_x_r_vec_sequential
@@ -7,12 +7,16 @@ from "tower_struct" import TowerProofs, TowerVerifierOutput, PointAndEval
 const u32 num_fanin = 2
 const u32 log2_num_fanin = 1
 
+// t_list, msg_list, next_t, t_len are used to verify the correct generation of transcript
+// store msg_list[0] as the index to the next cell
+// Perform one check on the entire t_list at the very end
 def tower_verify(
     field[0][0] initial_prod_evals,
     field[0][0] initial_logup_evals,
     TowerProofs tower_proofs,
     u32 expected_max_round,
-    Transcript t
+    Transcript[0] t_list,
+    field[0] msg_list
 ) -> TowerVerifierOutput:
     // XXX to sumcheck batched product argument with logup, we limit num_product_fanin to 2
     // TODO mayber give a better naming?
@@ -36,57 +40,55 @@ def tower_verify(
 
     // get_challenge_pows
     // decimal expression of "combine subset evals"
-    t = append_message_field(t, 567674997755577675492904462386182052033524231283)
-    // BLOCK 28
-    field alpha = t.hash
-    array_decl field[initial_prod_evals_len + initial_logup_evals_len * 2] alpha_pows
-    field state = 1
-    for u32 i in 0..initial_prod_evals_len + initial_logup_evals_len * 2 do
-        // BLOCK 29
-        alpha_pows[i] = state
-        state = state * alpha
-    endfor
-    // BLOCK 30
+    // t = append_message_field(t, 567674997755577675492904462386182052033524231283)
+    field next_t = msg_list[0]
+    msg_list[next_t] = 567674997755577675492904462386182052033524231283
+    next_t = next_t + 1
+    Transcript t = t_list[next_t]
 
     array_decl field[log2_num_fanin] initial_rt
-    for u32 i in 0..log2_num_fanin do
-        // decimal expression of "product_sum"
-        // BLOCK 31
-        t = append_message_field(t, 135940096403279116418381165)
-        // initial_rt[i] = t.hash
-        // BLOCK 32
-    endfor
+    // for u32 i in 0..log2_num_fanin do
+    // decimal expression of "product_sum"
+    // t = append_message_field(t, 135940096403279116418381165)
+    msg_list[next_t] = 135940096403279116418381165
+    next_t = next_t + 1
+    t = t_list[next_t]
+    // initial_rt[i] = t.hash
+    // endfor
 
     // --
 
+    field alpha_init = t.hash
+    array_decl field[initial_prod_evals_len + initial_logup_evals_len * 2] alpha_pows
+    field state = 1
     // initial_claim = \sum_j alpha^j * out_j[rt]
     // out_j[rt] := (record_{j}[rt])
     // out_j[rt] := (logup_p{j}[rt])
     // out_j[rt] := (logup_q{j}[rt])
-    // BLOCK 33
     field initial_claim = 0
     for u32 i in 0..initial_prod_evals_len do
-        // BLOCK 34
+        alpha_pows[i] = state
+        state = state * alpha_init
         field[0] evals = initial_prod_evals[i]
         field alpha = alpha_pows[i]
-        initial_claim = initial_claim + mle_eval(evals, num_fanin, initial_rt, log2_num_fanin) * alpha
-        // BLOCK 35
+        // mle_eval: (1 - point[0]) * self[0] + point[0] * self[1]
+        initial_claim = initial_claim + ((1 - initial_rt[0]) * evals[0] + initial_rt[0] * evals[1]) * alpha
     endfor
-    // BLOCK 36
     for u32 i in 0..initial_logup_evals_len do
-        // BLOCK 37
+        alpha_pows[initial_prod_evals_len + 2 * i] = state
+        state = state * alpha_init
+        alpha_pows[initial_prod_evals_len + 2 * i + 1] = state
+        state = state * alpha_init
         field alpha_numerator = alpha_pows[initial_prod_evals_len + 2 * i]
         field alpha_denominator = alpha_pows[initial_prod_evals_len + 2 * i + 1]
         field[2] mle_numerator = [initial_logup_evals[i][0], initial_logup_evals[i][1]]
         field[2] mle_denominator = [initial_logup_evals[i][2], initial_logup_evals[i][3]]
-        initial_claim = initial_claim + mle_eval(mle_numerator, num_fanin, initial_rt, log2_num_fanin) * alpha_numerator
-        // BLOCK 38
-        initial_claim = initial_claim + mle_eval(mle_denominator, num_fanin, initial_rt, log2_num_fanin) * alpha_denominator
-        // BLOCK 39
+        // mle_eval: (1 - point[0]) * self[0] + point[0] * self[1]
+        initial_claim = initial_claim + ((1 - initial_rt[0]) * mle_numerator[0] + initial_rt[0] * mle_numerator[1]) * alpha_numerator
+        initial_claim = initial_claim + ((1 - initial_rt[0]) * mle_denominator[0] + initial_rt[0] * mle_denominator[1]) * alpha_denominator
     endfor
 
     // evaluation in the tower input layer
-    // BLOCK 40
     array_decl field[tower_proofs.prod_spec_size] prod_spec_input_layer_eval
     array_decl field[tower_proofs.logup_spec_size] logup_spec_p_input_layer_eval
     array_decl field[tower_proofs.logup_spec_size] logup_spec_q_input_layer_eval
@@ -100,7 +102,8 @@ def tower_verify(
         field[0] out_rt = next_rt.point
         field out_claim = next_rt.eval
         u32 rt_len = (round + 1) * log2_num_fanin
-        // BLOCK 41, FOLDED verify_sumcheck
+
+        msg_list[0] = next_t
         SumCheckSubClaim sumcheck_claim = verify_sumcheck(
             out_claim,
             SumcheckProof {
@@ -111,26 +114,23 @@ def tower_verify(
                 max_degree: num_fanin + 1, // + 1 for eq
                 num_variables: rt_len
             },
-            t
+            t_list,
+            msg_list
         )
+        next_t = msg_list[0]
 
         // check expected_evaluation
-        // BLOCK 42
         field[0] rt = sumcheck_claim.point
         field expected_evaluation = 0
+        field eq_rt = eq_eval(rt_len, out_rt, rt)
         for u32 spec_index in 0..tower_proofs.prod_spec_size do
-            // BLOCK 43
             if tower_proofs.layer_per_spec[spec_index] < round then
-                // BLOCK 44
                 field alpha = alpha_pows[spec_index]
                 field prod = 1
                 for u32 i in 0..eval_len do
-                    // BLOCK 45
                     prod = prod * tower_proofs.prod_specs_eval[spec_index][round][i]
                 endfor
-                // BLOCK 46
-                expected_evaluation = expected_evaluation + eq_eval(rt_len, out_rt, rt) * alpha * prod
-                // BLOCK 47
+                expected_evaluation = expected_evaluation + eq_rt * alpha * prod
             endif
         endfor
         for u32 spec_index in 0..tower_proofs.logup_spec_size do
@@ -141,7 +141,7 @@ def tower_verify(
                 field p2 = tower_proofs.logup_specs_eval[spec_index][round][1]
                 field q1 = tower_proofs.logup_specs_eval[spec_index][round][2]
                 field q2 = tower_proofs.logup_specs_eval[spec_index][round][3]
-                expected_evaluation = expected_evaluation + eq_eval(rt_len, out_rt, rt) * (alpha_numerator * (p1 * q2 + p2 * q1) + alpha_denominator * (q1 * q2))
+                expected_evaluation = expected_evaluation + eq_rt * (alpha_numerator * (p1 * q2 + p2 * q1) + alpha_denominator * (q1 * q2))
             endif
         endfor
         assert(expected_evaluation == sumcheck_claim.expected_evaluation)
@@ -150,18 +150,18 @@ def tower_verify(
         // rt' = r_merge || rt
         // r_merge.len() == ceil_log2(num_product_fanin)
         array_decl field[log2_num_fanin] r_merge
-        array_decl field[rt_len + log2_num_fanin] rt_prime
-        for u32 i in 0..rt_len do
-            rt_prime[i] = rt[i]
-        endfor
-        for u32 i in 0..log2_num_fanin do
-            // decimal expression of "merge"
-            t = append_message_field(t, 469853431653)
-            r_merge[i] = t.hash
-            rt_prime[rt_len + i] = t.hash
-        endfor
-        // Block 1 - 4: FOLDED build_eq_x_r_vec_sequential
-        field[num_fanin] coeffs = build_eq_x_r_vec_sequential(log2_num_fanin, num_fanin, r_merge)
+        field[rt_len + log2_num_fanin] rt_prime = rt
+        // for u32 i in 0..log2_num_fanin do
+        // decimal expression of "merge"
+        // t = append_message_field(t, 469853431653)
+        u32 i = 0
+        msg_list[next_t] = 469853431653
+        next_t = next_t + 1
+        t = t_list[next_t]
+        r_merge[i] = t.hash
+        rt_prime[rt_len + i] = t.hash
+        // endfor
+        field[num_fanin] coeffs = [1 - r_merge[0], r_merge[0]]
 
         field prod_spec_evals = 0
         // 
@@ -201,6 +201,9 @@ def tower_verify(
         }
         eval_len = eval_len * num_fanin
     endfor
+    
+    msg_list[0] = next_t
+    assert(verify_transcript(t_list, msg_list) == 1)
 
     return TowerVerifierOutput {
         rt_tower: next_rt.point,
@@ -223,7 +226,11 @@ def main() -> u32:
         logup_specs_eval: [[[0, 0, 0, 0]]]
     }
     u32 expected_max_round = 2
-    Transcript t = new_transcript()
-    TowerVerifierOutput output = tower_verify(initial_prod_evals, initial_logup_evals, tower_proofs, expected_max_round, t)
+    Transcript[8] t_list = [Transcript{
+        hash: 2
+    }; 8]
+    array_decl field[8] msg_list
+    msg_list[0] = 1
+    TowerVerifierOutput output = tower_verify(initial_prod_evals, initial_logup_evals, tower_proofs, expected_max_round, t_list, msg_list)
 
     return 1

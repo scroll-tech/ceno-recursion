@@ -860,21 +860,19 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         }
     }
 
-    if VERBOSE {
-        println!("\n--\nFUNC");
-        print!("{:3} ", " ");
-        for i in 0..if entry_regs.len() == 0 {1} else {0} {
-            print!("{:3} ", i);
-        }
-        println!();
-        print!("{:3} ", "I");
-        for i in 0..entry_regs.len() {
-            print!("{:3} ", entry_regs[i]);
-        }
-        println!();
-        print!("{:3} ", "O");
-        println!("{:3} ", func_outputs);
+    println!("\n--\nFUNC");
+    print!("{:3} ", " ");
+    for i in 0..if entry_regs.len() == 0 {1} else {0} {
+        print!("{:3} ", i);
     }
+    println!();
+    print!("{:3} ", "I");
+    for i in 0..entry_regs.len() {
+        print!("{:3} ", entry_regs[i]);
+    }
+    println!();
+    print!("{:3} ", "O");
+    println!("{:3} ", func_outputs);
     let func_inputs = Assignment::new(entry_regs.iter().map(|i| integer_to_bytes(i.clone())).collect());
     let func_outputs = Assignment::new(vec![integer_to_bytes(func_outputs)]);
 
@@ -940,7 +938,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<true>(path.clone(), &options, entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
+    let rtk = get_run_time_knowledge::<false>(path.clone(), &options, entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
     let witness_time = witness_start.elapsed();
 
     // --

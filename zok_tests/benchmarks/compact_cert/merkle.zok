@@ -5,10 +5,10 @@ struct MerkleProof {
     field[0] path
 }
 
-def verify_merkle(MerkleProof proof, field root, u32 index, bool[0] index_bits, field[5] entry, u32 depth) -> u32:
+def verify_merkle(u32 leaf_size, MerkleProof proof, field root, u32 index, bool[0] index_bits, field[5] entry, u32 depth) -> u32:
     u32 index_assemb = 0
     // hash of leaf
-    field cur_node = poseidon(5, entry)
+    field cur_node = poseidon(leaf_size, entry)
     // hash of internal nodes
     for u32 i in 0..depth do
         u32 next_bit = !index_bits[i] ? 0 : 1
@@ -21,6 +21,40 @@ def verify_merkle(MerkleProof proof, field root, u32 index, bool[0] index_bits, 
     assert(cur_node == root)
     return 1
 
+// Perform two merkle tree verification together
+// Both tree are of the same size, opening the same index
+// Specifically built for compact certificate
+def verify_merkle_batch(
+    u32 leaf_size,
+    u32 index, 
+    bool[0] index_bits,  
+    MerkleProof proof_0, 
+    field root_0, 
+    field[5] entry_0,
+    MerkleProof proof_1, 
+    field root_1, 
+    field[5] entry_1, 
+    u32 depth
+) -> u32:
+    u32 index_assemb = 0
+    // hash of leaf
+    field cur_node_0 = poseidon(leaf_size, entry_0)
+    field cur_node_1 = poseidon(leaf_size, entry_1)
+    // hash of internal nodes
+    for u32 i in 0..depth do
+        u32 next_bit = !index_bits[i] ? 0 : 1
+        index_assemb = index_assemb * 2 + next_bit
+        // Depending on index, cur_node and proof[i] will be on two sides of the inputs
+        field[2] inputs_0 = !index_bits[depth - i - 1] ? [cur_node_0, proof_0.path[i]] : [proof_0.path[i], cur_node_0]
+        cur_node_0 = poseidon(2, inputs_0)
+        field[2] inputs_1 = !index_bits[depth - i - 1] ? [cur_node_1, proof_1.path[i]] : [proof_1.path[i], cur_node_1]
+        cur_node_1 = poseidon(2, inputs_1)
+    endfor
+    assert(index_assemb == index)
+    assert(cur_node_0 == root_0)
+    assert(cur_node_1 == root_1)
+    return 1
+
 def main() -> bool:
     // construct proof for depth = 2, index = 2
     u32 depth = 2
@@ -30,4 +64,4 @@ def main() -> bool:
         path: [1456623673339096257817090108755639590551884867406093321072892464683931189590, 511154968495907440281207254976660066699316103824895525946267243518485200632]
     }
     field root = 4025061991628092675460898405984409787580357548626371141566464220460064800482
-    return verify_merkle(proof, root, index, index_bits, [1, 2, 3, 4, 5], depth) == 1
+    return verify_merkle(5, proof, root, index, index_bits, [1, 2, 3, 4, 5], depth) == 1

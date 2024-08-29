@@ -1,6 +1,6 @@
 from "./poseidon.zok" import poseidon, ark, sbox, mix
-from "./merkle.zok" import MerkleProof, verify_merkle
-from "./schnorr.zok" import WIDTH, Point, PublicKey, Signature, verify_signature, point_add, point_mul
+from "./merkle.zok" import MerkleProof, verify_merkle, verify_merkle_batch
+from "./schnorr.zok" import WIDTH, Point, DoublePoint, QuadPoint, PublicKey, Signature, verify_signature, point_add, point_mul, point_double_add_batch, point_mul_batch
 
 // Reveal Proof Entry
 struct T {
@@ -43,9 +43,10 @@ def verifier(
 
         T t = compact_cert_proof.t_list[j]
         // Sig Opening
-        assert(verify_merkle(t.pi_s, compact_cert_proof.sig_root, t.i, t.i_bits, t.s, merkle_depth) == 1)
+        // assert(verify_merkle(5, t.pi_s, compact_cert_proof.sig_root, t.i, t.i_bits, t.s, merkle_depth) == 1)
         // Att Opening
-        assert(verify_merkle(t.pi_p, att_root, t.i, t.i_bits, t.p, merkle_depth) == 1)
+        // assert(verify_merkle(5, t.pi_p, att_root, t.i, t.i_bits, t.p, merkle_depth) == 1)
+        assert(verify_merkle_batch(5, t.i, t.i_bits, t.pi_s, compact_cert_proof.sig_root, t.s, t.pi_p, att_root, t.p, merkle_depth) == 1)
         // Validity of signature
         PublicKey pk = PublicKey {
             p: Point { x: t.p[0], y: t.p[1] },
@@ -72,7 +73,8 @@ def main() -> u32:
     u32 signed_weight = num_attestors * weight
     array_decl PublicKey[num_attestors] pk_list
     array_decl Signature[num_attestors] sig_list
-    for u32 i in 0..num_attestors do
+    // Constant folding to avoid constructing new blocks
+    for u32 i in 0..8 /*num_attestors*/ do
         pk_list[i] = PublicKey {
             p: Point {
                 x: 2023776050662786605020065854616777351003832247628992350849206310281785027488,

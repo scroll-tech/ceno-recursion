@@ -2,7 +2,7 @@
 //                                          or (sig_r_x, sig_r_y, sig_s, l, r)
 // Merkle tree internal nodes require hash of 2 inputs (L, R)
 // Fiat-Shamir requires hash of 5 inputs (J, PROOF_ROOT, WEIGHT, MESSAGE, ATT_ROOT)
-// Schnoor verification requires hash of 3 inputs (MESSAGE, R.x, R.y)
+// Schnorr verification requires hash of 3 inputs (MESSAGE, R.x, R.y)
 
 const field[441] POSEIDON_C = [
   758662019503705074,

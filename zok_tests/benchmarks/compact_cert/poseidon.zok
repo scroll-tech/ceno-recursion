@@ -1,31 +1,35 @@
 from "./poseidon_constants.zok" import POSEIDON_C, POSEIDON_M
 
-def ark(u32 N, field[0] state, field[441] c, u32 it) -> field[N]:
-    for u32 i in 0..N do
+def ark(u32 t, field[6] state, field[441] c, u32 it) -> field[6]:
+    for u32 i in 0..6 do
         state[i] = state[i] + c[it + i]
     endfor
     return state
 
-def sbox(u32 N, field[0] state, u32 f, u32 p, u32 r) -> field[N]:
+def sbox(u32 t, field[6] state, u32 f, u32 p, u32 r) -> field[6]:
     state[0] = state[0]**5
-    for u32 i in 1..N do
+    for u32 i in 1..t do
         state[i] = ((r < f/2) || (r >= f/2 + p)) ? state[i]**5 : state[i]
     endfor
     return state
 
-def mix(u32 N, field[0] state, field[81] m) -> field[N]:
-    field[N] out = [0; N]
-    for u32 i in 0..N do
+def mix(u32 t, field[6] state, field[81] m) -> field[6]:
+    field[6] out = [0; 6]
+    for u32 i in 0..6 do
         field acc = 0
-        for u32 j in 0..N do
-            acc = acc + (state[j] * m[i * 9 + j])
+        bool in_bound = true
+        for u32 j in 0..6 do
+            in_bound = in_bound && j != t
+            if in_bound then
+                acc = acc + (state[j] * m[i * 9 + j])
+            endif
         endfor
         out[i] = acc
     endfor
     return out
 
 def poseidon(u32 N, field[0] inputs) -> field:
-    assert(N > 0 && N <= 6) // max 6 inputs
+    assert(N > 0 && N <= 5) // max 5 inputs
 
     u32 t = N + 1
     u32[7] rounds_p = [56, 57, 56, 60, 60, 63, 64, 63]
@@ -42,9 +46,12 @@ def poseidon(u32 N, field[0] inputs) -> field:
     field[441] c = POSEIDON_C
     field[81] m = POSEIDON_M
 
-    field[t] state = [0; t]
-    for u32 i in 1..t do
-        state[i] = inputs[i - 1]
+    field[6] state = [0; 6]
+    // Only copy the first N entry
+    u32 i_minus_one_bounded = 0
+    for u32 i in 1..6 do
+        state[i] = inputs[i_minus_one_bounded]
+        i_minus_one_bounded = i_minus_one_bounded + 1 == N ? i_minus_one_bounded : i_minus_one_bounded + 1
     endfor
 
     for u32 r in 0..f+p do

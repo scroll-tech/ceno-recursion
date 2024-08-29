@@ -1,0 +1,23 @@
+No-Opt:
+Num Blocks: 50
+Compiler time: 1779ms
+Preprocess time: 890ms
+Prover time: 168.628s
+Verifier time: 1.407s
+Proof size: 293.8kB
+
+Opt 1:
+Num Blocks: 36
+Compiler time: 1885ms
+Preprocess time: 746ms
+Prover time: 138.873s
+Verifier time: 1.121s
+Proof size: 237.9kB
+
+Opt 2:
+Num Blocks: 26
+Compiler time: 1758ms
+Preprocess time: 685ms
+Prover time: 87.709s
+Verifier time: 783.85ms
+Proof size: 163.6kB

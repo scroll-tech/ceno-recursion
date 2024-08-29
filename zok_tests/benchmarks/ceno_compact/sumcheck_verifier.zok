@@ -26,6 +26,7 @@ def verify_round_and_update_state(SumcheckIOPVerifierState self, IOPProverMessag
 
 def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
     u32 len = p_i_len
+    assert(len == 4)
     array_decl field[len] evals
 
     // Combine `prod = \prod_{j} (eval_at - j)`
@@ -34,7 +35,7 @@ def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
     evals[0] = eval_at
     field res = 0
     field denom_up = 1
-    for u32 e in 1..len do
+    for u32 e in 1..4 do
         field tmp = eval_at - (F)e
         evals[e] = tmp
         prod = prod * tmp
@@ -91,12 +92,15 @@ def verify_sumcheck(
     Transcript[0] t_list,
     field[0] msg_list
 ) -> SumCheckSubClaim:
+    assert(aux_info.max_degree == 3)
+    /*
     if aux_info.num_variables == 0 then
         return SumCheckSubClaim {
             point: [],
             expected_evaluation: claimed_sum
         }
     endif
+    */
     // t = append_message_u32(t, aux_info.num_variables)
     field next_t = msg_list[0]
     msg_list[next_t] = (F)aux_info.num_variables
@@ -120,7 +124,7 @@ def verify_sumcheck(
     }
     for u32 i in 0..aux_info.num_variables do
         IOPProverMessage prover_msg = proof.proofs[i]
-        for u32 j in 0..aux_info.max_degree + 1 do
+        for u32 j in 0..4 do
             // t = append_message_field(t, prover_msg.evaluations[j])
             msg_list[next_t] = prover_msg.evaluations[j]
             next_t = next_t + 1

@@ -36,8 +36,8 @@ def verifier(
 
     for u32 j in 0..num_reveals do
         // Reproduce coin
-        field[5] inputs = [(F)j, compact_cert_proof.sig_root, (F)proven_weight, message, att_root]
-        field coin_hash = poseidon(5, inputs)
+        // field[5] inputs = [(F)j, compact_cert_proof.sig_root, (F)proven_weight, message, att_root]
+        // field coin_hash = poseidon(5, inputs)
         // field coin = coin_hash % (F)signed_weight
         field coin = coins[j]
 

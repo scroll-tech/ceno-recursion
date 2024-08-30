@@ -17,7 +17,7 @@ use crate::front::Computations;
 use crate::target::r1cs::trans::to_r1cs;
 use crate::front::zsharp::{cfg, ZSharp};
 
-const MIN_BLOCK_SIZE: usize = 1024;
+const MIN_BLOCK_SIZE: usize = 4096;
 const CFG_VERBOSE: bool = false;
 
 fn type_to_ty(t: Type) -> Result<Ty, String> {

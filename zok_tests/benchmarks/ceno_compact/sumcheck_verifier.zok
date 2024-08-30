@@ -43,17 +43,15 @@ def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
     endfor
     field denom_down = 1
 
-    u32 it = len
-    while it > 0 do
-        u32 i = it - 1
+    for u32 it in 0..4 do
+        u32 i = 3 - it
         res = res + p_i[i] * prod * denom_down / (denom_up * evals[i])
         // compute denom for the next step is current_denom * (len-i)/i
         if i != 0 then
             denom_up = -1 * denom_up * (F)(len - i)
             denom_down = denom_down * (F)i
         endif
-        it = it - 1
-    endwhile
+    endfor
     return res
 
 def check_and_generate_subclaim(SumcheckIOPVerifierState self, field asserted_sum) -> SumCheckSubClaim:

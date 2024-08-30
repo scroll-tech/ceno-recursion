@@ -21,3 +21,11 @@ Preprocess time: 685ms
 Prover time: 87.709s
 Verifier time: 783.85ms
 Proof size: 163.6kB
+
+Opt 3:
+Num Blocks: 25
+Compiler time: 1695ms
+Preprocess time: 691ms
+Prover time: 88.112s
+Verifier time: 783.42ms
+Proof size: 162.3kB

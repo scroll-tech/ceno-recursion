@@ -53,7 +53,7 @@ where `hash_seq` is supplied by the prover as witnesses.
 We note that the original code needs to be expressed using at least 5 blocks (2 for instructions of the two loop, 3 for instructions before, between, and after the loops), the optimized code only needs 2 (1 for the loop, 1 for the return). We also note that the optimized code eliminates the iterator `i2`, although it does introduce additional constraints through the ternary.
 
 ## Preliminary Results
-Currently all sequence breaking analyses are performed by hand. It is unclear whether there exist any similar implementations (due to its peculiar application) or what extent we can push on the automation process. Existing empirical evidence suggests up to ~75% reduction in compiler and prover time for complex programs.
+Currently all sequence breaking analyses are performed by hand. It is unclear whether there exist any similar implementations (due to its peculiar application) or the extent of the automation process. Existing empirical evidence suggests up to ~75% reduction in prover and verifier time for complex programs.
 
 ## Other Potential Uses of the Analysis
-Sequence breaker analyses are particularly useful for block-based SNARK systems (as far as we know, CoBBl is the only one). It might be applicable to certain SAT / SMT solving problems, although it is unclear whether the analyses would achieve any substantial speedup. Apart from the above, such analysis seems only useful on computers where registers and memory can time travel to the past.
+Sequence breaker analyses are particularly useful for block-based SNARK systems (as far as we know, CoBBl is the only one). It might be applicable to certain SAT / SMT solving problems, although it is unclear whether the analyses would achieve any substantial speedup. Apart from the above, such analysis seems only applicable to computers where registers and memory can time travel to the past.

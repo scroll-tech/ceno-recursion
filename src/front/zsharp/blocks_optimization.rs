@@ -3285,11 +3285,11 @@ impl<'ast> ZGen<'ast> {
     // However, we won't know the size of witnesses until circuit generation,
     // hence need to record inputs, outputs, and witnesses separately
     // Structure for input / output:
-    // reg  0   1   2   3   4   5   6   7   8   9
-    //      _  BN  RET TS  AS  RP  SP  BP  i8  i9
+    // reg  0   1   2   3   4   5   6   7   8
+    //      _  BN  RET TS  AS  SP  BP  i7  i8
     // Structure for witness:
-    // reg  0   1   2   3   4   5   6   7  ...
-    //      _  TS  AS  RP  SP  BP  w6  w7
+    // reg  0   1   2   3   4   5   6  ...
+    //      _  TS  AS  SP  BP  w5  w6
     //
     // When the io map and witness map is determined, update the block such that
     // 1. The first and last values of each variable in io should be assigned an io register

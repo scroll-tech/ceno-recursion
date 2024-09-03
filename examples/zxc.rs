@@ -297,6 +297,7 @@ struct RunTimeKnowledge {
     block_max_num_proofs: usize,
     block_num_proofs: Vec<usize>,
     consis_num_proofs: usize,
+    total_num_init_mem_accesses: usize,
     total_num_phy_mem_accesses: usize,
     total_num_vir_mem_accesses: usize,
   
@@ -324,6 +325,7 @@ impl RunTimeKnowledge {
         }
         writeln!(&mut f, "")?;
         writeln!(&mut f, "{}", self.consis_num_proofs)?;
+        writeln!(&mut f, "{}", self.total_num_init_mem_accesses)?;
         writeln!(&mut f, "{}", self.total_num_phy_mem_accesses)?;
         writeln!(&mut f, "{}", self.total_num_vir_mem_accesses)?;
 
@@ -661,7 +663,8 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     ctk: &CompileTimeKnowledge,
     live_io_size: Vec<usize>,
     live_mem_size: Vec<usize>,
-    prover_data_list: Vec<ProverData>
+    prover_data_list: Vec<ProverData>,
+    total_num_init_mem_accesses: usize,
 ) -> RunTimeKnowledge {
     let num_blocks = ctk.block_num_instances;
     let num_input_unpadded = ctk.num_inputs_unpadded;
@@ -928,6 +931,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         block_max_num_proofs,
         block_num_proofs,
         consis_num_proofs,
+        total_num_init_mem_accesses,
         total_num_phy_mem_accesses,
         total_num_vir_mem_accesses,
       
@@ -1003,7 +1007,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<false>(path.clone(), &options, entry_regs, entry_arrays, &ctk, live_io_size, live_mem_size, prover_data_list);
+    let rtk = get_run_time_knowledge::<false>(path.clone(), &options, entry_regs, entry_arrays, &ctk, live_io_size, live_mem_size, prover_data_list, alloc_counter);
     let witness_time = witness_start.elapsed();
 
     // --

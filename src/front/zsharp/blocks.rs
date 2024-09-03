@@ -70,7 +70,7 @@ pub fn ty_to_type<'ast>(ty: &Ty) -> Result<Type<'ast>, String> {
         Ty::Bool => Ok(Type::Basic(BasicType::Boolean(BooleanType {
             span: Span::new("", 0, 0).unwrap()
         }))),
-        Ty::Field => Ok(Type::Basic(BasicType::Field(FieldType {
+        Ty::Field | Ty::Array(..) => Ok(Type::Basic(BasicType::Field(FieldType {
             span: Span::new("", 0, 0).unwrap()
         }))),
         _ => Err(format!("Type not supported: {:?}", ty))
@@ -2428,7 +2428,8 @@ impl<'ast> ZGen<'ast> {
                 let r = self.circ_declare_input(
                     &f,
                     name.clone(),
-                    x,
+                    // Declare arrays as field
+                    if let Ty::Array(..) = x { &Ty::Field } else { x },
                     ZVis::Public,
                     None,
                     true,
@@ -2444,7 +2445,8 @@ impl<'ast> ZGen<'ast> {
                     let r = self.circ_declare_input(
                         &f,
                         name.clone(),
-                        x,
+                        // Declare arrays as field
+                        if let Ty::Array(..) = x { &Ty::Field } else { x },
                         ZVis::Public,
                         None,
                         true,
@@ -2521,7 +2523,7 @@ impl<'ast> ZGen<'ast> {
                     let r = self.circ_declare_input(
                         &f,
                         output_name.clone(),
-                        x,
+                        if let Ty::Array(..) = x { &Ty::Field } else { x },
                         ZVis::Public,
                         None,
                         true,

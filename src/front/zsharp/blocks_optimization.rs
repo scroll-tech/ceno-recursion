@@ -1571,11 +1571,14 @@ impl<'ast> ZGen<'ast> {
         &self,
         mut bls: Vec<Block<'ast>>,
         mut entry_bl: usize,
-        inputs: Vec<(String, Ty)>,
+        mut inputs: Vec<(String, Ty)>,
         // When no_opt is set, DO NOT perform Merge / Spilling
         no_opt: bool,
     ) -> (Vec<Block<'ast>>, usize) {
         println!("\n\n--\nOptimization:");
+        // Add %AS to program input
+        inputs.insert(0, ("%AS".to_string(), Ty::Field));
+
         if !no_opt {
             // Construct CFG
             let (
@@ -2831,9 +2834,10 @@ impl<'ast> ZGen<'ast> {
             entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%TS", &Ty::Field)));
         }
         // If %AS is alive, initialize %AS
-        if bls[entry_bl].outputs.contains(&("%AS".to_string(), Some(Ty::Field))) {
-            entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS", &Ty::Field)));
-        }
+        // XXX: %AS is now a program input
+        // if bls[entry_bl].outputs.contains(&("%AS".to_string(), Some(Ty::Field))) {
+            // entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS", &Ty::Field)));
+        // }
         bls[entry_bl].instructions = entry_bl_instructions;
 
         // Iterate through the blocks FUNCTION BY FUNCTION, add push and pop statements if variable is in SPILLS

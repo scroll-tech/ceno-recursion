@@ -561,7 +561,8 @@ impl<'ast> ZGen<'ast> {
         // Initialize %TS for memory timestamp
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%TS", &Ty::Field)));
         // Initialize %AS for allocating arrays
-        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS", &Ty::Field)));
+        // XXX: %AS is now a program input
+        // blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS", &Ty::Field)));
 
         // Create a mapping from each function name to the beginning of their blocks
         let mut func_blk_map = BTreeMap::new();
@@ -644,9 +645,10 @@ impl<'ast> ZGen<'ast> {
     }
 
     // Convert each function to blocks
-    // Generic: IS_MAIN determines if we are in the main function, which has two properties:
+    // Generic: IS_MAIN determines if we are in the main function:
     //   1. We don't update the exit block of MAIN to rp@
     //   2. Return value of main is not a struct & stored in %RET, return value of every function, if struct, is stored in ret@
+    //   3. If not in the main function, declare all constants again
     // Return type:
     // Blks, blks_len
     fn bl_gen_function_init_<const IS_MAIN: bool>(

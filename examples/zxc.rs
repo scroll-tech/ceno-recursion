@@ -926,13 +926,27 @@ fn main() {
     let mut buffer = String::new();
     reader.read_line(&mut buffer).unwrap();
     let _ = buffer.trim();
+
+    // Keep track of %AS
+    let mut alloc_counter: usize = 0;
     while buffer != "END".to_string() {
         let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
-        entry_regs.push(Integer::from(split[1].parse::<usize>().unwrap()));
+        // split is either of form [VAR, VAL] or [VAR, "[", ENTRY_0, ENTRY_1, ..., "]"] 
+        if let Ok(val) = split[1].parse::<usize>() {
+            entry_regs.push(Integer::from(val));
+        } else {
+            assert_eq!(split[1], "[");
+            assert_eq!(split[split.len() - 1], "]");
+            // TODO: parse actual entries
+            entry_regs.push(Integer::from(alloc_counter));
+            alloc_counter += split.len() - 3; // var, "[", and "]"
+        }
 
         buffer.clear();
         reader.read_line(&mut buffer).unwrap();
     }
+    // Insert %AS to the fron of entry_reg
+    entry_regs.insert(0, Integer::from(alloc_counter));
     println!("INPUT: {:?}", entry_regs);
 
     // --

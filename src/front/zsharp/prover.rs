@@ -198,7 +198,8 @@ impl<'ast> ZGen<'ast> {
         let mut vir_mem_op: Vec<MemOp>;
         
         // Process input variables
-        // Insert a 0 in front of the input variables for BN
+        // Append %BN = 0 in front of the input variables
+        // Note: %AS is handled by the input parser and is already present in entry_regs
         let entry_regs = &[vec![Integer::from(0)], entry_regs.clone()].concat();
         let mut prog_reg_in = vec![None; io_size];
         let mut i = 0;

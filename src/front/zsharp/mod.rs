@@ -87,12 +87,13 @@ impl FrontEnd for ZSharpFE {
 
 impl ZSharpFE {
     /// Execute the Z# front-end interpreter on the supplied file with the supplied inputs
-    pub fn interpret(i: Inputs, entry_regs: &Vec<Integer>) -> (
+    pub fn interpret(i: Inputs, entry_regs: &Vec<Integer>, entry_arrays: &Vec<Vec<Integer>>) -> (
         T, // Return Value
         Vec<usize>, // Block IDs
         Vec<Vec<Option<Value>>>, // Prog Input | Block Outputs
         Vec<Vec<Option<Value>>>, // (PM Vars + VM Vars) per block
         Vec<HashMap<String, Value, BuildHasherDefault<fxhash::FxHasher>>>, // Map of IO name -> IO value, for witness generation
+        Vec<[Value; 4]>, // Initial memory accesses, sorted by execution & address (same ordering)
         Vec<(Value, Value)>, // Physical memory accesses, sorted by address
         Vec<[Value; 4]> // Virtual memory accesses, sorted by address
     ) {
@@ -107,7 +108,15 @@ impl ZSharpFE {
         let (blks, entry_bl) = g.optimize_block::<INTERPRET_VERBOSE>(blks, entry_bl, inputs.clone(), i.no_opt);
         let (blks, entry_bl, io_size, _, _, _, _) = g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl, inputs);
         println!("\n\n--\nInterpretation:");
-        let (ret, _, prog_reg_in, bl_exec_state, phy_mem_list, vir_mem_list) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(entry_bl, entry_regs, &blks, io_size)
+        let (
+            ret, 
+            _, 
+            prog_reg_in, 
+            bl_exec_state, 
+            init_mem_list,
+            phy_mem_list, 
+            vir_mem_list
+        ) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(entry_bl, entry_regs, entry_arrays, &blks, io_size)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
         // prover::print_state_list(&bl_exec_state);
         // let _ = prover::sort_by_block(&bl_exec_state);
@@ -190,6 +199,18 @@ impl ZSharpFE {
             }
             block_io_map_list.push(inputs);
         }
+        let init_mem_list = init_mem_list.iter().map(|i|
+            [
+                to_const_value(i.addr_t.clone())
+                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                to_const_value(i.data_t.clone())
+                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                to_const_value(i.ls_t.clone().unwrap())
+                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                to_const_value(i.ts_t.clone().unwrap())
+                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+            ]
+        ).collect();
         let phy_mem_list = phy_mem_list.iter().map(|i|
             (
                 to_const_value(i.addr_t.clone())
@@ -252,7 +273,7 @@ impl ZSharpFE {
                 } else { None },
             ]).collect::<Vec<Option<Value>>>(),
         ].concat()).collect();
-        return (ret, block_id_list, block_outputs_list, block_mems_list, block_io_map_list, phy_mem_list, vir_mem_list);
+        return (ret, block_id_list, block_outputs_list, block_mems_list, block_io_map_list, init_mem_list, phy_mem_list, vir_mem_list);
     }
 }
 

@@ -299,6 +299,8 @@ struct RunTimeKnowledge {
   
     block_vars_matrix: Vec<Vec<VarsAssignment>>,
     exec_inputs: Vec<InputsAssignment>,
+    // Initial memory state, in (addr, val, ls = STORE, ts = 0) pair, sorted by appearance in program input (the same as address order)
+    init_mems_list: Vec<MemsAssignment>,
     addr_phy_mems_list: Vec<MemsAssignment>,
     addr_vir_mems_list: Vec<MemsAssignment>,
     addr_ts_bits_list: Vec<MemsAssignment>,
@@ -340,6 +342,13 @@ impl RunTimeKnowledge {
             writeln!(&mut f, "EXEC {}", exec_counter)?;
             exec.write(&mut f)?;
             exec_counter += 1;
+        }
+        writeln!(&mut f, "INIT_MEMS")?;
+        let mut addr_counter = 0;
+        for addr in &self.init_mems_list {
+            writeln!(&mut f, "ACCESS {}", addr_counter)?;
+            addr.write(&mut f)?;
+            addr_counter += 1;
         }
         writeln!(&mut f, "ADDR_PHY_MEMS")?;
         let mut addr_counter = 0;
@@ -636,6 +645,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     path: PathBuf,
     options: &Options,
     entry_regs: Vec<Integer>,
+    entry_arrays: Vec<Vec<Integer>>,
     ctk: &CompileTimeKnowledge,
     live_io_size: Vec<usize>,
     live_mem_size: Vec<usize>,
@@ -648,14 +658,23 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     // bl_io_map maps name of io variables to their values
     // bl_outputs are used to fill in io part of vars
     // bl_io_map is used to compute witness part of vars
-    let (_, block_id_list, bl_outputs_list, bl_mems_list, bl_io_map_list, phy_mem_list, vir_mem_list) = {
+    let (
+        _, 
+        block_id_list, 
+        bl_outputs_list, 
+        bl_mems_list, 
+        bl_io_map_list,
+        init_mem_list,
+        phy_mem_list, 
+        vir_mem_list
+    ) = {
         let inputs = zsharp::Inputs {
             file: path,
             mode: Mode::Proof,
             no_opt: options.no_opt
         };
 
-        ZSharpFE::interpret(inputs, &entry_regs)
+        ZSharpFE::interpret(inputs, &entry_regs, &entry_arrays)
     };
 
     // Meta info
@@ -792,6 +811,23 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         block_vars_matrix[slot].push(vars_assignment);
     }
 
+    // Initial Memory: valid, _, addr, data, ls, ts, _, _
+    let mut input_mem = Vec::new();
+    // No need to record TS bits since it is always 0
+    // Also no need for D since this is not a coherence check
+    for i in 0..init_mem_list.len() {
+        let m = &init_mem_list[i];
+        
+        let mut mem: Vec<Integer> = vec![zero.clone(); 8];
+        mem[0] = one.clone();
+        mem[2] = m[0].as_integer().unwrap();
+        mem[3] = m[1].as_integer().unwrap();
+        mem[4] = m[2].as_integer().unwrap();
+        mem[5] = m[3].as_integer().unwrap();
+        
+        input_mem.push(Assignment::new(mem.iter().map(|i| integer_to_bytes(i.clone())).collect()))
+    }
+
     // Physical Memory: valid, D, addr, data
     let mut addr_phy_mems_list = Vec::new();
     let mut phy_mem_last = vec![one.clone(); 4];
@@ -885,6 +921,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
       
         block_vars_matrix,
         exec_inputs,
+        init_mems_list: input_mem,
         addr_phy_mems_list,
         addr_vir_mems_list,
         addr_ts_bits_list,
@@ -927,8 +964,9 @@ fn main() {
     reader.read_line(&mut buffer).unwrap();
     let _ = buffer.trim();
 
-    // Keep track of %AS
-    let mut alloc_counter: usize = 0;
+    // Keep track of %AS and record initial memory state
+    let mut alloc_counter = 0;
+    let mut entry_arrays: Vec<Vec<Integer>> = Vec::new();
     while buffer != "END".to_string() {
         let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
         // split is either of form [VAR, VAL] or [VAR, "[", ENTRY_0, ENTRY_1, ..., "]"] 
@@ -937,8 +975,9 @@ fn main() {
         } else {
             assert_eq!(split[1], "[");
             assert_eq!(split[split.len() - 1], "]");
-            // TODO: parse actual entries
             entry_regs.push(Integer::from(alloc_counter));
+            // Parse the entries
+            entry_arrays.push(split[2..split.len() - 1].iter().map(|entry| Integer::from(entry.parse::<usize>().unwrap())).collect());
             alloc_counter += split.len() - 3; // var, "[", and "]"
         }
 
@@ -952,7 +991,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<false>(path.clone(), &options, entry_regs, &ctk, live_io_size, live_mem_size, prover_data_list);
+    let rtk = get_run_time_knowledge::<false>(path.clone(), &options, entry_regs, entry_arrays, &ctk, live_io_size, live_mem_size, prover_data_list);
     let witness_time = witness_start.elapsed();
 
     // --

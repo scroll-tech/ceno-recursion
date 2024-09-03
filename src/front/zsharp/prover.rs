@@ -158,6 +158,39 @@ impl<'ast> ZGen<'ast> {
         }
     }
 
+    fn int_to_t(&self, int: &Integer, ty: &Ty) -> Result<T, String> {
+        let e = &(LiteralExpression::DecimalLiteral(
+            DecimalLiteralExpression {
+                value: DecimalNumber {
+                    value: int.to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                },
+                suffix: Some(match ty {
+                    Ty::Field => DecimalSuffix::Field(FieldSuffix {
+                        span: Span::new("", 0, 0).unwrap()
+                    }),
+                    Ty::Uint(64) => DecimalSuffix::U64(U64Suffix {
+                        span: Span::new("", 0, 0).unwrap()
+                    }),
+                    Ty::Uint(32) => DecimalSuffix::U32(U32Suffix {
+                        span: Span::new("", 0, 0).unwrap()
+                    }),
+                    Ty::Uint(16) => DecimalSuffix::U16(U16Suffix {
+                        span: Span::new("", 0, 0).unwrap()
+                    }),
+                    Ty::Uint(8) => DecimalSuffix::U8(U8Suffix {
+                        span: Span::new("", 0, 0).unwrap()
+                    }),
+                    _ => panic!("Unsupported input type: {:?}!", ty)
+                }),
+                span: Span::new("", 0, 0).unwrap()
+            }
+        ));
+
+        let val = self.literal_(e)?;
+        Ok(val)
+    }
+
     // I am hacking cvars_stack to do the interpretation. Ideally we want a separate var_table to do so.
     // We only need BTreeMap<String, T> to finish evaluation, so the 2 Vecs of cvars_stack should always have
     // size 1, i.e. we use only one function and one scope.
@@ -165,6 +198,7 @@ impl<'ast> ZGen<'ast> {
         &self,
         entry_bl: usize,
         entry_regs: &Vec<Integer>, // Entry regs should match the input of the entry block
+        entry_arrays: &Vec<Vec<Integer>>,
         bls: &Vec<Block<'ast>>,
         io_size: usize
     ) -> Result<(
@@ -172,6 +206,7 @@ impl<'ast> ZGen<'ast> {
         Vec<usize>, // Block ID
         Vec<Option<T>>, // Program input state
         Vec<ExecState>, // Block output states
+        Vec<MemOp>, // Input Memory operations
         Vec<MemOp>, // Physical Memory operations
         Vec<MemOp> // Virtual Memory operations
     ), String> {
@@ -194,56 +229,57 @@ impl<'ast> ZGen<'ast> {
         let mut phy_mem: Vec<T> = Vec::new();
         let mut vir_mem: Vec<Option<T>> = Vec::new();
         let mut terminated = false;
+        let mut init_mem_list: Vec<MemOp> = Vec::new();
         let mut phy_mem_op: Vec<MemOp>;
         let mut vir_mem_op: Vec<MemOp>;
         
-        // Process input variables
+        // Process input variables & arrays
         // Append %BN = 0 in front of the input variables
         // Note: %AS is handled by the input parser and is already present in entry_regs
         let entry_regs = &[vec![Integer::from(0)], entry_regs.clone()].concat();
         let mut prog_reg_in = vec![None; io_size];
         let mut i = 0;
+        // What is the next array and what is the next address to allocate?
+        let mut arr_count = 0;
+        let mut addr_count = 0;
         for (name, ty) in &bls[entry_bl].inputs {
             if let Some(x) = ty {
                 assert!(i < entry_regs.len());
 
-                let e = &(LiteralExpression::DecimalLiteral(
-                    DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: entry_regs[i].to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        suffix: Some(match x {
-                            Ty::Field => DecimalSuffix::Field(FieldSuffix {
-                                span: Span::new("", 0, 0).unwrap()
-                            }),
-                            Ty::Uint(64) => DecimalSuffix::U64(U64Suffix {
-                                span: Span::new("", 0, 0).unwrap()
-                            }),
-                            Ty::Uint(32) => DecimalSuffix::U32(U32Suffix {
-                                span: Span::new("", 0, 0).unwrap()
-                            }),
-                            Ty::Uint(16) => DecimalSuffix::U16(U16Suffix {
-                                span: Span::new("", 0, 0).unwrap()
-                            }),
-                            Ty::Uint(8) => DecimalSuffix::U8(U8Suffix {
-                                span: Span::new("", 0, 0).unwrap()
-                            }),
-                            _ => panic!("Unsupported input type: {:?}!", x)
-                        }),
-                        span: Span::new("", 0, 0).unwrap()
-                    }
-                ));
-
-                let val = self.literal_(e)?;
-                self.declare_init_impl_::<true>(
-                    name.to_string(),
-                    x.clone(),
-                    val,
-                )?;
+                // Determine if ty is basic or complex
+                match x {
+                    Ty::Uint(_) | Ty::Field => {
+                        let val = self.int_to_t(&entry_regs[i], &x)?;
+                        self.declare_init_impl_::<true>(
+                            name.to_string(),
+                            x.clone(),
+                            val,
+                        )?;
+                    },
+                    Ty::Array(_, entry_ty) => {
+                        match **entry_ty {
+                            Ty::Uint(_) | Ty::Field => {
+                                for entry in &entry_arrays[arr_count] {
+                                    let addr = addr_count;
+                                    let addr_t = self.int_to_t(&Integer::from(addr_count), &Ty::Field)?;
+                                    let data_t = self.int_to_t(&entry, &*entry_ty)?;
+                                    let ls_t = self.int_to_t(&Integer::from(STORE), &Ty::Field)?;
+                                    let ts = 0;
+                                    let ts_t = self.int_to_t(&Integer::from(0), &Ty::Field)?;
+                                    init_mem_list.push(MemOp::new_vir(addr, addr_t, data_t, ls_t, ts, ts_t));
+                                    addr_count += 1;
+                                }
+                                arr_count += 1;
+                            },
+                            _ => { panic!("Bool, Struct and NestedArray input types not supported!") }
+                        }
+                    },
+                    _ => { panic!("Bool, Struct and NestedArray input types not supported!") }
+                }
                 i += 1;
             }
         }
+        
         // Execute program
         while !terminated {
             bl_exec_count[nb] += 1;
@@ -367,8 +403,8 @@ impl<'ast> ZGen<'ast> {
             "Missing return value for one or more functions."
         ));
 
-        let (phy_mem_list, vir_mem_list) = sort_by_mem(&bl_exec_state);
-        Ok((ret?, bl_exec_count, prog_reg_in, bl_exec_state, phy_mem_list, vir_mem_list))
+        let (phy_mem_list, vir_mem_list) = sort_by_mem(&init_mem_list, &bl_exec_state);
+        Ok((ret?, bl_exec_count, prog_reg_in, bl_exec_state, init_mem_list, phy_mem_list, vir_mem_list))
     }
 
     // Convert a usize into a Field value
@@ -395,7 +431,7 @@ impl<'ast> ZGen<'ast> {
     // ret[2]: Virtual memory map,
     // ret[3]: Has the program terminated?
     // ret[4]: Pairs of [addr, data] for all physical (scoping) memory operations in the block
-    // ret[5]: Quadruples of [addr, data, io, ts] for all virtual memory operations in the block
+    // ret[5]: Quadruples of [addr, data, ls, ts] for all virtual memory operations in the block
     fn bl_eval_impl_(
         &self, 
         bl: &Block<'ast>,
@@ -753,9 +789,12 @@ impl<'ast> ZGen<'ast> {
     }
 }
 
-pub fn sort_by_mem(bl_exec_state: &Vec<ExecState>) -> (Vec<MemOp>, Vec<MemOp>) {
+pub fn sort_by_mem(
+    init_mem_list: &Vec<MemOp>,
+    bl_exec_state: &Vec<ExecState>,
+) -> (Vec<MemOp>, Vec<MemOp>) {
     let mut sorted_phy_mem_op_list = Vec::new();
-    let mut sorted_vir_mem_op_list = Vec::new();
+    let mut sorted_vir_mem_op_list = init_mem_list.clone();
     for b in bl_exec_state {
         sorted_phy_mem_op_list.append(&mut b.phy_mem_op.clone());
         sorted_vir_mem_op_list.append(&mut b.vir_mem_op.clone());

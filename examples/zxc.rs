@@ -206,6 +206,8 @@ struct CompileTimeKnowledge {
     args: Vec<Vec<(Vec<(usize, Integer)>, Vec<(usize, Integer)>, Vec<(usize, Integer)>)>>,
   
     func_input_width: usize,
+    // Whether the input contains any memory accesses
+    init_mem_set: bool,
     input_offset: usize,
     input_block_num: usize,
     output_offset: usize,
@@ -259,6 +261,7 @@ impl CompileTimeKnowledge {
         writeln!(&mut f, "INST_END")?;
 
         writeln!(&mut f, "{}", self.func_input_width)?;
+        writeln!(&mut f, "{}", if self.init_mem_set { 1 } else { 0 })?;
         writeln!(&mut f, "{}", self.input_offset)?;
         writeln!(&mut f, "{}", self.input_block_num)?;
         writeln!(&mut f, "{}", self.output_offset)?;
@@ -422,7 +425,15 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 ) -> (CompileTimeKnowledge, Vec<usize>, Vec<usize>, Vec<ProverData>) {
     println!("Generating Compiler Time Data...");
 
-    let (cs, func_input_width, num_inputs_unpadded, live_io_list, block_num_mem_accesses, live_vm_list) = {
+    let (
+        cs, 
+        func_input_width, 
+        num_inputs_unpadded, 
+        live_io_list, 
+        block_num_mem_accesses, 
+        live_vm_list, 
+        init_mem_set,
+    ) = {
         let inputs = zsharp::Inputs {
             file: path.clone(),
             mode: Mode::Proof,
@@ -627,6 +638,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         max_ts_width: MAX_TS_WIDTH,
         args,
         func_input_width,
+        init_mem_set,
         input_offset: NUM_RESERVED_VARS,
         input_block_num,
         output_offset: OUTPUT_OFFSET,

@@ -3218,7 +3218,7 @@ impl<'ast> ZGen<'ast> {
         bls: Vec<Block<'ast>>,
         entry_bl: usize,
         inputs: Vec<(String, Ty)>
-    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>, Vec<Vec<usize>>) {
+    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>, Vec<Vec<usize>>, bool) {
         println!("\n\n--\nPost-Processing:");
         // Construct a new CFG for the program
         // Note that this is the CFG after DBE, and might be different from the previous CFG
@@ -3272,10 +3272,10 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Obtain # of scoping memory accesses per block
-        let (num_mem_accesses, live_vm) = self.get_blocks_memory_info(&bls);
+        let (init_mem_set, num_mem_accesses, live_vm) = self.get_blocks_memory_info(&bls, entry_bl);
 
         print_bls(&bls, &entry_bl);
-        (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses, live_vm)
+        (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses, live_vm, init_mem_set)
     }
 
     // Convert all mentionings of variables to registers
@@ -3649,14 +3649,20 @@ impl<'ast> ZGen<'ast> {
     // Construct a view of memory from the blocks.
     // Converts array initializers to pointer definition
     // Returns:
-    // 0. # of (physical (scoping) memory, virtual memory accesses) accesses for each block
-    // 1. Liveness of each virtual memory variable
+    // 0. Whether the input contains memory accesses
+    // 1. # of (physical (scoping) memory, virtual memory accesses) accesses for each block
+    // 2. Liveness of each virtual memory variable
     //    * We need all variables present for permutation check, but some are not referenced in the constraints and will be killed in R1CS
     //    * For every _live_ virtual memory variable, record its overall ordering in all virtual memory variables 
     fn get_blocks_memory_info(
         &self,
         bls: &Vec<Block>,
-    ) -> (Vec<(usize, usize)>, Vec<Vec<usize>>) {
+        entry_bl: usize,
+    ) -> (bool, Vec<(usize, usize)>, Vec<Vec<usize>>) {
+        let init_mem_set = bls[entry_bl].inputs.iter().fold(false, 
+            |acc, i| if let Some(Ty::Array(..)) = i.1 { true } else { acc }
+        );
+
         // Number of memory accesses per block
         let mut num_mem_accesses = Vec::new();
         // Map of each _live_ vm variables to its overall ordering
@@ -3672,7 +3678,7 @@ impl<'ast> ZGen<'ast> {
             }
             live_vm_list.push(live_vm);
         }
-        (num_mem_accesses, live_vm_list)
+        (init_mem_set, num_mem_accesses, live_vm_list)
     }
 
     // Bound the total # of block executions & the total # of memory accesses

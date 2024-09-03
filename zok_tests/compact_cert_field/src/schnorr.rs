@@ -1,10 +1,9 @@
 use crate::curve::*;
-use crate::Sha256;
-use rs_merkle::Hasher;
 use rand::Rng;
 use ff::PrimeField;
 use primitive_types::U512;
 use crate::field::Fp;
+use crate::poseidon;
 
 #[derive(Clone, Debug)]
 pub struct PublicKey {
@@ -69,18 +68,12 @@ pub fn gen() -> (PublicKey, SecretKey) {
     (pk, sk)
 }
 
-pub fn sign(sk: &SecretKey, m: &[u8]) -> Signature {
+pub fn sign(sk: &SecretKey, m: &Fp) -> Signature {
     let order: U512 = U512::from_dec_str("7237005577332262213973186563042994240955753618821290553176770668684506720427").unwrap();
     let (k, _) = gen_r(252);
     let r = curve_mul(&sk.pk.p, k);
     // Produce hash
-    let mut hin: Vec<u8> = Vec::new();
-    hin.extend(m);
-    let x_bytes: Vec<u8> = bincode::serialize(&r.x).unwrap();
-    let y_bytes: Vec<u8> = bincode::serialize(&r.y).unwrap();
-    hin.extend(x_bytes);
-    hin.extend(y_bytes);
-    let e_bytes = Sha256::hash(&hin);
+    let e_bytes = poseidon(&[m.clone(), r.x.clone(), r.y.clone()]).to_bytes();
     let mut e: U512 = U512::from(0);
     for e_byte in e_bytes {
         e *= 256;
@@ -94,16 +87,10 @@ pub fn sign(sk: &SecretKey, m: &[u8]) -> Signature {
     }
 }
 
-pub fn verify_sig(pk: &PublicKey, sig: &Signature, m: &[u8]) -> bool {
+pub fn verify_sig(pk: &PublicKey, sig: &Signature, m: &Fp) {
     let order: U512 = U512::from_dec_str("7237005577332262213973186563042994240955753618821290553176770668684506720427").unwrap();
     // Produce hash
-    let mut hin: Vec<u8> = Vec::new();
-    hin.extend(m);
-    let x_bytes: Vec<u8> = bincode::serialize(&sig.r.x).unwrap();
-    let y_bytes: Vec<u8> = bincode::serialize(&sig.r.y).unwrap();
-    hin.extend(x_bytes);
-    hin.extend(y_bytes);
-    let e_bytes = Sha256::hash(&hin);
+    let e_bytes = poseidon(&[m.clone(), sig.r.x.clone(), sig.r.y.clone()]).to_bytes();
     let mut e: U512 = U512::from(0);
     for e_byte in e_bytes {
         e *= 256;
@@ -113,5 +100,5 @@ pub fn verify_sig(pk: &PublicKey, sig: &Signature, m: &[u8]) -> bool {
 
     let eq = curve_mul(&pk.q, e);
     let sp = curve_mul(&pk.p, sig.s);
-    return curve_add(&sig.r, &eq) == sp
+    assert_eq!(curve_add(&sig.r, &eq), sp);
 }

@@ -26,7 +26,8 @@ fn mix(state: &[Fp], m: [Fp; 81]) -> Vec<Fp> {
     return out
 }
 
-pub fn poseidon(n: usize, inputs: &[Fp]) -> Fp {
+pub fn poseidon(inputs: &[Fp]) -> Fp {
+    let n = inputs.len();
     assert!(n > 0 && n <= 5) ;// max 5 inputs
 
     let t = n + 1;

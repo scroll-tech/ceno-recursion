@@ -3,13 +3,13 @@ mod curve;
 mod schnorr;
 mod poseidon;
 mod poseidon_constants;
+mod merkle;
 
-use rs_merkle::algorithms::Sha256;
-use rs_merkle::{MerkleTree, Hasher, MerkleProof};
-use rand::*;
 use crate::field::Fp;
 use crate::schnorr::*;
 use crate::poseidon::*;
+use crate::merkle::*;
+use ff::PrimeField;
 
 // Attestor info
 #[derive(Clone)]
@@ -27,16 +27,12 @@ impl Attestor {
         }
     }
 
-    // bit:        8       8       4       4      8
-    // entry: pk.p.x, pk.p.y, pk.q.x, pk.q.y, weight
-    fn hash(&self) -> [u8; 32] {
-        let pk_p_x_hash: [u8; 8] = Sha256::hash(&self.pk.p.x.to_bytes())[24..].try_into().unwrap();
-        let pk_p_y_hash: [u8; 8] = Sha256::hash(&self.pk.p.y.to_bytes())[24..].try_into().unwrap();
-        let pk_q_x_hash: [u8; 4] = Sha256::hash(&self.pk.q.x.to_bytes())[28..].try_into().unwrap();
-        let pk_q_y_hash: [u8; 4] = Sha256::hash(&self.pk.q.y.to_bytes())[28..].try_into().unwrap();
-        let pk_q_hash: [u8; 8] = [pk_q_x_hash, pk_q_y_hash].concat().try_into().unwrap();
-        let weight_hash: [u8; 8] = Sha256::hash(&self.weight.to_ne_bytes())[24..].try_into().unwrap();
-        [pk_p_x_hash, pk_p_y_hash, pk_q_hash, weight_hash].concat().try_into().unwrap()
+    fn to_list(&self) -> Vec<Fp> {
+        [self.pk.p.x.clone(), self.pk.p.y.clone(), self.pk.q.x.clone(), self.pk.q.y.clone(), Fp::from(self.weight as u64)].to_vec()
+    }
+
+    fn hash(&self) -> Fp {
+        poseidon(&self.to_list())
     }
 }
 
@@ -56,35 +52,31 @@ impl Sig {
         }
     }
 
-    // bit:   8   8        4        4      8
-    // entry: l,  r, sig.r.x, sig.r.y, sig.s
-    fn hash(&self) -> [u8; 32] {
-        let l_hash: [u8; 8] = Sha256::hash(&self.l.to_ne_bytes())[24..].try_into().unwrap();
-        let r_hash: [u8; 8] = Sha256::hash(&self.r.to_ne_bytes())[24..].try_into().unwrap();
+    fn to_list(&self) -> Vec<Fp> {
         if let Some(sig) = &self.sig {
-            let sig_r_x_hash: [u8; 4] = Sha256::hash(&sig.r.x.to_bytes())[28..].try_into().unwrap();
-            let sig_r_y_hash: [u8; 4] = Sha256::hash(&sig.r.y.to_bytes())[28..].try_into().unwrap();
-            let sig_r_hash: [u8; 8] = [sig_r_x_hash, sig_r_y_hash].concat().try_into().unwrap();
-            let mut sig_s_buffer: [u8; 64] = [0; 64];
-            sig.s.to_big_endian(&mut sig_s_buffer);
-            let sig_s_hash: [u8; 8] = Sha256::hash(&sig_s_buffer[32..])[24..].try_into().unwrap();
-            [l_hash, r_hash, sig_r_hash, sig_s_hash].concat().try_into().unwrap()
+            // Convert sig.s from U512 to Fp
+            let s_fp = Fp::from_str_vartime(&format!("{}", sig.s)).unwrap();
+            [sig.r.x.clone(), sig.r.y.clone(), s_fp, Fp::from(self.l as u64), Fp::from(self.r as u64)].to_vec()
         } else {
-            [l_hash, r_hash, [0; 8], [0; 8]].concat().try_into().unwrap()
+            [Fp::from(0), Fp::from(0), Fp::from(0), Fp::from(self.l as u64), Fp::from(self.r as u64)].to_vec()
         }
+    }
+
+    fn hash(&self) -> Fp {
+        poseidon(&self.to_list())
     }
 }
 
 // Reveal Proof Entry
 struct T {
     i: usize,
-    s: [u8; 32],
-    pi_s: MerkleProof<Sha256>,
-    p: [u8; 32],
-    pi_p: MerkleProof<Sha256>,
+    s: Fp,
+    pi_s: MerkleProof,
+    p: Fp,
+    pi_p: MerkleProof,
 }
 impl T {
-    fn new(i: usize, s: [u8; 32], pi_s: MerkleProof<Sha256>, p: [u8; 32], pi_p: MerkleProof<Sha256>) -> T {
+    fn new(i: usize, s: Fp, pi_s: MerkleProof, p: Fp, pi_p: MerkleProof) -> T {
         T {
             i,
             s,
@@ -97,26 +89,21 @@ impl T {
 
 // Proof
 struct CompactCertProof {
-    sig_root: [u8; 32],
+    sig_root: Fp,
     signed_weight: usize,
     t_list: Vec<T>
 }
 
-const MSG_LEN: usize = 15;
 const NUM_ATTESTORS: usize = 10;
 const PROVEN_WEIGHT: usize = 8;
 const KNOWLEDGE_SOUNDNESS: usize = 10; // knowledge soundness of 2^{-k}
-const MAX_NUM_REVEALS: usize = 2; // num reveals 2^q
+const MAX_NUM_REVEALS: usize = 8; // num reveals 2^q
 
 // Commit all attestors as a merkle tree
 fn trusted_setup(
     attestors: &Vec<Attestor>
-) -> Result<([u8; 32], MerkleTree<Sha256>), String> {
-    let leaves: Vec<[u8; 32]> = attestors.iter().map(|att| att.hash()).collect();
-    let merkle_tree = MerkleTree::<Sha256>::from_leaves(&leaves);
-    let root = merkle_tree.root().ok_or("couldn't get the merkle root")?;
-
-    Ok((root, merkle_tree))
+) -> MerkleTree {
+    build_merkle_tree(&attestors.iter().map(|i| i.to_list()).collect())
 }
 
 fn prover(
@@ -124,9 +111,9 @@ fn prover(
     proven_weight: usize,
     k: usize, // knowledge error ~2^{-k} 
     q: usize, // <=2^q random oracle queries
-    message: &[u8], // the message being signed
-    att_root: &[u8; 32], // commitment to the attestors (root of merkle tree)
-    att_tree: &MerkleTree<Sha256>,
+    message: &Fp, // the message being signed
+    att_root: &Fp, // commitment to the attestors (root of merkle tree)
+    att_tree: &MerkleTree,
 ) -> Result<(CompactCertProof, Vec<Attestor>, Vec<Sig>), String> {
     let mut signed_weight = 0;
     let mut collected_list = vec![false; attestors.len()];
@@ -135,7 +122,7 @@ fn prover(
     let mut i = 0;
     for a in attestors {
         // Check signature
-        assert!(verify_sig(&a.pk, &a.sig, &message));
+        verify_sig(&a.pk, &a.sig, &message);
         signed_weight += a.weight;
         
         collected_list[i] = true;
@@ -163,12 +150,7 @@ fn prover(
     assert!(sigs[sigs.len() - 1].r == signed_weight);
 
     // Construct merkle tree for sigs
-    let (sig_root, sig_tree) = {
-        let leaves: Vec<[u8; 32]> = sigs.iter().map(|i| i.hash()).collect();
-        let merkle_tree = MerkleTree::<Sha256>::from_leaves(&leaves);
-        let root = merkle_tree.root().ok_or("couldn't get the merkle root")?;
-        (root, merkle_tree)
-    };
+    let sig_tree = build_merkle_tree(&sigs.iter().map(|i| i.to_list()).collect());
 
     // Map cumulated weight back to index
     // Binary search, lo inclusive, hi exclusive
@@ -196,44 +178,36 @@ fn prover(
     let mut att_list = Vec::new();
     let mut sig_list = Vec::new();
     for j in 0..num_reveals {
-        let mut hin: Vec<u8> = Vec::new();
-        // hin <- (j, root, proven_weight, message, commit)
-        hin.extend((j as u32).to_ne_bytes());
-        hin.extend(sig_root);
-        hin.extend(proven_weight.to_ne_bytes());
-        hin.extend(message);
-        hin.extend(att_root);
-
-        // Compute coin_hash modulo signed_weight
-        let coin_hash = Sha256::hash(&hin);
+        // Produce coin
+        let coin_hash_bytes = poseidon(&[Fp::from(j as u64), sig_tree.root.clone(), Fp::from(proven_weight as u64), message.clone(), att_root.clone()]).to_bytes();
         let mut coin: usize = 0;
-        for j in coin_hash {
-            coin = (2 * coin + j as usize) % signed_weight;
+        for b in coin_hash_bytes {
+            coin = (2 * coin + b as usize) % signed_weight;
         }
         let i = int_to_ind(coin, 0, attestors.len());
         att_list.push(attestors[i].clone());
         sig_list.push(sigs[i].clone());
 
         // Construct Merkle Proof for Sig
-        let (sig_leaf, sig_proof) = {
-            let leaf = sig_tree.leaves().ok_or("sig tree contains no leaf")?[i];
-            let merkle_proof = sig_tree.proof(&vec![i]);
-            (leaf, merkle_proof)
+        let (sig_leaf_hash, sig_proof) = {
+            let leaf_hash = sig_tree.leaf_hashes[i];
+            let merkle_proof = prove_merkle(&sig_tree, i);
+            (leaf_hash, merkle_proof)
         };
 
         // Construct Merkle Proof for Att
-        let (att_leaf, att_proof) = {
-            let leaf = att_tree.leaves().ok_or("att tree contains no leaf")?[i];
-            let merkle_proof = att_tree.proof(&vec![i]);
-            (leaf, merkle_proof)
+        let (att_leaf_hash, att_proof) = {
+            let leaf_hash = att_tree.leaf_hashes[i];
+            let merkle_proof = prove_merkle(att_tree, i);
+            (leaf_hash, merkle_proof)
         };
 
-        t_list.push(T::new(i, sig_leaf, sig_proof, att_leaf, att_proof));
+        t_list.push(T::new(i, sig_leaf_hash, sig_proof, att_leaf_hash, att_proof));
     }
     
     Ok((
         CompactCertProof {
-            sig_root,
+            sig_root: sig_tree.root,
             signed_weight,
             t_list
         },
@@ -247,9 +221,9 @@ fn verifier(
     proven_weight: usize,
     k: usize,
     q: usize,
-    message: &[u8], // the message being signed
+    message: &Fp, // the message being signed
     att_len: usize,
-    att_root: [u8; 32],
+    att_root: Fp,
     // List of attestors / sigs provided by the prover
     att_list: &Vec<Attestor>,
     sig_list: &Vec<Sig>,
@@ -262,28 +236,20 @@ fn verifier(
 
     for j in 0..num_reveals {
         // Reproduce coin
-        let mut hin: Vec<u8> = Vec::new();
-        // hin <- (j, root, proven_weight, message, commit)
-        hin.extend((j as u32).to_ne_bytes());
-        hin.extend(compact_cert_proof.sig_root);
-        hin.extend(proven_weight.to_ne_bytes());
-        hin.extend(message);
-        hin.extend(att_root);
-        // Compute coin_hash modulo signed_weight
-        let coin_hash = Sha256::hash(&hin);
+        let coin_hash_bytes = poseidon(&[Fp::from(j as u64), compact_cert_proof.sig_root.clone(), Fp::from(proven_weight as u64), message.clone(), att_root]).to_bytes();
         let mut coin: usize = 0;
-        for j in coin_hash {
-            coin = (2 * coin + j as usize) % signed_weight;
+        for b in coin_hash_bytes {
+            coin = (2 * coin + b as usize) % signed_weight;
         }
 
         let t = &compact_cert_proof.t_list[j];
         // Sig Opening
-        assert!(t.pi_s.verify(compact_cert_proof.sig_root, &vec![t.i], &vec![t.s], att_len));
+        verify_merkle(att_len, &t.pi_s, compact_cert_proof.sig_root, t.i, &t.s);
         // Att Opening
-        assert!(t.pi_p.verify(att_root, &vec![t.i], &vec![t.p], att_len));
+        verify_merkle(att_len, &t.pi_p, att_root, t.i, &t.p);
         // Validity of signature
         assert_eq!(att_list[j].hash(), t.p);
-        assert!(verify_sig(&att_list[j].pk, &sig_list[j].sig.clone().unwrap(), &message));
+        verify_sig(&att_list[j].pk, &sig_list[j].sig.clone().unwrap(), &message);
         // L < coin <= L + Weight
         assert_eq!(sig_list[j].hash(), t.s);
         assert!(sig_list[j].l <= coin && coin < sig_list[j].l + att_list[j].weight);
@@ -291,14 +257,8 @@ fn verifier(
 }
 
 fn main() {
-    let inputs = [Fp::from(1), Fp::from(2), Fp::from(3), Fp::from(4), Fp::from(5)];
-    let output = poseidon(5, &inputs);
-    println!("{:?}", output);
-    /*
     // Generate message
-    let mut rng = rand::thread_rng();
-    let mut message: [u8; MSG_LEN] = [0; MSG_LEN];
-    rng.try_fill(&mut message).unwrap();
+    let message = Fp::from_str_vartime("4025061991628092675460898405984409787580357548626371141566464220460064800482").unwrap();
 
     // Generate attestors
     let mut attestors = Vec::new();
@@ -311,7 +271,8 @@ fn main() {
     let q = MAX_NUM_REVEALS;
 
     // TRUSTED SETUP
-    let (att_root, att_tree) = trusted_setup(&attestors).unwrap();
+    let att_tree = trusted_setup(&attestors);
+    let att_root = att_tree.root;
     
     // PROVER
     let (compact_cert_proof, att_list, sig_list) = prover(&attestors, PROVEN_WEIGHT, k, q, &message, &att_root, &att_tree).unwrap();
@@ -320,5 +281,4 @@ fn main() {
     verifier(&compact_cert_proof, PROVEN_WEIGHT, k, q, &message, attestors.len(), att_root, &att_list, &sig_list);
 
     println!("Verification Successful!")
-    */
 }

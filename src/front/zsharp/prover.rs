@@ -259,6 +259,14 @@ impl<'ast> ZGen<'ast> {
                     Ty::Array(_, entry_ty) => {
                         match **entry_ty {
                             Ty::Uint(_) | Ty::Field => {
+                                // Declare the array as a pointer
+                                let val = self.int_to_t(&Integer::from(addr_count), &Ty::Field)?;
+                                self.declare_init_impl_::<true>(
+                                    name.to_string(),
+                                    Ty::Field,
+                                    val,
+                                )?;
+                                // Add all entries as STOREs
                                 for entry in &entry_arrays[arr_count] {
                                     let addr = addr_count;
                                     let addr_t = self.int_to_t(&Integer::from(addr_count), &Ty::Field)?;
@@ -266,6 +274,7 @@ impl<'ast> ZGen<'ast> {
                                     let ls_t = self.int_to_t(&Integer::from(STORE), &Ty::Field)?;
                                     let ts = 0;
                                     let ts_t = self.int_to_t(&Integer::from(0), &Ty::Field)?;
+                                    vir_mem.push(Some(data_t.clone()));
                                     init_mem_list.push(MemOp::new_vir(addr, addr_t, data_t, ls_t, ts, ts_t));
                                     addr_count += 1;
                                 }

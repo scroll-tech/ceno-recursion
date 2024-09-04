@@ -830,19 +830,17 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         block_vars_matrix[slot].push(vars_assignment);
     }
 
-    // Initial Memory: valid, _, addr, data, ls, ts, _, _
+    // Initial Memory: valid, _, addr, data (ts and ls are both 0 and are not recorded)
     let mut init_mems_list = Vec::new();
     // No need to record TS bits since it is always 0
     // Also no need for D since this is not a coherence check
     for i in 0..init_mem_list.len() {
         let m = &init_mem_list[i];
         
-        let mut mem: Vec<Integer> = vec![zero.clone(); 8];
+        let mut mem: Vec<Integer> = vec![zero.clone(); 4];
         mem[0] = one.clone();
         mem[2] = m[0].as_integer().unwrap();
         mem[3] = m[1].as_integer().unwrap();
-        mem[4] = m[2].as_integer().unwrap();
-        mem[5] = m[3].as_integer().unwrap();
         
         init_mems_list.push(Assignment::new(mem.iter().map(|i| integer_to_bytes(i.clone())).collect()))
     }

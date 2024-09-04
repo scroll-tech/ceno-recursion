@@ -22,6 +22,8 @@ use circ::target::r1cs::opt::reduce_linearities;
 use circ::target::r1cs::trans::to_r1cs;
 use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
 use circ::target::r1cs::ProverData;
+#[cfg(feature = "spartan")]
+use libspartan::scalar::Scalar;
 
 use std::fs::File;
 use std::io::{BufReader, BufRead, Write};
@@ -35,6 +37,7 @@ use std::path::PathBuf;
 use core::cmp::Ordering;
 
 use std::time::*;
+use serde::{Serialize, Deserialize};
 
 // How many reserved variables (EXCLUDING V) are in front of the actual input / output?
 // %BN, %RET, %TS, %AS, %SP, %BP
@@ -102,9 +105,9 @@ enum ProofOption {
 }
 
 struct SparseMatEntry {
-    args_a: Vec<(usize, Integer)>,
-    args_b: Vec<(usize, Integer)>,
-    args_c: Vec<(usize, Integer)>
+    args_a: Vec<(usize, [u8; 32])>,
+    args_b: Vec<(usize, [u8; 32])>,
+    args_c: Vec<(usize, [u8; 32])>
 }
 
 // When adding the validity check, what does the sparse format look like?
@@ -153,6 +156,9 @@ fn get_sparse_cons_with_v_check(
         }
         (args_a, args_b, args_c)
     };
+    let args_a = args_a.into_iter().map(|(x, y)| (x, integer_to_bytes(y))).collect();
+    let args_b = args_b.into_iter().map(|(x, y)| (x, integer_to_bytes(y))).collect();
+    let args_c = args_c.into_iter().map(|(x, y)| (x, integer_to_bytes(y))).collect();
     return Some(SparseMatEntry { args_a, args_b, args_c });
 }
 
@@ -194,6 +200,7 @@ fn write_bytes(mut f: &File, bytes: &[u8; 32]) -> std::io::Result<()> {
 // --
 // Structures to match Spartan
 // --
+#[derive(Serialize, Deserialize)]
 struct CompileTimeKnowledge {
     block_num_instances: usize,
     num_vars: usize,
@@ -203,11 +210,9 @@ struct CompileTimeKnowledge {
     block_num_vir_mem_accesses: Vec<usize>,
     max_ts_width: usize,
   
-    args: Vec<Vec<(Vec<(usize, Integer)>, Vec<(usize, Integer)>, Vec<(usize, Integer)>)>>,
+    args: Vec<Vec<(Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>)>>,
   
     func_input_width: usize,
-    // Whether the input contains any memory accesses
-    init_mem_set: bool,
     input_offset: usize,
     input_block_num: usize,
     output_offset: usize,
@@ -215,6 +220,14 @@ struct CompileTimeKnowledge {
 }
 
 impl CompileTimeKnowledge {
+    fn serialize_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
+        let file_name = format!("../zok_tests/constraints/{}_bin.ctk", benchmark_name);
+        let mut f = File::create(file_name)?;
+        let content = bincode::serialize(&self).unwrap();
+        f.write(&content)?;
+        Ok(())
+    }
+
     fn write_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
         let file_name = format!("../zok_tests/constraints/{}.ctk", benchmark_name);
         let mut f = File::create(file_name)?;
@@ -243,17 +256,17 @@ impl CompileTimeKnowledge {
                 writeln!(&mut f, "A")?;
                 for (var, val) in &cons.0 {
                     writeln!(&mut f, "{}", var)?;
-                    write_bytes(&mut f, &integer_to_bytes(val.clone()))?;
+                    write_bytes(&mut f, &val)?;
                 }
                 writeln!(&mut f, "B")?;
                 for (var, val) in &cons.1 {
                     writeln!(&mut f, "{}", var)?;
-                    write_bytes(&mut f, &integer_to_bytes(val.clone()))?;
+                    write_bytes(&mut f, &val.clone())?;
                 }
                 writeln!(&mut f, "C")?;
                 for (var, val) in &cons.2 {
                     writeln!(&mut f, "{}", var)?;
-                    write_bytes(&mut f, &integer_to_bytes(val.clone()))?;
+                    write_bytes(&mut f, &val.clone())?;
                 }
             }
             counter += 1;
@@ -261,7 +274,6 @@ impl CompileTimeKnowledge {
         writeln!(&mut f, "INST_END")?;
 
         writeln!(&mut f, "{}", self.func_input_width)?;
-        writeln!(&mut f, "{}", if self.init_mem_set { 1 } else { 0 })?;
         writeln!(&mut f, "{}", self.input_offset)?;
         writeln!(&mut f, "{}", self.input_block_num)?;
         writeln!(&mut f, "{}", self.output_offset)?;
@@ -270,20 +282,20 @@ impl CompileTimeKnowledge {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Assignment {
-    assignment: Vec<[u8; 32]>,
+    assignment: Vec<Scalar>,
 }
 impl Assignment {
     fn new(list: Vec<[u8; 32]>) -> Assignment {
         Assignment {
-            assignment: list
+            assignment: list.into_iter().map(|i| Scalar::from_bytes(&i).unwrap()).collect()
         }
     }
 
     fn write(&self, mut f: &File) -> std::io::Result<()> {
         for assg in &self.assignment {
-            write_bytes(&mut f, assg)?;
+            write_bytes(&mut f, &assg.to_bytes())?;
         }
         Ok(())
     }
@@ -293,6 +305,7 @@ pub type VarsAssignment = Assignment;
 pub type InputsAssignment = Assignment;
 pub type MemsAssignment = Assignment;
 
+#[derive(Serialize, Deserialize)]
 struct RunTimeKnowledge {
     block_max_num_proofs: usize,
     block_num_proofs: Vec<usize>,
@@ -309,14 +322,21 @@ struct RunTimeKnowledge {
     addr_vir_mems_list: Vec<MemsAssignment>,
     addr_ts_bits_list: Vec<MemsAssignment>,
   
-    input: Assignment,
-    input_mem: Assignment,
-    // Output can only have one entry
-    output: Assignment,
+    input: Vec<[u8; 32]>,
+    input_mem: Vec<[u8; 32]>,
+    output: [u8; 32],
     output_exec_num: usize
 }
 
 impl RunTimeKnowledge {
+    fn serialize_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
+        let file_name = format!("../zok_tests/inputs/{}_bin.rtk", benchmark_name);
+        let mut f = File::create(file_name)?;
+        let content = bincode::serialize(&self).unwrap();
+        f.write(&content)?;
+        Ok(())
+    }
+
     fn write_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
         let file_name = format!("../zok_tests/inputs/{}.rtk", benchmark_name);
         let mut f = File::create(file_name)?;
@@ -378,11 +398,11 @@ impl RunTimeKnowledge {
             addr_counter += 1;
         }
         writeln!(&mut f, "INPUTS")?;
-        self.input.write(&mut f)?;
+        Assignment::new(self.input.clone()).write(&mut f)?;
         writeln!(&mut f, "INPUT_MEMS")?;
-        self.input_mem.write(&mut f)?;
+        Assignment::new(self.input_mem.clone()).write(&mut f)?;
         writeln!(&mut f, "OUTPUTS")?;
-        self.output.write(&mut f)?;
+        Assignment::new(vec![self.output.clone()]).write(&mut f)?;
         writeln!(&mut f, "OUTPUTS_END")?;
         writeln!(&mut f, "{}", self.output_exec_num)?;
         Ok(())
@@ -437,7 +457,6 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         live_io_list, 
         block_num_mem_accesses, 
         live_vm_list, 
-        init_mem_set,
     ) = {
         let inputs = zsharp::Inputs {
             file: path.clone(),
@@ -565,7 +584,6 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
             None
         }
     };
-    println!("0 - {:?}, 1 - {:?}, 2 - {:?}, 3 - {:?}, 4 - {:?}", io_relabel(0, 0), io_relabel(0, 1), io_relabel(0, 2), io_relabel(0, 3), io_relabel(0, 4));
     // Add all IOs and WV in front
     let witness_relabel = |b: usize, i: usize|  -> usize {
         let num_pm_vars = VARS_PER_ST_ACCESS * block_num_mem_accesses[b].0;
@@ -595,7 +613,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         sparse_mat_entry.push(Vec::new());
         // First constraint is V * V = V
         let (args_a, args_b, args_c) =
-            (vec![(v_cnst, Integer::from(1))], vec![(v_cnst, Integer::from(1))], vec![(v_cnst, Integer::from(1))]);
+            (vec![(v_cnst, integer_to_bytes(Integer::from(1)))], vec![(v_cnst, integer_to_bytes(Integer::from(1)))], vec![(v_cnst, integer_to_bytes(Integer::from(1)))]);
         sparse_mat_entry[b].push(SparseMatEntry { args_a, args_b, args_c });
         // Iterate
         for c in r1cs.constraints() {
@@ -626,8 +644,12 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     // Collect all necessary info
     let block_num_instances = r1cs_list.len();
     let num_vars = max_num_witnesses;
-    let args: Vec<Vec<(Vec<(usize, Integer)>, Vec<(usize, Integer)>, Vec<(usize, Integer)>)>> = 
-        sparse_mat_entry.iter().map(|v| v.iter().map(|i| (i.args_a.clone(), i.args_b.clone(), i.args_c.clone())).collect()).collect();
+    let args: Vec<Vec<(Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>)>> = 
+        sparse_mat_entry.iter().map(|v| v.iter().map(|i| (
+            i.args_a.clone(), 
+            i.args_b.clone(), 
+            i.args_c.clone()
+        )).collect()).collect();
     let input_block_num = 0;
     let output_block_num = block_num_instances;
 
@@ -644,7 +666,6 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         max_ts_width: MAX_TS_WIDTH,
         args,
         func_input_width,
-        init_mem_set,
         input_offset: NUM_RESERVED_VARS,
         input_block_num,
         output_offset: OUTPUT_OFFSET,
@@ -934,9 +955,9 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     println!();
     print!("{:3} ", "O");
     println!("{:3} ", func_outputs);
-    let func_inputs = Assignment::new(entry_regs.iter().map(|i| integer_to_bytes(i.clone())).collect());
-    let input_mem = Assignment::new(entry_arrays.iter().map(|i| integer_to_bytes(i.clone())).collect());
-    let func_outputs = Assignment::new(vec![integer_to_bytes(func_outputs)]);
+    let func_inputs = entry_regs.iter().map(|i| integer_to_bytes(i.clone())).collect();
+    let input_mem = entry_arrays.iter().map(|i| integer_to_bytes(i.clone())).collect();
+    let func_outputs = integer_to_bytes(func_outputs);
 
     RunTimeKnowledge {
         block_max_num_proofs,
@@ -1025,8 +1046,10 @@ fn main() {
     // --
     // Write CTK, RTK to file
     // --
-    let _ = ctk.write_to_file(benchmark_name.to_string());
-    let _ = rtk.write_to_file(benchmark_name.to_string());
+    // ctk.write_to_file(benchmark_name.to_string()).unwrap();
+    ctk.serialize_to_file(benchmark_name.to_string()).unwrap();
+    // rtk.write_to_file(benchmark_name.to_string()).unwrap();
+    rtk.serialize_to_file(benchmark_name.to_string()).unwrap();
 
     println!("Compiler time: {}ms", compiler_time.as_millis());
     println!("\n--\nWitness time: {}ms", witness_time.as_millis());

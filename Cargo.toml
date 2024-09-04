@@ -45,7 +45,7 @@ pest-ast = { version = "0.3", optional = true }
 from-pest = { version = "0.3", optional = true }
 itertools = "0.10"
 petgraph = { version = "0.6", optional = true }
-spartan = { version = "0.7.0", default-features = false, optional = true }
+spartan = { version = "0.8.1", default-features = false, optional = true }
 merlin = { version = "3.0.0", optional = true }
 curve25519-dalek = {version = "3.2.0", features = ["serde"], optional = true}
 # TODO: kill
@@ -63,6 +63,8 @@ approx = "0.5.0"
 
 [patch.crates-io]
 ff = { path = "../ff" }
+spartan = { path = "../Spartan" }
+curve25519-dalek = { path = "../curve25519-dalek" }
 
 [features]
 default = ["bellman", "r1cs", "poly", "smt", "zok"]

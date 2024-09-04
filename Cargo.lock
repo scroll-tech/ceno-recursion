@@ -466,16 +466,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
 
 [[package]]
-name = "colored"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbf2150cce219b664a8a70df7a1f933836724b503f8a413af9365b4dcc4d90b8"
-dependencies = [
- "lazy_static",
- "windows-sys",
-]
-
-[[package]]
 name = "constant_time_eq"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -553,9 +543,7 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b9fdf9972b2bd6af2d913799d9ebc165ea4d2e65878e329d9c6b372c4491b61"
+version = "3.2.1"
 dependencies = [
  "byteorder",
  "digest 0.9.0",
@@ -1288,7 +1276,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a6b1679d49b24bbfe0c803429aa1874472f50d9b363131f0e89fc356b544d03"
 dependencies = [
  "getrandom 0.1.16",
- "libc",
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
  "rand_hc",
@@ -1571,24 +1558,19 @@ dependencies = [
 
 [[package]]
 name = "spartan"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e52e49b6d607a0ef405654185943138a64ad36f9262e33d791f7233cedaa1b2"
+version = "0.8.1"
 dependencies = [
  "bincode",
  "byteorder",
- "colored",
  "curve25519-dalek",
  "digest 0.8.1",
  "flate2",
  "itertools",
  "merlin",
  "rand 0.7.3",
- "rand_core 0.5.1",
  "serde",
  "sha3",
  "subtle",
- "thiserror",
  "zeroize",
 ]
 

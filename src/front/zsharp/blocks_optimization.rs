@@ -3264,7 +3264,7 @@ impl<'ast> ZGen<'ast> {
             }
         }
         // XXX: As a temporary hack, remove %AS from program input to match with the circuit
-        assert_eq!(live_io[0].0.remove(1), 4);
+        // assert_eq!(live_io[0].0.remove(1), 4);
 
         // Convert Typed Defs back to Assignees
         let bls = self.tydef_to_assignee::<MODE>(bls);

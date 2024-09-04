@@ -310,6 +310,7 @@ struct RunTimeKnowledge {
     addr_ts_bits_list: Vec<MemsAssignment>,
   
     input: Assignment,
+    input_mem: Assignment,
     // Output can only have one entry
     output: Assignment,
     output_exec_num: usize
@@ -378,6 +379,8 @@ impl RunTimeKnowledge {
         }
         writeln!(&mut f, "INPUTS")?;
         self.input.write(&mut f)?;
+        writeln!(&mut f, "INPUT_MEMS")?;
+        self.input_mem.write(&mut f)?;
         writeln!(&mut f, "OUTPUTS")?;
         self.output.write(&mut f)?;
         writeln!(&mut f, "OUTPUTS_END")?;
@@ -828,7 +831,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     }
 
     // Initial Memory: valid, _, addr, data, ls, ts, _, _
-    let mut input_mem = Vec::new();
+    let mut init_mems_list = Vec::new();
     // No need to record TS bits since it is always 0
     // Also no need for D since this is not a coherence check
     for i in 0..init_mem_list.len() {
@@ -841,7 +844,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         mem[4] = m[2].as_integer().unwrap();
         mem[5] = m[3].as_integer().unwrap();
         
-        input_mem.push(Assignment::new(mem.iter().map(|i| integer_to_bytes(i.clone())).collect()))
+        init_mems_list.push(Assignment::new(mem.iter().map(|i| integer_to_bytes(i.clone())).collect()))
     }
 
     // Physical Memory: valid, D, addr, data
@@ -912,6 +915,9 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         }
     }
 
+    // Fold entry_arrays
+    let entry_arrays = entry_arrays.into_iter().fold(Vec::new(), |acc, a| [acc, a].concat()).to_vec();
+
     println!("\n--\nFUNC");
     print!("{:3} ", " ");
     for i in 0..if entry_regs.len() == 0 {1} else {0} {
@@ -923,9 +929,15 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         print!("{:3} ", entry_regs[i]);
     }
     println!();
+    print!("{:3} ", "M");
+    for i in 0..min(entry_arrays.len(), 32) {
+        print!("{:3} ", entry_arrays[i]);
+    }
+    println!();
     print!("{:3} ", "O");
     println!("{:3} ", func_outputs);
     let func_inputs = Assignment::new(entry_regs.iter().map(|i| integer_to_bytes(i.clone())).collect());
+    let input_mem = Assignment::new(entry_arrays.iter().map(|i| integer_to_bytes(i.clone())).collect());
     let func_outputs = Assignment::new(vec![integer_to_bytes(func_outputs)]);
 
     RunTimeKnowledge {
@@ -938,12 +950,13 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
       
         block_vars_matrix,
         exec_inputs,
-        init_mems_list: input_mem,
+        init_mems_list: init_mems_list,
         addr_phy_mems_list,
         addr_vir_mems_list,
         addr_ts_bits_list,
       
         input: func_inputs,
+        input_mem,
         output: func_outputs,
         output_exec_num
     }

@@ -3250,7 +3250,7 @@ impl<'ast> ZGen<'ast> {
         */
 
         // VtR
-        let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) = self.var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl, inputs);
+        let (bls, transition_map_list, io_size, witness_map, witness_size, mut live_io) = self.var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl, inputs);
         if VERBOSE {
             println!("\n\n--\nVar -> Reg:");
             println!("Var -> IO map:");
@@ -3263,6 +3263,8 @@ impl<'ast> ZGen<'ast> {
                 println!("  BLOCK {}: {:?}", i, live_io[i])
             }
         }
+        // XXX: As a temporary hack, remove %AS from program input to match with the circuit
+        assert_eq!(live_io[0].0.remove(1), 4);
 
         // Convert Typed Defs back to Assignees
         let bls = self.tydef_to_assignee::<MODE>(bls);

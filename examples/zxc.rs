@@ -562,6 +562,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
             None
         }
     };
+    println!("0 - {:?}, 1 - {:?}, 2 - {:?}, 3 - {:?}, 4 - {:?}", io_relabel(0, 0), io_relabel(0, 1), io_relabel(0, 2), io_relabel(0, 3), io_relabel(0, 4));
     // Add all IOs and WV in front
     let witness_relabel = |b: usize, i: usize|  -> usize {
         let num_pm_vars = VARS_PER_ST_ACCESS * block_num_mem_accesses[b].0;
@@ -1007,7 +1008,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<false>(path.clone(), &options, entry_regs, entry_arrays, &ctk, live_io_size, live_mem_size, prover_data_list, alloc_counter);
+    let rtk = get_run_time_knowledge::<true>(path.clone(), &options, entry_regs, entry_arrays, &ctk, live_io_size, live_mem_size, prover_data_list, alloc_counter);
     let witness_time = witness_start.elapsed();
 
     // --

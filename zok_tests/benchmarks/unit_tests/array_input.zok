@@ -1,0 +1,6 @@
+// Test array inputs
+def main(field[10] MEM, field[6] a, field[5] b) -> field:
+  assert(a[2] == a[4])
+  b[4] = 3
+  assert(b[4] == b[1])
+  return 1

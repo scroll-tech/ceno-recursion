@@ -1,3 +1,4 @@
+use std::iter::zip;
 use zokrates_pest_ast::*;
 use crate::front::zsharp::ZGen;
 use crate::front::zsharp::T;
@@ -197,6 +198,8 @@ impl<'ast> ZGen<'ast> {
     pub fn bl_eval_entry_fn<const VERBOSE: bool>(
         &self,
         entry_bl: usize,
+        prog_inputs: &Vec<(String, Ty)>,
+        input_liveness: &Vec<bool>,
         entry_regs: &Vec<Integer>, // Entry regs should match the input of the entry block
         entry_arrays: &Vec<Vec<Integer>>,
         bls: &Vec<Block<'ast>>,
@@ -234,59 +237,73 @@ impl<'ast> ZGen<'ast> {
         let mut vir_mem_op: Vec<MemOp>;
         
         // Process input variables & arrays
-        // Append %BN = 0 in front of the input variables
+        // Add %BN and %AS to the front of inputs
         // Note: %AS is handled by the input parser and is already present in entry_regs
         let entry_regs = &[vec![Integer::from(0)], entry_regs.clone()].concat();
-        let mut prog_reg_in = vec![None; io_size];
-        let mut i = 0;
-        // What is the next array and what is the next address to allocate?
-        let mut arr_count = 0;
-        let mut addr_count = 0;
-        for (name, ty) in &bls[entry_bl].inputs {
-            if let Some(x) = ty {
-                assert!(i < entry_regs.len());
+        let prog_inputs = &[vec![("%BN".to_string(), Ty::Field), ("%AS".to_string(), Ty::Field)], prog_inputs.clone()].concat();
+        let entry_arrays = &[vec![vec![]], vec![vec![]], entry_arrays.clone()].concat();
+        let input_liveness = &[vec![true], input_liveness.clone()].concat();
 
-                // Determine if ty is basic or complex
-                match x {
-                    Ty::Uint(_) | Ty::Field => {
+        let mut prog_reg_in = vec![None; io_size];
+        // The next address to allocate
+        let mut addr_count = 0;
+        // The index in prog_inputs
+        let mut i = 0;
+        // The corresponding index in bls[entry_bl].input
+        let mut input_count = 0;
+        assert_eq!(prog_inputs.len(), entry_regs.len());
+        assert_eq!(prog_inputs.len(), entry_arrays.len());
+        assert_eq!(prog_inputs.len(), input_liveness.len());
+        for ((_, x), alive) in zip(prog_inputs, input_liveness) {
+            assert!(i < entry_regs.len());
+
+            // Determine if ty is basic or complex
+            match x {
+                Ty::Uint(_) | Ty::Field => {
+                    if *alive {
+                        let (name, _) = &bls[entry_bl].inputs[input_count];
                         let val = self.int_to_t(&entry_regs[i], &x)?;
                         self.declare_init_impl_::<true>(
                             name.to_string(),
                             x.clone(),
                             val,
                         )?;
-                    },
-                    Ty::Array(_, entry_ty) => {
-                        match **entry_ty {
-                            Ty::Uint(_) | Ty::Field => {
+                        input_count += 1;
+                    }
+                },
+                Ty::Array(_, entry_ty) => {
+                    match **entry_ty {
+                        Ty::Uint(_) | Ty::Field => {
+                            if *alive {
+                                let (name, _) = &bls[entry_bl].inputs[input_count];
                                 // Declare the array as a pointer
-                                let val = self.int_to_t(&Integer::from(addr_count), &Ty::Field)?;
+                                let val = self.int_to_t(&entry_regs[i], &Ty::Field)?;
                                 self.declare_init_impl_::<true>(
                                     name.to_string(),
                                     Ty::Field,
                                     val,
                                 )?;
-                                // Add all entries as STOREs
-                                for entry in &entry_arrays[arr_count] {
-                                    let addr = addr_count;
-                                    let addr_t = self.int_to_t(&Integer::from(addr_count), &Ty::Field)?;
-                                    let data_t = self.int_to_t(&entry, &*entry_ty)?;
-                                    let ls_t = self.int_to_t(&Integer::from(STORE), &Ty::Field)?;
-                                    let ts = 0;
-                                    let ts_t = self.int_to_t(&Integer::from(0), &Ty::Field)?;
-                                    vir_mem.push(Some(data_t.clone()));
-                                    init_mem_list.push(MemOp::new_vir(addr, addr_t, data_t, ls_t, ts, ts_t));
-                                    addr_count += 1;
-                                }
-                                arr_count += 1;
-                            },
-                            _ => { panic!("Bool, Struct and NestedArray input types not supported!") }
-                        }
-                    },
-                    _ => { panic!("Bool, Struct and NestedArray input types not supported!") }
-                }
-                i += 1;
+                                input_count += 1;
+                            }
+                            // Add all entries as STOREs
+                            for entry in &entry_arrays[i] {
+                                let addr = addr_count;
+                                let addr_t = self.int_to_t(&Integer::from(addr_count), &Ty::Field)?;
+                                let data_t = self.int_to_t(&entry, &*entry_ty)?;
+                                let ls_t = self.int_to_t(&Integer::from(STORE), &Ty::Field)?;
+                                let ts = 0;
+                                let ts_t = self.int_to_t(&Integer::from(0), &Ty::Field)?;
+                                vir_mem.push(Some(data_t.clone()));
+                                init_mem_list.push(MemOp::new_vir(addr, addr_t, data_t, ls_t, ts, ts_t));
+                                addr_count += 1;
+                            }
+                        },
+                        _ => { panic!("Bool, Struct and NestedArray input types not supported!") }
+                    }
+                },
+                _ => { panic!("Bool, Struct and NestedArray input types not supported!") }
             }
+            i += 1;
         }
         
         // Execute program

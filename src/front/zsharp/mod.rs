@@ -33,7 +33,7 @@ use zvisit::{ZConstLiteralRewriter, ZGenericInf, ZStatementWalker, ZVisitorMut};
 
 // garbage collection increment for adaptive GC threshold
 const GC_INC: usize = 32;
-const GEN_VERBOSE: bool = true;
+const GEN_VERBOSE: bool = false;
 const INTERPRET_VERBOSE: bool = false;
 
 /// Inputs to the Z# compiler
@@ -106,15 +106,7 @@ impl ZSharpFE {
         
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
         let (blks, entry_bl, input_liveness) = g.optimize_block::<INTERPRET_VERBOSE>(blks, entry_bl, inputs.clone(), i.no_opt);
-        let (blks, entry_bl, io_size, _, _, _, _, _) = g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl, inputs);
-        // Filter entry_regs based on input_liveness
-        assert_eq!(input_liveness.len(), entry_regs.len());
-        let mut live_entry_regs = Vec::new();
-        for i in 0..input_liveness.len() {
-            if input_liveness[i] {
-                live_entry_regs.push(entry_regs[i].clone());
-            }
-        }
+        let (blks, entry_bl, io_size, _, _, _, _, _) = g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl, inputs.clone());
 
         println!("\n\n--\nInterpretation:");
         let (
@@ -125,7 +117,7 @@ impl ZSharpFE {
             init_mem_list,
             phy_mem_list, 
             vir_mem_list
-        ) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(entry_bl, &live_entry_regs, entry_arrays, &blks, io_size)
+        ) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(entry_bl, &inputs, &input_liveness, &entry_regs, entry_arrays, &blks, io_size)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
         // prover::print_state_list(&bl_exec_state);
         // let _ = prover::sort_by_block(&bl_exec_state);

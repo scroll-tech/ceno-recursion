@@ -1024,12 +1024,14 @@ fn main() {
 
     // Keep track of %AS and record initial memory state
     let mut alloc_counter = 0;
+    // One array per input, regardless of type. This is because arrays might be fed in as pointers.
     let mut entry_arrays: Vec<Vec<Integer>> = Vec::new();
     while buffer != "END".to_string() {
         let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
         // split is either of form [VAR, VAL] or [VAR, "[", ENTRY_0, ENTRY_1, ..., "]"] 
         if let Ok(val) = split[1].parse::<usize>() {
             entry_regs.push(Integer::from(val));
+            entry_arrays.push(vec![]);
         } else {
             assert_eq!(split[1], "[");
             assert_eq!(split[split.len() - 1], "]");

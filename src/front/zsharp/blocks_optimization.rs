@@ -2346,7 +2346,7 @@ impl<'ast> ZGen<'ast> {
         // Determine liveness of each input variable
         let mut input_liveness = Vec::new();
         let mut next_live_input_index = 0;
-        for (name, ty) in &inputs {
+        for (name, _) in &inputs {
             if &bls[0].inputs[next_live_input_index].0 == name {
                 input_liveness.push(true);
                 next_live_input_index += 1;

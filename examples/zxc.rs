@@ -212,6 +212,7 @@ struct CompileTimeKnowledge {
   
     args: Vec<Vec<(Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>)>>,
   
+    input_liveness: Vec<bool>,
     func_input_width: usize,
     input_offset: usize,
     input_block_num: usize,
@@ -273,6 +274,10 @@ impl CompileTimeKnowledge {
         }
         writeln!(&mut f, "INST_END")?;
 
+        for b in &self.input_liveness {
+            write!(&mut f, "{} ", if *b { 1 } else { 0 })?;
+        }
+        writeln!(&mut f, "")?;
         writeln!(&mut f, "{}", self.func_input_width)?;
         writeln!(&mut f, "{}", self.input_offset)?;
         writeln!(&mut f, "{}", self.input_block_num)?;
@@ -456,7 +461,8 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         num_inputs_unpadded, 
         live_io_list, 
         block_num_mem_accesses, 
-        live_vm_list, 
+        live_vm_list,
+        input_liveness,
     ) = {
         let inputs = zsharp::Inputs {
             file: path.clone(),
@@ -665,6 +671,8 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         block_num_vir_mem_accesses: block_num_mem_accesses.iter().map(|i| i.1).collect(),
         max_ts_width: MAX_TS_WIDTH,
         args,
+        
+        input_liveness,
         func_input_width,
         input_offset: NUM_RESERVED_VARS,
         input_block_num,
@@ -706,7 +714,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         bl_io_map_list,
         init_mem_list,
         phy_mem_list, 
-        vir_mem_list
+        vir_mem_list,
     ) = {
         let inputs = zsharp::Inputs {
             file: path,
@@ -955,6 +963,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     println!();
     print!("{:3} ", "O");
     println!("{:3} ", func_outputs);
+
     let func_inputs = entry_regs.iter().map(|i| integer_to_bytes(i.clone())).collect();
     let input_mem = entry_arrays.iter().map(|i| integer_to_bytes(i.clone())).collect();
     let func_outputs = integer_to_bytes(func_outputs);

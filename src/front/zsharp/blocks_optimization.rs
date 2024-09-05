@@ -1565,7 +1565,7 @@ impl<'ast> ZGen<'ast> {
     // BLOCK OPTIMIZATION
     // --
 
-    // Returns: Blocks
+    // Returns: blks, entry_bl, input_liveness
     // Inputs are (variable, type) pairs
     pub fn optimize_block<const VERBOSE: bool>(
         &self,
@@ -1574,7 +1574,7 @@ impl<'ast> ZGen<'ast> {
         mut inputs: Vec<(String, Ty)>,
         // When no_opt is set, DO NOT perform Merge / Spilling
         no_opt: bool,
-    ) -> (Vec<Block<'ast>>, usize) {
+    ) -> (Vec<Block<'ast>>, usize, Vec<bool>) {
         println!("\n\n--\nOptimization:");
         // Add %AS to program input
         inputs.insert(0, ("%AS".to_string(), Ty::Field));
@@ -1640,7 +1640,7 @@ impl<'ast> ZGen<'ast> {
             }
 
             // Set Input Output
-            bls = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, &entry_bls_fn, &exit_bls_fn, &call_exit_entry_map, inputs.clone());
+            (bls, _) = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, &entry_bls_fn, &exit_bls_fn, &call_exit_entry_map, inputs.clone());
             if VERBOSE {
                 println!("\n\n--\nSet Input Output before Spilling:");
                 print_bls(&bls, &entry_bl);
@@ -1742,12 +1742,13 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Set I/O again after optimizations
-        bls = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, &entry_bls_fn, &exit_bls_fn, &call_exit_entry_map, inputs.clone());
+        let input_liveness: Vec<bool>;
+        (bls, input_liveness) = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, &entry_bls_fn, &exit_bls_fn, &call_exit_entry_map, inputs.clone());
         if VERBOSE {
             println!("\n\n--\nSet Input Output after Spilling:");
             print_bls(&bls, &entry_bl);
         }
-        (bls, entry_bl)
+        (bls, entry_bl, input_liveness)
     }
 
     // Return value: successor, rp_successor, successor_fn, visited, next_bls
@@ -2135,7 +2136,7 @@ impl<'ast> ZGen<'ast> {
     }
 
     // For each block, set its input to be variables that are alive & defined at the entry point of the block and their type
-    // Returns: bls
+    // Returns: bls, input_liveness
     // This pass consists of a liveness analysis and a reaching definition (for typing)
     fn set_input_output(
         &self,
@@ -2149,7 +2150,7 @@ impl<'ast> ZGen<'ast> {
         exit_bls_fn: &BTreeSet<usize>,
         call_exit_entry_map: &BTreeMap<usize, usize>,
         inputs: Vec<(String, Ty)>
-    ) -> Vec<Block<'ast>> {
+    ) -> (Vec<Block<'ast>>, Vec<bool>) {
         // Liveness
         let mut visited: Vec<bool> = vec![false; bls.len()];
         // MEET is union, so IN and OUT are Empty Set
@@ -2330,11 +2331,9 @@ impl<'ast> ZGen<'ast> {
         for i in 0..bls.len() {
             bls[i].inputs = Vec::new();
             // Only variables that are alive & defined will become parts of inputs / outputs
-            if i != 0 {
-                for name in input_lst[i].iter().sorted() {
-                    if let Some(ty) = ty_map_in[i].get(name) {
-                        bls[i].inputs.push((name.to_string(), Some(ty.clone())));
-                    }
+            for name in input_lst[i].iter().sorted() {
+                if let Some(ty) = ty_map_in[i].get(name) {
+                    bls[i].inputs.push((name.to_string(), Some(ty.clone())));
                 }
             }
             bls[i].outputs = Vec::new();
@@ -2344,11 +2343,19 @@ impl<'ast> ZGen<'ast> {
                 }
             }
         }
+        // Determine liveness of each input variable
+        let mut input_liveness = Vec::new();
+        let mut next_live_input_index = 0;
         for (name, ty) in &inputs {
-            bls[0].inputs.push((name.to_string(), Some(ty.clone())));
+            if &bls[0].inputs[next_live_input_index].0 == name {
+                input_liveness.push(true);
+                next_live_input_index += 1;
+            } else {
+                input_liveness.push(false);
+            }
         }
 
-        return bls;
+        return (bls, input_liveness);
     }
 
     // Count number of constraints for a block
@@ -3250,7 +3257,7 @@ impl<'ast> ZGen<'ast> {
         */
 
         // VtR
-        let (bls, transition_map_list, io_size, witness_map, witness_size, mut live_io) = self.var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl, inputs);
+        let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) = self.var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl, inputs);
         if VERBOSE {
             println!("\n\n--\nVar -> Reg:");
             println!("Var -> IO map:");
@@ -3263,8 +3270,6 @@ impl<'ast> ZGen<'ast> {
                 println!("  BLOCK {}: {:?}", i, live_io[i])
             }
         }
-        // XXX: As a temporary hack, remove %AS from program input to match with the circuit
-        // assert_eq!(live_io[0].0.remove(1), 4);
 
         // Convert Typed Defs back to Assignees
         let bls = self.tydef_to_assignee::<MODE>(bls);

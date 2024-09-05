@@ -51,7 +51,7 @@ pub struct ZSharpFE;
 
 impl FrontEnd for ZSharpFE {
     type Inputs<'ast> = Inputs;
-    fn gen(i: Inputs) -> (Computations, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>, Vec<Vec<usize>>) {
+    fn gen(i: Inputs) -> (Computations, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>, Vec<Vec<usize>>, Vec<bool>) {
         debug!(
             "Starting Z# front-end, field: {}",
             Sort::Field(cfg().field().clone())
@@ -69,7 +69,7 @@ impl FrontEnd for ZSharpFE {
             b.pretty();
             println!("");
         }
-        let (blks, entry_bl) = g.optimize_block::<GEN_VERBOSE>(blks, entry_bl, inputs.clone(), i.no_opt);
+        let (blks, entry_bl, input_liveness) = g.optimize_block::<GEN_VERBOSE>(blks, entry_bl, inputs.clone(), i.no_opt);
         let (blks, _, io_size, _, live_io_list, num_mem_accesses, live_vm_list, _) = 
             g.process_block::<GEN_VERBOSE, 0>(blks, entry_bl, inputs);
         // NOTE: The input of block 0 includes %BN, which should be removed when reasoning about function input
@@ -81,7 +81,7 @@ impl FrontEnd for ZSharpFE {
         g.file_stack_pop();
         let mut cs = Computations::new();
         cs.comps = g.into_circify().cir_ctx().cs.borrow_mut().clone();
-        (cs, func_input_width, io_size, live_io_list, num_mem_accesses, live_vm_list)
+        (cs, func_input_width, io_size, live_io_list, num_mem_accesses, live_vm_list, input_liveness)
     }
 }
 
@@ -95,7 +95,7 @@ impl ZSharpFE {
         Vec<HashMap<String, Value, BuildHasherDefault<fxhash::FxHasher>>>, // Map of IO name -> IO value, for witness generation
         Vec<[Value; 4]>, // Initial memory accesses, sorted by execution & address (same ordering)
         Vec<(Value, Value)>, // Physical memory accesses, sorted by address
-        Vec<[Value; 4]> // Virtual memory accesses, sorted by address
+        Vec<[Value; 4]>, // Virtual memory accesses, sorted by address
     ) {
         let loader = parser::ZLoad::new();
         let asts = loader.load(&i.file);
@@ -105,8 +105,17 @@ impl ZSharpFE {
         g.generics_stack_push(HashMap::new());
         
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
-        let (blks, entry_bl) = g.optimize_block::<INTERPRET_VERBOSE>(blks, entry_bl, inputs.clone(), i.no_opt);
+        let (blks, entry_bl, input_liveness) = g.optimize_block::<INTERPRET_VERBOSE>(blks, entry_bl, inputs.clone(), i.no_opt);
         let (blks, entry_bl, io_size, _, _, _, _, _) = g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl, inputs);
+        // Filter entry_regs based on input_liveness
+        assert_eq!(input_liveness.len(), entry_regs.len());
+        let mut live_entry_regs = Vec::new();
+        for i in 0..input_liveness.len() {
+            if input_liveness[i] {
+                live_entry_regs.push(entry_regs[i].clone());
+            }
+        }
+
         println!("\n\n--\nInterpretation:");
         let (
             ret, 
@@ -116,7 +125,7 @@ impl ZSharpFE {
             init_mem_list,
             phy_mem_list, 
             vir_mem_list
-        ) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(entry_bl, entry_regs, entry_arrays, &blks, io_size)
+        ) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(entry_bl, &live_entry_regs, entry_arrays, &blks, io_size)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
         // prover::print_state_list(&bl_exec_state);
         // let _ = prover::sort_by_block(&bl_exec_state);

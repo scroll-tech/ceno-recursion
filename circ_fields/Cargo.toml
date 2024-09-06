@@ -15,7 +15,6 @@ rand = "0.8"
 rug = { version = "1.11", features = ["serde"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 datasize = { version = "0.2", features = ["detailed"] }
-goldilocks = { git = "https://github.com/hero78119/Goldilocks" }
 
 [patch.crates-io]
 ff = { path = "../../ff" }

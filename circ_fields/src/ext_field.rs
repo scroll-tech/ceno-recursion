@@ -10,6 +10,42 @@ use ff::derive::subtle::CtOption;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct FGoldilocksExt2(pub [FGoldilocks; 2]);
 
+impl FGoldilocksExt2 {
+    /// FrobeniusField automorphisms: x -> x^p, where p is the order of BaseField.
+    fn frobenius(&self) -> Self {
+        self.repeated_frobenius(1)
+    }
+
+    /// Repeated Frobenius automorphisms: x -> x^(p^count).
+    ///
+    /// Follows precomputation suggestion in Section 11.3.3 of the
+    /// Handbook of Elliptic and Hyperelliptic Curve Cryptography.
+    fn repeated_frobenius(&self, count: usize) -> Self {
+        if count == 0 {
+            return *self;
+        } else if count >= 2 {
+            // x |-> x^(p^D) is the identity, so x^(p^count) ==
+            // x^(p^(count % D))
+            return self.repeated_frobenius(count % 2);
+        }
+        let arr = self.0;
+
+        // z0 = DTH_ROOT^count = W^(k * count) where k = floor((p^D-1)/D)
+        let mut z0 = FGoldilocks::from(18446744069414584320u64);
+        for _ in 1..count {
+            z0 *= FGoldilocks::from(18446744069414584320u64);
+        }
+        let z0square = z0 * z0;
+
+        let mut res = [FGoldilocks::from(0u64); 2];
+
+        res[0] = arr[0] * z0;
+        res[1] = arr[1] * z0square;
+
+        Self(res)
+    }
+}
+
 impl ConditionallySelectable for FGoldilocksExt2 {
     fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
         Self([
@@ -57,6 +93,14 @@ impl<'a> Mul<&'a FGoldilocks> for FGoldilocksExt2 {
         self
     }
 }
+impl Mul<i64> for FGoldilocksExt2 {
+    type Output = FGoldilocksExt2;
+
+    #[inline]
+    fn mul(self, rhs: i64) -> Self::Output {
+        &self * &FGoldilocks::from(rhs)
+    }
+}
 impl MulAssign<&FGoldilocks> for FGoldilocksExt2 {
     #[inline]
     fn mul_assign(&mut self, rhs: &FGoldilocks) {
@@ -64,11 +108,16 @@ impl MulAssign<&FGoldilocks> for FGoldilocksExt2 {
         self.0[1] *= rhs;
     }
 }
-
 impl MulAssign<FGoldilocks> for FGoldilocksExt2 {
     #[inline]
     fn mul_assign(&mut self, rhs: FGoldilocks) {
         self.mul_assign(&rhs)
+    }
+}
+impl MulAssign<i64> for FGoldilocksExt2 {
+    #[inline]
+    fn mul_assign(&mut self, rhs: i64) {
+        self.mul_assign(&FGoldilocks::from(rhs))
     }
 }
 
@@ -81,7 +130,6 @@ impl Add<FGoldilocks> for FGoldilocksExt2 {
         self
     }
 }
-
 impl<'a> Add<&'a FGoldilocks> for FGoldilocksExt2 {
     type Output = Self;
 
@@ -91,18 +139,31 @@ impl<'a> Add<&'a FGoldilocks> for FGoldilocksExt2 {
         self
     }
 }
+impl Add<i64> for FGoldilocksExt2 {
+    type Output = Self;
 
+    #[inline]
+    fn add(mut self, rhs: i64) -> Self::Output {
+        self += &FGoldilocks::from(rhs);
+        self
+    }
+}
 impl AddAssign<FGoldilocks> for FGoldilocksExt2 {
     #[inline]
     fn add_assign(&mut self, rhs: FGoldilocks) {
         *self += &rhs;
     }
 }
-
 impl<'a> AddAssign<&'a FGoldilocks> for FGoldilocksExt2 {
     #[inline]
     fn add_assign(&mut self, rhs: &'a FGoldilocks) {
         self.0[0] += rhs;
+    }
+}
+impl AddAssign<i64> for FGoldilocksExt2 {
+    #[inline]
+    fn add_assign(&mut self, rhs: i64) {
+        *self += &FGoldilocks::from(rhs);
     }
 }
 
@@ -115,7 +176,6 @@ impl Sub<FGoldilocks> for FGoldilocksExt2 {
         self
     }
 }
-
 impl<'a> Sub<&'a FGoldilocks> for FGoldilocksExt2 {
     type Output = Self;
 
@@ -125,18 +185,31 @@ impl<'a> Sub<&'a FGoldilocks> for FGoldilocksExt2 {
         self
     }
 }
+impl Sub<i64> for FGoldilocksExt2 {
+    type Output = Self;
 
+    #[inline]
+    fn sub(mut self, rhs: i64) -> Self::Output {
+        self -= &FGoldilocks::from(rhs);
+        self
+    }
+}
 impl SubAssign<FGoldilocks> for FGoldilocksExt2 {
     #[inline]
     fn sub_assign(&mut self, rhs: FGoldilocks) {
         *self -= &rhs;
     }
 }
-
 impl<'a> SubAssign<&'a FGoldilocks> for FGoldilocksExt2 {
     #[inline]
     fn sub_assign(&mut self, rhs: &'a FGoldilocks) {
         self.0[0] -= rhs;
+    }
+}
+impl SubAssign<i64> for FGoldilocksExt2 {
+    #[inline]
+    fn sub_assign(&mut self, rhs: i64) {
+        *self -= &FGoldilocks::from(rhs);
     }
 }
 
@@ -255,12 +328,12 @@ impl<'a> MulAssign<&'a FGoldilocksExt2> for FGoldilocksExt2 {
 impl Field for FGoldilocksExt2 {
     /// The zero element of the field, the additive identity.
     fn zero() -> Self {
-        Self([FGoldilocks::from(0); 2])
+        Self([FGoldilocks::from(0u64); 2])
     }
 
     /// The one element of the field, the multiplicative identity.
     fn one() -> Self {
-        Self([FGoldilocks::from(1), FGoldilocks::from(0)])
+        Self([FGoldilocks::from(1u64), FGoldilocks::from(0u64)])
     }
 
     /// Returns an element chosen uniformly at random using a user-provided RNG.
@@ -299,7 +372,7 @@ impl Field for FGoldilocksExt2 {
 
         let a_pow_r_minus_1 = self.frobenius();
         let a_pow_r = a_pow_r_minus_1 * *self;
-        debug_assert!(a_pow_r.0[1] == FGoldilocks::ZERO);
+        debug_assert!(a_pow_r.0[1] == FGoldilocks::from(0u64));
         let a_pow_r_inv = a_pow_r.0[0].invert().expect("inverse does not exist");
 
         let res = [
@@ -312,7 +385,7 @@ impl Field for FGoldilocksExt2 {
 
     /// Returns the square root of the field element, if it is
     /// quadratic residue.
-    fn sqrt(&self) -> Option<Self> {
+    fn sqrt(&self) -> CtOption<Self> {
         unimplemented!()
     }
 }

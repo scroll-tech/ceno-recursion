@@ -5,6 +5,7 @@ use rand::RngCore;
 
 use crate::ff_field::FGoldilocks;
 use ff::derive::subtle::CtOption;
+use rug::Integer;
 
 /// Degree 2 FGoldilocks extension field mod x^2 - 7
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
@@ -235,22 +236,22 @@ impl<'a> Add<&'a FGoldilocksExt2> for FGoldilocksExt2 {
     type Output = Self;
 
     #[inline]
-    fn add(self, rhs: Self) -> Self::Output {
+    fn add(self, rhs: &'a FGoldilocksExt2) -> Self::Output {
         Self([self.0[0] + rhs.0[0], self.0[1] + rhs.0[1]])
     }
 }
 impl AddAssign for FGoldilocksExt2 {
     #[inline]
     fn add_assign(&mut self, rhs: FGoldilocksExt2) {
-        *self.0[0] += &rhs.0[0];
-        *self.0[1] += &rhs.0[1];
+        self.0[0] += &rhs.0[0];
+        self.0[1] += &rhs.0[1];
     }
 }
 impl<'a> AddAssign<&'a FGoldilocksExt2> for FGoldilocksExt2 {
     #[inline]
     fn add_assign(&mut self, rhs: &'a FGoldilocksExt2) {
-        *self.0[0] += rhs.0[0];
-        *self.0[1] += rhs.0[1];
+        self.0[0] += rhs.0[0];
+        self.0[1] += rhs.0[1];
     }
 }
 
@@ -266,22 +267,22 @@ impl<'a> Sub<&'a FGoldilocksExt2> for FGoldilocksExt2 {
     type Output = Self;
 
     #[inline]
-    fn sub(self, rhs: Self) -> Self::Output {
+    fn sub(self, rhs: &'a FGoldilocksExt2) -> Self::Output {
         Self([self.0[0] - rhs.0[0], self.0[1] - rhs.0[1]])
     }
 }
 impl SubAssign for FGoldilocksExt2 {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
-        *self.0[0] -= rhs.0[0];
-        *self.0[1] -= rhs.0[1];
+        self.0[0] -= rhs.0[0];
+        self.0[1] -= rhs.0[1];
     }
 }
 impl<'a> SubAssign<&'a FGoldilocksExt2> for FGoldilocksExt2 {
     #[inline]
-    fn sub_assign(&mut self, rhs: Self) {
-        *self.0[0] -= rhs.0[0];
-        *self.0[1] -= rhs.0[1];
+    fn sub_assign(&mut self, rhs: &'a FGoldilocksExt2) {
+        self.0[0] -= rhs.0[0];
+        self.0[1] -= rhs.0[1];
     }
 }
 
@@ -292,7 +293,7 @@ fn mul_internal(a: &FGoldilocksExt2, b: &FGoldilocksExt2) -> FGoldilocksExt2 {
     let a2b1 = a.0[1] * b.0[0];
     let a2b2 = a.0[1] * b.0[1];
 
-    let c1 = a1b1 + FGoldilocks::from(7) * a2b2;
+    let c1 = a1b1 + FGoldilocks::from(7u64) * a2b2;
     let c2 = a2b1 + a1b2;
     FGoldilocksExt2::from([c1, c2])
 }
@@ -308,7 +309,7 @@ impl<'a> Mul<&'a FGoldilocksExt2> for FGoldilocksExt2 {
     type Output = Self;
 
     #[inline]
-    fn mul(self, rhs: Self) -> Self::Output {
+    fn mul(self, rhs: &'a FGoldilocksExt2) -> Self::Output {
         mul_internal(&self, &rhs)
     }
 }
@@ -320,7 +321,7 @@ impl MulAssign for FGoldilocksExt2 {
 }
 impl<'a> MulAssign<&'a FGoldilocksExt2> for FGoldilocksExt2 {
     #[inline]
-    fn mul_assign(&mut self, rhs: Self) {
+    fn mul_assign(&mut self, rhs: &'a FGoldilocksExt2) {
         *self = mul_internal(&self, &rhs);
     }
 }
@@ -387,5 +388,39 @@ impl Field for FGoldilocksExt2 {
     /// quadratic residue.
     fn sqrt(&self) -> CtOption<Self> {
         unimplemented!()
+    }
+}
+
+impl std::convert::From<[FGoldilocks; 2]> for FGoldilocksExt2 {
+    #[track_caller]
+    fn from(limbs: [FGoldilocks; 2]) -> Self {
+        FGoldilocksExt2(limbs)
+    }
+}
+
+impl std::convert::From<Integer> for FGoldilocksExt2 {
+    #[track_caller]
+    fn from(mut i: Integer) -> Self {
+        todo!()
+    }
+}
+
+impl std::convert::From<i64> for FGoldilocksExt2 {
+    #[track_caller]
+    fn from(mut i: i64) -> Self {
+        let u = i.abs_diff(0);
+        let neg = i < 0;
+        if neg {
+            -FGoldilocksExt2::from(u)
+        } else {
+            FGoldilocksExt2::from(u)
+        }
+    }
+}
+
+impl std::convert::From<u64> for FGoldilocksExt2 {
+    #[track_caller]
+    fn from(i: u64) -> Self {
+        FGoldilocksExt2::from([FGoldilocks::from(i), FGoldilocks::from(0u64)])
     }
 }

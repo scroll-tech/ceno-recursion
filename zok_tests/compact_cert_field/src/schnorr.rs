@@ -68,7 +68,8 @@ pub fn gen() -> (PublicKey, SecretKey) {
     (pk, sk)
 }
 
-pub fn sign(sk: &SecretKey, m: &Fp) -> Signature {
+// Record down e to be used by the circuit
+pub fn sign(sk: &SecretKey, m: &Fp) -> (Signature, U512) {
     let order: U512 = U512::from_dec_str("7237005577332262213973186563042994240955753618821290553176770668684506720427").unwrap();
     let (k, _) = gen_r(252);
     let r = curve_mul(&sk.pk.p, k);
@@ -81,10 +82,10 @@ pub fn sign(sk: &SecretKey, m: &Fp) -> Signature {
         e %= order;
     }
     let s = (k + sk.a * e) % order;
-    Signature {
-        r,
-        s
-    }
+    (
+        Signature { r, s },
+        e
+    )
 }
 
 pub fn verify_sig(pk: &PublicKey, sig: &Signature, m: &Fp) {

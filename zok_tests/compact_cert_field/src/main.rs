@@ -11,6 +11,10 @@ use crate::poseidon::*;
 use crate::merkle::*;
 use ff::PrimeField;
 
+use std::fs::File;
+use std::io::Write;
+use rug::{Integer, integer::Order};
+
 // Attestor info
 #[derive(Clone)]
 struct Attestor {
@@ -98,6 +102,7 @@ const NUM_ATTESTORS: usize = 10;
 const PROVEN_WEIGHT: usize = 8;
 const KNOWLEDGE_SOUNDNESS: usize = 10; // knowledge soundness of 2^{-k}
 const MAX_NUM_REVEALS: usize = 8; // num reveals 2^q
+const SIG_WIDTH: usize = 253;
 
 // Commit all attestors as a merkle tree
 fn trusted_setup(
@@ -174,6 +179,7 @@ fn prover(
 
     // Fiat-Shamir of oracle queries
     let num_reveals: usize = (k + q).div_ceil((signed_weight / proven_weight).ilog2() as usize);
+    println!("Num Reveals: {}", num_reveals);
     let mut t_list = Vec::new();
     let mut att_list = Vec::new();
     let mut sig_list = Vec::new();
@@ -256,16 +262,25 @@ fn verifier(
     }
 }
 
+impl std::convert::From<&Fp> for Integer {
+    fn from(f: &Fp) -> Self {
+        Self::from_digits(f.to_repr().as_ref(), Order::Lsf)
+    }
+}
+
 fn main() {
     // Generate message
     let message = Fp::from_str_vartime("4025061991628092675460898405984409787580357548626371141566464220460064800482").unwrap();
 
     // Generate attestors
     let mut attestors = Vec::new();
+    // Record all e's to be used by the circuit
+    let mut e_list = Vec::new();
     for i in 0..NUM_ATTESTORS {
         let (pk, sk) = gen();
-        let attestor_sig = sign(&sk, &message);
+        let (attestor_sig, e) = sign(&sk, &message);
         attestors.push(Attestor::new(attestor_sig, pk, i));
+        e_list.push(e);
     }
     let k = KNOWLEDGE_SOUNDNESS;
     let q = MAX_NUM_REVEALS;
@@ -280,5 +295,150 @@ fn main() {
     // VERIFIER
     verifier(&compact_cert_proof, PROVEN_WEIGHT, k, q, &message, attestors.len(), att_root, &att_list, &sig_list);
 
-    println!("Verification Successful!")
+    println!("Verification Successful!");
+
+    // Generate input for Zok
+    let file_name = format!("../benchmarks/compact_cert/compact_cert.input");
+    let mut f = File::create(file_name).unwrap();
+    // u32 num_attestors
+    writeln!(&mut f, "num_attestors {}", NUM_ATTESTORS).unwrap();
+    // For compact_cert_proof
+    // field sig_root
+    writeln!(&mut f, "sig_root {}", Integer::from(&compact_cert_proof.sig_root)).unwrap();
+    // u32 signed_weight,
+    writeln!(&mut f, "signed_weight {}", compact_cert_proof.signed_weight).unwrap();
+    // u32[0] t_i_list,
+    write!(&mut f, "t_i_list [ ");
+    for i in &compact_cert_proof.t_list {
+        write!(&mut f, "{} ", i.i);
+    }
+    writeln!(&mut f, "]");
+    // All memory entries within T (i_bits || s || pi_s.path || p || pi_p.path)
+    // field[0] t_mem,
+    write!(&mut f, "t_mem [ ");
+    // i_bits
+    let merkle_depth: usize = NUM_ATTESTORS.next_power_of_two().ilog2().div_ceil(1).try_into().unwrap();
+    for i in &compact_cert_proof.t_list {
+        let mut i = i.i.clone();
+        // Split i.i into big endian bits, with len = log(NUM_ATTESTORS) rounded up
+        let mut i_bits = Vec::new();
+        for _ in 0..merkle_depth {
+            i_bits.insert(0, i % 2);
+            i /= 2;
+        }
+        for j in 0..merkle_depth {
+            write!(&mut f, "{} ", i_bits[j]);
+        }
+    }
+    // s: sig_r_x, sig_r_y, sig_s, l, r
+    for s in &sig_list {
+        for e in &s.to_list() {
+            write!(&mut f, "{} ", Integer::from(e));
+        }
+    }
+    // pi_s.path
+    for i in &compact_cert_proof.t_list {
+        for p in &i.pi_s.path {
+            write!(&mut f, "{} ", Integer::from(p));
+        }
+    }
+    // p
+    for p in &att_list {
+        for e in &p.to_list() {
+            write!(&mut f, "{} ", Integer::from(e));
+        }
+    }
+    // pi_p.path
+    for i in &compact_cert_proof.t_list {
+        for p in &i.pi_p.path {
+            write!(&mut f, "{} ", Integer::from(p));
+        }
+    }
+    writeln!(&mut f, "]");
+    // List of pointers (input format field[0])
+    let num_reveals = att_list.len();
+    // bool[0][0] t_i_bits_list
+    write!(&mut f, "t_i_bits_list [ ");
+    for p in (0..num_reveals).map(|i| i * merkle_depth) {
+        write!(&mut f, "{} ", p);
+    }
+    writeln!(&mut f, "]");
+    // field[0][0] t_s_list,
+    write!(&mut f, "t_s_list [ ");
+    for p in (0..num_reveals).map(|i| num_reveals * merkle_depth + i * 5) {
+        write!(&mut f, "{} ", p);
+    }
+    writeln!(&mut f, "]");
+    // field[0][0] t_pi_s_path_list,
+    write!(&mut f, "t_pi_s_path_list [ ");
+    for p in (0..num_reveals).map(|i| num_reveals * (merkle_depth + 5) + i * merkle_depth) {
+        write!(&mut f, "{} ", p);
+    }
+    writeln!(&mut f, "]");
+    // field[0][0] t_p_list,
+    write!(&mut f, "t_p_list [ ");
+    for p in (0..num_reveals).map(|i| num_reveals * (2 * merkle_depth + 5) + i * 5) {
+        write!(&mut f, "{} ", p);
+    }
+    writeln!(&mut f, "]");
+    // field[0][0] t_pi_p_path_list,
+    write!(&mut f, "t_pi_p_path_list [ ");
+    for p in (0..num_reveals).map(|i| num_reveals * (2 * merkle_depth + 10) + i * merkle_depth) {
+        write!(&mut f, "{} ", p);
+    }
+    writeln!(&mut f, "]");
+    // For others
+    // u32 proven_weight,
+    writeln!(&mut f, "proven_weight {}", PROVEN_WEIGHT).unwrap();
+    // u32 num_reveals,
+    writeln!(&mut f, "num_reveals {}", num_reveals).unwrap();
+    // field message,
+    writeln!(&mut f, "message {}", Integer::from(&message)).unwrap();
+    // u32 merkle_depth,
+    writeln!(&mut f, "merkle_depth {}", merkle_depth).unwrap();
+    // field att_root,
+    writeln!(&mut f, "att_root {}", Integer::from(&att_root)).unwrap();
+    // Memory entries of e_bits || s_bits
+    // field[0] e_s_mem,
+    write!(&mut f, "e_s_mem [ ");
+    for i in 0..num_reveals {
+        let next_att = compact_cert_proof.t_list[i].i;
+        let mut e = e_list[next_att].clone();
+        // Split e into SIG_WIDTH little-endian bits
+        let mut e_bits = Vec::new();
+        for _ in 0..SIG_WIDTH {
+            e_bits.insert(0, e % 2);
+            e /= 2;
+        }
+        for j in 0..SIG_WIDTH {
+            write!(&mut f, "{} ", e_bits[j]);
+        }
+    }
+    for i in 0..num_reveals {
+        let mut s = Integer::from(&compact_cert_proof.t_list[i].s).clone();
+        // Split s into SIG_WIDTH little-endian bits
+        let mut s_bits = Vec::new();
+        for _ in 0..SIG_WIDTH {
+            s_bits.insert(0, s.clone() % 2);
+            s /= 2;
+        }
+        for j in 0..SIG_WIDTH {
+            write!(&mut f, "{} ", s_bits[j]);
+        }
+    }
+    writeln!(&mut f, "]");
+    // List of pointers (input format field[0])
+    // bool[0][0] e_bits_list
+    write!(&mut f, "e_bits_list [ ");
+    for p in (0..num_reveals).map(|i| num_reveals * (3 * merkle_depth + 10) + i * SIG_WIDTH) {
+        write!(&mut f, "{} ", p);
+    }
+    writeln!(&mut f, "]");
+    // bool[0][0] s_bits_list
+    write!(&mut f, "s_bits_list [ ");
+    for p in (0..num_reveals).map(|i| num_reveals * (3 * merkle_depth + 10 + SIG_WIDTH) + i * SIG_WIDTH) {
+        write!(&mut f, "{} ", p);
+    }
+    writeln!(&mut f, "]");
+    write!(&mut f, "END").unwrap();
 }

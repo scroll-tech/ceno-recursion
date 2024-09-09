@@ -63,6 +63,62 @@ def verifier(
 
     return 1
 
+// Parse out the inputs in simple register - memory form
+def main(
+    u32 num_attestors,
+    // For compact_cert_proof
+    field sig_root,
+    u32 signed_weight,
+    u32[0] t_i_list,
+    // All memory entries within T (i_bits || s || pi_s.path || p || pi_p.path)
+    field[0] t_mem,
+    // List of pointers (input format field[0])
+    bool[0][0] t_i_bits_list,
+    field[0][0] t_s_list,
+    field[0][0] t_pi_s_path_list,
+    field[0][0] t_p_list,
+    field[0][0] t_pi_p_path_list,
+    // For others
+    u32 proven_weight,
+    u32 num_reveals,
+    field message,
+    u32 merkle_depth,
+    field att_root,
+    // Memory entries of e_bits || s_bits
+    field[0] e_s_mem,
+    // List of pointers (input format field[0])
+    bool[0][0] e_bits_list,
+    bool[0][0] s_bits_list
+) -> u32:
+    field message = 6908441180828167112785246881494320159273940089327447106269949444716788494909
+    array_decl T[num_reveals] t_list
+    for u32 k in 0..num_reveals do
+        t_list[k] = T {
+            i: t_i_list[k],
+            i_bits: t_i_bits_list[k],
+            s: t_s_list[k],
+            pi_s: MerkleProof { path: t_pi_s_path_list[k] },
+            p: t_p_list[k],
+            pi_p: MerkleProof { path: t_pi_p_path_list[k] }
+        }
+    endfor
+    CompactCertProof compact_cert_proof = CompactCertProof {
+        sig_root: sig_root,
+        signed_weight: signed_weight,
+        t_list: t_list
+    }
+
+    return verifier(
+        compact_cert_proof,
+        proven_weight,
+        num_reveals,
+        message,
+        merkle_depth,
+        att_root,
+        e_bits_list,
+        s_bits_list
+    )
+/*
 def main() -> u32:
     field message = 6908441180828167112785246881494320159273940089327447106269949444716788494909
 
@@ -74,7 +130,7 @@ def main() -> u32:
     array_decl PublicKey[num_attestors] pk_list
     array_decl Signature[num_attestors] sig_list
     // Constant folding to avoid constructing new blocks
-    for u32 i in 0..8 /*num_attestors*/ do
+    for u32 i in 0..8 do
         pk_list[i] = PublicKey {
             p: Point {
                 x: 2023776050662786605020065854616777351003832247628992350849206310281785027488,
@@ -164,3 +220,4 @@ def main() -> u32:
         e_bits_list,
         s_bits_list
     )
+    */

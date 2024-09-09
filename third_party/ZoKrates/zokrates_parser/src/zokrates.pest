@@ -22,7 +22,7 @@ return_types = _{ ( "->" ~ ( "(" ~ ty_list ~ ")" | ty ))? }
 constant_generics_declaration = _{ "<" ~ constant_generics_list ~ ">" }
 constant_generics_list = _{ identifier ~ ("," ~ identifier)* }
 
-parameter_list = _{(parameter ~ ("," ~ NEWLINE? ~ parameter)*)?}
+parameter_list = _{(parameter ~ ("," ~ NEWLINE? ~ COMMENT? ~ NEWLINE? ~ parameter)*)?}
 parameter = {array_param_metadata? ~ vis? ~ ty ~ identifier}
 
 // basic types

@@ -259,7 +259,7 @@ impl<'ast> ZGen<'ast> {
 
             // Determine if ty is basic or complex
             match x {
-                Ty::Uint(_) | Ty::Field => {
+                Ty::Uint(_) | Ty::Field | Ty::Bool => {
                     if *alive {
                         let (name, _) = &bls[entry_bl].inputs[input_count];
                         let val = self.int_to_t(&entry_regs[i], &x)?;
@@ -272,36 +272,36 @@ impl<'ast> ZGen<'ast> {
                     }
                 },
                 Ty::Array(_, entry_ty) => {
-                    match **entry_ty {
-                        Ty::Uint(_) | Ty::Field => {
-                            if *alive {
-                                let (name, _) = &bls[entry_bl].inputs[input_count];
-                                // Declare the array as a pointer
-                                let val = self.int_to_t(&entry_regs[i], &Ty::Field)?;
-                                self.declare_init_impl_::<true>(
-                                    name.to_string(),
-                                    Ty::Field,
-                                    val,
-                                )?;
-                                input_count += 1;
-                            }
-                            // Add all entries as STOREs
-                            for entry in &entry_arrays[i] {
-                                let addr = addr_count;
-                                let addr_t = self.int_to_t(&Integer::from(addr_count), &Ty::Field)?;
-                                let data_t = self.int_to_t(&entry, &*entry_ty)?;
-                                let ls_t = self.int_to_t(&Integer::from(STORE), &Ty::Field)?;
-                                let ts = 0;
-                                let ts_t = self.int_to_t(&Integer::from(0), &Ty::Field)?;
-                                vir_mem.push(Some(data_t.clone()));
-                                init_mem_list.push(MemOp::new_vir(addr, addr_t, data_t, ls_t, ts, ts_t));
-                                addr_count += 1;
-                            }
-                        },
-                        _ => { panic!("Bool, Struct and NestedArray input types not supported!") }
+                    let entry_ty = match **entry_ty {
+                        Ty::Uint(_) | Ty::Field | Ty::Bool => { &*entry_ty },
+                        Ty::Array(..) => { &Ty::Field }
+                        _ => { panic!("Struct input type not supported!") }
+                    };
+                    if *alive {
+                        let (name, _) = &bls[entry_bl].inputs[input_count];
+                        // Declare the array as a pointer
+                        let val = self.int_to_t(&entry_regs[i], &Ty::Field)?;
+                        self.declare_init_impl_::<true>(
+                            name.to_string(),
+                            Ty::Field,
+                            val,
+                        )?;
+                        input_count += 1;
+                    }
+                    // Add all entries as STOREs
+                    for entry in &entry_arrays[i] {
+                        let addr = addr_count;
+                        let addr_t = self.int_to_t(&Integer::from(addr_count), &Ty::Field)?;
+                        let data_t = self.int_to_t(&entry, &*entry_ty)?;
+                        let ls_t = self.int_to_t(&Integer::from(STORE), &Ty::Field)?;
+                        let ts = 0;
+                        let ts_t = self.int_to_t(&Integer::from(0), &Ty::Field)?;
+                        vir_mem.push(Some(data_t.clone()));
+                        init_mem_list.push(MemOp::new_vir(addr, addr_t, data_t, ls_t, ts, ts_t));
+                        addr_count += 1;
                     }
                 },
-                _ => { panic!("Bool, Struct and NestedArray input types not supported!") }
+                _ => { panic!("Struct input type not supported!") }
             }
             i += 1;
         }
@@ -325,7 +325,7 @@ impl<'ast> ZGen<'ast> {
                 for (name, ty) in &bls[nb].inputs {
                     if let Some(x) = ty {
                         let output_name = str::replace(name, "i", "o");
-                        let val = self.cvar_lookup(&output_name).unwrap_or(
+                        let val = self.cvar_lookup(&output_name).unwrap_or_else( ||
                             self.expr_impl_::<true>(&Expression::Literal(
                                 match x {
                                     Ty::Bool => {

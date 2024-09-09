@@ -1029,18 +1029,17 @@ fn main() {
     while buffer != "END".to_string() {
         let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
         // split is either of form [VAR, VAL] or [VAR, "[", ENTRY_0, ENTRY_1, ..., "]"] 
-        if let Ok(val) = split[1].parse::<usize>() {
-            entry_regs.push(Integer::from(val));
+        if let Ok(val) = Integer::from_str_radix(&split[1], 10) {
+            entry_regs.push(val);
             entry_arrays.push(vec![]);
         } else {
             assert_eq!(split[1], "[");
             assert_eq!(split[split.len() - 1], "]");
             entry_regs.push(Integer::from(alloc_counter));
             // Parse the entries
-            entry_arrays.push(split[2..split.len() - 1].iter().map(|entry| Integer::from(entry.parse::<usize>().unwrap())).collect());
+            entry_arrays.push(split[2..split.len() - 1].iter().map(|entry| Integer::from_str_radix(&entry, 10).unwrap()).collect());
             alloc_counter += split.len() - 3; // var, "[", and "]"
         }
-
         buffer.clear();
         reader.read_line(&mut buffer).unwrap();
     }

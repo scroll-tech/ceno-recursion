@@ -400,14 +400,15 @@ impl std::convert::From<[FGoldilocks; 2]> for FGoldilocksExt2 {
 
 impl std::convert::From<Integer> for FGoldilocksExt2 {
     #[track_caller]
-    fn from(mut i: Integer) -> Self {
-        todo!()
+    fn from(i: Integer) -> Self {
+        let ui: u64 = i.try_into().unwrap();
+        FGoldilocksExt2::from(ui)
     }
 }
 
 impl std::convert::From<i64> for FGoldilocksExt2 {
     #[track_caller]
-    fn from(mut i: i64) -> Self {
+    fn from(i: i64) -> Self {
         let u = i.abs_diff(0);
         let neg = i < 0;
         if neg {
@@ -422,5 +423,13 @@ impl std::convert::From<u64> for FGoldilocksExt2 {
     #[track_caller]
     fn from(i: u64) -> Self {
         FGoldilocksExt2::from([FGoldilocks::from(i), FGoldilocks::from(0u64)])
+    }
+}
+
+impl std::convert::From<&FGoldilocksExt2> for Integer {
+    #[track_caller]
+    fn from(f: &FGoldilocksExt2) -> Self {
+        assert_eq!(f.0[1], FGoldilocks::from(0u64));
+        Integer::from(&f.0[0])
     }
 }

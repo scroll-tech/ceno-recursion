@@ -93,6 +93,7 @@ impl From<CircOpt> for CircCfg {
                 circ_opt::BuiltinField::Bls12381 => FieldT::FBls12381,
                 circ_opt::BuiltinField::Bn254 => FieldT::FBn254,
                 circ_opt::BuiltinField::Curve25519 => FieldT::FCurve25519,
+                circ_opt::BuiltinField::GoldilocksExt2 => FieldT::FGoldilocksExt2,
             }
         };
         Self { opt, field }

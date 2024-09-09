@@ -2327,7 +2327,6 @@ impl<'ast> ZGen<'ast> {
         let ty_map_out = bl_out;
 
         // Update input of all blocks
-        // Note: block 0 takes function input and %BN as input
         for i in 0..bls.len() {
             bls[i].inputs = Vec::new();
             // Only variables that are alive & defined will become parts of inputs / outputs
@@ -2343,13 +2342,17 @@ impl<'ast> ZGen<'ast> {
                 }
             }
         }
-        // Determine liveness of each input variable
+
+        // For entry block, inputs need to be sorted the same order as program input
+        // Determine liveness of each program input along the way
+        bls[*entry_bl].inputs = Vec::new();
         let mut input_liveness = Vec::new();
-        let mut next_live_input_index = 0;
         for (name, _) in &inputs {
-            if &bls[0].inputs[next_live_input_index].0 == name {
+            if input_lst[*entry_bl].contains(name) {
                 input_liveness.push(true);
-                next_live_input_index += 1;
+                if let Some(ty) = ty_map_in[*entry_bl].get(name) {
+                    bls[*entry_bl].inputs.push((name.to_string(), Some(ty.clone())));
+                }
             } else {
                 input_liveness.push(false);
             }
@@ -3257,7 +3260,7 @@ impl<'ast> ZGen<'ast> {
         */
 
         // VtR
-        let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) = self.var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl, inputs);
+        let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) = self.var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl);
         if VERBOSE {
             println!("\n\n--\nVar -> Reg:");
             println!("Var -> IO map:");
@@ -3316,8 +3319,7 @@ impl<'ast> ZGen<'ast> {
         mut bls: Vec<Block<'ast>>,
         predecessor: &Vec<BTreeSet<usize>>,
         successor: &Vec<BTreeSet<usize>>,
-        entry_bl: usize,
-        inputs: Vec<(String, Ty)>
+        entry_bl: usize
     ) -> (Vec<Block<'ast>>, Vec<BTreeMap<String, usize>>, usize, BTreeMap<String, usize>, usize, Vec<(Vec<usize>, Vec<usize>)>) {    
         // reg_map is consisted of two Var -> Reg Maps: TRANSITION_MAP_LIST & WITNESS_MAP
         // TRANSITION_MAP_LIST is a list of maps corresponding to each transition state
@@ -3330,11 +3332,11 @@ impl<'ast> ZGen<'ast> {
         let mut bl_in: Vec<Option<usize>> = vec![None; bls.len()];
         let mut bl_out: Vec<Option<usize>> = vec![None; bls.len()];
 
-        // Process program inputs
+        // Process entry_block
         let input_map = {
             let mut io_map: BTreeMap<String, usize> = new_io_map();
             // inputs
-            for (v, _) in &inputs {
+            for (v, _) in &bls[entry_bl].inputs {
                 (_, io_map, _) = var_name_to_reg_id_expr::<1>(v.to_string(), io_map);
             }
             io_map

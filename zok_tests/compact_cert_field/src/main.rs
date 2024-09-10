@@ -359,31 +359,32 @@ fn main() {
     let num_reveals = att_list.len();
     // bool[0][0] t_i_bits_list
     write!(&mut f, "t_i_bits_list [ ");
-    for p in (0..num_reveals).map(|i| i * merkle_depth) {
+    // Account for t_i_list in the offset
+    for p in (0..num_reveals).map(|i| num_reveals + i * merkle_depth) {
         write!(&mut f, "{} ", p);
     }
     writeln!(&mut f, "]");
     // field[0][0] t_s_list,
     write!(&mut f, "t_s_list [ ");
-    for p in (0..num_reveals).map(|i| num_reveals * merkle_depth + i * 5) {
+    for p in (0..num_reveals).map(|i| num_reveals * (merkle_depth + 1) + i * 5) {
         write!(&mut f, "{} ", p);
     }
     writeln!(&mut f, "]");
     // field[0][0] t_pi_s_path_list,
     write!(&mut f, "t_pi_s_path_list [ ");
-    for p in (0..num_reveals).map(|i| num_reveals * (merkle_depth + 5) + i * merkle_depth) {
+    for p in (0..num_reveals).map(|i| num_reveals * (merkle_depth + 6) + i * merkle_depth) {
         write!(&mut f, "{} ", p);
     }
     writeln!(&mut f, "]");
     // field[0][0] t_p_list,
     write!(&mut f, "t_p_list [ ");
-    for p in (0..num_reveals).map(|i| num_reveals * (2 * merkle_depth + 5) + i * 5) {
+    for p in (0..num_reveals).map(|i| num_reveals * (2 * merkle_depth + 6) + i * 5) {
         write!(&mut f, "{} ", p);
     }
     writeln!(&mut f, "]");
     // field[0][0] t_pi_p_path_list,
     write!(&mut f, "t_pi_p_path_list [ ");
-    for p in (0..num_reveals).map(|i| num_reveals * (2 * merkle_depth + 10) + i * merkle_depth) {
+    for p in (0..num_reveals).map(|i| num_reveals * (2 * merkle_depth + 11) + i * merkle_depth) {
         write!(&mut f, "{} ", p);
     }
     writeln!(&mut f, "]");
@@ -430,13 +431,13 @@ fn main() {
     // List of pointers (input format field[0])
     // bool[0][0] e_bits_list
     write!(&mut f, "e_bits_list [ ");
-    for p in (0..num_reveals).map(|i| num_reveals * (3 * merkle_depth + 10) + i * SIG_WIDTH) {
+    for p in (0..num_reveals).map(|i| num_reveals * (3 * merkle_depth + 11) + i * SIG_WIDTH) {
         write!(&mut f, "{} ", p);
     }
     writeln!(&mut f, "]");
     // bool[0][0] s_bits_list
     write!(&mut f, "s_bits_list [ ");
-    for p in (0..num_reveals).map(|i| num_reveals * (3 * merkle_depth + 10 + SIG_WIDTH) + i * SIG_WIDTH) {
+    for p in (0..num_reveals).map(|i| num_reveals * (3 * merkle_depth + 11 + SIG_WIDTH) + i * SIG_WIDTH) {
         write!(&mut f, "{} ", p);
     }
     writeln!(&mut f, "]");

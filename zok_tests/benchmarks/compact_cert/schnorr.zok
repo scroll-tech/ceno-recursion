@@ -24,7 +24,7 @@ def point_add(Point a, Point b) -> Point:
 
 // k_bits is in big-endian of length 253
 // Use k_bits for multiplication while simultaneous check it matches k
-def point_mul(Point a, field k, bool[0] k_bits) -> Point:
+def point_mul(Point a, field k, field[0] k_bits) -> Point:
     // Hack: set (0, 0) to be the identity
     Point a_k = Point {
         x: 0,
@@ -34,7 +34,9 @@ def point_mul(Point a, field k, bool[0] k_bits) -> Point:
     for u32 i in 0..WIDTH do
         a_k = point_add(a_k, a_k)
         k_assemb = k_assemb * 2
-        if k_bits[i] then
+        field next_bit = k_bits[i]
+        assert(next_bit * (next_bit - 1) == 0)
+        if next_bit == 1 then
             a_k = point_add(a_k, a)
             k_assemb = k_assemb + 1 
         endif
@@ -100,10 +102,10 @@ def point_double_add_batch(
 def point_mul_batch(
     Point a_0, 
     field k_0, 
-    bool[0] k_bits_0,
+    field[0] k_bits_0,
     Point a_1, 
     field k_1, 
-    bool[0] k_bits_1
+    field[0] k_bits_1
 ) -> DoublePoint:
     // Hack: set (0, 0) to be the identity
     Point a_k_0 = Point {
@@ -120,15 +122,19 @@ def point_mul_batch(
         k_assemb_0 = k_assemb_0 * 2
         k_assemb_1 = k_assemb_1 * 2
         QuadPoint tmp = point_double_add_batch(a_k_0, a_0, a_k_1, a_1)
-        if k_bits_0[i] then
+        field next_bit_0 = k_bits_0[i]
+        assert(next_bit_0 * (next_bit_0 - 1) == 0)
+        k_assemb_0 = k_assemb_0 + next_bit_0
+        if next_bit_0 == 1 then
             a_k_0 = tmp.p2
-            k_assemb_0 = k_assemb_0 + 1 
         else
             a_k_0 = tmp.p0
         endif
-        if k_bits_1[i] then
+        field next_bit_1 = k_bits_1[i]
+        assert(next_bit_1 * (next_bit_1 - 1) == 0)
+        k_assemb_1 = k_assemb_1 + next_bit_1
+        if next_bit_1 == 1 then
             a_k_1 = tmp.p3
-            k_assemb_1 = k_assemb_1 + 1
         else
             a_k_1 = tmp.p1
         endif
@@ -150,7 +156,7 @@ struct Signature {
     field s
 }
 
-def verify_signature(field msg, PublicKey pk, Signature sig, bool[0] e_bits, bool[0] s_bits) -> u32:
+def verify_signature(field msg, PublicKey pk, Signature sig, field[0] e_bits, field[0] s_bits) -> u32:
     // Check all points are on the curve
     assert(pk.p.y * pk.p.y == pk.p.x * pk.p.x * pk.p.x + A * pk.p.x + B)
     assert(pk.q.y * pk.q.y == pk.q.x * pk.q.x * pk.q.x + A * pk.q.x + B)
@@ -164,12 +170,12 @@ def verify_signature(field msg, PublicKey pk, Signature sig, bool[0] e_bits, boo
     for u32 i in 0..WIDTH do
         s_assemb = s_assemb * 2
         e_assemb = e_assemb * 2
-        if s_bits[i] then
-            s_assemb = s_assemb + 1
-        endif
-        if e_bits[i] then
-            e_assemb = e_assemb + 1
-        endif
+        field s_bit = s_bits[i]
+        assert(s_bit * (s_bit - 1) == 0)
+        s_assemb = s_assemb + s_bit
+        field e_bit = e_bits[i]
+        assert(e_bit * (e_bit - 1) == 0)
+        e_assemb = e_assemb + e_bit
     endfor
     assert(s_assemb == sig.s)
     assert(e_assemb == e)
@@ -182,6 +188,7 @@ def verify_signature(field msg, PublicKey pk, Signature sig, bool[0] e_bits, boo
     assert(res.x == sp.x && res.y == sp.y)
     return 1
 
+/*
 def main() -> u32:
     field msg = 6908441180828167112785246881494320159273940089327447106269949444716788494909
 
@@ -217,3 +224,4 @@ def main() -> u32:
         s: s
     }
     return verify_signature(msg, pk, sig, e_bits, s_bits)
+*/

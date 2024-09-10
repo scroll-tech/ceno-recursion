@@ -366,7 +366,11 @@ impl<'ast> ZGen<'ast> {
                         );
                         self.declare_init_impl_::<true>(
                             name.to_string(),
-                            x.clone(),
+                            match x {
+                                Ty::Uint(_) | Ty::Field | Ty::Bool => { x.clone() },
+                                Ty::Array(..) => { Ty::Field },
+                                _ => { unreachable!() }
+                            },
                             val,
                         )?;
                     }

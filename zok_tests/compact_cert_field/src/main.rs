@@ -119,7 +119,7 @@ fn prover(
     message: &Fp, // the message being signed
     att_root: &Fp, // commitment to the attestors (root of merkle tree)
     att_tree: &MerkleTree,
-) -> Result<(CompactCertProof, Vec<Attestor>, Vec<Sig>), String> {
+) -> Result<(CompactCertProof, Vec<Attestor>, Vec<Sig>, Vec<usize>), String> {
     let mut signed_weight = 0;
     let mut collected_list = vec![false; attestors.len()];
     
@@ -183,6 +183,7 @@ fn prover(
     let mut t_list = Vec::new();
     let mut att_list = Vec::new();
     let mut sig_list = Vec::new();
+    let mut coin_list = Vec::new();
     for j in 0..num_reveals {
         // Produce coin
         let coin_hash_bytes = poseidon(&[Fp::from(j as u64), sig_tree.root.clone(), Fp::from(proven_weight as u64), message.clone(), att_root.clone()]).to_bytes();
@@ -191,6 +192,7 @@ fn prover(
             coin = (2 * coin + b as usize) % signed_weight;
         }
         let i = int_to_ind(coin, 0, attestors.len());
+        coin_list.push(coin);
         att_list.push(attestors[i].clone());
         sig_list.push(sigs[i].clone());
 
@@ -219,6 +221,7 @@ fn prover(
         },
         att_list,
         sig_list,
+        coin_list,
     ))
 }
 
@@ -270,7 +273,7 @@ impl std::convert::From<&Fp> for Integer {
 
 fn main() {
     // Generate message
-    let message = Fp::from_str_vartime("4025061991628092675460898405984409787580357548626371141566464220460064800482").unwrap();
+    let message = Fp::from_str_vartime("6908441180828167112785246881494320159273940089327447106269949444716788494909").unwrap();
 
     // Generate attestors
     let mut attestors = Vec::new();
@@ -290,7 +293,7 @@ fn main() {
     let att_root = att_tree.root;
     
     // PROVER
-    let (compact_cert_proof, att_list, sig_list) = prover(&attestors, PROVEN_WEIGHT, k, q, &message, &att_root, &att_tree).unwrap();
+    let (compact_cert_proof, att_list, sig_list, coin_list) = prover(&attestors, PROVEN_WEIGHT, k, q, &message, &att_root, &att_tree).unwrap();
 
     // VERIFIER
     verifier(&compact_cert_proof, PROVEN_WEIGHT, k, q, &message, attestors.len(), att_root, &att_list, &sig_list);
@@ -308,14 +311,14 @@ fn main() {
     // u32 signed_weight,
     writeln!(&mut f, "signed_weight {}", compact_cert_proof.signed_weight).unwrap();
     // u32[0] t_i_list,
-    write!(&mut f, "t_i_list [ ");
+    write!(&mut f, "t_i_list [ ").unwrap();
     for i in &compact_cert_proof.t_list {
-        write!(&mut f, "{} ", i.i);
+        write!(&mut f, "{} ", i.i).unwrap();
     }
-    writeln!(&mut f, "]");
+    writeln!(&mut f, "]").unwrap();
     // All memory entries within T (i_bits || s || pi_s.path || p || pi_p.path)
     // field[0] t_mem,
-    write!(&mut f, "t_mem [ ");
+    write!(&mut f, "t_mem [ ").unwrap();
     // i_bits
     let merkle_depth: usize = NUM_ATTESTORS.next_power_of_two().ilog2().div_ceil(1).try_into().unwrap();
     for i in &compact_cert_proof.t_list {
@@ -327,67 +330,67 @@ fn main() {
             i /= 2;
         }
         for j in 0..merkle_depth {
-            write!(&mut f, "{} ", i_bits[j]);
+            write!(&mut f, "{} ", i_bits[j]).unwrap();
         }
     }
     // s: sig_r_x, sig_r_y, sig_s, l, r
     for s in &sig_list {
         for e in &s.to_list() {
-            write!(&mut f, "{} ", Integer::from(e));
+            write!(&mut f, "{} ", Integer::from(e)).unwrap();
         }
     }
     // pi_s.path
     for i in &compact_cert_proof.t_list {
         for p in &i.pi_s.path {
-            write!(&mut f, "{} ", Integer::from(p));
+            write!(&mut f, "{} ", Integer::from(p)).unwrap();
         }
     }
     // p
     for p in &att_list {
         for e in &p.to_list() {
-            write!(&mut f, "{} ", Integer::from(e));
+            write!(&mut f, "{} ", Integer::from(e)).unwrap();
         }
     }
     // pi_p.path
     for i in &compact_cert_proof.t_list {
         for p in &i.pi_p.path {
-            write!(&mut f, "{} ", Integer::from(p));
+            write!(&mut f, "{} ", Integer::from(p)).unwrap();
         }
     }
-    writeln!(&mut f, "]");
+    writeln!(&mut f, "]").unwrap();
     // List of pointers (input format field[0])
     let num_reveals = att_list.len();
     // bool[0][0] t_i_bits_list
-    write!(&mut f, "t_i_bits_list [ ");
+    write!(&mut f, "t_i_bits_list [ ").unwrap();
     // Account for t_i_list in the offset
     for p in (0..num_reveals).map(|i| num_reveals + i * merkle_depth) {
-        write!(&mut f, "{} ", p);
+        write!(&mut f, "{} ", p).unwrap();
     }
-    writeln!(&mut f, "]");
+    writeln!(&mut f, "]").unwrap();
     // field[0][0] t_s_list,
-    write!(&mut f, "t_s_list [ ");
+    write!(&mut f, "t_s_list [ ").unwrap();
     for p in (0..num_reveals).map(|i| num_reveals * (merkle_depth + 1) + i * 5) {
-        write!(&mut f, "{} ", p);
+        write!(&mut f, "{} ", p).unwrap();
     }
-    writeln!(&mut f, "]");
+    writeln!(&mut f, "]").unwrap();
     // field[0][0] t_pi_s_path_list,
-    write!(&mut f, "t_pi_s_path_list [ ");
+    write!(&mut f, "t_pi_s_path_list [ ").unwrap();
     for p in (0..num_reveals).map(|i| num_reveals * (merkle_depth + 6) + i * merkle_depth) {
-        write!(&mut f, "{} ", p);
+        write!(&mut f, "{} ", p).unwrap();
     }
-    writeln!(&mut f, "]");
+    writeln!(&mut f, "]").unwrap();
     // field[0][0] t_p_list,
-    write!(&mut f, "t_p_list [ ");
+    write!(&mut f, "t_p_list [ ").unwrap();
     for p in (0..num_reveals).map(|i| num_reveals * (2 * merkle_depth + 6) + i * 5) {
-        write!(&mut f, "{} ", p);
+        write!(&mut f, "{} ", p).unwrap();
     }
-    writeln!(&mut f, "]");
+    writeln!(&mut f, "]").unwrap();
     // field[0][0] t_pi_p_path_list,
-    write!(&mut f, "t_pi_p_path_list [ ");
+    write!(&mut f, "t_pi_p_path_list [ ").unwrap();
     for p in (0..num_reveals).map(|i| num_reveals * (2 * merkle_depth + 11) + i * merkle_depth) {
-        write!(&mut f, "{} ", p);
+        write!(&mut f, "{} ", p).unwrap();
     }
-    writeln!(&mut f, "]");
+    writeln!(&mut f, "]").unwrap();
     // For others
     // u32 proven_weight,
     writeln!(&mut f, "proven_weight {}", PROVEN_WEIGHT).unwrap();
@@ -401,45 +404,52 @@ fn main() {
     writeln!(&mut f, "att_root {}", Integer::from(&att_root)).unwrap();
     // Memory entries of e_bits || s_bits
     // field[0] e_s_mem,
-    write!(&mut f, "e_s_mem [ ");
+    write!(&mut f, "e_s_mem [ ").unwrap();
     for i in 0..num_reveals {
         let next_att = compact_cert_proof.t_list[i].i;
         let mut e = e_list[next_att].clone();
-        // Split e into SIG_WIDTH little-endian bits
+        println!("i = {}, e = {}", i, e);
+        // Split e into SIG_WIDTH big endian bits
         let mut e_bits = Vec::new();
         for _ in 0..SIG_WIDTH {
-            e_bits.insert(0, e % 2);
+            e_bits.insert(0, e.clone() % 2);
             e /= 2;
         }
         for j in 0..SIG_WIDTH {
-            write!(&mut f, "{} ", e_bits[j]);
+            write!(&mut f, "{} ", e_bits[j]).unwrap();
         }
     }
     for i in 0..num_reveals {
-        let mut s = Integer::from(&compact_cert_proof.t_list[i].s).clone();
-        // Split s into SIG_WIDTH little-endian bits
+        let mut s = Integer::from(&sig_list[i].to_list()[2]).clone();
+        // Split s into SIG_WIDTH big endian bits
         let mut s_bits = Vec::new();
         for _ in 0..SIG_WIDTH {
             s_bits.insert(0, s.clone() % 2);
             s /= 2;
         }
         for j in 0..SIG_WIDTH {
-            write!(&mut f, "{} ", s_bits[j]);
+            write!(&mut f, "{} ", s_bits[j]).unwrap();
         }
     }
-    writeln!(&mut f, "]");
+    writeln!(&mut f, "]").unwrap();
     // List of pointers (input format field[0])
     // bool[0][0] e_bits_list
-    write!(&mut f, "e_bits_list [ ");
-    for p in (0..num_reveals).map(|i| num_reveals * (3 * merkle_depth + 11) + i * SIG_WIDTH) {
-        write!(&mut f, "{} ", p);
+    write!(&mut f, "e_bits_list [ ").unwrap();
+    for p in (0..num_reveals).map(|i| num_reveals * (3 * merkle_depth + 16) + i * SIG_WIDTH) {
+        write!(&mut f, "{} ", p).unwrap();
     }
-    writeln!(&mut f, "]");
+    writeln!(&mut f, "]").unwrap();
     // bool[0][0] s_bits_list
-    write!(&mut f, "s_bits_list [ ");
-    for p in (0..num_reveals).map(|i| num_reveals * (3 * merkle_depth + 11 + SIG_WIDTH) + i * SIG_WIDTH) {
-        write!(&mut f, "{} ", p);
+    write!(&mut f, "s_bits_list [ ").unwrap();
+    for p in (0..num_reveals).map(|i| num_reveals * (3 * merkle_depth + 16 + SIG_WIDTH) + i * SIG_WIDTH) {
+        write!(&mut f, "{} ", p).unwrap();
     }
-    writeln!(&mut f, "]");
+    writeln!(&mut f, "]").unwrap();
+    // field[0] coins
+    write!(&mut f, "coins [ ").unwrap();
+    for c in coin_list {
+        write!(&mut f, "{} ", c).unwrap();
+    }
+    writeln!(&mut f, "]").unwrap();
     write!(&mut f, "END").unwrap();
 }

@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
-use primitive_types::U512;
 use ff::Field;
 use crate::field::Fp;
+use rug::Integer;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Point {
@@ -32,12 +32,12 @@ pub fn curve_double(a: &Point) -> Point {
 }
 
 // k_bits in big_endian form
-pub fn curve_mul(a: &Point, mut k: U512) -> Point {
-    assert!(k != U512::from(0));
+pub fn curve_mul(a: &Point, mut k: Integer) -> Point {
+    assert!(k != Integer::from(0));
     // Express k using bits
     let mut k_bits = Vec::new();
-    while k != U512::from(0) {
-        k_bits.insert(0, k % 2 == U512::from(1));
+    while k != Integer::from(0) {
+        k_bits.insert(0, k.clone() % 2 == Integer::from(1));
         k /= 2;
     }
 

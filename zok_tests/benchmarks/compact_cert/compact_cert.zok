@@ -27,12 +27,12 @@ def verifier(
     u32 merkle_depth,
     field att_root,
     field[0][0] e_bits_list,
-    field[0][0] s_bits_list
+    field[0][0] s_bits_list,
+    field[0] coins
 ) -> u32:
     u32 signed_weight = compact_cert_proof.signed_weight
     assert(signed_weight > proven_weight)
     // let num_reveals: usize = (k + q).div_ceil((signed_weight / proven_weight).ilog2() as usize);
-    field[num_reveals] coins = [7, 30, 34]
 
     for u32 j in 0..num_reveals do
         // Reproduce coin
@@ -88,9 +88,9 @@ def main(
     field[0] e_s_mem,
     // List of pointers (input format field[0])
     field[0][0] e_bits_list,
-    field[0][0] s_bits_list
+    field[0][0] s_bits_list,
+    field[0] coins
 ) -> u32:
-    field message = 6908441180828167112785246881494320159273940089327447106269949444716788494909
     array_decl T[num_reveals] t_list
     for u32 k in 0..num_reveals do
         t_list[k] = T {
@@ -116,7 +116,8 @@ def main(
         merkle_depth,
         att_root,
         e_bits_list,
-        s_bits_list
+        s_bits_list,
+        coins
     )
 /*
 def main() -> u32:

@@ -1,9 +1,9 @@
 use crate::curve::*;
 use rand::Rng;
 use ff::PrimeField;
-use primitive_types::U512;
 use crate::field::Fp;
 use crate::poseidon;
+use crate::Integer;
 
 #[derive(Clone, Debug)]
 pub struct PublicKey {
@@ -13,24 +13,24 @@ pub struct PublicKey {
 
 #[derive(Clone, Debug)]
 pub struct SecretKey {
-    pub a: U512,
+    pub a: Integer,
     pub pk: PublicKey,
 }
 
 #[derive(Clone, Debug)]
 pub struct Signature {
     pub r: Point,
-    pub s: U512,
+    pub s: Integer,
 }
 
-pub fn gen_r(num_bits: usize) -> (U512, Vec<bool>) {
+pub fn gen_r(num_bits: usize) -> (Integer, Vec<bool>) {
     let mut a_bits = Vec::new();
     let mut rng = rand::thread_rng();
     for _ in 0..num_bits {
         let bit: bool = rng.gen();
         a_bits.insert(0, bit);
     }
-    let mut a: U512 = U512::from(1);
+    let mut a = Integer::from(1);
     let mut i = 0;
     while !a_bits[i] {
         i += 1;
@@ -38,7 +38,7 @@ pub fn gen_r(num_bits: usize) -> (U512, Vec<bool>) {
     while i < a_bits.len() {
         a *= 2;
         if a_bits[i] {
-            a += U512::from(1);
+            a += Integer::from(1);
         }
         i += 1;
     }
@@ -56,7 +56,7 @@ pub fn gen() -> (PublicKey, SecretKey) {
     // Randomize 252 bits to form a
     let (a, _) = gen_r(252);
 
-    let q = curve_mul(&p, a);
+    let q = curve_mul(&p, a.clone());
     let pk = PublicKey {
         p,
         q,
@@ -69,19 +69,13 @@ pub fn gen() -> (PublicKey, SecretKey) {
 }
 
 // Record down e to be used by the circuit
-pub fn sign(sk: &SecretKey, m: &Fp) -> (Signature, U512) {
-    let order: U512 = U512::from_dec_str("7237005577332262213973186563042994240955753618821290553176770668684506720427").unwrap();
+pub fn sign(sk: &SecretKey, m: &Fp) -> (Signature, Integer) {
+    let order = Integer::from_str_radix("7237005577332262213973186563042994240955753618821290553176770668684506720427", 10).unwrap();
     let (k, _) = gen_r(252);
-    let r = curve_mul(&sk.pk.p, k);
+    let r = curve_mul(&sk.pk.p, k.clone());
     // Produce hash
-    let e_bytes = poseidon(&[m.clone(), r.x.clone(), r.y.clone()]).to_bytes();
-    let mut e: U512 = U512::from(0);
-    for e_byte in e_bytes {
-        e *= 256;
-        e += e_byte.into();
-        e %= order;
-    }
-    let s = (k + sk.a * e) % order;
+    let e = Integer::from(&poseidon(&[m.clone(), r.x.clone(), r.y.clone()]));
+    let s = (k + sk.a.clone() * e.clone()) % order;
     (
         Signature { r, s },
         e
@@ -89,17 +83,10 @@ pub fn sign(sk: &SecretKey, m: &Fp) -> (Signature, U512) {
 }
 
 pub fn verify_sig(pk: &PublicKey, sig: &Signature, m: &Fp) {
-    let order: U512 = U512::from_dec_str("7237005577332262213973186563042994240955753618821290553176770668684506720427").unwrap();
     // Produce hash
-    let e_bytes = poseidon(&[m.clone(), sig.r.x.clone(), sig.r.y.clone()]).to_bytes();
-    let mut e: U512 = U512::from(0);
-    for e_byte in e_bytes {
-        e *= 256;
-        e += e_byte.into();
-        e %= order;
-    }
+    let e = Integer::from(&poseidon(&[m.clone(), sig.r.x.clone(), sig.r.y.clone()]));
 
     let eq = curve_mul(&pk.q, e);
-    let sp = curve_mul(&pk.p, sig.s);
+    let sp = curve_mul(&pk.p, sig.s.clone());
     assert_eq!(curve_add(&sig.r, &eq), sp);
 }

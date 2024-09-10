@@ -669,6 +669,8 @@ impl<'ast> ZGen<'ast> {
     }
 
     fn literal_(&self, e: &ast::LiteralExpression<'ast>) -> Result<T, String> {
+        debug!("Literal: {}", e.span().as_str());
+
         match e {
             ast::LiteralExpression::DecimalLiteral(d) => {
                 let vstr = &d.value.value;

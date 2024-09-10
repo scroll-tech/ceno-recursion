@@ -401,8 +401,7 @@ impl std::convert::From<[FGoldilocks; 2]> for FGoldilocksExt2 {
 impl std::convert::From<Integer> for FGoldilocksExt2 {
     #[track_caller]
     fn from(i: Integer) -> Self {
-        let ui: u64 = i.try_into().unwrap();
-        FGoldilocksExt2::from(ui)
+        FGoldilocksExt2::from([FGoldilocks::from(i), FGoldilocks::from(0u64)])
     }
 }
 

@@ -136,7 +136,7 @@ impl FieldT {
             Self::FBn254 => FieldV::from(InlineFieldV(0, InlineFieldTag::Bn254)),
             Self::FCurve25519 => FieldV::from(InlineFieldV(0, InlineFieldTag::FCurve25519)),
             Self::IntField(_) => self.new_v(0),
-            Self::FGoldilocksExt2 => FieldV::from(InlineFieldV(0, InlineFieldTag::FGoldilocksExt2)),
+            Self::FGoldilocksExt2 => self.new_v(0),
         }
     }
 
@@ -612,7 +612,9 @@ impl FieldV {
         let i = Integer::from(i);
         if i.signed_bits() < 64 - N_TAG_BITS as u32 {
             if let Some(t) = ty.inline_tag() {
-                return Self::from(InlineFieldV(i.to_i64_wrapping(), t));
+                if t != InlineFieldTag::FGoldilocksExt2 {
+                    return Self::from(InlineFieldV(i.to_i64_wrapping(), t));
+                }
             }
         }
         Self::from(match ty {

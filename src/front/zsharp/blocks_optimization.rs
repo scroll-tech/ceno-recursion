@@ -3226,8 +3226,7 @@ impl<'ast> ZGen<'ast> {
     pub fn process_block<const VERBOSE: bool, const MODE: usize>(
         &self,
         bls: Vec<Block<'ast>>,
-        entry_bl: usize,
-        inputs: Vec<(String, Ty)>
+        entry_bl: usize
     ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>, Vec<Vec<usize>>, bool) {
         println!("\n\n--\nPost-Processing:");
         // Construct a new CFG for the program

@@ -408,7 +408,6 @@ fn main() {
     for i in 0..num_reveals {
         let next_att = compact_cert_proof.t_list[i].i;
         let mut e = e_list[next_att].clone();
-        println!("i = {}, e = {}", i, e);
         // Split e into SIG_WIDTH big endian bits
         let mut e_bits = Vec::new();
         for _ in 0..SIG_WIDTH {

@@ -1,0 +1,32 @@
+const u32 T = 12
+const u32 RATE = 11
+
+struct SparseMDSMatrix {
+    field[T] row
+    field[RATE] col_hat
+}
+
+struct MDSMatrices {
+    field[T][T] mds
+    field[T][T] pre_sparse_mds
+    SparseMDSMatrix[0] sparse_matrices
+}
+
+struct OptimizedConstants {
+    field[0][T] start
+    field[0] partial
+    field[0][T] end
+}
+
+struct Spec {
+    u32 r_f
+    SparseMDSMatrix mds_matrices
+    OptimizedConstants constants
+}
+
+struct Poseidon {
+    field[T] state
+    Spec spec
+    u32 absorb_len
+    field[0] absorbing
+}

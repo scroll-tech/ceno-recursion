@@ -134,11 +134,11 @@ def main() -> field:
     u32 max_degree = 3
 
     // Generate structs
-    field claimed_sum = 3
+    field claimed_sum = 2
     SumcheckProof proof = SumcheckProof {
         points: [0; num_vars],
         proofs: [IOPProverMessage {
-            evaluations: [2, 0, 2, 0, 2, 0]
+            evaluations: [2, 0, 2, 0]
         }; num_vars]
     }
     VPAuxInfo aux_info = VPAuxInfo {

@@ -4,7 +4,7 @@ struct Transcript {
 
 def new_transcript() -> Transcript:
     return Transcript {
-        hash: 2
+        hash: 4
     }
 
 def append_message_u32(Transcript t, u32 f) -> Transcript:

@@ -9,7 +9,7 @@ use bellman::groth16::{
 use bellman::Circuit;
 use bls12_381::{Bls12, Scalar};
 */
-const INLINE_SPARTAN_PROOF: bool = false;
+const INLINE_SPARTAN_PROOF: bool = true;
 const TOTAL_NUM_VARS_BOUND: usize = 1000000000;
 
 use core::cmp::min;
@@ -479,7 +479,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     );
     println!("done.");
 
-    // if VERBOSE {
+    if VERBOSE {
         for (name, c) in &cs.comps {
             println!("\n--\nName: {}", name);
             println!("VariableMetadata:");
@@ -493,7 +493,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
                 println!("  {}", t);
             }
         }
-    // }
+    }
 
     if VERBOSE { println!("Converting to r1cs:"); }
     let mut block_num = 0;
@@ -1003,8 +1003,7 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
       num_vars, 
       &ctk.args,
       num_inputs_unpadded,
-      max_block_num_phy_ops > 0,
-      max_block_num_vir_ops > 0,
+      max_block_num_phy_ops > 0 && max_block_num_vir_ops > 0,
       &block_num_phy_ops,
       &block_num_vir_ops,
       &ctk.num_vars_per_block,

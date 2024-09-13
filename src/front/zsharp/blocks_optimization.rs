@@ -1169,7 +1169,7 @@ fn la_inst<'ast>(
                 // }
             }
             // If there is a store, then keep the statement if array is alive
-            BlockContent::Store((val_expr, _, arr, id_expr, _)) => {
+            BlockContent::Store((val_expr, _, arr, id_expr, _, _)) => {
                 // if is_alive(&state, arr) {
                     new_instructions.insert(0, i.clone());
                     state.insert(arr.to_string());
@@ -1187,7 +1187,7 @@ fn la_inst<'ast>(
                 // }
             }
             // If there is a load, then keep the statement if val is alive
-            BlockContent::Load((val, _, arr, id_expr)) => {
+            BlockContent::Load((val, _, arr, id_expr, _)) => {
                 if is_alive(&state, val) {
                     new_instructions.insert(0, i.clone());
                     state.remove(val);
@@ -1270,7 +1270,7 @@ fn ty_inst<'ast>(
                 state.insert(arr.clone(), Ty::Field);
             }
             BlockContent::Store(_) => {}
-            BlockContent::Load((val, ty, _, _)) => {
+            BlockContent::Load((val, ty, _, _, _)) => {
                 state.insert(val.clone(), ty.clone());
             }
             BlockContent::DummyLoad() => {}
@@ -1317,17 +1317,17 @@ fn fm_inst<'ast, const IS_CALLER: bool>(
                 let new_expr = expr_replace_fn(expr, old_f_name, new_f_name, scope_diff);
                 new_instr.insert(0, BlockContent::ArrayInit((new_arr, ty.clone(), new_expr)));
             }
-            BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
+            BlockContent::Store((val_expr, ty, arr, id_expr, init, ro)) => {
                 let new_val_expr = expr_replace_fn(val_expr, old_f_name, new_f_name, scope_diff);
                 let new_arr = var_fn_merge(arr, old_f_name, new_f_name, scope_diff);
                 let new_id_expr = expr_replace_fn(id_expr, old_f_name, new_f_name, scope_diff);
-                new_instr.insert(0, BlockContent::Store((new_val_expr, ty.clone(), new_arr, new_id_expr, *init)));
+                new_instr.insert(0, BlockContent::Store((new_val_expr, ty.clone(), new_arr, new_id_expr, *init, *ro)));
             }
-            BlockContent::Load((val, ty, arr, id_expr)) => {
+            BlockContent::Load((val, ty, arr, id_expr, ro)) => {
                 let new_val = var_fn_merge(val, old_f_name, new_f_name, scope_diff);
                 let new_arr = var_fn_merge(arr, old_f_name, new_f_name, scope_diff);
                 let new_id_expr = expr_replace_fn(id_expr, old_f_name, new_f_name, scope_diff);
-                new_instr.insert(0, BlockContent::Load((new_val, ty.clone(), new_arr, new_id_expr)));
+                new_instr.insert(0, BlockContent::Load((new_val, ty.clone(), new_arr, new_id_expr, *ro)));
             }
             BlockContent::DummyLoad() => {
                 new_instr.insert(0, BlockContent::DummyLoad());
@@ -1347,7 +1347,6 @@ fn fm_inst<'ast, const IS_CALLER: bool>(
     }
     new_instr
 }
-
 
 // Var -> Reg
 fn vtr_inst<'ast>(
@@ -1374,23 +1373,23 @@ fn vtr_inst<'ast>(
                 (new_size_expr, witness_map) = var_to_reg_expr(&size_expr, witness_map);
                 new_instr.push(BlockContent::ArrayInit((new_arr_name, ty.clone(), new_size_expr)));
             }
-            BlockContent::Store((val_expr, ty, arr, id_expr, init)) => {
+            BlockContent::Store((val_expr, ty, arr, id_expr, init, ro)) => {
                 let new_val_expr: Expression;
                 let new_id_expr: Expression;
                 let new_arr_name: String;
                 (new_val_expr, witness_map) = var_to_reg_expr(&val_expr, witness_map);
                 (new_id_expr, witness_map) = var_to_reg_expr(&id_expr, witness_map);
                 (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
-                new_instr.push(BlockContent::Store((new_val_expr, ty.clone(), new_arr_name, new_id_expr, *init)))
+                new_instr.push(BlockContent::Store((new_val_expr, ty.clone(), new_arr_name, new_id_expr, *init, *ro)))
             }
-            BlockContent::Load((val, ty, arr, id_expr)) => {
+            BlockContent::Load((val, ty, arr, id_expr, ro)) => {
                 let new_val: String;
                 let new_id_expr: Expression;
                 let new_arr_name: String;
                 (new_val, witness_map, _) = var_name_to_reg_id_expr::<0>(val.to_string(), witness_map);
                 (new_id_expr, witness_map) = var_to_reg_expr(&id_expr, witness_map);
                 (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
-                new_instr.push(BlockContent::Load((new_val, ty.clone(), new_arr_name, new_id_expr)))
+                new_instr.push(BlockContent::Load((new_val, ty.clone(), new_arr_name, new_id_expr, *ro)))
             }
             BlockContent::DummyLoad() => {
                 new_instr.push(BlockContent::DummyLoad());

@@ -13,15 +13,22 @@ pub fn pretty_block_content(indent: usize, bc: &BlockContent) {
             pretty_expr::<false>(&size_expr); 
             println!("] {arr}")
         }
-        BlockContent::Store((val, ty, arr, id, init)) => { 
+        BlockContent::Store((val, ty, arr, id, init, ro)) => { 
             print!("{arr}["); 
             pretty_expr::<false>(&id); print!("] = "); 
             pretty_expr::<false>(&val); 
             print!(" <{ty}>");
             if *init { print!(", init"); }
+            if *ro { print!(", ro"); }
             println!(); 
         }
-        BlockContent::Load((val, ty, arr, id)) => { print!("{ty} {} = {arr}[", pretty_name(val)); pretty_expr::<false>(&id); println!("]"); }
+        BlockContent::Load((val, ty, arr, id, ro)) => { 
+            print!("{ty} {} = {arr}[", pretty_name(val)); 
+            pretty_expr::<false>(&id); 
+            print!("]");
+            if *ro { print!(", ro"); }
+            println!("");
+        }
         BlockContent::DummyLoad() => { println!("Dummy Load"); }
         BlockContent::Branch((cond, if_insts, else_insts)) => { 
             print!("if ");

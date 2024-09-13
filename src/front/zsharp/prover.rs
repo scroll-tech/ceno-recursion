@@ -546,7 +546,7 @@ impl<'ast> ZGen<'ast> {
                     let new_as_t = add(as_t, len_t).unwrap();
                     self.cvar_assign(W_AS, new_as_t)?;
                 }
-                BlockContent::Store((val_expr, _, arr, id_expr, init)) => {
+                BlockContent::Store((val_expr, _, arr, id_expr, init, _)) => {
                     let mut val_t = self.expr_impl_::<true>(&val_expr)?;
                     let mut id_t = self.expr_impl_::<true>(&id_expr)?;
 
@@ -593,7 +593,7 @@ impl<'ast> ZGen<'ast> {
                         ts_t
                     ));
                 }
-                BlockContent::Load((var, ty, arr, id_expr)) => {
+                BlockContent::Load((var, ty, arr, id_expr, _)) => {
                     let mut id_t = self.expr_impl_::<true>(&id_expr)?;
 
                     // Add array offset to obtain address

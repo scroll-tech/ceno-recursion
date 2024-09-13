@@ -229,10 +229,10 @@ pub enum BlockContent<'ast> {
     MemPop((String, Ty, usize)),  // val = %PHY[%BP + offset]
     //          arr   type size_expr, assume only one dimensional
     ArrayInit((String, Ty, Expression<'ast>)), 
-    //     val_expr         type   arr   id_expr           init?
-    Store((Expression<'ast>, Ty, String, Expression<'ast>, bool)), // arr[id] = val
-    //    var    type   arr   id_expr
-    Load((String, Ty, String, Expression<'ast>)),  // val = arr[id]
+    //     val_expr         type   arr   id_expr           init?  read-only?
+    Store((Expression<'ast>, Ty, String, Expression<'ast>, bool,  bool)), // arr[id] = val, if read-only then no timestamp & load/store
+    //    var    type   arr   id_expr           read-only?
+    Load((String, Ty, String, Expression<'ast>, bool)),  // val = arr[id], if read-only then no timestamp & load/store
     DummyLoad(),
     Branch((Expression<'ast>, Vec<BlockContent<'ast>>, Vec<BlockContent<'ast>>)),
     Stmt(Statement<'ast>) // other statements
@@ -1245,7 +1245,7 @@ impl<'ast> ZGen<'ast> {
                             }
                             AssigneeAccess::Select(s) => {
                                 let (new_l, arr_ty) = var_scope_info.reference_var(&l_name, f_name)?;
-                                if let Ty::Array(_, _, entry_ty) = arr_ty {
+                                if let Ty::Array(ro, _, entry_ty) = arr_ty {
                                     let struct_ty = *entry_ty.clone();
                                     let mut entry_ty = *entry_ty.clone();
                                     Self::bl_gen_type_check(&entry_ty, &rhs_ty)?;
@@ -1275,7 +1275,7 @@ impl<'ast> ZGen<'ast> {
                                         (blks, blks_len, var_scope_info, new_index_expr, _, _, _, _) = 
                                             self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &e, f_name, 0, 0, 0, 0, var_scope_info)?;
                                         // Perform pointer arithmetics
-                                        (blks, blks_len) = self.bl_gen_store_(blks, blks_len, &new_l, &index_ty, &new_index_expr, &rhs_expr, &entry_ty, f_name, &var_scope_info, false, &struct_ty, &member_accesses)?;
+                                        (blks, blks_len) = self.bl_gen_store_(blks, blks_len, &new_l, &index_ty, &new_index_expr, &rhs_expr, &entry_ty, f_name, &var_scope_info, false, &struct_ty, &member_accesses, ro)?;
                                     } else {
                                         return Err(format!("Array range access not implemented!"));
                                     }
@@ -1377,6 +1377,8 @@ impl<'ast> ZGen<'ast> {
     }
 
     // Generate store instructions, similar to bl_gen_def_stmt
+    // Note: The compiler DOES NOT reason about whether we can store an entry into a read_only slot
+    //       If an illegal store is performed, it will be rejected by the proof
     fn bl_gen_store_(
         &'ast self,
         mut blks: Vec<Block<'ast>>,
@@ -1391,6 +1393,7 @@ impl<'ast> ZGen<'ast> {
         is_alloc: bool,
         struct_ty: &Ty,
         prev_accesses: &Vec<MemberAccess>,
+        read_only: bool,
     ) -> Result<(Vec<Block>, usize), String> {
         debug!("Block Gen Store: {}[{}] = {}", arr_extended_name, new_index_expr.span().as_str(), new_entry_expr.span().as_str());
 
@@ -1427,6 +1430,7 @@ impl<'ast> ZGen<'ast> {
                         is_alloc,
                         struct_ty,
                         &next_accesses,
+                        read_only,
                     )?;
                 }
             } else {
@@ -1437,7 +1441,7 @@ impl<'ast> ZGen<'ast> {
         else {
             let cur_ty = if let Ty::Array(..) = cur_ty { Ty::Field } else { cur_ty.clone() };
             let new_offset_expr = self.bl_gen_pointer_offset_(new_index_expr.clone(), prev_accesses, index_ty, struct_ty)?;
-            let store_instr = BlockContent::Store((new_entry_expr.clone(), cur_ty, arr_extended_name.to_string(), new_offset_expr, is_alloc));
+            let store_instr = BlockContent::Store((new_entry_expr.clone(), cur_ty, arr_extended_name.to_string(), new_offset_expr, is_alloc, read_only));
             blks[blks_len - 1].instructions.push(store_instr);
             blks[blks_len - 1].num_vm_ops += 1;
         }
@@ -1458,6 +1462,7 @@ impl<'ast> ZGen<'ast> {
         var_scope_info: &VarScopeInfo,
         struct_ty: &Ty,
         prev_accesses: &Vec<MemberAccess>,
+        read_only: bool,
     ) -> Result<(Vec<Block>, usize), String> {
         debug!("Block Gen Load: {} = {}[{}]", l, arr_extended_name, new_index_expr.span().as_str());
 
@@ -1487,6 +1492,7 @@ impl<'ast> ZGen<'ast> {
                     var_scope_info,
                     struct_ty,
                     &next_accesses,
+                    read_only,
                 )?;
             }
         }
@@ -1494,7 +1500,7 @@ impl<'ast> ZGen<'ast> {
         else {
             let cur_ty = if let Ty::Array(..) = cur_ty { Ty::Field } else { cur_ty.clone() };
             let new_offset_expr = self.bl_gen_pointer_offset_(new_index_expr.clone(), prev_accesses, index_ty, struct_ty)?;
-            let load_instr = BlockContent::Load((new_l, cur_ty, arr_extended_name.to_string(), new_offset_expr));
+            let load_instr = BlockContent::Load((new_l, cur_ty, arr_extended_name.to_string(), new_offset_expr, read_only));
             blks[blks_len - 1].instructions.push(load_instr);
             blks[blks_len - 1].num_vm_ops += 1;
         }
@@ -1602,8 +1608,8 @@ impl<'ast> ZGen<'ast> {
                                 let load_name = format!("load^{}", load_count);
                                 let arr_name = &ret_name;
                                 let (arr_extended_name, arr_ty) = var_scope_info.reference_var(&arr_name, f_name)?;
-                                let mut load_ty = if let Ty::Array(_, _, load_ty) = arr_ty {
-                                    *load_ty.clone()
+                                let (ro, mut load_ty) = if let Ty::Array(ro, _, load_ty) = arr_ty {
+                                    (ro, *load_ty.clone())
                                 } else {
                                     return Err(format!("Loading from a variable {} that is not an array!", arr_extended_name));
                                 };
@@ -1646,7 +1652,8 @@ impl<'ast> ZGen<'ast> {
                                     f_name, 
                                     &var_scope_info, 
                                     &struct_ty,
-                                    &member_accesses
+                                    &member_accesses,
+                                    ro,
                                 )?;
                                 load_count += 1;
                                 ret_name = load_name;
@@ -1883,7 +1890,7 @@ impl<'ast> ZGen<'ast> {
                 value: index_extended_name.to_string(),
                 span: Span::new("", 0, 0).unwrap()
             });
-            (blks, blks_len) = self.bl_gen_store_(blks, blks_len, &arr_extended_name, &index_ty, &new_index_expr, &new_entry_expr, &entry_ty, f_name, &var_scope_info, is_alloc, &entry_ty, &Vec::new())?;
+            (blks, blks_len) = self.bl_gen_store_(blks, blks_len, &arr_extended_name, &index_ty, &new_index_expr, &new_entry_expr, &entry_ty, f_name, &var_scope_info, is_alloc, &entry_ty, &Vec::new(), read_only)?;
             blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_increment_stmt(&index_extended_name, 1, &index_ty)));
             
             // Bound
@@ -1928,7 +1935,7 @@ impl<'ast> ZGen<'ast> {
                     suffix: Some(ty_to_dec_suffix(&ty_to_type(&index_ty).unwrap())),
                     span: Span::new("", 0, 0).unwrap()
                 }));
-                (blks, blks_len) = self.bl_gen_store_(blks, blks_len, &arr_extended_name, &index_ty, &new_index_expr, &new_entry_expr, &entry_ty, f_name, &var_scope_info, is_alloc, &entry_ty, &Vec::new())?;
+                (blks, blks_len) = self.bl_gen_store_(blks, blks_len, &arr_extended_name, &index_ty, &new_index_expr, &new_entry_expr, &entry_ty, f_name, &var_scope_info, is_alloc, &entry_ty, &Vec::new(), read_only)?;
                 index += 1;
             }
         }
@@ -2315,7 +2322,7 @@ impl<'ast> ZGen<'ast> {
                     self.assign_impl_::<false>(W_AS, &[][..], new_as_t, false).unwrap();
                 }
             }
-            BlockContent::Store((val_expr, _, arr, id_expr, init)) => {
+            BlockContent::Store((val_expr, _, arr, id_expr, init, _)) => {
                 if ESTIMATE {}
                 else {
                     // ADDR, LS, & TS
@@ -2347,7 +2354,7 @@ impl<'ast> ZGen<'ast> {
                     vir_mem_op_count += 1;
                 }
             }
-            BlockContent::Load((val, ty, arr, id_expr)) => {
+            BlockContent::Load((val, ty, arr, id_expr, _)) => {
                 if ESTIMATE {
                     let r = self.circ_declare_input(
                         &f,

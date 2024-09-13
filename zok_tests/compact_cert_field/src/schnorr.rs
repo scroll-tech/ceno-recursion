@@ -74,7 +74,7 @@ pub fn sign(sk: &SecretKey, m: &Fp) -> (Signature, Integer) {
     let (k, _) = gen_r(252);
     let r = curve_mul(&sk.pk.p, k.clone());
     // Produce hash
-    let e = Integer::from(&poseidon(&[m.clone(), r.x.clone(), r.y.clone()]));
+    let e = Integer::from(&poseidon(&[m.clone(), r.x.clone(), r.y.clone(), Fp::from(0), Fp::from(0)]));
     let s = (k + sk.a.clone() * e.clone()) % order;
     (
         Signature { r, s },
@@ -84,7 +84,7 @@ pub fn sign(sk: &SecretKey, m: &Fp) -> (Signature, Integer) {
 
 pub fn verify_sig(pk: &PublicKey, sig: &Signature, m: &Fp) {
     // Produce hash
-    let e = Integer::from(&poseidon(&[m.clone(), sig.r.x.clone(), sig.r.y.clone()]));
+    let e = Integer::from(&poseidon(&[m.clone(), sig.r.x.clone(), sig.r.y.clone(), Fp::from(0), Fp::from(0)]));
 
     let eq = curve_mul(&pk.q, e);
     let sp = curve_mul(&pk.p, sig.s.clone());

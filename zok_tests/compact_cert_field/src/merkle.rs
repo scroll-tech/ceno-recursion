@@ -32,11 +32,11 @@ pub fn build_merkle_tree(leaves: &Vec<Vec<Fp>>) -> MerkleTree {
         for i in 0..internal_nodes[round].len() / 2 {
             let child_0 = internal_nodes[round][2 * i].clone();
             let child_1 = internal_nodes[round][2 * i + 1].clone();
-            internal_nodes[round + 1].push(poseidon(&[child_0, child_1]));
+            internal_nodes[round + 1].push(poseidon(&[child_0, child_1, Fp::from(0), Fp::from(0), Fp::from(0)]));
         }
         round += 1;
     }
-    let root = poseidon(&[internal_nodes[round][0], internal_nodes[round][1]]);
+    let root = poseidon(&[internal_nodes[round][0], internal_nodes[round][1], Fp::from(0), Fp::from(0), Fp::from(0)]);
     let depth = round + 1;
     MerkleTree {
         depth,
@@ -66,9 +66,9 @@ pub fn verify_merkle(num_leaves: usize, proof: &MerkleProof, root: Fp, mut index
     assert_eq!(proof.path.len().pow(2), num_leaves.next_power_of_two());
     for other_node in &proof.path {
         if index % 2 == 0 {
-            cur_node = poseidon(&[cur_node, other_node.clone()]);
+            cur_node = poseidon(&[cur_node, other_node.clone(), Fp::from(0), Fp::from(0), Fp::from(0)]);
         } else {
-            cur_node = poseidon(&[other_node.clone(), cur_node]);
+            cur_node = poseidon(&[other_node.clone(), cur_node, Fp::from(0), Fp::from(0), Fp::from(0)]);
         }
         index /= 2;
     }

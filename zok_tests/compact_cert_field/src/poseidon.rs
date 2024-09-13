@@ -28,13 +28,10 @@ fn mix(state: &[Fp], m: [Fp; 81]) -> Vec<Fp> {
 
 pub fn poseidon(inputs: &[Fp]) -> Fp {
     let n = inputs.len();
-    assert!(n > 0 && n <= 5) ;// max 5 inputs
-
+    assert_eq!(n, 5);
     let t = n + 1;
-    let rounds_p = [56, 57, 56, 60, 60, 63, 64, 63];
-
     let f = 8;
-    let p = rounds_p[t - 2];
+    let p = 64;
 
     // Constants are padded with zeroes to the maximum value calculated by
     // t * (f + p) = 497, where `t` (number of inputs + 1) is a max of 7.

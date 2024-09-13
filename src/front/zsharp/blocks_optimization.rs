@@ -2924,7 +2924,8 @@ impl<'ast> ZGen<'ast> {
                 stack_in[cur_bl] = stack.clone();
 
                 let mut new_instructions = Vec::new();
-                let mut sp_offset = 0;
+                // Delay all pushes until the end of the block, as %SP might change midblock due to read-only array allocation
+                let mut push_list: Vec<(String, Ty)> = Vec::new();
 
                 // Handle function return scope change
                 while stack.len() > bls[cur_bl].scope {
@@ -2958,19 +2959,7 @@ impl<'ast> ZGen<'ast> {
                                                 if let Some(var_ty) = var_type {
                                                     // GEN
                                                     oos.insert(var.to_string());
-
-                                                    if sp_offset == 0 {
-                                                        // %PHY[%SP + 0] = %BP
-                                                        new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));
-                                                        // %BP = %SP
-                                                        new_instructions.push(BlockContent::Stmt(bp_update_stmt.clone()));
-                                                        stack[cur_frame].push(("%BP".to_string(), Ty::Field));
-                                                        sp_offset += 1;
-                                                    }
-                                                    // %PHY[%SP + ?] = Var
-                                                    new_instructions.push(BlockContent::MemPush((var.to_string(), var_ty.clone(), sp_offset)));
-                                                    stack[cur_frame].push((var.to_string(), var_ty.clone()));
-                                                    sp_offset += 1;
+                                                    push_list.push((var.to_string(), var_ty.clone()));
                                                 }
                                             }
                                         }
@@ -3002,9 +2991,12 @@ impl<'ast> ZGen<'ast> {
                 // If there is a scope change in fn_successor, pop out all candidates that are no longer spilled
                 let mut succ_scope = 0;
                 for succ in &successor_fn[cur_bl] {
-                    if succ_scope < bls[*succ].scope { succ_scope = bls[*succ].scope };
+                    if succ_scope < bls[*succ].scope {
+                        succ_scope = bls[*succ].scope
+                    };
                 }
                 if succ_scope < bls[cur_bl].scope {
+                    assert!(push_list.len() == 0);
                     while stack.len() > succ_scope {
                         let mut sp_offset = stack[stack.len() - 1].len() - 1;
                         for (var, ty) in stack[stack.len() - 1].iter().rev() {
@@ -3013,6 +3005,24 @@ impl<'ast> ZGen<'ast> {
                         }
                         stack.pop();
                     }
+                }
+
+                // Perform all stack pushes
+                if push_list.len() > 0 {
+                    let mut sp_offset = 0;
+                    // %PHY[%SP + 0] = %BP
+                    new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));
+                    // %BP = %SP
+                    new_instructions.push(BlockContent::Stmt(bp_update_stmt.clone()));
+                    stack[cur_frame].push(("%BP".to_string(), Ty::Field));
+                    sp_offset += 1;
+                    for (var, ty) in push_list.into_iter() {
+                        new_instructions.push(BlockContent::MemPush((var.to_string(), ty.clone(), sp_offset)));
+                        stack[cur_frame].push((var, ty));
+                        sp_offset += 1;
+                    }
+                    // %SP = %SP + ?
+                    new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset, &Ty::Field)));   
                 }
 
                 // If there is a function call, push all live & in-scope candidates onto stack
@@ -3024,12 +3034,7 @@ impl<'ast> ZGen<'ast> {
 
                     // the last instruction is rp@ = ?, which should appear after scope change
                     let rp_update_inst = new_instructions.pop().unwrap();
-
-                    // %SP = %SP + ?
-                    if sp_offset > 0 {
-                        new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset, &Ty::Field)));   
-                        sp_offset = 0;                         
-                    }
+                    let mut sp_offset = 0;                         
 
                     let callee = Vec::from_iter(successor[cur_bl].clone())[0];
                     let callee_name = &bls[callee].fn_name;
@@ -3060,11 +3065,12 @@ impl<'ast> ZGen<'ast> {
                     }
                     // rp@ = ?
                     new_instructions.push(rp_update_inst);
+                    // %SP = %SP + ?
+                    if sp_offset > 0 {
+                        new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset, &Ty::Field)));                        
+                    }
                 }
-                // %SP = %SP + ?
-                if sp_offset > 0 {
-                    new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset, &Ty::Field)));                        
-                }
+
 
                 bls[cur_bl].instructions = new_instructions;
                 oos_out[cur_bl] = oos.clone();

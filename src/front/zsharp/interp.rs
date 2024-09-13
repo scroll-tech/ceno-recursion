@@ -23,12 +23,14 @@ pub fn extract(
                 .ok_or_else(|| format!("Could not find scalar variable {name} in the input map"))?;
             Ok(T::new(ty.clone(), leaf_term(Op::Const(ir_val))))
         }
-        Ty::Array(elem_count, elem_ty) => T::new_array(
+        Ty::Array(_, elem_count, elem_ty) => T::new_array(
+            false,
             (0..*elem_count)
                 .map(|i| extract(&format!("{name}.{i}"), elem_ty, scalar_input_values))
                 .collect::<Result<Vec<_>, _>>()?,
         ),
         Ty::MutArray(elem_count) => T::new_array(
+            false,
             (0..*elem_count)
                 .map(|i| extract(&format!("{name}.{i}"), &Ty::Field, scalar_input_values))
                 .collect::<Result<Vec<_>, _>>()?,

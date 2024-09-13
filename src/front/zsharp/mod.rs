@@ -33,7 +33,7 @@ use zvisit::{ZConstLiteralRewriter, ZGenericInf, ZStatementWalker, ZVisitorMut};
 
 // garbage collection increment for adaptive GC threshold
 const GC_INC: usize = 32;
-const GEN_VERBOSE: bool = true;
+const GEN_VERBOSE: bool = false;
 const INTERPRET_VERBOSE: bool = false;
 
 /// Inputs to the Z# compiler
@@ -1330,12 +1330,12 @@ impl<'ast> ZGen<'ast> {
                             Ok(())
                         }
                     })?;
-                T::new_array(avals)
+                T::new_array(ia.dim_ro.is_some(), avals)
             }
             ast::Expression::ArrayInitializer(ai) => {
                 let val = self.expr_impl_::<IS_CNST>(&ai.value)?;
                 let num = self.const_usize_impl_::<IS_CNST>(&ai.count)?;
-                fill_array(val, num)
+                fill_array(ai.dim_ro.is_some(), val, num)
             }
             ast::Expression::Postfix(p) => {
                 // assume no functions in arrays, etc.
@@ -1677,9 +1677,9 @@ impl<'ast> ZGen<'ast> {
                 let t = self.identifier_impl_::<IS_CNST>(&a.id)?;
                 a.accesses.iter().try_fold(t.ty, |ty, acc| match acc {
                     ast::AssigneeAccess::Select(aa) => match ty {
-                        Ty::Array(sz, ity) => match &aa.expression {
+                        Ty::Array(ro, sz, ity) => match &aa.expression {
                             ast::RangeOrExpression::Expression(_) => Ok(*ity),
-                            ast::RangeOrExpression::Range(_) => Ok(Ty::Array(sz, ity)),
+                            ast::RangeOrExpression::Range(_) => Ok(Ty::Array(ro, sz, ity)),
                         },
                         ty => Err(format!("Attempted array access on non-Array type {ty}")),
                     },
@@ -1920,10 +1920,10 @@ impl<'ast> ZGen<'ast> {
                 a.dimensions
                     .iter()
                     .rev()
-                    .map(|d| self.const_usize_impl_::<IS_CNST>(d))
+                    .map(|d| (d.0.is_some(), self.const_usize_impl_::<IS_CNST>(&d.1)))
                     // if array is dynamically-sized, set length to 0
-                    .map(|d| if let Ok(d) = d { d } else { 0 })
-                    .fold(b, |b, d| Ok(Ty::Array(d, Box::new(b?))))
+                    .map(|d| if let Ok(v) = d.1 { (d.0, v) } else { (d.0, 0) })
+                    .fold(b, |b, d| Ok(Ty::Array(d.0, d.1, Box::new(b?))))
             }
             ast::Type::Struct(s) => {
                 let (def, path) = self.get_struct_or_type(&s.id.value).ok_or_else(|| {

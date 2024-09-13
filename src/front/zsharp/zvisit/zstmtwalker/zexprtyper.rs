@@ -36,23 +36,24 @@ impl<'ast, 'ret, 'wlk> ZExpressionTyper<'ast, 'ret, 'wlk> {
     fn arrayize(
         &self,
         ty: ast::Type<'ast>,
+        ro: Option<ast::DimRO<'ast>>,
         cnt: ast::Expression<'ast>,
         spn: &ast::Span<'ast>,
     ) -> ast::ArrayType<'ast> {
         use ast::Type::*;
         match ty {
             Array(mut aty) => {
-                aty.dimensions.insert(0, cnt);
+                aty.dimensions.insert(0, (ro, cnt));
                 aty
             }
             Basic(bty) => ast::ArrayType {
                 ty: ast::BasicOrStructType::Basic(bty),
-                dimensions: vec![cnt],
+                dimensions: vec![(ro, cnt)],
                 span: *spn,
             },
             Struct(sty) => ast::ArrayType {
                 ty: ast::BasicOrStructType::Struct(sty),
-                dimensions: vec![cnt],
+                dimensions: vec![(ro, cnt)],
                 span: *spn,
             },
         }
@@ -243,7 +244,7 @@ impl<'ast, 'ret, 'wlk> ZVisitorMut<'ast> for ZExpressionTyper<'ast, 'ret, 'wlk> 
 
         self.visit_expression(&mut aie.value)?;
         if let Some(ty) = self.take()? {
-            let ty = self.arrayize(ty, aie.count.as_ref().clone(), &aie.span);
+            let ty = self.arrayize(ty, aie.dim_ro.clone(), aie.count.as_ref().clone(), &aie.span);
             self.ty.replace(Array(ty));
         }
         Ok(())
@@ -275,7 +276,7 @@ impl<'ast, 'ret, 'wlk> ZVisitorMut<'ast> for ZExpressionTyper<'ast, 'ret, 'wlk> 
                         Ok((ty, 1))
                     } else if let ast::Type::Array(mut at) = ty {
                         assert!(!at.dimensions.is_empty());
-                        let len = self.walker.zgen.const_usize_(&at.dimensions[0])?;
+                        let len = self.walker.zgen.const_usize_(&at.dimensions[0].1)?;
                         if at.dimensions.len() == 1 {
                             Ok((bos_to_type(at.ty), len))
                         } else {
@@ -309,6 +310,7 @@ impl<'ast, 'ret, 'wlk> ZVisitorMut<'ast> for ZExpressionTyper<'ast, 'ret, 'wlk> 
         self.ty = acc_ty.map(|at| {
             ast::Type::Array(self.arrayize(
                 at,
+                iae.dim_ro.clone(),
                 ast::Expression::Literal(ast::LiteralExpression::HexLiteral(
                     ast::HexLiteralExpression {
                         value: ast::HexNumberExpression::U32(ast::U32NumberExpression {

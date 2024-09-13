@@ -271,7 +271,7 @@ impl<'ast> ZGen<'ast> {
                         input_count += 1;
                     }
                 },
-                Ty::Array(_, entry_ty) => {
+                Ty::Array(_, _, entry_ty) => {
                     let entry_ty = match **entry_ty {
                         Ty::Uint(_) | Ty::Field | Ty::Bool => { &*entry_ty },
                         Ty::Array(..) => { &Ty::Field }

@@ -16,7 +16,7 @@ pub enum Ty {
     Bool,
     Field,
     Struct(String, FieldList<Ty>),
-    Array(usize, Box<Ty>),
+    Array(bool, usize, Box<Ty>), // read-only?, size, type
     MutArray(usize),
 }
 
@@ -33,15 +33,15 @@ impl Display for Ty {
                 }
                 o.finish()
             }
-            Ty::Array(n, b) => {
-                let mut dims = vec![n];
+            Ty::Array(ro, n, b) => {
+                let mut dims = vec![(ro, n)];
                 let mut bb = b.as_ref();
-                while let Ty::Array(n, b) = bb {
+                while let Ty::Array(ro, n, b) = bb {
                     bb = b.as_ref();
-                    dims.push(n);
+                    dims.push((ro, n));
                 }
                 write!(f, "{bb}")?;
-                dims.iter().try_for_each(|d| write!(f, "[{d}]"))
+                dims.iter().try_for_each(|d| write!(f, "[{}{}]", if *d.0 {"ro "} else {""}, d.1))
             }
             Ty::MutArray(n) => write!(f, "MutArray({n})"),
         }
@@ -68,7 +68,7 @@ impl Ty {
             Self::Bool => Sort::Bool,
             Self::Uint(w) => Sort::BitVector(*w),
             Self::Field => default_field_sort(),
-            Self::Array(n, b) => {
+            Self::Array(_, n, b) => {
                 Sort::Array(Box::new(default_field_sort()), Box::new(b.sort()), *n)
             }
             Self::MutArray(n) => Sort::Array(
@@ -97,14 +97,14 @@ impl Ty {
     /// Array value type
     pub fn array_val_ty(&self) -> &Self {
         match self {
-            Self::Array(_, b) => b,
+            Self::Array(_, _, b) => b,
             // TODO: MutArray?
             _ => panic!("Not an array type: {:?}", self),
         }
     }
     /// Is this an array?
     pub fn is_array(&self) -> bool {
-        matches!(self, Self::Array(_, _) | Self::MutArray(_))
+        matches!(self, Self::Array(..) | Self::MutArray(_))
     }
 }
 
@@ -145,7 +145,7 @@ impl T {
     }
     fn unwrap_array_ir(self) -> Result<Vec<Term>, String> {
         match &self.ty {
-            Ty::Array(size, _sort) => Ok((0..*size)
+            Ty::Array(_ro, size, _sort) => Ok((0..*size)
                 .map(|i| term![Op::Select; self.term.clone(), pf_lit_ir(i)])
                 .collect()),
             Ty::MutArray(size) => Ok((0..*size)
@@ -156,7 +156,7 @@ impl T {
     }
     pub fn unwrap_array(self) -> Result<Vec<T>, String> {
         match &self.ty {
-            Ty::Array(_size, sort) => {
+            Ty::Array(_ro, _size, sort) => {
                 let sort = (**sort).clone();
                 Ok(self
                     .unwrap_array_ir()?
@@ -172,8 +172,8 @@ impl T {
             s => Err(format!("Not an array: {s}")),
         }
     }
-    pub fn new_array(v: Vec<T>) -> Result<T, String> {
-        array(v)
+    pub fn new_array(ro: bool, v: Vec<T>) -> Result<T, String> {
+        array(ro, v)
     }
 
     pub fn new_struct(name: String, fields: Vec<(String, T)>) -> T {
@@ -262,7 +262,7 @@ impl T {
                 write!(f, "}}")
             }
             Value::Array(arr) => {
-                let inner_ty = if let Ty::Array(_, ty) = &self.ty {
+                let inner_ty = if let Ty::Array(_, _, ty) = &self.ty {
                     Ok(ty)
                 } else {
                     Err(Error::new(
@@ -689,15 +689,15 @@ where
 
 pub fn slice(arr: T, start: Option<usize>, end: Option<usize>) -> Result<T, String> {
     match &arr.ty {
-        Ty::Array(size, _) => {
+        Ty::Array(ro, size, _) => {
             let start = start.unwrap_or(0);
             let end = end.unwrap_or(*size);
-            array(arr.unwrap_array()?.drain(start..end))
+            array(*ro, arr.unwrap_array()?.drain(start..end))
         }
         Ty::MutArray(size) => {
             let start = start.unwrap_or(0);
             let end = end.unwrap_or(*size);
-            array(arr.unwrap_array()?.drain(start..end))
+            array(false, arr.unwrap_array()?.drain(start..end))
         }
         a => Err(format!("Cannot slice {a}")),
     }
@@ -752,7 +752,7 @@ fn coerce_to_field(i: T) -> Result<Term, String> {
 
 pub fn array_select(array: T, idx: T) -> Result<T, String> {
     match array.ty {
-        Ty::Array(_, elem_ty) if matches!(idx.ty, Ty::Uint(_) | Ty::Field) => {
+        Ty::Array(_, _, elem_ty) if matches!(idx.ty, Ty::Uint(_) | Ty::Field) => {
             let iterm = coerce_to_field(idx).unwrap();
             Ok(T::new(*elem_ty, term![Op::Select; array.term, iterm]))
         }
@@ -776,7 +776,7 @@ pub fn mut_array_store(array: T, idx: T, val: T, cond: Term) -> Result<T, String
 }
 
 pub fn array_store(array: T, idx: T, val: T) -> Result<T, String> {
-    if matches!(&array.ty, Ty::Array(_, _)) && matches!(&idx.ty, Ty::Uint(_) | Ty::Field) {
+    if matches!(&array.ty, Ty::Array(_, _, _)) && matches!(&idx.ty, Ty::Uint(_) | Ty::Field) {
         // XXX(q) typecheck here?
         let iterm = if matches!(idx.ty, Ty::Uint(_)) {
             term![Op::UbvToPf(default_field()); idx.term]
@@ -797,13 +797,13 @@ fn ir_array<I: IntoIterator<Item = Term>>(value_sort: Sort, elems: I) -> Term {
     term(Op::Array(key_sort, value_sort), elems.into_iter().collect())
 }
 
-pub fn fill_array(value: T, size: usize) -> Result<T, String> {
+pub fn fill_array(read_only: bool, value: T, size: usize) -> Result<T, String> {
     Ok(T::new(
-        Ty::Array(size, Box::new(value.ty)),
+        Ty::Array(read_only, size, Box::new(value.ty)),
         term![Op::Fill(default_field_sort(), size); value.term],
     ))
 }
-pub fn array<I: IntoIterator<Item = T>>(elems: I) -> Result<T, String> {
+pub fn array<I: IntoIterator<Item = T>>(read_only: bool, elems: I) -> Result<T, String> {
     let v: Vec<T> = elems.into_iter().collect();
     if let Some(e) = v.first() {
         let ty = e.type_();
@@ -812,7 +812,7 @@ pub fn array<I: IntoIterator<Item = T>>(elems: I) -> Result<T, String> {
         } else {
             let sort = check(&e.term);
             Ok(T::new(
-                Ty::Array(v.len(), Box::new(ty.clone())),
+                Ty::Array(read_only, v.len(), Box::new(ty.clone())),
                 ir_array(sort, v.into_iter().map(|t| t.term)),
             ))
         }
@@ -846,7 +846,7 @@ pub fn uint_to_uint(u: T, w: usize) -> Result<T, String> {
 pub fn uint_to_bits(u: T) -> Result<T, String> {
     match &u.ty {
         Ty::Uint(n) => Ok(T::new(
-            Ty::Array(*n, Box::new(Ty::Bool)),
+            Ty::Array(false, *n, Box::new(Ty::Bool)),
             ir_array(
                 Sort::Bool,
                 (0..*n).rev().map(|i| term![Op::BvBit(i); u.term.clone()]),
@@ -859,7 +859,7 @@ pub fn uint_to_bits(u: T) -> Result<T, String> {
 // XXX(rsw) is it correct to enforce length here, vs. in (say) builtin_call in mod.rs?
 pub fn uint_from_bits(u: T) -> Result<T, String> {
     match &u.ty {
-        Ty::Array(bits, elem_ty) if **elem_ty == Ty::Bool => match bits {
+        Ty::Array(_, bits, elem_ty) if **elem_ty == Ty::Bool => match bits {
             8 | 16 | 32 | 64 => Ok(T::new(
                 Ty::Uint(*bits),
                 term(
@@ -901,7 +901,7 @@ fn bv_from_bits(barr: Term, size: usize) -> Term {
 
 pub fn bit_array_le(a: T, b: T, n: usize) -> Result<T, String> {
     match (&a.ty, &b.ty) {
-        (Ty::Array(la, ta), Ty::Array(lb, tb)) => {
+        (Ty::Array(_, la, ta), Ty::Array(_, lb, tb)) => {
             if **ta != Ty::Bool || **tb != Ty::Bool {
                 Err("bit-array-le must be called on arrays of Bools".to_string())
             } else if la != lb {
@@ -928,7 +928,7 @@ pub fn bit_array_le(a: T, b: T, n: usize) -> Result<T, String> {
 }
 
 pub fn sample_challenge(a: T, number: usize) -> Result<T, String> {
-    if let Ty::Array(_, ta) = &a.ty {
+    if let Ty::Array(_, _, ta) = &a.ty {
         if let Ty::Field = &**ta {
             Ok(T::new(
                 Ty::Field,
@@ -1007,7 +1007,7 @@ impl Embeddable for ZSharp {
                     precompute.map(|p| p.term),
                 ),
             ),
-            Ty::Array(n, ty) => {
+            Ty::Array(ro, n, ty) => {
                 let ps: Vec<Option<T>> = match precompute.map(|p| p.unwrap_array()) {
                     Some(Ok(v)) => v.into_iter().map(Some).collect(),
                     Some(Err(e)) => panic!("{}", e),
@@ -1015,6 +1015,7 @@ impl Embeddable for ZSharp {
                 };
                 debug_assert_eq!(*n, ps.len());
                 array(
+                    *ro,
                     ps.into_iter().enumerate().map(|(i, p)| {
                         self.declare_input(f, ctx, ty, idx_name(&name, i), visibility, p)
                     }),
@@ -1029,6 +1030,7 @@ impl Embeddable for ZSharp {
                 };
                 debug_assert_eq!(*n, ps.len());
                 array(
+                    false,
                     ps.into_iter().enumerate().map(|(i, p)| {
                         self.declare_input(f, ctx, &Ty::Field, idx_name(&name, i), visibility, p)
                     }),

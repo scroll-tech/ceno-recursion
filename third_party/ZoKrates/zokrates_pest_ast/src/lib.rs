@@ -13,7 +13,7 @@ pub use ast::{
     AssertionStatement, Assignee, AssigneeAccess, BasicOrStructType, BasicType, BinaryExpression,
     BinaryOperator, BooleanLiteralExpression, BooleanType, CallAccess, ConditionalStatement, 
     CondStoreStatement, ConstantDefinition, ConstantGenericValue, Curve, DecimalLiteralExpression,
-    DecimalNumber, DecimalSuffix, DefinitionStatement, ExplicitGenerics, Expression, FieldSuffix,
+    DecimalNumber, DecimalSuffix, DefinitionStatement, DimRO, ExplicitGenerics, Expression, FieldSuffix,
     FieldType, File, FromExpression, FromImportDirective, FunctionDefinition, HexLiteralExpression,
     HexNumberExpression, IdentifierExpression, ImportDirective, ImportSymbol,
     InlineArrayExpression, InlineStructExpression, InlineStructMember, IterationStatement,
@@ -282,10 +282,17 @@ mod ast {
     }
 
     #[derive(Debug, FromPest, PartialEq, Clone)]
+    #[pest_ast(rule(Rule::dim_ro))]
+    pub struct DimRO<'ast> {
+        #[pest_ast(outer())]
+        pub span: Span<'ast>,
+    }
+
+    #[derive(Debug, FromPest, PartialEq, Clone)]
     #[pest_ast(rule(Rule::ty_array))]
     pub struct ArrayType<'ast> {
         pub ty: BasicOrStructType<'ast>,
-        pub dimensions: Vec<Expression<'ast>>,
+        pub dimensions: Vec<(Option<DimRO<'ast>>, Expression<'ast>)>,
         #[pest_ast(outer())]
         pub span: Span<'ast>,
     }
@@ -756,6 +763,7 @@ mod ast {
     #[derive(Debug, FromPest, PartialEq, Clone)]
     #[pest_ast(rule(Rule::inline_array_expression))]
     pub struct InlineArrayExpression<'ast> {
+        pub dim_ro: Option<DimRO<'ast>>,
         pub expressions: Vec<SpreadOrExpression<'ast>>,
         #[pest_ast(outer())]
         pub span: Span<'ast>,
@@ -782,6 +790,7 @@ mod ast {
     #[derive(Debug, FromPest, PartialEq, Clone)]
     #[pest_ast(rule(Rule::array_initializer_expression))]
     pub struct ArrayInitializerExpression<'ast> {
+        pub dim_ro: Option<DimRO<'ast>>,
         pub value: Box<Expression<'ast>>,
         pub count: Box<Expression<'ast>>,
         #[pest_ast(outer())]

@@ -9,7 +9,7 @@ use bellman::groth16::{
 use bellman::Circuit;
 use bls12_381::{Bls12, Scalar};
 */
-const INLINE_SPARTAN_PROOF: bool = true;
+const INLINE_SPARTAN_PROOF: bool = false;
 const TOTAL_NUM_VARS_BOUND: usize = 1000000000;
 
 use core::cmp::min;

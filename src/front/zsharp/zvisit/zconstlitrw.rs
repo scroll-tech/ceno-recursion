@@ -132,8 +132,15 @@ impl<'ast> ZVisitorMut<'ast> for ZConstLiteralRewriter {
         aie: &mut ast::ArrayInitializerExpression<'ast>,
     ) -> ZVisitorResult {
         if self.to_ty.is_some() {
-            if let Ty::Array(_, arr_ty) = self.to_ty.clone().unwrap() {
+            if let Ty::Array(ro, _, arr_ty) = self.to_ty.clone().unwrap() {
                 // ArrayInitializerExpression::value should match arr_ty
+                if aie.dim_ro.is_some() != ro {
+                    return Err(
+                        "ZConstLiteralRewriter: rewriting read-only ArrayInitializerExpression to rewritable Array type"
+                            .to_string()
+                            .into(),
+                    );
+                }
                 let to_ty = self.replace(Some(*arr_ty));
                 self.visit_expression(&mut aie.value)?;
                 self.to_ty = to_ty;
@@ -218,8 +225,15 @@ impl<'ast> ZVisitorMut<'ast> for ZConstLiteralRewriter {
         iae: &mut ast::InlineArrayExpression<'ast>,
     ) -> ZVisitorResult {
         let mut inner_ty = if let Some(t) = self.to_ty.as_ref() {
-            if let Ty::Array(_, arr_ty) = t.clone() {
-                Ok(Some(*arr_ty))
+            if let Ty::Array(ro, _, arr_ty) = t.clone() {
+                if ro != iae.dim_ro.is_some() {
+                    Err(
+                        "ZConstLiteralRewriter: rewriting read-only InlineArrayExpression to rewritable Array type"
+                            .to_string(),
+                    )
+                } else {
+                    Ok(Some(*arr_ty))
+                }
             } else {
                 Err(
                     "ZConstLiteralRewriter: rewriting InlineArrayExpression to non-Array type"
@@ -272,8 +286,15 @@ impl<'ast> ZVisitorMut<'ast> for ZConstLiteralRewriter {
             self.to_ty
                 .as_ref()
                 .map(|to_ty| {
-                    if let Ty::Array(_, arr_ty) = to_ty {
-                        Ok(*arr_ty.clone())
+                    if let Ty::Array(ro, _, arr_ty) = to_ty {
+                        if ro != &aty.dimensions[0].0.is_some() {
+                            Err(
+                                "ZConstLiteralRewriter: rewriting read-only ArrayType to rewritable Array type"
+                                    .to_string(),
+                            )
+                        } else {
+                            Ok(*arr_ty.clone())
+                        }
                     } else {
                         Err(
                             "ZConstLiteralRewriter: rewriting ArrayType to non-Array type"
@@ -289,7 +310,7 @@ impl<'ast> ZVisitorMut<'ast> for ZConstLiteralRewriter {
         self.replace(Some(Ty::Uint(32)));
         aty.dimensions
             .iter_mut()
-            .try_for_each(|d| self.visit_expression(d))?;
+            .try_for_each(|d| self.visit_expression(&mut d.1))?;
         self.to_ty = to_ty;
 
         self.visit_span(&mut aty.span)

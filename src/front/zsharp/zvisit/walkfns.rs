@@ -304,7 +304,7 @@ pub fn walk_array_type<'ast, Z: ZVisitorMut<'ast>>(
     visitor.visit_basic_or_struct_type(&mut aty.ty)?;
     aty.dimensions
         .iter_mut()
-        .try_for_each(|d| visitor.visit_expression(d))?;
+        .try_for_each(|d| visitor.visit_expression(&mut d.1))?;
     visitor.visit_span(&mut aty.span)
 }
 

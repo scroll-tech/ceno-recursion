@@ -473,31 +473,34 @@ pub struct ArrayInitInfo<'ast> {
     dyn_length: Option<Expression<'ast>>,
     // Entries of the array, mapped to indices of unique_contents
     arr_entries: Option<Vec<usize>>,
+    read_only: bool,
     entry_ty: Ty,
 }
 
 impl<'ast> ArrayInitInfo<'ast> {
-    fn from_static_array_initializer(value: Expression<'ast>, arr_size: usize, entry_ty: Ty) -> ArrayInitInfo<'ast> {
+    fn from_static_array_initializer(value: Expression<'ast>, arr_size: usize, read_only: bool, entry_ty: Ty) -> ArrayInitInfo<'ast> {
         ArrayInitInfo {
             dynamic: false,
             unique_contents: vec![value],
             dyn_length: None,
             arr_entries: Some(vec![0; arr_size]),
+            read_only,
             entry_ty
         }
     }
 
-    fn from_dyn_array_initializer(value: Expression<'ast>, dyn_arr_len: Expression<'ast>, entry_ty: Ty) -> ArrayInitInfo<'ast> {
+    fn from_dyn_array_initializer(value: Expression<'ast>, dyn_arr_len: Expression<'ast>, read_only: bool, entry_ty: Ty) -> ArrayInitInfo<'ast> {
         ArrayInitInfo {
             dynamic: true,
             unique_contents: vec![value],
             dyn_length: Some(dyn_arr_len),
             arr_entries: None,
+            read_only,
             entry_ty,
         }
     }
 
-    fn from_inline_array(entries: Vec<Expression<'ast>>, entry_ty: Ty) -> ArrayInitInfo<'ast> {
+    fn from_inline_array(entries: Vec<Expression<'ast>>, read_only: bool, entry_ty: Ty) -> ArrayInitInfo<'ast> {
         let mut unique_contents = Vec::new();
         let mut arr_entries = Vec::new();
         for e in entries.into_iter() {
@@ -509,6 +512,7 @@ impl<'ast> ArrayInitInfo<'ast> {
             unique_contents,
             dyn_length: None,
             arr_entries: Some(arr_entries),
+            read_only,
             entry_ty
         }
     }
@@ -841,7 +845,7 @@ impl<'ast> ZGen<'ast> {
                 .first().ok_or("No return type provided for one or more function")?;
             let mut ret_ty = self.type_impl_::<false>(&ret_type)?;
             // If return type is an array, convert it to a pointer
-            if let Ty::Array(_, _) = ret_ty {
+            if let Ty::Array(..) = ret_ty {
                 ret_ty = Ty::Field;
             }
 
@@ -1141,11 +1145,11 @@ impl<'ast> ZGen<'ast> {
                 let arr_name = a.id.value.to_string();
                 let arr_extended_name = var_scope_info.declare_var(&arr_name, f_name, cur_scope, arr_ty.clone());
                 if let Type::Array(aty) = &a.ty {
-                    let index_ty = self.bl_gen_type_(&aty.dimensions[0], f_name, &var_scope_info)?;
+                    let index_ty = self.bl_gen_type_(&aty.dimensions[0].1, f_name, &var_scope_info)?;
                     let new_len_expr: Expression;
                     (blks, blks_len, var_scope_info, new_len_expr, _, _, _, _) = 
-                        self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &aty.dimensions[0], f_name, 0, 0, 0, 0, var_scope_info)?;
-                    let entry_ty = if let Ty::Array(_, entry_ty) = arr_ty { *entry_ty.clone() } else { unreachable!() };
+                        self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &aty.dimensions[0].1, f_name, 0, 0, 0, 0, var_scope_info)?;
+                    let entry_ty = if let Ty::Array(_, _, entry_ty) = arr_ty { *entry_ty.clone() } else { unreachable!() };
                     
                     // Compute the actual allocated size
                     let new_size_expr = self.bl_gen_pointer_offset_(new_len_expr, &Vec::new(), &index_ty, &entry_ty)?;
@@ -1163,24 +1167,35 @@ impl<'ast> ZGen<'ast> {
     fn bl_gen_type_check(
         lhs: &Ty,
         rhs: &Ty
-    ) -> bool {
+    ) -> Result<(), String> {
         match (lhs, rhs) {
-            (Ty::Array(lhs_len, lhs_entry_ty), Ty::Array(rhs_len, rhs_entry_ty)) => {
-                let entry_ty_check = Self::bl_gen_type_check(lhs_entry_ty, rhs_entry_ty);
+            (Ty::Array(lhs_ro, lhs_len, lhs_entry_ty), Ty::Array(rhs_ro, rhs_len, rhs_entry_ty)) => {
+                let ro_check = lhs_ro == rhs_ro;
                 let len_check = lhs_len == rhs_len || *lhs_len == 0;
-                entry_ty_check && len_check
+                let entry_ty_check = Self::bl_gen_type_check(lhs_entry_ty, rhs_entry_ty);
+                if ro_check && len_check && entry_ty_check.is_ok() {
+                    Ok(())
+                } else {
+                    Err(format!("Type Check failed: lhs - {:?}, rhs - {:?}", lhs, rhs))
+                }
             }
             (Ty::Struct(lhs_name, lhs_field_ty), Ty::Struct(rhs_name, rhs_field_ty)) => {
                 if lhs_name != rhs_name {
-                    false
+                    Err(format!("Type Check failed: lhs - {:?}, rhs - {:?}", lhs, rhs))
                 } else {
-                    lhs_field_ty.fields().zip(rhs_field_ty.fields())
-                        .map(|(lhs_field, rhs_field)| lhs_field.0 == rhs_field.0 && Self::bl_gen_type_check(&lhs_field.1, &rhs_field.1))
-                        .fold(true, |acc, b| acc && b)
+                    if lhs_field_ty.fields().zip(rhs_field_ty.fields())
+                        .map(|(lhs_field, rhs_field)| lhs_field.0 == rhs_field.0 && Self::bl_gen_type_check(&lhs_field.1, &rhs_field.1).is_ok())
+                        .fold(true, |acc, b| acc && b) {
+                            Ok(())
+                    } else {
+                        Err(format!("Type Check failed: lhs - {:?}, rhs - {:?}", lhs, rhs))
+                    }
                 }
             }
             _ => {
-                lhs == rhs
+                if lhs == rhs { Ok(()) } else {
+                    Err(format!("Type Check failed: lhs - {:?}, rhs - {:?}", lhs, rhs))
+                }
             }
         }
     }
@@ -1230,10 +1245,10 @@ impl<'ast> ZGen<'ast> {
                             }
                             AssigneeAccess::Select(s) => {
                                 let (new_l, arr_ty) = var_scope_info.reference_var(&l_name, f_name)?;
-                                if let Ty::Array(_, entry_ty) = arr_ty {
+                                if let Ty::Array(_, _, entry_ty) = arr_ty {
                                     let struct_ty = *entry_ty.clone();
                                     let mut entry_ty = *entry_ty.clone();
-                                    Self::bl_gen_type_check(&entry_ty, &rhs_ty);
+                                    Self::bl_gen_type_check(&entry_ty, &rhs_ty)?;
                                     skip_stmt_gen = true;
                                     if let RangeOrExpression::Expression(e) = &s.expression {
                                         // For all subsequent struct member accesses, compute index and rhs
@@ -1272,7 +1287,7 @@ impl<'ast> ZGen<'ast> {
                         }
                         acc_counter += 1;
                     }
-                    Self::bl_gen_type_check(&lhs_ty, &rhs_ty);
+                    Self::bl_gen_type_check(&lhs_ty, &rhs_ty)?;
                     if !skip_stmt_gen {
                         (blks, blks_len) = 
                             self.bl_gen_def_stmt_(blks, blks_len, &l_name, &rhs_expr, &rhs_ty, f_name, f_name, &var_scope_info)?;
@@ -1282,7 +1297,7 @@ impl<'ast> ZGen<'ast> {
                     // If array is dynamically bounded, cannot use type_impl_ because bound might involve variables undefined in circ
                     let l_name = l.identifier.value.to_string();
                     let lhs_ty = self.type_impl_::<false>(&l.ty)?;
-                    Self::bl_gen_type_check(&lhs_ty, &rhs_ty);
+                    Self::bl_gen_type_check(&lhs_ty, &rhs_ty)?;
                     var_scope_info.declare_var(&l_name, f_name, cur_scope, lhs_ty.clone());
                     (blks, blks_len) = 
                         self.bl_gen_def_stmt_(blks, blks_len, &l_name, &rhs_expr, &rhs_ty, f_name, f_name, &var_scope_info)?;
@@ -1587,7 +1602,7 @@ impl<'ast> ZGen<'ast> {
                                 let load_name = format!("load^{}", load_count);
                                 let arr_name = &ret_name;
                                 let (arr_extended_name, arr_ty) = var_scope_info.reference_var(&arr_name, f_name)?;
-                                let mut load_ty = if let Ty::Array(_, load_ty) = arr_ty {
+                                let mut load_ty = if let Ty::Array(_, _, load_ty) = arr_ty {
                                     *load_ty.clone()
                                 } else {
                                     return Err(format!("Loading from a variable {} that is not an array!", arr_extended_name));
@@ -1667,9 +1682,9 @@ impl<'ast> ZGen<'ast> {
                     self.expr_impl_::<false>(&ai.count).and_then(|e| const_int(e)).and_then(|i| i.try_into().or_else(|_| Err("".to_string())))
                 };
                 let array_init_info = if let Ok(arr_size) = arr_size {
-                    ArrayInitInfo::from_static_array_initializer(*ai.value.clone(), arr_size, entry_ty.clone())
+                    ArrayInitInfo::from_static_array_initializer(*ai.value.clone(), arr_size, ai.dim_ro.is_some(), entry_ty.clone())
                 } else {
-                    ArrayInitInfo::from_dyn_array_initializer(*ai.value.clone(), *ai.count.clone(), entry_ty)
+                    ArrayInitInfo::from_dyn_array_initializer(*ai.value.clone(), *ai.count.clone(), ai.dim_ro.is_some(), entry_ty)
                 };
                 let arr_extended_name: String;
                 (blks, blks_len, var_scope_info, arr_extended_name, func_count, array_count, struct_count, load_count) = 
@@ -1690,8 +1705,7 @@ impl<'ast> ZGen<'ast> {
                         return Err(format!("Spread not supported in inline arrays!"));
                     }
                 }
-
-                let array_init_info = ArrayInitInfo::from_inline_array(e_list, entry_ty.clone());
+                let array_init_info = ArrayInitInfo::from_inline_array(e_list, ia.dim_ro.is_some(), entry_ty.clone());
                 let arr_extended_name: String;
                 (blks, blks_len, var_scope_info, arr_extended_name, func_count, array_count, struct_count, load_count) = 
                     self.bl_gen_array_init_::<IS_MAIN>(blks, blks_len, func_count, array_count, struct_count, load_count, f_name, array_init_info, var_scope_info)?;
@@ -1807,10 +1821,11 @@ impl<'ast> ZGen<'ast> {
 
         let cur_scope = blks[blks_len - 1].scope;
         let entry_ty = array_init_info.entry_ty.clone();
+        let read_only = array_init_info.read_only;
         let arr_len = if let Some(arr_content) = &array_init_info.arr_entries { arr_content.len() } else { 0 };
         // Assign array^X to be the temporary array
         let arr_name = format!("array^{}", array_count);
-        let arr_extended_name = var_scope_info.declare_var(&arr_name, &f_name, cur_scope, Ty::Array(arr_len, Box::new(entry_ty.clone())));
+        let arr_extended_name = var_scope_info.declare_var(&arr_name, &f_name, cur_scope, Ty::Array(read_only, arr_len, Box::new(entry_ty.clone())));
         array_count += 1;
         
         // Initialize array
@@ -1978,7 +1993,7 @@ impl<'ast> ZGen<'ast> {
                             }
                             Access::Select(s) => {
                                 if let RangeOrExpression::Expression(_) = &s.expression {
-                                    let load_ty = if let Ty::Array(_, load_ty) = var_ty {
+                                    let load_ty = if let Ty::Array(_, _, load_ty) = var_ty {
                                         *load_ty.clone()
                                     } else {
                                         return Err(format!("Loading from a variable {} that is not an array!", var_extended_name));
@@ -2011,14 +2026,14 @@ impl<'ast> ZGen<'ast> {
             Expression::ArrayInitializer(ai) => {
                 let ai_len = self.const_usize_impl_::<false>(&*ai.count);
                 let ai_len = if let Ok(ai_len) = ai_len { ai_len } else { 0 };
-                Ty::Array(ai_len, Box::new(self.bl_gen_type_(&ai.value, f_name, var_scope_info)?)) // array length does not matter
+                Ty::Array(ai.dim_ro.is_some(), ai_len, Box::new(self.bl_gen_type_(&ai.value, f_name, var_scope_info)?)) // array length does not matter
             }
             Expression::InlineArray(ia) => {
                 if ia.expressions.len() == 0 {
-                    Ty::Array(0, Box::new(Ty::Field))
+                    Ty::Array(ia.dim_ro.is_some(), 0, Box::new(Ty::Field))
                 }
                 else if let SpreadOrExpression::Expression(e) = &ia.expressions[0] {
-                    Ty::Array(ia.expressions.len(), Box::new(self.bl_gen_type_(e, f_name, var_scope_info)?)) // array length does not matter
+                    Ty::Array(ia.dim_ro.is_some(), ia.expressions.len(), Box::new(self.bl_gen_type_(e, f_name, var_scope_info)?)) // array length does not matter
                 } else {
                     return Err(format!("Spread not supported in inline arrays!"));
                 }

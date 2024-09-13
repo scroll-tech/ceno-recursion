@@ -227,7 +227,7 @@ impl<'ast, 'gen, const IS_CNST: bool> ZGenericInf<'ast, 'gen, IS_CNST> {
         mut arg_ty: Ty,
         def_ty: &ast::ArrayType<'ast>,
     ) -> Result<(), String> {
-        if !matches!(arg_ty, Ty::Array(_, _)) {
+        if !matches!(arg_ty, Ty::Array(..)) {
             return Err(format!(
                 "Type mismatch unifying generics: got {arg_ty}, decl was Array",
             ));
@@ -237,7 +237,7 @@ impl<'ast, 'gen, const IS_CNST: bool> ZGenericInf<'ast, 'gen, IS_CNST> {
         let mut dim_off = 0;
         loop {
             match arg_ty {
-                Ty::Array(arg_dim, nty) => {
+                Ty::Array(_, arg_dim, nty) => {
                     // make sure that we expect at least one more array dim
                     if dim_off >= def_ty.dimensions.len() {
                         return Err(format!(
@@ -248,7 +248,7 @@ impl<'ast, 'gen, const IS_CNST: bool> ZGenericInf<'ast, 'gen, IS_CNST> {
                     }
 
                     // unify actual dimension with dim expression
-                    self.fdef_gen_ty_expr(arg_dim, &def_ty.dimensions[dim_off])?;
+                    self.fdef_gen_ty_expr(arg_dim, &def_ty.dimensions[dim_off].1)?;
 
                     // iterate
                     dim_off += 1;

@@ -47,9 +47,9 @@ def verify_merkle_batch(
         assert(next_bit * (next_bit - 1) == 0)
         index_assemb = index_assemb * 2 + next_bit
         // Depending on index, cur_node and proof[i] will be on two sides of the inputs
-        field[2] inputs_0 = index_bits[depth - i - 1] == 0 ? [cur_node_0, proof_0.path[i], 0, 0, 0] : [proof_0.path[i], cur_node_0, 0, 0, 0]
+        field[5] inputs_0 = index_bits[depth - i - 1] == 0 ? [cur_node_0, proof_0.path[i], 0, 0, 0] : [proof_0.path[i], cur_node_0, 0, 0, 0]
         cur_node_0 = poseidon(5, inputs_0)
-        field[2] inputs_1 = index_bits[depth - i - 1] == 0 ? [cur_node_1, proof_1.path[i], 0, 0, 0] : [proof_1.path[i], cur_node_1, 0, 0, 0]
+        field[5] inputs_1 = index_bits[depth - i - 1] == 0 ? [cur_node_1, proof_1.path[i], 0, 0, 0] : [proof_1.path[i], cur_node_1, 0, 0, 0]
         cur_node_1 = poseidon(5, inputs_1)
     endfor
     assert(index_assemb == (F)index)

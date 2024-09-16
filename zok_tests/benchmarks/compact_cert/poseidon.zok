@@ -37,7 +37,7 @@ def poseidon(u32 N, field[0] inputs) -> field:
     // and we do not want callers passing down constants.
     // This should be revisited once compiler limitations are gone.
 
-    field[441] c = POSEIDON_C
+    field[ro 441] c = POSEIDON_C
 
     field state0 = 0
     field state1 = inputs[0]

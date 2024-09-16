@@ -4,7 +4,7 @@
 // Fiat-Shamir requires hash of 5 inputs (J, PROOF_ROOT, WEIGHT, MESSAGE, ATT_ROOT)
 // Schnorr verification requires hash of 3 inputs (MESSAGE, R.x, R.y)
 
-const field[441] POSEIDON_C = [
+const field[ro 441] POSEIDON_C = [ro
   758662019503705074,
   9958560809385864598,
   1277576466825840593,

@@ -74,9 +74,9 @@ def main(
     field[0] t_mem,
     // List of pointers (input format field[0])
     field[0][0] t_i_bits_list,
-    field[0][0] t_s_list,
+    field[0][5] t_s_list,
     field[0][0] t_pi_s_path_list,
-    field[0][0] t_p_list,
+    field[0][5] t_p_list,
     field[0][0] t_pi_p_path_list,
     // For others
     u32 proven_weight,

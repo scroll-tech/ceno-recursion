@@ -75,3 +75,11 @@ Preprocess time: 1077ms
 Prover time: 30.21s
 Verifier time: 515.07ms
 Proof size: 988.9kB
+
+Opt 8:
+Num Blocks: 17
+Compiler time: 615ms
+Preprocess time: 1104ms
+Prover time: 30.13s
+Verifier time: 509.04ms
+Proof size: 979.8kB

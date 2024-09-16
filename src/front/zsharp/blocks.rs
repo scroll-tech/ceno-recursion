@@ -214,6 +214,8 @@ pub struct Block<'ast> {
     pub fn_num_exec_bound: usize,
     // Is this block the head of a while loop? If so, this block cannot be merged with any block before it
     pub is_head_of_while_loop: bool,
+    // Number of read-only memory accesses
+    pub num_ro_ops: usize,
     // Number of non-scoping-related memory accesses
     pub num_vm_ops: usize,
     // Name of the function the block is in
@@ -227,13 +229,14 @@ pub enum BlockContent<'ast> {
     //       val   type  offset  
     MemPush((String, Ty, usize)), // %PHY[%SP + offset] = val
     MemPop((String, Ty, usize)),  // val = %PHY[%BP + offset]
-    //          arr   type size_expr, assume only one dimensional
-    ArrayInit((String, Ty, Expression<'ast>)), 
+    //          arr   type size_expr         read_only
+    ArrayInit((String, Ty, Expression<'ast>, bool)), 
     //     val_expr         type   arr   id_expr           init?  read-only?
     Store((Expression<'ast>, Ty, String, Expression<'ast>, bool,  bool)), // arr[id] = val, if read-only then no timestamp & load/store
-    //    var    type   arr   id_expr           read-only?
+    //    var    type   arr   id_expr           read_only?
     Load((String, Ty, String, Expression<'ast>, bool)),  // val = arr[id], if read-only then no timestamp & load/store
-    DummyLoad(),
+    //        read_only?
+    DummyLoad(bool),
     Branch((Expression<'ast>, Vec<BlockContent<'ast>>, Vec<BlockContent<'ast>>)),
     Stmt(Statement<'ast>) // other statements
 }
@@ -264,6 +267,7 @@ impl<'ast> Block<'ast> {
             terminator: BlockTerminator::Transition(bl_coda(NextBlock::Label(name + 1))),
             fn_num_exec_bound: num_exec_bound,
             is_head_of_while_loop: false,
+            num_ro_ops: 0,
             num_vm_ops: 0,
             fn_name,
             scope
@@ -280,6 +284,7 @@ impl<'ast> Block<'ast> {
             terminator: old_bl.terminator.clone(),
             fn_num_exec_bound: old_bl.fn_num_exec_bound,
             is_head_of_while_loop: old_bl.is_head_of_while_loop,
+            num_ro_ops: old_bl.num_ro_ops,
             num_vm_ops: old_bl.num_vm_ops,
             fn_name: old_bl.fn_name.clone(),
             scope: old_bl.scope
@@ -305,13 +310,14 @@ impl<'ast> Block<'ast> {
         // Terminator
         self.terminator = succ.terminator;
         // Add up memory operators
+        self.num_ro_ops += succ.num_ro_ops;
         self.num_vm_ops += succ.num_vm_ops;
     }
 
     pub fn pretty(&self) {
         println!("\nBlock {}:", self.name);
         println!("Func: {}, Scope: {}", self.fn_name, self.scope);
-        println!("Exec Bound: {}, While Loop: {}, Num VM Ops: {}", self.fn_num_exec_bound, self.is_head_of_while_loop, self.num_vm_ops);
+        println!("Exec Bound: {}, While Loop: {}, RO Ops: {}, VM Ops: {}", self.fn_num_exec_bound, self.is_head_of_while_loop, self.num_ro_ops, self.num_vm_ops);
         println!("Inputs:");
 
         for i in &self.inputs {
@@ -559,7 +565,8 @@ impl<'ast> ZGen<'ast> {
         blks.push(Block::new(0, 1, f_name.to_string(), 0));
         blks_len += 1;
         // Initialize %SP
-        blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%SP", &Ty::Field)));
+        // XXX: %SP is now a program input
+        // blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%SP", &Ty::Field)));
         // Initialize %BP
         blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%BP", &Ty::Field)));
         // Initialize %TS for memory timestamp
@@ -1153,7 +1160,7 @@ impl<'ast> ZGen<'ast> {
                     
                     // Compute the actual allocated size
                     let new_size_expr = self.bl_gen_pointer_offset_(new_len_expr, &Vec::new(), &index_ty, &entry_ty)?;
-                    blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name, entry_ty, new_size_expr)));
+                    blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name, entry_ty, new_size_expr, aty.dimensions[0].0.is_some())));
                 } else {
                     return Err(format!("Declaring non-array {} as an array!", arr_extended_name));
                 }
@@ -1443,7 +1450,11 @@ impl<'ast> ZGen<'ast> {
             let new_offset_expr = self.bl_gen_pointer_offset_(new_index_expr.clone(), prev_accesses, index_ty, struct_ty)?;
             let store_instr = BlockContent::Store((new_entry_expr.clone(), cur_ty, arr_extended_name.to_string(), new_offset_expr, is_alloc, read_only));
             blks[blks_len - 1].instructions.push(store_instr);
-            blks[blks_len - 1].num_vm_ops += 1;
+            if read_only {
+                blks[blks_len - 1].num_ro_ops += 1;
+            } else {
+                blks[blks_len - 1].num_vm_ops += 1;
+            }
         }
         Ok((blks, blks_len))
     }
@@ -1502,7 +1513,11 @@ impl<'ast> ZGen<'ast> {
             let new_offset_expr = self.bl_gen_pointer_offset_(new_index_expr.clone(), prev_accesses, index_ty, struct_ty)?;
             let load_instr = BlockContent::Load((new_l, cur_ty, arr_extended_name.to_string(), new_offset_expr, read_only));
             blks[blks_len - 1].instructions.push(load_instr);
-            blks[blks_len - 1].num_vm_ops += 1;
+            if read_only {
+                blks[blks_len - 1].num_ro_ops += 1;
+            } else {
+                blks[blks_len - 1].num_vm_ops += 1;
+            }
         }
         Ok((blks, blks_len))
     }
@@ -1844,7 +1859,7 @@ impl<'ast> ZGen<'ast> {
             self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &len_expr, f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
         // Perform pointer arithmetics
         let new_size_expr = self.bl_gen_pointer_offset_(new_len_expr, &Vec::new(), &index_ty, &entry_ty)?;
-        blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name.clone(), entry_ty.clone(), new_size_expr)));
+        blks[blks_len - 1].instructions.push(BlockContent::ArrayInit((arr_extended_name.clone(), entry_ty.clone(), new_size_expr, read_only)));
 
         // Start by declaring all init^X to unique_contents
         for i in 0..array_init_info.unique_contents.len() {
@@ -2124,9 +2139,10 @@ impl<'ast> ZGen<'ast> {
     // MODE: LOAD, STORE, DUMMY_LOAD, INIT_STORE
     fn vir_mem_to_circ<const MODE: usize>(
         &'ast self,
-        vir_mem_op_count: usize,
+        mem_op_count: usize,
         arr: Option<&String>,
         id_expr: Option<&Expression<'ast>>,
+        read_only: bool,
     ) {
         // ADDR if exist
         if let Some(addr_expr) = id_expr {
@@ -2141,20 +2157,27 @@ impl<'ast> ZGen<'ast> {
                 span: Span::new("", 0, 0).unwrap()
             })).unwrap();
             let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                value: format!("%vm{:06}a", vir_mem_op_count),
+                value: if read_only {
+                    format!("%pm{:06}a", mem_op_count)
+                } else {
+                    format!("%vm{:06}a", mem_op_count)
+                },
                 span: Span::new("", 0, 0).unwrap()
             })).unwrap();
             let b = bool(eq(add(lhs_t, offset_t).unwrap(), rhs_t).unwrap()).unwrap();
             self.assert(b).unwrap();
         }
-        // LS
-        let ls = if MODE == STORE || MODE == INIT_STORE { STORE } else { LOAD };
-        self.bl_gen_assert_const(&format!("%vm{:06}l", vir_mem_op_count), ls);
-        // TS, increment if STORE
-        if MODE == STORE {
-            self.stmt_impl_::<false>(&bl_gen_increment_stmt(W_TS, 1, &Ty::Field)).unwrap();
+        // LS and TS only applicable if not read_only
+        if !read_only {
+            // LS
+            let ls = if MODE == STORE || MODE == INIT_STORE { STORE } else { LOAD };
+            self.bl_gen_assert_const(&format!("%vm{:06}l", mem_op_count), ls);
+            // TS, increment if STORE
+            if MODE == STORE {
+                self.stmt_impl_::<false>(&bl_gen_increment_stmt(W_TS, 1, &Ty::Field)).unwrap();
+            }
+            self.bl_gen_assert_eq(&W_TS, &format!("%vm{:06}t", mem_op_count));
         }
-        self.bl_gen_assert_eq(&W_TS, &format!("%vm{:06}t", vir_mem_op_count));
         // DATA is updated individually by LOAD or STORE
     }
 
@@ -2162,8 +2185,9 @@ impl<'ast> ZGen<'ast> {
         i: &BlockContent, 
         f: &str,
         mut phy_mem_op_count: usize,
+        mut ro_mem_op_count: usize, 
         mut vir_mem_op_count: usize
-    ) -> (usize, usize) {
+    ) -> (usize, usize, usize) {
         debug!("Inst to Circ: {:?}", i);
         match i {
             BlockContent::MemPush((var, _, offset)) => {
@@ -2290,7 +2314,7 @@ impl<'ast> ZGen<'ast> {
                 ).unwrap();
                 phy_mem_op_count += 1;  
             }
-            BlockContent::ArrayInit((arr, _, len_expr)) => {
+            BlockContent::ArrayInit((arr, _, len_expr, read_only)) => {
                 if ESTIMATE {
                     self.circ_declare_input(
                         &f,
@@ -2302,9 +2326,11 @@ impl<'ast> ZGen<'ast> {
                         &None,
                     ).unwrap();
                 } else {
-                    // Declare the array as a pointer (field), set to %AS
+                    // If read_only, allocate on stack (%SP), otherwise allocate on virtual memory (%AS)
+                    let mem_pointer = if *read_only { W_SP } else { W_AS };
+                    // Declare the array as a pointer (field), set to mem_pointer
                     let as_expr = Expression::Identifier(IdentifierExpression {
-                        value: W_AS.to_string(),
+                        value: mem_pointer.to_string(),
                         span: Span::new("", 0, 0).unwrap()
                     });
                     let as_t = self.expr_impl_::<false>(&as_expr).unwrap();
@@ -2313,48 +2339,69 @@ impl<'ast> ZGen<'ast> {
                         Ty::Field,
                         as_t.clone(),
                     ).unwrap();
-                    // Increment %AS by size of array
+                    // Increment mem_pointer by size of array
                     let mut len_t = self.expr_impl_::<false>(&len_expr).unwrap();
                     if len_t.type_() != &Ty::Field {
                         len_t = uint_to_field(len_t).unwrap();
                     }
                     let new_as_t = add(as_t, len_t).unwrap();
-                    self.assign_impl_::<false>(W_AS, &[][..], new_as_t, false).unwrap();
+                    self.assign_impl_::<false>(mem_pointer, &[][..], new_as_t, false).unwrap();
                 }
             }
-            BlockContent::Store((val_expr, _, arr, id_expr, init, _)) => {
+            BlockContent::Store((val_expr, _, arr, id_expr, init, read_only)) => {
                 if ESTIMATE {}
                 else {
-                    // ADDR, LS, & TS
-                    if *init {
-                        self.vir_mem_to_circ::<INIT_STORE>(
-                            vir_mem_op_count,
-                            Some(&arr),
-                            Some(&id_expr)
-                        );
-                    } else {
+                    let rhs_t = if *read_only {
+                        // ADDR
                         self.vir_mem_to_circ::<STORE>(
-                            vir_mem_op_count,
+                            ro_mem_op_count,
                             Some(&arr),
-                            Some(&id_expr)
+                            Some(&id_expr),
+                            *read_only,
                         );
-                    }
+                        let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                            value: format!("%pm{:06}v", ro_mem_op_count),
+                            span: Span::new("", 0, 0).unwrap()
+                        })).unwrap();
+                        // Update Label
+                        ro_mem_op_count += 1;
+                        rhs_t
+                    } else {
+                        // ADDR, LS, & TS
+                        if *init {
+                            self.vir_mem_to_circ::<INIT_STORE>(
+                                vir_mem_op_count,
+                                Some(&arr),
+                                Some(&id_expr),
+                                *read_only,
+                            );
+                        } else {
+                            self.vir_mem_to_circ::<STORE>(
+                                vir_mem_op_count,
+                                Some(&arr),
+                                Some(&id_expr),
+                                *read_only,
+                            );
+                        }
+                        let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                            value: format!("%vm{:06}d", vir_mem_op_count),
+                            span: Span::new("", 0, 0).unwrap()
+                        })).unwrap();
+                        // Update Label
+                        vir_mem_op_count += 1;
+                        rhs_t
+                    };
+
                     // Assert correctness of DATA, always stored as Field
                     let mut lhs_t = self.expr_impl_::<false>(&val_expr).unwrap();
                     if lhs_t.type_() != &Ty::Field {
                         lhs_t = uint_to_field(lhs_t).unwrap();
                     }
-                    let rhs_t = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%vm{:06}d", vir_mem_op_count),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
                     let b = bool(eq(lhs_t, rhs_t).unwrap()).unwrap();
                     self.assert(b).unwrap();
-                    // Update Label
-                    vir_mem_op_count += 1;
                 }
             }
-            BlockContent::Load((val, ty, arr, id_expr, _)) => {
+            BlockContent::Load((val, ty, arr, id_expr, read_only)) => {
                 if ESTIMATE {
                     let r = self.circ_declare_input(
                         &f,
@@ -2367,17 +2414,37 @@ impl<'ast> ZGen<'ast> {
                     );
                     r.unwrap();
                 } else {
-                    // ADDR, LS, & TS
-                    self.vir_mem_to_circ::<LOAD>(
-                        vir_mem_op_count,
-                        Some(&arr),
-                        Some(&id_expr)
-                    );
-                    // Assign LOAD value to data
-                    let mut e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
-                        value: format!("%vm{:06}d", vir_mem_op_count),
-                        span: Span::new("", 0, 0).unwrap()
-                    })).unwrap();
+                    let mut e = if *read_only {
+                        // ADDR
+                        self.vir_mem_to_circ::<LOAD>(
+                            ro_mem_op_count,
+                            Some(&arr),
+                            Some(&id_expr),
+                            *read_only,
+                        );
+                        // Assign LOAD value to data
+                        let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                            value: format!("%pm{:06}v", ro_mem_op_count),
+                            span: Span::new("", 0, 0).unwrap()
+                        })).unwrap();
+                        ro_mem_op_count += 1;
+                        e
+                    } else {
+                        // ADDR, LS, & TS
+                        self.vir_mem_to_circ::<LOAD>(
+                            vir_mem_op_count,
+                            Some(&arr),
+                            Some(&id_expr),
+                            *read_only,
+                        );
+                        // Assign LOAD value to data
+                        let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                            value: format!("%vm{:06}d", vir_mem_op_count),
+                            span: Span::new("", 0, 0).unwrap()
+                        })).unwrap();
+                        vir_mem_op_count += 1;
+                        e
+                    };
                     // Convert the loaded value to the correct type
                     e = field_to_ty(e, &ty).unwrap();
                     self.declare_init_impl_::<false>(
@@ -2385,17 +2452,21 @@ impl<'ast> ZGen<'ast> {
                         ty.clone(),
                         e,
                     ).unwrap();
-                    vir_mem_op_count += 1;
                 }
             }
-            BlockContent::DummyLoad() => {
+            BlockContent::DummyLoad(read_only) => {
                 // ADDR, LS, & TS
                 self.vir_mem_to_circ::<DUMMY_LOAD>(
-                    vir_mem_op_count,
+                    if *read_only { ro_mem_op_count } else { vir_mem_op_count },
                     None,
-                    None
+                    None,
+                    *read_only,
                 );
-                vir_mem_op_count += 1;
+                if *read_only {
+                    ro_mem_op_count += 1;
+                } else {
+                    vir_mem_op_count += 1;
+                }
             }
             BlockContent::Branch((cond, if_insts, else_insts)) => {
                 let cond = self.expr_impl_::<false>(&cond).unwrap();
@@ -2403,34 +2474,38 @@ impl<'ast> ZGen<'ast> {
 
                 // Mem_ops overlap in two branches
                 let mut if_phy_mem_op_count = phy_mem_op_count;
+                let mut if_ro_mem_op_count = ro_mem_op_count;
                 let mut if_vir_mem_op_count = vir_mem_op_count;
                 let mut else_phy_mem_op_count = phy_mem_op_count;
+                let mut else_ro_mem_op_count = ro_mem_op_count;
                 let mut else_vir_mem_op_count = vir_mem_op_count;
 
                 self.circ_enter_condition(cbool.clone());
                 for i in if_insts {
-                    (if_phy_mem_op_count, if_vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, if_phy_mem_op_count, if_vir_mem_op_count);
+                    (if_phy_mem_op_count, if_ro_mem_op_count, if_vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, if_phy_mem_op_count, if_ro_mem_op_count, if_vir_mem_op_count);
                 }
                 self.circ_exit_condition();
                 self.circ_enter_condition(term![NOT; cbool]);
                 for i in else_insts {
-                    (else_phy_mem_op_count, else_vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, else_phy_mem_op_count, else_vir_mem_op_count);
+                    (else_phy_mem_op_count, else_ro_mem_op_count, else_vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, else_phy_mem_op_count, else_ro_mem_op_count, else_vir_mem_op_count);
                 }
                 self.circ_exit_condition();
 
                 // No phy_op should every occur in branches, and the same amount of vir_op should occur in two branches
                 assert_eq!(if_phy_mem_op_count, phy_mem_op_count);
                 assert_eq!(else_phy_mem_op_count, phy_mem_op_count);
+                assert_eq!(if_ro_mem_op_count, else_ro_mem_op_count);
                 assert_eq!(if_vir_mem_op_count, else_vir_mem_op_count);
 
                 phy_mem_op_count = if_phy_mem_op_count;
+                ro_mem_op_count = if_ro_mem_op_count;
                 vir_mem_op_count = if_vir_mem_op_count;
             }
             BlockContent::Stmt(stmt) => {
                 self.stmt_impl_::<false>(&stmt).unwrap();
             }
         }
-        (phy_mem_op_count, vir_mem_op_count)
+        (phy_mem_op_count, ro_mem_op_count, vir_mem_op_count)
     }
 
     // Convert a block to circ_ir
@@ -2479,11 +2554,37 @@ impl<'ast> ZGen<'ast> {
             }
         }
 
-        // How many scoping memory operations have we encountered?
-        let mut phy_mem_op_count = 0;
+        // How many scoping memory operations have we encountered? Counter starts at b.num_ro_ops
+        let mut phy_mem_op_count = b.num_ro_ops;
+        // How many read-only memory operations have we encountered?
+        let mut ro_mem_op_count = 0;
         // How many virtual memory operations have we encountered?
         let mut vir_mem_op_count = 0;
         
+        // Declare all read-only memory accesses to avoid dealing with branching
+        for i in 0..b.num_ro_ops {
+            // Declare the next ADDR and DATA
+            // VIR_ADDR as 'a'
+            self.circ_declare_input(
+                f,
+                format!("%pm{:06}a", i),
+                &Ty::Field,
+                ZVis::Private(0),
+                None,
+                true,
+                &None,
+            ).unwrap();
+            // VAL as 'd'
+            self.circ_declare_input(
+                f,
+                format!("%pm{:06}v", i),
+                &Ty::Field,
+                ZVis::Private(0),
+                None,
+                true,
+                &None,
+            ).unwrap();
+        }
         // Declare all virtual memory accesses to avoid dealing with branching
         for i in 0..b.num_vm_ops {
             // Declare the next ADDR, DATA, L/S, and TS
@@ -2531,7 +2632,7 @@ impl<'ast> ZGen<'ast> {
 
         // Iterate over instructions, convert memory accesses into statements and then IR
         for i in &b.instructions {
-            (phy_mem_op_count, vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, phy_mem_op_count, vir_mem_op_count);
+            (phy_mem_op_count, ro_mem_op_count, vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, phy_mem_op_count, ro_mem_op_count, vir_mem_op_count);
         }
         
         // If in estimation mode, declare and assert all outputs of the block

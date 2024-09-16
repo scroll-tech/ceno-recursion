@@ -737,20 +737,21 @@ fn term_to_instr<'ast>(
     bls: &Vec<Block>,
     term: &Expression<'ast>,
     instr_list: &Vec<Vec<BlockContent<'ast>>>,
+    ro_count_list: &Vec<usize>,
     vm_count_list: &Vec<usize>,
     cur_bl: usize,
-) -> (Vec<BlockContent<'ast>>, usize, usize) {
+) -> (Vec<BlockContent<'ast>>, usize, usize, usize) {
     // There are three cases for the terminator
     // A ternary should be converted to a branching instruction
     // A constant literal should be converted to the corresponding instruction list x looping
     // Any reference to rp@ should result in the termination of the conversion
     match term {
         Expression::Ternary(t) => {
-            let (mut left_instr, left_vm_count, left_repeat) = term_to_instr(bls, &t.second, instr_list, vm_count_list, cur_bl);
-            let (mut right_instr, right_vm_count, right_repeat) = term_to_instr(bls, &t.third, instr_list, vm_count_list, cur_bl);
+            let (mut left_instr, left_ro_count, left_vm_count, left_repeat) = term_to_instr(bls, &t.second, instr_list, ro_count_list, vm_count_list, cur_bl);
+            let (mut right_instr, right_ro_count, right_vm_count, right_repeat) = term_to_instr(bls, &t.third, instr_list, ro_count_list, vm_count_list, cur_bl);
             // If both left and right are empty, don't construct if / else
             if left_instr.len() == 0 && right_instr.len() == 0 {
-                return (Vec::new(), 0, 1);
+                return (Vec::new(), 0, 0, 1);
             }
 
             // Restrictions on loop structure
@@ -758,11 +759,17 @@ fn term_to_instr<'ast>(
             assert!(left_repeat == 1 || right_instr.len() == 0);
 
             // Insert dummy loads on branches if vm_count does not match
+            if left_ro_count < right_ro_count {
+                left_instr.extend(vec![BlockContent::DummyLoad(true); right_ro_count - left_ro_count]);
+            }
             if left_vm_count < right_vm_count {
-                left_instr.extend(vec![BlockContent::DummyLoad(); right_vm_count - left_vm_count]);
+                left_instr.extend(vec![BlockContent::DummyLoad(false); right_vm_count - left_vm_count]);
+            }
+            if right_ro_count < left_ro_count {
+                right_instr.extend(vec![BlockContent::DummyLoad(true); left_ro_count - right_ro_count]);
             }
             if right_vm_count < left_vm_count {
-                right_instr.extend(vec![BlockContent::DummyLoad(); left_vm_count - right_vm_count]);
+                right_instr.extend(vec![BlockContent::DummyLoad(false); left_vm_count - right_vm_count]);
             }
             let branch_inst = BlockContent::Branch((
                 *t.first.clone(),
@@ -770,7 +777,7 @@ fn term_to_instr<'ast>(
                 right_instr
             ));
 
-            (vec![branch_inst; left_repeat], max(left_vm_count, right_vm_count) * left_repeat, 1)
+            (vec![branch_inst; left_repeat], max(left_ro_count, right_ro_count) * left_repeat, max(left_vm_count, right_vm_count) * left_repeat, 1)
         }
         Expression::Literal(le) => {
             if let LiteralExpression::DecimalLiteral(dle) = le {
@@ -780,9 +787,9 @@ fn term_to_instr<'ast>(
                 if next_scope > cur_scope {
                     // Copy from instr_list only if scope of next_bl is higher than cur_scope
                     // DO NOT unroll the loops here. We need to unroll with the condition
-                    (instr_list[next_bl].clone(), vm_count_list[next_bl], bls[next_bl].fn_num_exec_bound / bls[cur_bl].fn_num_exec_bound)
+                    (instr_list[next_bl].clone(), ro_count_list[next_bl], vm_count_list[next_bl], bls[next_bl].fn_num_exec_bound / bls[cur_bl].fn_num_exec_bound)
                 } else {
-                    (Vec::new(), 0, 1)
+                    (Vec::new(), 0, 0, 1)
                 }
             } else {
                 panic!("Terminator to instruction failed: terminator cannot contain boolean or hex")
@@ -1154,22 +1161,30 @@ fn la_inst<'ast>(
             }
             // NOTE: Due to pointer aliasing, cannot remove any vm statements
             // If there is an array initialization, then the array is dead but %AS is alive
-            BlockContent::ArrayInit((arr, _, len)) => {
+            BlockContent::ArrayInit((arr, _, len, read_only)) => {
                 // if is_alive(&state, arr) {
                     new_instructions.insert(0, i.clone());
                     let gen = expr_find_val(&len);
                     la_gen(&mut state, &gen);
                     state.remove(arr);
-                    state.insert("%AS".to_string());
+                    if *read_only {
+                        state.insert("%SP".to_string());
+                    } else {
+                        state.insert("%AS".to_string());
+                    }
                     for (_, s) in state_per_call_trace.iter_mut() {
                         la_gen(s, &gen);
                         s.remove(arr);
-                        s.insert("%AS".to_string());
+                        if *read_only {
+                            s.insert("%SP".to_string());
+                        } else {
+                            s.insert("%AS".to_string());
+                        }
                     }
                 // }
             }
             // If there is a store, then keep the statement if array is alive
-            BlockContent::Store((val_expr, _, arr, id_expr, _, _)) => {
+            BlockContent::Store((val_expr, _, arr, id_expr, _, read_only)) => {
                 // if is_alive(&state, arr) {
                     new_instructions.insert(0, i.clone());
                     state.insert(arr.to_string());
@@ -1177,38 +1192,50 @@ fn la_inst<'ast>(
                     la_gen(&mut state, &val_gen);
                     let id_gen = expr_find_val(id_expr);
                     la_gen(&mut state, &id_gen);
-                    state.insert("%TS".to_string());
+                    if !*read_only {
+                        state.insert("%TS".to_string());
+                    }
                     for (_, s) in state_per_call_trace.iter_mut() {
                         s.insert(arr.to_string());
                         la_gen(s, &val_gen);
                         la_gen(s, &id_gen);
-                        s.insert("%TS".to_string());
+                        if !*read_only {
+                            s.insert("%TS".to_string());
+                        }
                     }
                 // }
             }
             // If there is a load, then keep the statement if val is alive
-            BlockContent::Load((val, _, arr, id_expr, _)) => {
+            BlockContent::Load((val, _, arr, id_expr, read_only)) => {
                 if is_alive(&state, val) {
                     new_instructions.insert(0, i.clone());
                     state.remove(val);
                     state.insert(arr.to_string());
                     let gen = expr_find_val(id_expr);
                     la_gen(&mut state, &gen);
-                    state.insert("%TS".to_string());
+                    if !*read_only {
+                        state.insert("%TS".to_string());
+                    }
                     for (_, s) in state_per_call_trace.iter_mut() {
                         s.remove(val);
                         s.insert(arr.to_string());
                         la_gen(s, &gen);
-                        s.insert("%TS".to_string());
+                        if !*read_only {
+                            s.insert("%TS".to_string());
+                        }
                     }
                 }
             }
             // Do not reason about liveness of dummy loads, mark %TS as alive
-            BlockContent::DummyLoad() => {
+            BlockContent::DummyLoad(read_only) => {
                 new_instructions.insert(0, i.clone());
-                state.insert("%TS".to_string());
+                if !*read_only {
+                    state.insert("%TS".to_string());
+                }
                 for (_, s) in state_per_call_trace.iter_mut() {
-                    s.insert("%TS".to_string());
+                    if !*read_only {
+                        s.insert("%TS".to_string());
+                    }
                 }
             }
             BlockContent::Branch((cond, if_inst, else_inst)) => {
@@ -1266,14 +1293,14 @@ fn ty_inst<'ast>(
             BlockContent::MemPop((id, ty, _)) => {
                 state.insert(id.clone(), ty.clone());
             }
-            BlockContent::ArrayInit((arr, _, _)) => {
+            BlockContent::ArrayInit((arr, _, _, _)) => {
                 state.insert(arr.clone(), Ty::Field);
             }
             BlockContent::Store(_) => {}
             BlockContent::Load((val, ty, _, _, _)) => {
                 state.insert(val.clone(), ty.clone());
             }
-            BlockContent::DummyLoad() => {}
+            BlockContent::DummyLoad(_) => {}
             BlockContent::Branch((_, if_inst, else_inst)) => {
                 state = ty_inst(state, &if_inst);
                 state = ty_inst(state, &else_inst);
@@ -1312,10 +1339,10 @@ fn fm_inst<'ast, const IS_CALLER: bool>(
             BlockContent::MemPop((id, ty, offset)) => {
                 new_instr.insert(0, BlockContent::MemPop((var_fn_merge(id, old_f_name, new_f_name, scope_diff), ty.clone(), *offset)));
             }
-            BlockContent::ArrayInit((arr, ty, expr)) => {
+            BlockContent::ArrayInit((arr, ty, expr, ro)) => {
                 let new_arr = var_fn_merge(arr, old_f_name, new_f_name, scope_diff);
                 let new_expr = expr_replace_fn(expr, old_f_name, new_f_name, scope_diff);
-                new_instr.insert(0, BlockContent::ArrayInit((new_arr, ty.clone(), new_expr)));
+                new_instr.insert(0, BlockContent::ArrayInit((new_arr, ty.clone(), new_expr, *ro)));
             }
             BlockContent::Store((val_expr, ty, arr, id_expr, init, ro)) => {
                 let new_val_expr = expr_replace_fn(val_expr, old_f_name, new_f_name, scope_diff);
@@ -1329,8 +1356,8 @@ fn fm_inst<'ast, const IS_CALLER: bool>(
                 let new_id_expr = expr_replace_fn(id_expr, old_f_name, new_f_name, scope_diff);
                 new_instr.insert(0, BlockContent::Load((new_val, ty.clone(), new_arr, new_id_expr, *ro)));
             }
-            BlockContent::DummyLoad() => {
-                new_instr.insert(0, BlockContent::DummyLoad());
+            BlockContent::DummyLoad(ro) => {
+                new_instr.insert(0, BlockContent::DummyLoad(*ro));
             }
             BlockContent::Branch((cond, if_inst, else_inst)) => {
                 let new_cond = expr_replace_fn(cond, old_f_name, new_f_name, scope_diff);
@@ -1366,12 +1393,12 @@ fn vtr_inst<'ast>(
                 (new_var, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
                 new_instr.push(BlockContent::MemPop((new_var, ty.clone(), *offset)));
             }
-            BlockContent::ArrayInit((arr, ty, size_expr)) => {
+            BlockContent::ArrayInit((arr, ty, size_expr, ro)) => {
                 let new_arr_name: String;
                 (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
                 let new_size_expr: Expression;
                 (new_size_expr, witness_map) = var_to_reg_expr(&size_expr, witness_map);
-                new_instr.push(BlockContent::ArrayInit((new_arr_name, ty.clone(), new_size_expr)));
+                new_instr.push(BlockContent::ArrayInit((new_arr_name, ty.clone(), new_size_expr, *ro)));
             }
             BlockContent::Store((val_expr, ty, arr, id_expr, init, ro)) => {
                 let new_val_expr: Expression;
@@ -1391,8 +1418,8 @@ fn vtr_inst<'ast>(
                 (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
                 new_instr.push(BlockContent::Load((new_val, ty.clone(), new_arr_name, new_id_expr, *ro)))
             }
-            BlockContent::DummyLoad() => {
-                new_instr.push(BlockContent::DummyLoad());
+            BlockContent::DummyLoad(ro) => {
+                new_instr.push(BlockContent::DummyLoad(*ro));
             }
             BlockContent::Branch((cond, if_inst, else_inst)) => {
                 let new_cond: Expression;
@@ -1473,21 +1500,33 @@ fn bmc_inst<'ast>(
             }
             BlockContent::ArrayInit(_) => {}
             // Store includes init, invalidate, & store
-            BlockContent::Store(_) => {
-                vir_mem_accesses_count += 1;
-                //                      addr  data  ls    ts
-                vm_liveness.extend(vec![true, true, true, true]);
+            BlockContent::Store((_, _, _, _, _, ro)) => {
+                if *ro {
+                    phy_mem_accesses_count += 1;
+                } else {
+                    vir_mem_accesses_count += 1;
+                    //                      addr  data  ls    ts
+                    vm_liveness.extend(vec![true, true, true, true]);
+                }
             }
-            BlockContent::Load(_) => {
-                vir_mem_accesses_count += 1;
-                //                      addr  data  ls    ts
-                vm_liveness.extend(vec![true, true, true, true]);
+            BlockContent::Load((_, _, _, _, ro)) => {
+                if *ro {
+                    phy_mem_accesses_count += 1;
+                } else {
+                    vir_mem_accesses_count += 1;
+                    //                      addr  data  ls    ts
+                    vm_liveness.extend(vec![true, true, true, true]);
+                }
             }
-            BlockContent::DummyLoad() => {
-                vir_mem_accesses_count += 1;
-                //                      addr  data  ls    ts
-                // Note: while addr & data are not referenced in dummy loads, they are referenced in the other branch
-                vm_liveness.extend(vec![true, true, true, true]);
+            BlockContent::DummyLoad(ro) => {
+                if *ro {
+                    phy_mem_accesses_count += 1;
+                } else {
+                    vir_mem_accesses_count += 1;
+                    //                      addr  data  ls    ts
+                    // Note: while addr & data are not referenced in dummy loads, they are referenced in the other branch
+                    vm_liveness.extend(vec![true, true, true, true]);
+                }
             }
             /*
             BlockContent::Load(_) => {
@@ -1513,12 +1552,12 @@ fn bmc_inst<'ast>(
             BlockContent::Branch((_, if_inst, else_inst)) => {
                 let (if_phy_mem_accesses_count, if_vir_mem_accesses_count, if_vm_liveness) = bmc_inst(&if_inst);
                 let (else_phy_mem_accesses_count, else_vir_mem_accesses_count, else_vm_liveness) = bmc_inst(&else_inst);
-                // No scoping should occur at all within branches
-                assert_eq!(if_phy_mem_accesses_count, 0);
-                assert_eq!(else_phy_mem_accesses_count, 0);
+                // Through dummy loads, ro ops of both branches should be the same
+                assert_eq!(if_phy_mem_accesses_count, else_phy_mem_accesses_count);
                 // Through dummy loads, mem ops of both branches should be the same
                 assert_eq!(if_vir_mem_accesses_count, else_vir_mem_accesses_count);
                 assert_eq!(if_vm_liveness, else_vm_liveness);
+                phy_mem_accesses_count += if_phy_mem_accesses_count;
                 vir_mem_accesses_count += if_vir_mem_accesses_count;
                 vm_liveness.extend(if_vm_liveness);
             }
@@ -1575,8 +1614,9 @@ impl<'ast> ZGen<'ast> {
         no_opt: bool,
     ) -> (Vec<Block<'ast>>, usize, Vec<bool>) {
         println!("\n\n--\nOptimization:");
-        // Add %AS to program input
+        // Add %SP and %AS to program input
         inputs.insert(0, ("%AS".to_string(), Ty::Field));
+        inputs.insert(0, ("%SP".to_string(), Ty::Field));
 
         if !no_opt {
             // Construct CFG
@@ -2523,8 +2563,10 @@ impl<'ast> ZGen<'ast> {
                     // Backward analysis starting from comp_tail
                     // STATE is 
                     // 1. a list of instructions of all merged blocks of the current scope
-                    // 2. number of vm ops of all merged blocks of the current scope
+                    // 2. number of read-only ops of all merged blocks of the current scope
+                    // 3. number of vm ops of all merged blocks of the current scope
                     let mut instr_list: Vec<Vec<BlockContent<'ast>>> = vec![Vec::new(); bls.len()];
+                    let mut ro_count_list: Vec<usize> = vec![0; bls.len()];
                     let mut vm_count_list: Vec<usize> = vec![0; bls.len()];
                     let mut visited: Vec<bool> = vec![false; bls.len()];
 
@@ -2538,21 +2580,25 @@ impl<'ast> ZGen<'ast> {
 
                         // Instructions of cur_bl
                         let mut instr_state = bls[cur_bl].instructions.clone();
+                        let mut ro_count_state = bls[cur_bl].num_ro_ops;
                         let mut vm_count_state = bls[cur_bl].num_vm_ops;
                         // Instructions of successors & next block in scope, if not comp_tail
                         if cur_bl != comp_tail {                  
                             if let BlockTerminator::Transition(t) = &bls[cur_bl].terminator {
-                                let (merged_instr, merged_vm_count, _) = term_to_instr(&bls, t, &instr_list, &vm_count_list, cur_bl);
+                                let (merged_instr, merged_ro_count, merged_vm_count, _) = term_to_instr(&bls, t, &instr_list, &ro_count_list, &vm_count_list, cur_bl);
                                 instr_state.extend(merged_instr);
+                                ro_count_state += merged_ro_count;
                                 vm_count_state += merged_vm_count;
                             }
                             instr_state.extend(instr_list[scope_list[cur_bl][cur_scope]].clone());
+                            ro_count_state += ro_count_list[scope_list[cur_bl][cur_scope]];
                             vm_count_state += vm_count_list[scope_list[cur_bl][cur_scope]];
                         }
 
                         if !visited[cur_bl] || instr_state != instr_list[cur_bl] {
                             visited[cur_bl] = true;
                             instr_list[cur_bl] = instr_state;
+                            ro_count_list[cur_bl] = ro_count_state;
                             vm_count_list[cur_bl] = vm_count_state;
                             if cur_bl != comp_head {
                                 // Push in predecessors
@@ -2579,6 +2625,7 @@ impl<'ast> ZGen<'ast> {
                     count_list[comp_tail] = 0;
 
                     bls[comp_head].instructions = instr_list[comp_head].clone();
+                    bls[comp_head].num_ro_ops = ro_count_list[comp_head];
                     bls[comp_head].num_vm_ops = vm_count_list[comp_head];
                     bls[comp_head].terminator = bls[comp_tail].terminator.clone();
                     bls[comp_head].outputs = bls[comp_tail].outputs.clone();
@@ -3232,7 +3279,7 @@ impl<'ast> ZGen<'ast> {
         &self,
         bls: Vec<Block<'ast>>,
         entry_bl: usize
-    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>, Vec<Vec<usize>>, bool) {
+    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>, Vec<Vec<usize>>) {
         println!("\n\n--\nPost-Processing:");
         // Construct a new CFG for the program
         // Note that this is the CFG after DBE, and might be different from the previous CFG
@@ -3286,10 +3333,10 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Obtain # of scoping memory accesses per block
-        let (init_mem_set, num_mem_accesses, live_vm) = self.get_blocks_memory_info(&bls, entry_bl);
+        let (num_mem_accesses, live_vm) = self.get_blocks_memory_info(&bls);
 
         print_bls(&bls, &entry_bl);
-        (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses, live_vm, init_mem_set)
+        (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses, live_vm)
     }
 
     // Convert all mentionings of variables to registers
@@ -3670,12 +3717,7 @@ impl<'ast> ZGen<'ast> {
     fn get_blocks_memory_info(
         &self,
         bls: &Vec<Block>,
-        entry_bl: usize,
-    ) -> (bool, Vec<(usize, usize)>, Vec<Vec<usize>>) {
-        let init_mem_set = bls[entry_bl].inputs.iter().fold(false, 
-            |acc, i| if let Some(Ty::Array(..)) = i.1 { true } else { acc }
-        );
-
+    ) -> (Vec<(usize, usize)>, Vec<Vec<usize>>) {
         // Number of memory accesses per block
         let mut num_mem_accesses = Vec::new();
         // Map of each _live_ vm variables to its overall ordering
@@ -3691,7 +3733,7 @@ impl<'ast> ZGen<'ast> {
             }
             live_vm_list.push(live_vm);
         }
-        (init_mem_set, num_mem_accesses, live_vm_list)
+        (num_mem_accesses, live_vm_list)
     }
 
     // Bound the total # of block executions & the total # of memory accesses

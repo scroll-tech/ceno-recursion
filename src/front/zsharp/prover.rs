@@ -87,8 +87,8 @@ impl PartialEq for MemOp {
 impl Eq for MemOp {}
 
 // We reserve indices for reg_in and reg_out to:
-// reg  0   1   2   3   4   5   6   7   8   9
-//      V  BN RET  TS  AS  RP  SP  BP  i8  i9
+// reg  0   1   2   3   4   5   6   7   8
+//      V  BN  RET TS  AS  SP  BP  i7  i8
 #[derive(Debug, Clone)]
 pub struct ExecState {
     pub blk_id: usize,      // ID of the block
@@ -201,6 +201,7 @@ impl<'ast> ZGen<'ast> {
         prog_inputs: &Vec<(String, Ty)>,
         input_liveness: &Vec<bool>,
         entry_regs: &Vec<Integer>, // Entry regs should match the input of the entry block
+        entry_stacks: &Vec<Vec<Integer>>,
         entry_arrays: &Vec<Vec<Integer>>,
         bls: &Vec<Block<'ast>>,
         io_size: usize
@@ -209,7 +210,8 @@ impl<'ast> ZGen<'ast> {
         Vec<usize>, // Block ID
         Vec<Option<T>>, // Program input state
         Vec<ExecState>, // Block output states
-        Vec<MemOp>, // Input Memory operations
+        Vec<MemOp>, // Input Physical Memory operations
+        Vec<MemOp>, // Input Virtual Memory operations
         Vec<MemOp>, // Physical Memory operations
         Vec<MemOp> // Virtual Memory operations
     ), String> {
@@ -229,29 +231,33 @@ impl<'ast> ZGen<'ast> {
 
         self.cvar_enter_function();
         let mut nb = entry_bl;
-        let mut phy_mem: Vec<T> = Vec::new();
+        let mut phy_mem: Vec<Option<T>> = Vec::new();
         let mut vir_mem: Vec<Option<T>> = Vec::new();
         let mut terminated = false;
-        let mut init_mem_list: Vec<MemOp> = Vec::new();
+        let mut init_phy_mem_list: Vec<MemOp> = Vec::new();
+        let mut init_vir_mem_list: Vec<MemOp> = Vec::new();
         let mut phy_mem_op: Vec<MemOp>;
         let mut vir_mem_op: Vec<MemOp>;
         
         // Process input variables & arrays
-        // Add %BN and %AS to the front of inputs
-        // Note: %AS is handled by the input parser and is already present in entry_regs
+        // Add %BN, %SP, and %AS to the front of inputs
+        // Note: %SP and %AS are handled by the input parser and is already present in entry_regs
         let entry_regs = &[vec![Integer::from(0)], entry_regs.clone()].concat();
-        let prog_inputs = &[vec![("%BN".to_string(), Ty::Field), ("%AS".to_string(), Ty::Field)], prog_inputs.clone()].concat();
-        let entry_arrays = &[vec![vec![]], vec![vec![]], entry_arrays.clone()].concat();
+        let prog_inputs = &[vec![("%BN".to_string(), Ty::Field), ("%SP".to_string(), Ty::Field), ("%AS".to_string(), Ty::Field)], prog_inputs.clone()].concat();
+        let entry_stacks = &[vec![vec![]], vec![vec![]], vec![vec![]], entry_stacks.clone()].concat();
+        let entry_arrays = &[vec![vec![]], vec![vec![]], vec![vec![]], entry_arrays.clone()].concat();
         let input_liveness = &[vec![true], input_liveness.clone()].concat();
 
         let mut prog_reg_in = vec![None; io_size];
-        // The next address to allocate
-        let mut addr_count = 0;
+        // The next stack / address to allocate
+        let mut stack_addr_count = 0;
+        let mut mem_addr_count = 0;
         // The index in prog_inputs
         let mut i = 0;
         // The corresponding index in bls[entry_bl].input
         let mut input_count = 0;
         assert_eq!(prog_inputs.len(), entry_regs.len());
+        assert_eq!(prog_inputs.len(), entry_stacks.len());
         assert_eq!(prog_inputs.len(), entry_arrays.len());
         assert_eq!(prog_inputs.len(), input_liveness.len());
         for ((_, x), alive) in zip(prog_inputs, input_liveness) {
@@ -271,7 +277,7 @@ impl<'ast> ZGen<'ast> {
                         input_count += 1;
                     }
                 },
-                Ty::Array(_, _, entry_ty) => {
+                Ty::Array(read_only, _, entry_ty) => {
                     let entry_ty = match **entry_ty {
                         Ty::Uint(_) | Ty::Field | Ty::Bool => { &*entry_ty },
                         Ty::Array(..) => { &Ty::Field }
@@ -289,16 +295,29 @@ impl<'ast> ZGen<'ast> {
                         input_count += 1;
                     }
                     // Add all entries as STOREs
-                    for entry in &entry_arrays[i] {
-                        let addr = addr_count;
-                        let addr_t = self.int_to_t(&Integer::from(addr_count), &Ty::Field)?;
-                        let data_t = self.int_to_t(&entry, &*entry_ty)?;
-                        let ls_t = self.int_to_t(&Integer::from(STORE), &Ty::Field)?;
-                        let ts = 0;
-                        let ts_t = self.int_to_t(&Integer::from(0), &Ty::Field)?;
-                        vir_mem.push(Some(data_t.clone()));
-                        init_mem_list.push(MemOp::new_vir(addr, addr_t, data_t, ls_t, ts, ts_t));
-                        addr_count += 1;
+                    if *read_only {
+                        assert_eq!(entry_arrays[i].len(), 0);
+                        for entry in &entry_stacks[i] {
+                            let addr = stack_addr_count;
+                            let addr_t = self.int_to_t(&Integer::from(stack_addr_count), &Ty::Field)?;
+                            let data_t = self.int_to_t(&entry, &*entry_ty)?;
+                            phy_mem.push(Some(data_t.clone()));
+                            init_phy_mem_list.push(MemOp::new_phy(addr, addr_t, data_t));
+                            stack_addr_count += 1;
+                        }
+                    } else {
+                        assert_eq!(entry_stacks[i].len(), 0);
+                        for entry in &entry_arrays[i] {
+                            let addr = mem_addr_count;
+                            let addr_t = self.int_to_t(&Integer::from(mem_addr_count), &Ty::Field)?;
+                            let data_t = self.int_to_t(&entry, &*entry_ty)?;
+                            let ls_t = self.int_to_t(&Integer::from(STORE), &Ty::Field)?;
+                            let ts = 0;
+                            let ts_t = self.int_to_t(&Integer::from(0), &Ty::Field)?;
+                            vir_mem.push(Some(data_t.clone()));
+                            init_vir_mem_list.push(MemOp::new_vir(addr, addr_t, data_t, ls_t, ts, ts_t));
+                            mem_addr_count += 1;
+                        }
                     }
                 },
                 _ => { panic!("Struct input type not supported!") }
@@ -394,8 +413,12 @@ impl<'ast> ZGen<'ast> {
                 self.print_all_vars_in_scope();
                 print!("%PHY: [");
                 for c in &phy_mem {
-                    c.pretty(&mut std::io::stdout().lock())
-                    .expect("error pretty-printcaring value");
+                    if let Some(c) = c { 
+                        c.pretty(&mut std::io::stdout().lock())
+                        .expect("error pretty-printing value");
+                    } else {
+                        print!("_");
+                    }
                     print!(", ");
                 }
                 println!("]");
@@ -433,8 +456,8 @@ impl<'ast> ZGen<'ast> {
             "Missing return value for one or more functions."
         ));
 
-        let (phy_mem_list, vir_mem_list) = sort_by_mem(&init_mem_list, &bl_exec_state);
-        Ok((ret?, bl_exec_count, prog_reg_in, bl_exec_state, init_mem_list, phy_mem_list, vir_mem_list))
+        let (phy_mem_list, vir_mem_list) = sort_by_mem(&init_phy_mem_list, &init_vir_mem_list, &bl_exec_state);
+        Ok((ret?, bl_exec_count, prog_reg_in, bl_exec_state, init_phy_mem_list, init_vir_mem_list, phy_mem_list, vir_mem_list))
     }
 
     // Convert a usize into a Field value
@@ -465,9 +488,9 @@ impl<'ast> ZGen<'ast> {
     fn bl_eval_impl_(
         &self, 
         bl: &Block<'ast>,
-        mut phy_mem: Vec<T>,
+        mut phy_mem: Vec<Option<T>>,
         mut vir_mem: Vec<Option<T>>
-    ) -> Result<(usize, Vec<T>, Vec<Option<T>>, bool, Vec<MemOp>, Vec<MemOp>), String> {
+    ) -> Result<(usize, Vec<Option<T>>, Vec<Option<T>>, bool, Vec<MemOp>, Vec<MemOp>), String> {
         debug!("Block eval impl: {}", bl.name);
 
         let mut phy_mem_op: Vec<MemOp> = Vec::new();
@@ -490,11 +513,11 @@ impl<'ast> ZGen<'ast> {
     fn bl_eval_inst_impl_(
         &self,
         inst: &Vec<BlockContent>,
-        mut phy_mem: Vec<T>,
+        mut phy_mem: Vec<Option<T>>,
         mut vir_mem: Vec<Option<T>>,
         mut phy_mem_op: Vec<MemOp>,
         mut vir_mem_op: Vec<MemOp>,
-    ) -> Result<(Vec<T>, Vec<Option<T>>, Vec<MemOp>, Vec<MemOp>), String> {
+    ) -> Result<(Vec<Option<T>>, Vec<Option<T>>, Vec<MemOp>, Vec<MemOp>), String> {
         for s in inst {
             debug!("Block eval inst impl: {:?}", s);
             match s {
@@ -505,7 +528,7 @@ impl<'ast> ZGen<'ast> {
                         return Err(format!("Error processing %PHY push: index {sp} + {offset} does not match with stack size."));
                     } else {
                         let e = self.cvar_lookup(&var).ok_or(format!("Push to %PHY failed: pushing an out-of-scope variable: {}.", var))?;
-                        phy_mem.push(e);
+                        phy_mem.push(Some(e));
                     }
                     // Convert val_t to field for MemOp
                     let mut val_t = self.cvar_lookup(&var).unwrap();
@@ -521,7 +544,7 @@ impl<'ast> ZGen<'ast> {
                         return Err(format!("Error processing %PHY pop: index out of bound."));
                     } else {
                         let t = phy_mem[bp + offset].clone();
-                        self.cvar_assign(&var, t)?;
+                        self.cvar_assign(&var, t.unwrap())?;
                     }
                     // Convert val_t to field for MemOp
                     let mut val_t = self.cvar_lookup(&var).unwrap();
@@ -530,23 +553,27 @@ impl<'ast> ZGen<'ast> {
                     }
                     phy_mem_op.push(MemOp::new_phy(bp + offset, self.usize_to_field(bp + offset)?, val_t));         
                 }
-                BlockContent::ArrayInit((arr, _, len_expr)) => {
-                    // Declare the array as a pointer (field), set to %AS
-                    let as_t = self.cvar_lookup(W_AS).ok_or(format!("Array initialization failed: %AS is uninitialized."))?;
+                BlockContent::ArrayInit((arr, _, len_expr, read_only)) => {
+                    // Declare the array as a pointer (field), set to %SP or %AS
+                    let pointer_t = if *read_only {
+                        self.cvar_lookup(W_SP).ok_or(format!("Read-only array initialization failed: %SP is uninitialized."))?
+                    } else {
+                        self.cvar_lookup(W_AS).ok_or(format!("Array initialization failed: %AS is uninitialized."))?
+                    };
                     self.declare_init_impl_::<true>(
                         arr.to_string(),
                         Ty::Field,
-                        as_t.clone(),
+                        pointer_t.clone(),
                     )?;
                     // Increment %AS by size of array
                     let mut len_t = self.expr_impl_::<true>(&len_expr).unwrap();
                     if len_t.type_() != &Ty::Field {
                         len_t = uint_to_field(len_t).unwrap();
                     }
-                    let new_as_t = add(as_t, len_t).unwrap();
-                    self.cvar_assign(W_AS, new_as_t)?;
+                    let new_pointer_t = add(pointer_t, len_t).unwrap();
+                    self.cvar_assign(if *read_only { W_SP } else { W_AS }, new_pointer_t)?;
                 }
-                BlockContent::Store((val_expr, _, arr, id_expr, init, _)) => {
+                BlockContent::Store((val_expr, _, arr, id_expr, init, read_only)) => {
                     let mut val_t = self.expr_impl_::<true>(&val_expr)?;
                     let mut id_t = self.expr_impl_::<true>(&id_expr)?;
 
@@ -558,42 +585,62 @@ impl<'ast> ZGen<'ast> {
                     let addr_t = add(id_t, offset_t).unwrap();
                     let addr = self.t_to_usize(addr_t.clone())?;
                     // update vir_mem, pad if necessary
-                    if addr >= vir_mem.len() { vir_mem.extend(vec![None; addr + 1 - vir_mem.len()]); }
-                    vir_mem[addr] = Some(val_t.clone());
+                    if *read_only {
+                        if addr >= phy_mem.len() { 
+                            phy_mem.extend(vec![None; addr + 1 - phy_mem.len()]); 
+                        }
+                        phy_mem[addr] = Some(val_t.clone());
 
-                    // Update vir_mem_op
-                    let ls_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: STORE.to_string(),
+                        // Update phy_mem_op
+                        // Convert val_t to field for MemOp
+                        if val_t.type_() != &Ty::Field {
+                            val_t = uint_to_field(val_t).unwrap();
+                        }
+                        phy_mem_op.push(MemOp::new_phy(
+                            addr,
+                            addr_t,
+                            val_t,
+                        ));
+                    } else {
+                        if addr >= vir_mem.len() { 
+                            vir_mem.extend(vec![None; addr + 1 - vir_mem.len()]); 
+                        }
+                        vir_mem[addr] = Some(val_t.clone());
+
+                        // Update vir_mem_op
+                        let ls_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                            value: DecimalNumber {
+                                value: STORE.to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
                             span: Span::new("", 0, 0).unwrap()
-                        },
-                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
-                    }))).unwrap();
+                        }))).unwrap();
 
-                    // %TS = %TS + 1
-                    if !init {
-                        self.bl_eval_stmt_impl_(&bl_gen_increment_stmt(W_TS, 1, &Ty::Field)).unwrap();
-                    }
-                    let ts_t = self.cvar_lookup(W_TS).ok_or(format!("STORE failed: %TS is uninitialized."))?;
-                    let ts = self.t_to_usize(ts_t.clone())?;
+                        // %TS = %TS + 1
+                        if !init {
+                            self.bl_eval_stmt_impl_(&bl_gen_increment_stmt(W_TS, 1, &Ty::Field)).unwrap();
+                        }
+                        let ts_t = self.cvar_lookup(W_TS).ok_or(format!("STORE failed: %TS is uninitialized."))?;
+                        let ts = self.t_to_usize(ts_t.clone())?;
 
-                    // Convert val_t to field for MemOp
-                    if val_t.type_() != &Ty::Field {
-                        val_t = uint_to_field(val_t).unwrap();
+                        // Convert val_t to field for MemOp
+                        if val_t.type_() != &Ty::Field {
+                            val_t = uint_to_field(val_t).unwrap();
+                        }
+                        vir_mem_op.push(MemOp::new_vir(
+                            addr,
+                            addr_t,
+                            val_t,
+                            ls_t,
+                            ts,
+                            ts_t
+                        ));
                     }
-                    vir_mem_op.push(MemOp::new_vir(
-                        addr,
-                        addr_t,
-                        val_t,
-                        ls_t,
-                        ts,
-                        ts_t
-                    ));
                 }
-                BlockContent::Load((var, ty, arr, id_expr, _)) => {
+                BlockContent::Load((var, ty, arr, id_expr, read_only)) => {
                     let mut id_t = self.expr_impl_::<true>(&id_expr)?;
 
                     // Add array offset to obtain address
@@ -605,7 +652,11 @@ impl<'ast> ZGen<'ast> {
                     let addr = self.t_to_usize(addr_t.clone())?;
 
                     // Declare the variable
-                    let mut val_t = vir_mem[addr].clone().ok_or(format!("LOAD failed: entry {} is uninitialized.", addr))?;
+                    let mut val_t = if *read_only {
+                        phy_mem[addr].clone().ok_or(format!("Read-only LOAD failed: entry {} is uninitialized.", addr))?
+                    } else {
+                        vir_mem[addr].clone().ok_or(format!("LOAD failed: entry {} is uninitialized.", addr))?
+                    };
                     let entry_ty = val_t.type_();
                     if ty != entry_ty {
                         return Err(format!(
@@ -614,35 +665,43 @@ impl<'ast> ZGen<'ast> {
                         ));
                     }
                     self.cvar_declare_init(var.clone(), ty, val_t.clone())?;
-
-                    // Update vir_mem_op
-                    let ls_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: LOAD.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
-                    }))).unwrap();
-                    let ts_t = self.cvar_lookup(W_TS).ok_or(format!("STORE failed: %TS is uninitialized."))?;
-                    let ts = self.t_to_usize(ts_t.clone())?;
-
                     // Convert val_t to field for MemOp
                     if val_t.type_() != &Ty::Field {
                         val_t = uint_to_field(val_t).unwrap();
                     }
-                    vir_mem_op.push(MemOp::new_vir(
-                        addr,
-                        addr_t,
-                        val_t,
-                        ls_t,
-                        ts,
-                        ts_t
-                    ));
+
+                    // Update vir_mem_op
+                    if *read_only {
+                        phy_mem_op.push(MemOp::new_phy(
+                            addr,
+                            addr_t,
+                            val_t,
+                        ));
+                    } else {
+                        let ls_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                            value: DecimalNumber {
+                                value: LOAD.to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            span: Span::new("", 0, 0).unwrap()
+                        }))).unwrap();
+                        let ts_t = self.cvar_lookup(W_TS).ok_or(format!("STORE failed: %TS is uninitialized."))?;
+                        let ts = self.t_to_usize(ts_t.clone())?;
+    
+                        vir_mem_op.push(MemOp::new_vir(
+                            addr,
+                            addr_t,
+                            val_t,
+                            ls_t,
+                            ts,
+                            ts_t
+                        ));
+                    }
                 }
-                BlockContent::DummyLoad() => {
+                BlockContent::DummyLoad(read_only) => {
                     // Addr is 0
                     let addr_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
                         value: DecimalNumber {
@@ -656,35 +715,47 @@ impl<'ast> ZGen<'ast> {
                     }))).unwrap();
                     let addr = self.t_to_usize(addr_t.clone())?;
 
-                    // Val is vir_mem[0]
-                    let mut val_t = vir_mem[addr].clone().ok_or(format!("LOAD failed: entry {} is uninitialized.", addr))?;
-
-                    // Update vir_mem_op
-                    let ls_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: LOAD.to_string(),
-                            span: Span::new("", 0, 0).unwrap()
-                        },
-                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
-                    }))).unwrap();
-                    let ts_t = self.cvar_lookup(W_TS).ok_or(format!("STORE failed: %TS is uninitialized."))?;
-                    let ts = self.t_to_usize(ts_t.clone())?;
-
+                    // Val is phy_mem[0] or vir_mem[0]
+                    let mut val_t = if *read_only {
+                        phy_mem[addr].clone().ok_or(format!("LOAD failed: entry {} is uninitialized.", addr))?
+                    } else {
+                        vir_mem[addr].clone().ok_or(format!("LOAD failed: entry {} is uninitialized.", addr))?
+                    };
                     // Convert val_t to field for MemOp
                     if val_t.type_() != &Ty::Field {
                         val_t = uint_to_field(val_t).unwrap();
                     }
-                    vir_mem_op.push(MemOp::new_vir(
-                        addr,
-                        addr_t,
-                        val_t,
-                        ls_t,
-                        ts,
-                        ts_t
-                    ));
+
+                    // Update vir_mem_op
+                    if *read_only {
+                        phy_mem_op.push(MemOp::new_phy(
+                            addr,
+                            addr_t,
+                            val_t,
+                        ));
+                    } else {
+                        let ls_t = self.expr_impl_::<false>(&Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                            value: DecimalNumber {
+                                value: LOAD.to_string(),
+                                span: Span::new("", 0, 0).unwrap()
+                            },
+                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                span: Span::new("", 0, 0).unwrap()
+                            })),
+                            span: Span::new("", 0, 0).unwrap()
+                        }))).unwrap();
+                        let ts_t = self.cvar_lookup(W_TS).ok_or(format!("STORE failed: %TS is uninitialized."))?;
+                        let ts = self.t_to_usize(ts_t.clone())?;
+    
+                        vir_mem_op.push(MemOp::new_vir(
+                            addr,
+                            addr_t,
+                            val_t,
+                            ls_t,
+                            ts,
+                            ts_t
+                        ));
+                    }
                 }
                 BlockContent::Branch((cond, if_inst, else_inst)) => {
                     match self.expr_impl_::<true>(&cond).and_then(|v| {
@@ -820,11 +891,12 @@ impl<'ast> ZGen<'ast> {
 }
 
 pub fn sort_by_mem(
-    init_mem_list: &Vec<MemOp>,
+    init_phy_mem_list: &Vec<MemOp>,
+    init_vir_mem_list: &Vec<MemOp>,
     bl_exec_state: &Vec<ExecState>,
 ) -> (Vec<MemOp>, Vec<MemOp>) {
-    let mut sorted_phy_mem_op_list = Vec::new();
-    let mut sorted_vir_mem_op_list = init_mem_list.clone();
+    let mut sorted_phy_mem_op_list = init_phy_mem_list.clone();
+    let mut sorted_vir_mem_op_list = init_vir_mem_list.clone();
     for b in bl_exec_state {
         sorted_phy_mem_op_list.append(&mut b.phy_mem_op.clone());
         sorted_vir_mem_op_list.append(&mut b.vir_mem_op.clone());

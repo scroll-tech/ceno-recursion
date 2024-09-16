@@ -18,7 +18,7 @@ use crate::ir::proof::ConstraintMetadata;
 use crate::ir::term::*;
 use crate::front::zsharp::prover::MemOp;
 
-use log::{debug, info, trace, warn};
+use log::{debug,trace, warn};
 use rug::Integer;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, BTreeMap};
@@ -70,7 +70,7 @@ impl FrontEnd for ZSharpFE {
             println!("");
         }
         let (blks, entry_bl, input_liveness) = g.optimize_block::<GEN_VERBOSE>(blks, entry_bl, inputs, i.no_opt);
-        let (blks, _, io_size, _, live_io_list, num_mem_accesses, live_vm_list, _) = 
+        let (blks, _, io_size, _, live_io_list, num_mem_accesses, live_vm_list) = 
             g.process_block::<GEN_VERBOSE, 0>(blks, entry_bl);
         // NOTE: The input of block 0 includes %BN, which should be removed when reasoning about function input
         let func_input_width = blks[0].get_num_inputs() - 1;
@@ -87,13 +87,14 @@ impl FrontEnd for ZSharpFE {
 
 impl ZSharpFE {
     /// Execute the Z# front-end interpreter on the supplied file with the supplied inputs
-    pub fn interpret(i: Inputs, entry_regs: &Vec<Integer>, entry_arrays: &Vec<Vec<Integer>>) -> (
+    pub fn interpret(i: Inputs, entry_regs: &Vec<Integer>, entry_stacks: &Vec<Vec<Integer>>, entry_arrays: &Vec<Vec<Integer>>) -> (
         T, // Return Value
         Vec<usize>, // Block IDs
         Vec<Vec<Option<Value>>>, // Prog Input | Block Outputs
         Vec<Vec<Option<Value>>>, // (PM Vars + VM Vars) per block
         Vec<HashMap<String, Value, BuildHasherDefault<fxhash::FxHasher>>>, // Map of IO name -> IO value, for witness generation
-        Vec<[Value; 4]>, // Initial memory accesses, sorted by execution & address (same ordering)
+        Vec<[Value; 2]>, // Initial physical (read-only) memory accesses, sorted by execution & address (same ordering)
+        Vec<[Value; 4]>, // Initial virtual memory accesses, sorted by execution & address (same ordering)
         Vec<(Value, Value)>, // Physical memory accesses, sorted by address
         Vec<[Value; 4]>, // Virtual memory accesses, sorted by address
     ) {
@@ -106,7 +107,7 @@ impl ZSharpFE {
         
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
         let (blks, entry_bl, input_liveness) = g.optimize_block::<INTERPRET_VERBOSE>(blks, entry_bl, inputs.clone(), i.no_opt);
-        let (blks, entry_bl, io_size, _, _, _, _, _) = g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl,);
+        let (blks, entry_bl, io_size, _, _, _, _) = g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl);
 
         println!("\n\n--\nInterpretation:");
         let (
@@ -114,10 +115,11 @@ impl ZSharpFE {
             _, 
             prog_reg_in, 
             bl_exec_state, 
-            init_mem_list,
+            init_phy_mem_list,
+            init_vir_mem_list,
             phy_mem_list, 
             vir_mem_list
-        ) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(entry_bl, &inputs, &input_liveness, &entry_regs, entry_arrays, &blks, io_size)
+        ) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(entry_bl, &inputs, &input_liveness, &entry_regs, entry_stacks, entry_arrays, &blks, io_size)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
         // prover::print_state_list(&bl_exec_state);
         // let _ = prover::sort_by_block(&bl_exec_state);
@@ -200,7 +202,15 @@ impl ZSharpFE {
             }
             block_io_map_list.push(inputs);
         }
-        let init_mem_list = init_mem_list.iter().map(|i|
+        let init_phy_mem_list = init_phy_mem_list.iter().map(|i|
+            [
+                to_const_value(i.addr_t.clone())
+                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                to_const_value(i.data_t.clone())
+                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+            ]
+        ).collect();
+        let init_vir_mem_list = init_vir_mem_list.iter().map(|i|
             [
                 to_const_value(i.addr_t.clone())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
@@ -274,7 +284,7 @@ impl ZSharpFE {
                 } else { None },
             ]).collect::<Vec<Option<Value>>>(),
         ].concat()).collect();
-        return (ret, block_id_list, block_outputs_list, block_mems_list, block_io_map_list, init_mem_list, phy_mem_list, vir_mem_list);
+        return (ret, block_id_list, block_outputs_list, block_mems_list, block_io_map_list, init_phy_mem_list, init_vir_mem_list, phy_mem_list, vir_mem_list);
     }
 }
 

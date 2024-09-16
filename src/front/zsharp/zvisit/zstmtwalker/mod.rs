@@ -12,7 +12,7 @@ use super::{
 use zexprtyper::ZExpressionTyper;
 
 use std::collections::HashMap;
-use zokrates_pest_ast::{self as ast, BasicType};
+use zokrates_pest_ast as ast;
 
 pub(in super::super) struct ZStatementWalker<'ast, 'ret> {
     rets: &'ret [ast::Type<'ast>],

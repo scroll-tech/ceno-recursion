@@ -8,10 +8,12 @@ pub fn pretty_block_content(indent: usize, bc: &BlockContent) {
     match bc {
         BlockContent::MemPush((val, ty, offset)) => { println!("%PHY[%SP + {offset}] = {} <{ty}>", pretty_name(val)) }
         BlockContent::MemPop((val, ty, offset)) => { println!("{ty} {} = %PHY[%BP + {offset}]", pretty_name(val)) }
-        BlockContent::ArrayInit((arr, ty, size_expr)) => {
+        BlockContent::ArrayInit((arr, ty, size_expr, ro)) => {
             print!("{ty}[");
             pretty_expr::<false>(&size_expr); 
-            println!("] {arr}")
+            print!("] {arr}");
+            if *ro { print!(", ro"); }
+            println!("");
         }
         BlockContent::Store((val, ty, arr, id, init, ro)) => { 
             print!("{arr}["); 
@@ -29,7 +31,11 @@ pub fn pretty_block_content(indent: usize, bc: &BlockContent) {
             if *ro { print!(", ro"); }
             println!("");
         }
-        BlockContent::DummyLoad() => { println!("Dummy Load"); }
+        BlockContent::DummyLoad(ro) => {
+            print!("Dummy Load");
+            if *ro { print!(", ro"); }
+            println!("");
+        }
         BlockContent::Branch((cond, if_insts, else_insts)) => { 
             print!("if ");
             pretty_expr::<false>(cond);

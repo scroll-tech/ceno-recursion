@@ -295,19 +295,22 @@ struct RunTimeKnowledge {
     block_max_num_proofs: usize,
     block_num_proofs: Vec<usize>,
     consis_num_proofs: usize,
-    total_num_init_mem_accesses: usize,
+    total_num_init_phy_mem_accesses: usize,
+    total_num_init_vir_mem_accesses: usize,
     total_num_phy_mem_accesses: usize,
     total_num_vir_mem_accesses: usize,
   
     block_vars_matrix: Vec<Vec<VarsAssignment>>,
     exec_inputs: Vec<InputsAssignment>,
     // Initial memory state, in (addr, val, ls = STORE, ts = 0) pair, sorted by appearance in program input (the same as address order)
-    init_mems_list: Vec<MemsAssignment>,
+    init_phy_mems_list: Vec<MemsAssignment>,
+    init_vir_mems_list: Vec<MemsAssignment>,
     addr_phy_mems_list: Vec<MemsAssignment>,
     addr_vir_mems_list: Vec<MemsAssignment>,
     addr_ts_bits_list: Vec<MemsAssignment>,
   
     input: Vec<[u8; 32]>,
+    input_stack: Vec<[u8; 32]>,
     input_mem: Vec<[u8; 32]>,
     output: [u8; 32],
     output_exec_num: usize
@@ -331,7 +334,8 @@ impl RunTimeKnowledge {
         }
         writeln!(&mut f, "")?;
         writeln!(&mut f, "{}", self.consis_num_proofs)?;
-        writeln!(&mut f, "{}", self.total_num_init_mem_accesses)?;
+        writeln!(&mut f, "{}", self.total_num_init_phy_mem_accesses)?;
+        writeln!(&mut f, "{}", self.total_num_init_vir_mem_accesses)?;
         writeln!(&mut f, "{}", self.total_num_phy_mem_accesses)?;
         writeln!(&mut f, "{}", self.total_num_vir_mem_accesses)?;
 
@@ -354,9 +358,16 @@ impl RunTimeKnowledge {
             exec.write(&mut f)?;
             exec_counter += 1;
         }
-        writeln!(&mut f, "INIT_MEMS")?;
+        writeln!(&mut f, "INIT_PHY_MEMS")?;
         let mut addr_counter = 0;
-        for addr in &self.init_mems_list {
+        for addr in &self.init_phy_mems_list {
+            writeln!(&mut f, "ACCESS {}", addr_counter)?;
+            addr.write(&mut f)?;
+            addr_counter += 1;
+        }
+        writeln!(&mut f, "INIT_VIR_MEMS")?;
+        let mut addr_counter = 0;
+        for addr in &self.init_vir_mems_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
             addr.write(&mut f)?;
             addr_counter += 1;
@@ -672,12 +683,14 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     path: PathBuf,
     options: &Options,
     entry_regs: Vec<Integer>,
+    entry_stacks: Vec<Vec<Integer>>,
     entry_arrays: Vec<Vec<Integer>>,
     ctk: &CompileTimeKnowledge,
     live_io_size: Vec<usize>,
     live_mem_size: Vec<usize>,
     prover_data_list: Vec<ProverData>,
-    total_num_init_mem_accesses: usize,
+    total_num_init_phy_mem_accesses: usize,
+    total_num_init_vir_mem_accesses: usize,
 ) -> RunTimeKnowledge {
     let num_blocks = ctk.block_num_instances;
     let num_input_unpadded = ctk.num_inputs_unpadded;
@@ -692,7 +705,8 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         bl_outputs_list, 
         bl_mems_list, 
         bl_io_map_list,
-        init_mem_list,
+        init_phy_mem_list,
+        init_vir_mem_list,
         phy_mem_list, 
         vir_mem_list,
     ) = {
@@ -702,7 +716,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             no_opt: options.no_opt
         };
 
-        ZSharpFE::interpret(inputs, &entry_regs, &entry_arrays)
+        ZSharpFE::interpret(inputs, &entry_regs, &entry_stacks, &entry_arrays)
     };
 
     // Meta info
@@ -839,19 +853,30 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         block_vars_matrix[slot].push(vars_assignment);
     }
 
-    // Initial Memory: valid, _, addr, data (ts and ls are both 0 and are not recorded)
-    let mut init_mems_list = Vec::new();
-    // No need to record TS bits since it is always 0
-    // Also no need for D since this is not a coherence check
-    for i in 0..init_mem_list.len() {
-        let m = &init_mem_list[i];
+    // Initial Physical & Virtual Memory: valid, _, addr, data (ts and ls are both 0 and are not recorded)
+    let mut init_phy_mems_list = Vec::new();
+    for i in 0..init_phy_mem_list.len() {
+        let m = &init_phy_mem_list[i];
         
         let mut mem: Vec<Integer> = vec![zero.clone(); 4];
         mem[0] = one.clone();
         mem[2] = m[0].as_integer().unwrap();
         mem[3] = m[1].as_integer().unwrap();
         
-        init_mems_list.push(Assignment::new(&mem.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap())
+        init_phy_mems_list.push(Assignment::new(&mem.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap())
+    }
+    let mut init_vir_mems_list = Vec::new();
+    // No need to record TS bits since it is always 0
+    // Also no need for D since this is not a coherence check
+    for i in 0..init_vir_mem_list.len() {
+        let m = &init_vir_mem_list[i];
+        
+        let mut mem: Vec<Integer> = vec![zero.clone(); 4];
+        mem[0] = one.clone();
+        mem[2] = m[0].as_integer().unwrap();
+        mem[3] = m[1].as_integer().unwrap();
+        
+        init_vir_mems_list.push(Assignment::new(&mem.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap())
     }
 
     // Physical Memory: valid, D, addr, data
@@ -923,6 +948,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     }
 
     // Fold entry_arrays
+    let entry_stacks = entry_stacks.into_iter().fold(Vec::new(), |acc, a| [acc, a].concat()).to_vec();
     let entry_arrays = entry_arrays.into_iter().fold(Vec::new(), |acc, a| [acc, a].concat()).to_vec();
 
     println!("\n--\nFUNC");
@@ -936,6 +962,11 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         print!("{:3} ", entry_regs[i]);
     }
     println!();
+    print!("{:3} ", "S");
+    for i in 0..min(entry_stacks.len(), 32) {
+        print!("{:3} ", entry_stacks[i]);
+    }
+    println!();
     print!("{:3} ", "M");
     for i in 0..min(entry_arrays.len(), 32) {
         print!("{:3} ", entry_arrays[i]);
@@ -945,6 +976,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     println!("{:3} ", func_outputs);
 
     let func_inputs = entry_regs.iter().map(|i| integer_to_bytes(i.clone())).collect();
+    let input_stack = entry_stacks.iter().map(|i| integer_to_bytes(i.clone())).collect();
     let input_mem = entry_arrays.iter().map(|i| integer_to_bytes(i.clone())).collect();
     let func_outputs = integer_to_bytes(func_outputs);
 
@@ -952,18 +984,21 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         block_max_num_proofs,
         block_num_proofs,
         consis_num_proofs,
-        total_num_init_mem_accesses,
+        total_num_init_phy_mem_accesses,
+        total_num_init_vir_mem_accesses,
         total_num_phy_mem_accesses,
         total_num_vir_mem_accesses,
       
         block_vars_matrix,
         exec_inputs,
-        init_mems_list: init_mems_list,
+        init_phy_mems_list,
+        init_vir_mems_list,
         addr_phy_mems_list,
         addr_vir_mems_list,
         addr_ts_bits_list,
       
         input: func_inputs,
+        input_stack,
         input_mem,
         output: func_outputs,
         output_exec_num
@@ -971,209 +1006,213 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
 }
 
 fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
-    // --
-    // INSTANCE PREPROCESSING
-    // --
-    println!("Preprocessing instances...");
-    let preprocess_start = Instant::now();
-    let block_num_instances_bound = ctk.block_num_instances;
-    let num_vars = ctk.num_vars;
-    // num_inputs_unpadded is the actual size of the input
-    let num_inputs_unpadded = ctk.num_inputs_unpadded;
-    // num_ios is the width used by all input related computations
-    let num_ios = (num_inputs_unpadded * 2).next_power_of_two();
-    let block_num_phy_ops = ctk.block_num_phy_ops;
-    let block_num_vir_ops = ctk.block_num_vir_ops;
-    let max_block_num_phy_ops = *block_num_phy_ops.iter().max().unwrap();
-    let max_block_num_vir_ops = *block_num_vir_ops.iter().max().unwrap();
+  // --
+  // INSTANCE PREPROCESSING
+  // --
+  println!("Preprocessing instances...");
+  let preprocess_start = Instant::now();
+  let block_num_instances_bound = ctk.block_num_instances;
+  let num_vars = ctk.num_vars;
+  // num_inputs_unpadded is the actual size of the input
+  let num_inputs_unpadded = ctk.num_inputs_unpadded;
+  // num_ios is the width used by all input related computations
+  let num_ios = (num_inputs_unpadded * 2).next_power_of_two();
+  let block_num_phy_ops = ctk.block_num_phy_ops;
+  let block_num_vir_ops = ctk.block_num_vir_ops;
+  let max_block_num_phy_ops = *block_num_phy_ops.iter().max().unwrap();
+  let max_block_num_vir_ops = *block_num_vir_ops.iter().max().unwrap();
+
+  let mem_addr_ts_bits_size = (2 + ctk.max_ts_width).next_power_of_two();
+
+  assert_eq!(num_vars, num_vars.next_power_of_two());
+  assert!(ctk.args.len() == block_num_instances_bound);
+  assert!(block_num_phy_ops.len() == block_num_instances_bound);
+  // If output_block_num < block_num_instances, the prover can cheat by executing the program multiple times
+  assert!(ctk.output_block_num >= block_num_instances_bound);
+
+  println!("Generating Circuits...");
+  // --
+  // BLOCK INSTANCES
+  let (block_num_vars, block_num_cons, block_num_non_zero_entries, mut block_inst) = Instance::gen_block_inst::<true>(
+    block_num_instances_bound, 
+    num_vars, 
+    &ctk.args,
+    num_inputs_unpadded,
+    max_block_num_phy_ops > 0 || max_block_num_vir_ops > 0,
+    &block_num_phy_ops,
+    &block_num_vir_ops,
+    &ctk.num_vars_per_block,
+    &rtk.block_num_proofs,
+  );
+  println!("Finished Block");
+
+  // Pairwise INSTANCES
+  // CONSIS_CHECK & PHY_MEM_COHERE
+  let (pairwise_check_num_vars, pairwise_check_num_cons, pairwise_check_num_non_zero_entries, mut pairwise_check_inst) = Instance::gen_pairwise_check_inst::<true>(
+    ctk.max_ts_width, 
+    mem_addr_ts_bits_size,
+    rtk.consis_num_proofs,
+    rtk.total_num_phy_mem_accesses,
+    rtk.total_num_vir_mem_accesses,
+  );
+  println!("Finished Pairwise");
+
+  // PERM INSTANCES
+  // PERM_ROOT
+  let (perm_root_num_cons, perm_root_num_non_zero_entries, perm_root_inst) = Instance::gen_perm_root_inst::<true>(
+    num_inputs_unpadded, 
+    num_ios,
+    rtk.consis_num_proofs,
+    rtk.total_num_phy_mem_accesses,
+    rtk.total_num_vir_mem_accesses,
+  );
+  println!("Finished Perm");
+
+  // --
+  // COMMITMENT PREPROCESSING
+  // --
+  println!("Producing Public Parameters...");
+  // produce public parameters
+  let block_gens = SNARKGens::new(block_num_cons, block_num_vars, block_num_instances_bound, block_num_non_zero_entries);
+  let pairwise_check_gens = SNARKGens::new(pairwise_check_num_cons, 4 * pairwise_check_num_vars, 3, pairwise_check_num_non_zero_entries);
+  let perm_root_gens = SNARKGens::new(perm_root_num_cons, 8 * num_ios, 1, perm_root_num_non_zero_entries);
+  // Only use one version of gens_r1cs_sat
+  let vars_gens = SNARKGens::new(block_num_cons, TOTAL_NUM_VARS_BOUND, block_num_instances_bound.next_power_of_two(), block_num_non_zero_entries).gens_r1cs_sat;
   
-    let mem_addr_ts_bits_size = (2 + ctk.max_ts_width).next_power_of_two();
-  
-    assert_eq!(num_vars, num_vars.next_power_of_two());
-    assert!(ctk.args.len() == block_num_instances_bound);
-    assert!(block_num_phy_ops.len() == block_num_instances_bound);
-    // If output_block_num < block_num_instances, the prover can cheat by executing the program multiple times
-    assert!(ctk.output_block_num >= block_num_instances_bound);
-  
-    println!("Generating Circuits...");
-    // --
-    // BLOCK INSTANCES
-    let (block_num_vars, block_num_cons, block_num_non_zero_entries, mut block_inst) = Instance::gen_block_inst::<true>(
-      block_num_instances_bound, 
-      num_vars, 
-      &ctk.args,
-      num_inputs_unpadded,
-      max_block_num_phy_ops > 0 && max_block_num_vir_ops > 0,
-      &block_num_phy_ops,
-      &block_num_vir_ops,
-      &ctk.num_vars_per_block,
-      &rtk.block_num_proofs,
-    );
-    println!("Finished Block");
-  
-    // Pairwise INSTANCES
-    // CONSIS_CHECK & PHY_MEM_COHERE
-    let (pairwise_check_num_vars, pairwise_check_num_cons, pairwise_check_num_non_zero_entries, mut pairwise_check_inst) = Instance::gen_pairwise_check_inst::<true>(
-      ctk.max_ts_width, 
-      mem_addr_ts_bits_size,
-      rtk.consis_num_proofs,
-      rtk.total_num_phy_mem_accesses,
-      rtk.total_num_vir_mem_accesses,
-    );
-    println!("Finished Pairwise");
-  
-    // PERM INSTANCES
-    // PERM_ROOT
-    let (perm_root_num_cons, perm_root_num_non_zero_entries, perm_root_inst) = Instance::gen_perm_root_inst::<true>(
-      num_inputs_unpadded, 
-      num_ios,
-      rtk.consis_num_proofs,
-      rtk.total_num_phy_mem_accesses,
-      rtk.total_num_vir_mem_accesses,
-    );
-    println!("Finished Perm");
-  
-    // --
-    // COMMITMENT PREPROCESSING
-    // --
-    println!("Producing Public Parameters...");
-    // produce public parameters
-    let block_gens = SNARKGens::new(block_num_cons, block_num_vars, block_num_instances_bound, block_num_non_zero_entries);
-    let pairwise_check_gens = SNARKGens::new(pairwise_check_num_cons, 4 * pairwise_check_num_vars, 3, pairwise_check_num_non_zero_entries);
-    let perm_root_gens = SNARKGens::new(perm_root_num_cons, 8 * num_ios, 1, perm_root_num_non_zero_entries);
-    // Only use one version of gens_r1cs_sat
-    let vars_gens = SNARKGens::new(block_num_cons, TOTAL_NUM_VARS_BOUND, block_num_instances_bound.next_power_of_two(), block_num_non_zero_entries).gens_r1cs_sat;
+  // create a commitment to the R1CS instance
+  println!("Comitting Circuits...");
+  // block_comm_map records the sparse_polys committed in each commitment
+  // Note that A, B, C are committed separately, so sparse_poly[3*i+2] corresponds to poly C of instance i
+  let (block_comm_map, block_comm_list, block_decomm_list) = SNARK::multi_encode(&block_inst, &block_gens);
+  println!("Finished Block");
+  let (pairwise_check_comm, pairwise_check_decomm) = SNARK::encode(&pairwise_check_inst, &pairwise_check_gens);
+  println!("Finished Pairwise");
+  let (perm_root_comm, perm_root_decomm) = SNARK::encode(&perm_root_inst, &perm_root_gens);
+  println!("Finished Perm");
+
+  // --
+  // WITNESS PREPROCESSING
+  // --
+  let block_num_proofs = rtk.block_num_proofs;
+  let block_vars_matrix = rtk.block_vars_matrix;
+
+  assert!(block_num_proofs.len() <= block_num_instances_bound);
+  assert!(block_vars_matrix.len() <= block_num_instances_bound);
+  let preprocess_time = preprocess_start.elapsed();
+  println!("Preprocess time: {}ms", preprocess_time.as_millis());
+
+  println!("Running the proof...");
+  // produce a proof of satisfiability
+  let mut prover_transcript = Transcript::new(b"snark_example");
+  let proof = SNARK::prove(
+    ctk.input_block_num,
+    ctk.output_block_num,
+    &ctk.input_liveness,
+    ctk.func_input_width,
+    ctk.input_offset,
+    ctk.output_offset,
+    &rtk.input,
+    &rtk.output,
+    rtk.output_exec_num,
     
-    // create a commitment to the R1CS instance
-    println!("Comitting Circuits...");
-    // block_comm_map records the sparse_polys committed in each commitment
-    // Note that A, B, C are committed separately, so sparse_poly[3*i+2] corresponds to poly C of instance i
-    let (block_comm_map, block_comm_list, block_decomm_list) = SNARK::multi_encode(&block_inst, &block_gens);
-    println!("Finished Block");
-    let (pairwise_check_comm, pairwise_check_decomm) = SNARK::encode(&pairwise_check_inst, &pairwise_check_gens);
-    println!("Finished Pairwise");
-    let (perm_root_comm, perm_root_decomm) = SNARK::encode(&perm_root_inst, &perm_root_gens);
-    println!("Finished Perm");
-  
-    // --
-    // WITNESS PREPROCESSING
-    // --
-    let block_num_proofs = rtk.block_num_proofs;
-    let block_vars_matrix = rtk.block_vars_matrix;
-  
-    assert!(block_num_proofs.len() <= block_num_instances_bound);
-    assert!(block_vars_matrix.len() <= block_num_instances_bound);
-    let preprocess_time = preprocess_start.elapsed();
-    println!("Preprocess time: {}ms", preprocess_time.as_millis());
-  
-    println!("Running the proof...");
-    // produce a proof of satisfiability
-    let mut prover_transcript = Transcript::new(b"snark_example");
-    let proof = SNARK::prove(
-      ctk.input_block_num,
-      ctk.output_block_num,
-      &ctk.input_liveness,
-      ctk.func_input_width,
-      ctk.input_offset,
-      ctk.output_offset,
-      &rtk.input,
-      &rtk.output,
-      rtk.output_exec_num,
-      
-      num_vars,
-      num_ios,
-      max_block_num_phy_ops,
-      &block_num_phy_ops,
-      max_block_num_vir_ops,
-      &block_num_vir_ops,
-      mem_addr_ts_bits_size,
-      num_inputs_unpadded,
-      &ctk.num_vars_per_block,
-  
-      block_num_instances_bound,
-      rtk.block_max_num_proofs,
-      &block_num_proofs,
-      &mut block_inst,
-      &block_comm_map,
-      &block_comm_list,
-      &block_decomm_list,
-      &block_gens,
-      
-      rtk.consis_num_proofs,
-      rtk.total_num_init_mem_accesses,
-      rtk.total_num_phy_mem_accesses,
-      rtk.total_num_vir_mem_accesses,
-      &mut pairwise_check_inst,
-      &pairwise_check_comm,
-      &pairwise_check_decomm,
-      &pairwise_check_gens,
-  
-      block_vars_matrix,
-      rtk.exec_inputs,
-      rtk.init_mems_list,
-      rtk.addr_phy_mems_list,
-      rtk.addr_vir_mems_list,
-      rtk.addr_ts_bits_list,
-  
-      &perm_root_inst,
-      &perm_root_comm,
-      &perm_root_decomm,
-      &perm_root_gens,
-  
-      &vars_gens,
-      &mut prover_transcript,
-    );
-  
-    println!("Verifying the proof...");
-    // verify the proof of satisfiability
-    let mut verifier_transcript = Transcript::new(b"snark_example");
-    assert!(proof.verify(
-      ctk.input_block_num,
-      ctk.output_block_num,
-      &ctk.input_liveness,
-      ctk.func_input_width,
-      ctk.input_offset,
-      ctk.output_offset,
-      &rtk.input,
-      &rtk.input_mem,
-      &rtk.output,
-      rtk.output_exec_num,
-  
-      num_vars,
-      num_ios,
-      max_block_num_phy_ops,
-      &block_num_phy_ops,
-      max_block_num_vir_ops,
-      &block_num_vir_ops,
-      mem_addr_ts_bits_size,
-      num_inputs_unpadded,
-      &ctk.num_vars_per_block,
-      
-      block_num_instances_bound, 
-      rtk.block_max_num_proofs, 
-      &block_num_proofs, 
-      block_num_cons,
-      &block_comm_map,
-      &block_comm_list,
-      &block_gens,
-  
-      rtk.consis_num_proofs, 
-      rtk.total_num_init_mem_accesses,
-      rtk.total_num_phy_mem_accesses,
-      rtk.total_num_vir_mem_accesses,
-      pairwise_check_num_cons,
-      &pairwise_check_comm,
-      &pairwise_check_gens,
-  
-      perm_root_num_cons,
-      &perm_root_comm,
-      &perm_root_gens,
-  
-      &vars_gens,
-      &mut verifier_transcript
-    ).is_ok());
-    println!("proof verification successful!");
-  }  
+    num_vars,
+    num_ios,
+    max_block_num_phy_ops,
+    &block_num_phy_ops,
+    max_block_num_vir_ops,
+    &block_num_vir_ops,
+    mem_addr_ts_bits_size,
+    num_inputs_unpadded,
+    &ctk.num_vars_per_block,
+
+    block_num_instances_bound,
+    rtk.block_max_num_proofs,
+    &block_num_proofs,
+    &mut block_inst,
+    &block_comm_map,
+    &block_comm_list,
+    &block_decomm_list,
+    &block_gens,
+    
+    rtk.consis_num_proofs,
+    rtk.total_num_init_phy_mem_accesses,
+    rtk.total_num_init_vir_mem_accesses,
+    rtk.total_num_phy_mem_accesses,
+    rtk.total_num_vir_mem_accesses,
+    &mut pairwise_check_inst,
+    &pairwise_check_comm,
+    &pairwise_check_decomm,
+    &pairwise_check_gens,
+
+    block_vars_matrix,
+    rtk.exec_inputs,
+    rtk.init_phy_mems_list,
+    rtk.init_vir_mems_list,
+    rtk.addr_phy_mems_list,
+    rtk.addr_vir_mems_list,
+    rtk.addr_ts_bits_list,
+
+    &perm_root_inst,
+    &perm_root_comm,
+    &perm_root_decomm,
+    &perm_root_gens,
+
+    &vars_gens,
+    &mut prover_transcript,
+  );
+
+  println!("Verifying the proof...");
+  // verify the proof of satisfiability
+  let mut verifier_transcript = Transcript::new(b"snark_example");
+  assert!(proof.verify(
+    ctk.input_block_num,
+    ctk.output_block_num,
+    &ctk.input_liveness,
+    ctk.func_input_width,
+    ctk.input_offset,
+    ctk.output_offset,
+    &rtk.input,
+    &rtk.input_stack,
+    &rtk.input_mem,
+    &rtk.output,
+    rtk.output_exec_num,
+
+    num_vars,
+    num_ios,
+    max_block_num_phy_ops,
+    &block_num_phy_ops,
+    max_block_num_vir_ops,
+    &block_num_vir_ops,
+    mem_addr_ts_bits_size,
+    num_inputs_unpadded,
+    &ctk.num_vars_per_block,
+    
+    block_num_instances_bound, 
+    rtk.block_max_num_proofs, 
+    &block_num_proofs, 
+    block_num_cons,
+    &block_comm_map,
+    &block_comm_list,
+    &block_gens,
+
+    rtk.consis_num_proofs, 
+    rtk.total_num_init_phy_mem_accesses,
+    rtk.total_num_init_vir_mem_accesses,
+    rtk.total_num_phy_mem_accesses,
+    rtk.total_num_vir_mem_accesses,
+    pairwise_check_num_cons,
+    &pairwise_check_comm,
+    &pairwise_check_gens,
+
+    perm_root_num_cons,
+    &perm_root_comm,
+    &perm_root_gens,
+
+    &vars_gens,
+    &mut verifier_transcript
+  ).is_ok());
+  println!("proof verification successful!");
+}  
 
 fn main() {
     env_logger::Builder::from_default_env()
@@ -1207,35 +1246,59 @@ fn main() {
     reader.read_line(&mut buffer).unwrap();
     let _ = buffer.trim();
 
-    // Keep track of %AS and record initial memory state
-    let mut alloc_counter = 0;
+    // Keep track of %SP and %AS and record initial memory state
+    let mut stack_alloc_counter = 0;
+    let mut mem_alloc_counter = 0;
     // One array per input, regardless of type. This is because arrays might be fed in as pointers.
-    let mut entry_arrays: Vec<Vec<Integer>> = Vec::new();
+    let mut entry_stacks: Vec<Vec<Integer>> = Vec::new(); // for read-only
+    let mut entry_arrays: Vec<Vec<Integer>> = Vec::new(); // for others
     while buffer != "END".to_string() {
         let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
         // split is either of form [VAR, VAL] or [VAR, "[", ENTRY_0, ENTRY_1, ..., "]"] 
         if let Ok(val) = Integer::from_str_radix(&split[1], 10) {
             entry_regs.push(val);
+            entry_stacks.push(vec![]);
             entry_arrays.push(vec![]);
+        } else if split[1] == "[ro" {
+            assert_eq!(split[split.len() - 1], "]");
+            entry_regs.push(Integer::from(stack_alloc_counter));
+            // Parse the entries
+            entry_stacks.push(split[2..split.len() - 1].iter().map(|entry| Integer::from_str_radix(&entry, 10).unwrap()).collect());
+            entry_arrays.push(vec![]);
+            stack_alloc_counter += split.len() - 3; // var, "[", and "]"
         } else {
             assert_eq!(split[1], "[");
             assert_eq!(split[split.len() - 1], "]");
-            entry_regs.push(Integer::from(alloc_counter));
+            entry_regs.push(Integer::from(mem_alloc_counter));
+            entry_stacks.push(vec![]);
             // Parse the entries
             entry_arrays.push(split[2..split.len() - 1].iter().map(|entry| Integer::from_str_radix(&entry, 10).unwrap()).collect());
-            alloc_counter += split.len() - 3; // var, "[", and "]"
+            mem_alloc_counter += split.len() - 3; // var, "[", and "]"
         }
         buffer.clear();
         reader.read_line(&mut buffer).unwrap();
     }
-    // Insert %AS to the fron of entry_reg
-    entry_regs.insert(0, Integer::from(alloc_counter));
+    // Insert [%SP, %AS] to the front of entry_reg
+    entry_regs.insert(0, Integer::from(mem_alloc_counter));
+    entry_regs.insert(0, Integer::from(stack_alloc_counter));
     println!("INPUT: {:?}", entry_regs);
 
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<false>(path.clone(), &options, entry_regs, entry_arrays, &ctk, live_io_size, live_mem_size, prover_data_list, alloc_counter);
+    let rtk = get_run_time_knowledge::<false>(
+        path.clone(), 
+        &options, 
+        entry_regs, 
+        entry_stacks, 
+        entry_arrays, 
+        &ctk, 
+        live_io_size, 
+        live_mem_size, 
+        prover_data_list,
+        stack_alloc_counter,
+        mem_alloc_counter
+    );
     let witness_time = witness_start.elapsed();
 
     if !INLINE_SPARTAN_PROOF {

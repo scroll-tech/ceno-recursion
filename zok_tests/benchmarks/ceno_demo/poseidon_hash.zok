@@ -1,0 +1,13 @@
+from "poseidon" import poseidon
+
+def compress(u32 digest_width, field[0] x, field[0] y) -> field[0] {
+    field[12] perm = [0; 12]
+    for u32 i in 0..digest_width {
+        perm[i] = x[i]
+        perm[digest_width + i] = y[i]
+    }
+    perm = poseidon(perm)
+
+    // Returns a len-(digest_width) array reusing the same pointer as perm
+    return perm
+}

@@ -1,64 +1,62 @@
-from "poseidon_structs" import T, RATE, SparseMDSMatrix, MDSMatrices, OptimizedConstants, Spec, Poseidon
+from "poseidon_constants" import ALL_ROUND_CONSTANTS, MDS_MATRIX_CIRC, MDS_MATRIX_DIAG, FAST_PARTIAL_FIRST_ROUND_CONSTANT
 
-/// Appends elements to the absorption line updates state while `RATE` is
-/// full
-def update(Poseidon self, u32 elem_len, field[0] elements) -> Poseidon:
-    array_decl field[self.absorb_len + elem_len] input_elements
-    for u32 i in 0..self.absorb_len do
-        input_elements[i] = self.absorbing[i]
+def constant_layer(field[12] state, u32 round_ctr) -> field[12]:
+    for u32 i in 0..12 do
+        field round_constant = ALL_ROUND_CONSTANTS[round_ctr * 12 + i]
+        state[i] = state[i] + round_constant
     endfor
-    for u32 i in 0..elem_len do
-        input_elements[self.absorb_len + i] = elements[i]
-    endfor
+    return state
 
-    // Divide input_elements into chunks of length RATE, process all but the last chunk
-    u32 num_chunks = (self.absorb_len + elem_len) / RATE
-    for u32 i in num_chunks do
-        for u32 j in 0..RATE do
-            field input_element = input_elements[i * RATE + j]
-            field state = self.state[j + 1]
-            self.state[j + 1] = state + input_element
+def sbox_layer(field[12] state) -> field[12]:
+    for u32 i in 0..12 do
+        // x |--> x^7
+        state[i] = state[i] ** 7
+    endfor
+    return state
+
+def mds_layer(field[12] state) -> field[12]:
+    array_decl field[12] result
+
+    for u32 r in 0..12 do
+        // mds_row_shf
+        field res = 0
+        for u32 i in 0..12 do
+            res = res + state[(i + r) % 12] * MDS_MATRIX_CIRC[i]
         endfor
-        // Perform intermediate permutation
-        self.spec.permute(&mut self.state);
-        // Flush the absorption line
-        self.absorbing.clear();
+        res = res + state[r] * MDS_MATRIX_DIAG[r]
+        result[r] = res
     endfor
-    // Record the last chunk in absorbing
-    self.absorb_len = self.absorb_len + elem_len - num_chunks * RATE
-    array_decl field[self.absorb_len] new_absorbing
-    for u32 i in 0..self.absorb_len do
-        new_absorbing[i] = input_elements[num_chunks * RATE + i]
+
+    return result
+
+def full_rounds(field[12] state, u32 round_ctr) -> field[12]:
+    for u32 i in 0..4 do
+        state = constant_layer(state, round_ctr)
+        state = sbox_layer(state)
+        state = mds_layer(state)
+        round_ctr = round_ctr + 1
     endfor
-    self.absorbing = new_absorbing
+    return state
 
-    return self
+def partial_rounds(field[12] state, u32 round_ctr) -> field[12]:
+    for u32 i in 0..22 do
+        state = constant_layer(state, round_ctr)
+        state[0] = state[0] ** 7 // sbox
+        state = mds_layer(state)
+        round_ctr = round_ctr + 1
+    endfor
+    return state
 
-/// Results a single element by absorbing already added inputs
-pub fn squeeze(&mut self) -> F {
-    self.squeeze_vec()[0]
-}
+def poseidon(field[12] inputs) -> field[12]:
+    field[12] state = inputs
+    state = full_rounds(state, 0)
+    state = partial_rounds(state, 4)
+    state = full_rounds(state, 26)
 
-/// Results a single element by absorbing already added inputs
-pub fn squeeze_vec(&mut self) -> Vec<F> {
-    let mut last_chunk = self.absorbing.clone();
-    {
-        // Expect padding offset to be in [0, RATE)
-        debug_assert!(last_chunk.len() < RATE);
-    }
-    // Add the finishing sign of the variable length hashing. Note that this mut
-    // also apply when absorbing line is empty
-    last_chunk.push(F::ONE);
-    // Add the last chunk of inputs to the state for the final permutation cycle
+    return state
 
-    for (input_element, state) in last_chunk.iter().zip(self.state.0.iter_mut().skip(1)) {
-        state.add_assign(input_element);
-    }
+def main() -> field:
+    field[12] inputs = [1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0]
+    field[12] hashes = poseidon(inputs)
 
-    // Perform final permutation
-    self.spec.permute(&mut self.state);
-    // Flush the absorption line
-    self.absorbing.clear();
-    // Returns the challenge while preserving internal state
-    self.state.results().to_vec()
-}
+    return hashes[0]

@@ -493,10 +493,14 @@ impl<'ast> ZGen<'ast> {
     ) -> Result<(usize, Vec<Option<T>>, Vec<Option<T>>, bool, Vec<MemOp>, Vec<MemOp>), String> {
         debug!("Block eval impl: {}", bl.name);
 
+        // Record all RO mem ops before any PHY mem ops
         let mut phy_mem_op: Vec<MemOp> = Vec::new();
+        let mut ro_mem_op: Vec<MemOp> = Vec::new();
         let mut vir_mem_op: Vec<MemOp> = Vec::new();
 
-        (phy_mem, vir_mem, phy_mem_op, vir_mem_op) = self.bl_eval_inst_impl_(&bl.instructions, phy_mem, vir_mem, phy_mem_op, vir_mem_op)?;
+        (phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op) = self.bl_eval_inst_impl_(&bl.instructions, phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op)?;
+        ro_mem_op.extend(phy_mem_op);
+        let phy_mem_op = ro_mem_op;
 
         match &bl.terminator {
             BlockTerminator::Transition(e) => {
@@ -516,8 +520,9 @@ impl<'ast> ZGen<'ast> {
         mut phy_mem: Vec<Option<T>>,
         mut vir_mem: Vec<Option<T>>,
         mut phy_mem_op: Vec<MemOp>,
+        mut ro_mem_op: Vec<MemOp>,
         mut vir_mem_op: Vec<MemOp>,
-    ) -> Result<(Vec<Option<T>>, Vec<Option<T>>, Vec<MemOp>, Vec<MemOp>), String> {
+    ) -> Result<(Vec<Option<T>>, Vec<Option<T>>, Vec<MemOp>, Vec<MemOp>, Vec<MemOp>), String> {
         for s in inst {
             debug!("Block eval inst impl: {:?}", s);
             match s {
@@ -525,7 +530,7 @@ impl<'ast> ZGen<'ast> {
                     let sp_t = self.cvar_lookup(W_SP).ok_or(format!("Push to %PHY failed: %SP is uninitialized."))?;
                     let sp = self.t_to_usize(sp_t)?;
                     if sp + offset != phy_mem.len() {
-                        return Err(format!("Error processing %PHY push: index {sp} + {offset} does not match with stack size."));
+                        return Err(format!("Error processing %PHY push: index {sp} + {offset} does not match with stack size {}.", phy_mem.len()));
                     } else {
                         let e = self.cvar_lookup(&var).ok_or(format!("Push to %PHY failed: pushing an out-of-scope variable: {}.", var))?;
                         phy_mem.push(Some(e));
@@ -596,7 +601,7 @@ impl<'ast> ZGen<'ast> {
                         if val_t.type_() != &Ty::Field {
                             val_t = uint_to_field(val_t).unwrap();
                         }
-                        phy_mem_op.push(MemOp::new_phy(
+                        ro_mem_op.push(MemOp::new_phy(
                             addr,
                             addr_t,
                             val_t,
@@ -672,7 +677,7 @@ impl<'ast> ZGen<'ast> {
 
                     // Update vir_mem_op
                     if *read_only {
-                        phy_mem_op.push(MemOp::new_phy(
+                        ro_mem_op.push(MemOp::new_phy(
                             addr,
                             addr_t,
                             val_t,
@@ -726,9 +731,9 @@ impl<'ast> ZGen<'ast> {
                         val_t = uint_to_field(val_t).unwrap();
                     }
 
-                    // Update vir_mem_op
+                    // Update mem_op
                     if *read_only {
-                        phy_mem_op.push(MemOp::new_phy(
+                        ro_mem_op.push(MemOp::new_phy(
                             addr,
                             addr_t,
                             val_t,
@@ -763,10 +768,10 @@ impl<'ast> ZGen<'ast> {
                             .ok_or_else(|| "interpreting expr as const bool failed".to_string())
                     }) {
                         Ok(true) => {
-                            (phy_mem, vir_mem, phy_mem_op, vir_mem_op) = self.bl_eval_inst_impl_(if_inst, phy_mem, vir_mem, phy_mem_op, vir_mem_op)?;
+                            (phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op) = self.bl_eval_inst_impl_(if_inst, phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op)?;
                         },
                         Ok(false) => {
-                            (phy_mem, vir_mem, phy_mem_op, vir_mem_op) = self.bl_eval_inst_impl_(else_inst, phy_mem, vir_mem, phy_mem_op, vir_mem_op)?;
+                            (phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op) = self.bl_eval_inst_impl_(else_inst, phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op)?;
                         },
                         Err(err) => return Err(format!(
                             "Const conditional expression eval failed: {} at\n{}",
@@ -780,7 +785,7 @@ impl<'ast> ZGen<'ast> {
                 }
             }
         };
-        Ok((phy_mem, vir_mem, phy_mem_op, vir_mem_op))
+        Ok((phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op))
     }
 
     fn bl_eval_stmt_impl_(

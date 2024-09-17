@@ -2881,7 +2881,8 @@ impl<'ast> ZGen<'ast> {
         // If size of spills is not zero, need to add %BP and %SP to block 0
         if spills.len() > 0 {
             // Initialize %SP
-            entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%SP", &Ty::Field)));
+            // XXX: %SP is now a program input
+            // entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%SP", &Ty::Field)));
             // Initialize %BP
             entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%BP", &Ty::Field)));
         }

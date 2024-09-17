@@ -1,5 +1,7 @@
 //! AST Walker for zokrates_pest_ast
 
+use std::iter::zip;
+
 use super::super::ZGen;
 use super::{ZResult, ZVisitorError, ZVisitorResult};
 
@@ -48,6 +50,18 @@ fn eq_array_type<'ast>(
             ty.dimensions.len(),
             ty2.dimensions.len(),
         )));
+    }
+    for ((ro, _), (ro2, _)) in zip(&ty.dimensions, &ty2.dimensions) {
+        if ro.is_some() && ro2.is_none() {
+            return Err(ZVisitorError(format!(
+                "array type mismatch: \n\texpected read-only array, \n\tfound regular array",
+            )));
+        }
+        if ro.is_none() && ro2.is_some() {
+            return Err(ZVisitorError(format!(
+                "array type mismatch: \n\texpected regular array, \n\tfound read-only array",
+            )));
+        }
     }
     match (&ty.ty, &ty2.ty) {
         (Basic(bty), Basic(bty2)) => eq_basic_type(bty, bty2),

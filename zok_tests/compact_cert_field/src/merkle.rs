@@ -63,7 +63,7 @@ pub fn verify_merkle(num_leaves: usize, proof: &MerkleProof, root: Fp, mut index
     // hash of leaf
     let mut cur_node = hashed_leaf.clone();
     // hash of internal nodes
-    assert_eq!(proof.path.len().pow(2), num_leaves.next_power_of_two());
+    assert_eq!(2_usize.pow(proof.path.len().try_into().unwrap()), num_leaves.next_power_of_two());
     for other_node in &proof.path {
         if index % 2 == 0 {
             cur_node = poseidon(&[cur_node, other_node.clone(), Fp::from(0), Fp::from(0), Fp::from(0)]);

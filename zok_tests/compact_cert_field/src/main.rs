@@ -4,6 +4,7 @@ mod schnorr;
 mod poseidon;
 mod poseidon_constants;
 mod merkle;
+mod poseidon_gen;
 
 use crate::field::Fp;
 use crate::schnorr::*;
@@ -98,10 +99,10 @@ struct CompactCertProof {
     t_list: Vec<T>
 }
 
-const NUM_ATTESTORS: usize = 10;
+const NUM_ATTESTORS: usize = 1000;
 const PROVEN_WEIGHT: usize = 8;
-const KNOWLEDGE_SOUNDNESS: usize = 10; // knowledge soundness of 2^{-k}
-const MAX_NUM_REVEALS: usize = 8; // num reveals 2^q
+const KNOWLEDGE_SOUNDNESS: usize = 8; // knowledge soundness of 2^{-k}
+const MAX_NUM_REVEALS: usize = 200; // num reveals 2^q
 const SIG_WIDTH: usize = 253;
 
 // Commit all attestors as a merkle tree
@@ -451,4 +452,7 @@ fn main() {
     }
     writeln!(&mut f, "]").unwrap();
     write!(&mut f, "END").unwrap();
+
+    // Generate poseidon file
+    poseidon_gen::poseidon_gen();
 }

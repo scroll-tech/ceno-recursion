@@ -1,0 +1,140 @@
+from "./poseidon_constants.zok" import POSEIDON_C
+
+def ark(field[6] state, field[441] c, u32 it) -> field[6]:
+    for u32 i in 0..6 do
+        state[i] = state[i] + c[it + i]
+    endfor
+    return state
+
+def sbox(field[6] state, bool cond) -> field[6]:
+    state[0] = state[0]**5
+    for u32 i in 1..6 do
+        state[i] = cond ? state[i]**5 : state[i]
+    endfor
+    return state
+
+def mix(field[6] state, field[81] m) -> field[6]:
+    array_decl field[6] out
+    for u32 i in 0..6 do
+        field acc = 0
+        for u32 j in 0..6 do
+            acc = acc + (state[j] * m[i * 9 + j])
+        endfor
+        out[i] = acc
+    endfor
+    return out
+
+def poseidon(u32 N, field[ro 0] inputs) -> field:
+    assert(N == 5)
+    u32 t = N + 1
+    u32 f = 8
+    u32 fo2 = 4
+    u32 p = 64
+
+    // Constants are padded with zeroes to the maximum value calculated by
+    // t * (f + p) = 497, where `t` (number of inputs + 1) is a max of 7.
+    // This is done to keep the function generic, as resulting array size depends on `t`
+    // and we do not want callers passing down constants.
+    // This should be revisited once compiler limitations are gone.
+
+    field[ro 441] c = POSEIDON_C
+
+    field state0 = 0
+    field state1 = inputs[0]
+    field state2 = inputs[1]
+    field state3 = inputs[2]
+    field state4 = inputs[3]
+    field state5 = inputs[4]
+
+    bool cond = true
+
+    field m0 = 15058071544716697658
+    field m1 = 9113155049989891189
+    field m2 = 11350291668724975614
+    field m3 = 9632313156395526262
+    field m4 = 10413730688534659007
+    field m5 = 3697752025371176728
+    field m6 = 11885276071251709314
+    field m7 = 16598884434632610234
+    field m8 = 8089761759414446189
+    field m9 = 16040926183245094672
+    field m10 = 8904964827445835399
+    field m11 = 12487570753220630667
+    field m12 = 3761754934154259876
+    field m13 = 10365474600392912237
+    field m14 = 18215459870146304436
+    field m15 = 2521867902521748797
+    field m16 = 9276651354726850372
+    field m17 = 2876546369175151218
+    field m18 = 2535340427714539962
+    field m19 = 17035695180503554455
+    field m20 = 5065438235784555509
+    field m21 = 16133217454234073776
+    field m22 = 7083511463634692513
+    field m23 = 9613984133077979495
+    field m24 = 1331692021515548952
+    field m25 = 12210106727545806375
+    field m26 = 13648177365769586846
+    field m27 = 15042137044708510189
+    field m28 = 2554730408162944936
+    field m29 = 16742667895331233611
+    field m30 = 2494776793515665277
+    field m31 = 14141966007005028685
+    field m32 = 18062101036985256707
+    field m33 = 755902906165376348
+    field m34 = 386844847374139936
+    field m35 = 12578289204908190735
+    field m36 = 16474772505071285176
+    field m37 = 4219412987430389417
+    field m38 = 13785604981959978986
+    field m39 = 6782700766578855354
+    field m40 = 5027408469346314244
+    field m41 = 3789778619153321757
+    field m42 = 4990630321935587007
+    field m43 = 13343213396420799882
+    field m44 = 104089557996796214
+    field m45 = 17594182424895122809
+    field m46 = 1296646801898316520
+    field m47 = 16927267389512340836
+    field m48 = 15388042990166044599
+    field m49 = 1062925035106735976
+    field m50 = 6174325826189609393
+    for u32 r in 0..f+p do
+        // ark
+        u32 it = r * t
+        state0 = state0 + c[it]
+        state1 = state1 + c[it + 1]
+        state2 = state2 + c[it + 2]
+        state3 = state3 + c[it + 3]
+        state4 = state4 + c[it + 4]
+        state5 = state5 + c[it + 5]
+        // sbox
+        if r == fo2 then
+            cond = false
+        endif
+        if r == fo2 + p then
+            cond = true
+        endif
+        field new_state0 = state0 ** 5
+        field new_state1 = cond ? state1 ** 5 : state1
+        field new_state2 = cond ? state2 ** 5 : state2
+        field new_state3 = cond ? state3 ** 5 : state3
+        field new_state4 = cond ? state4 ** 5 : state4
+        field new_state5 = cond ? state5 ** 5 : state5
+        // mix
+        state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2 + new_state3 * m3 + new_state4 * m4 + new_state5 * m5
+        state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11 + new_state3 * m12 + new_state4 * m13 + new_state5 * m14
+        state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20 + new_state3 * m21 + new_state4 * m22 + new_state5 * m23
+        state3 = new_state0 * m27 + new_state1 * m28 + new_state2 * m29 + new_state3 * m30 + new_state4 * m31 + new_state5 * m32
+        state4 = new_state0 * m36 + new_state1 * m37 + new_state2 * m38 + new_state3 * m39 + new_state4 * m40 + new_state5 * m41
+        state5 = new_state0 * m45 + new_state1 * m46 + new_state2 * m47 + new_state3 * m48 + new_state4 * m49 + new_state5 * m50
+    endfor
+
+    return state0
+
+def main() -> field:
+    u32 n = 5
+    field[ro n] inputs = [1, 2, 3, 4, 5]
+    field hash = poseidon(n, inputs)
+
+    return hash

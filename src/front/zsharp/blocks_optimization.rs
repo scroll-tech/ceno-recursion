@@ -17,7 +17,7 @@ use crate::front::Computations;
 use crate::target::r1cs::trans::to_r1cs;
 use crate::front::zsharp::{cfg, ZSharp};
 
-const MIN_BLOCK_SIZE: usize = 4096;
+const MAX_BLOCK_SIZE: usize = 32768;
 const CFG_VERBOSE: bool = false;
 
 fn type_to_ty(t: Type) -> Result<Ty, String> {
@@ -2440,8 +2440,8 @@ impl<'ast> ZGen<'ast> {
         }
         // Reset self.circ
         self.circ.borrow_mut().reset(ZSharp::new());
-        // Maximum # of constraints is max(MIN_BLOCK_SIZE, bl_num_cons.max().next_power_of_two())
-        let max_num_cons = max(MIN_BLOCK_SIZE, bl_num_cons.iter().max().unwrap().next_power_of_two());
+        // Maximum # of constraints is max(MAX_BLOCK_SIZE, bl_num_cons.max().next_power_of_two())
+        let max_num_cons = max(MAX_BLOCK_SIZE, bl_num_cons.iter().max().unwrap().next_power_of_two());
 
         // STEP 2: Backward analysis within each function
         // For each block, if there exists a potential merge component, record the size of constraints of that component

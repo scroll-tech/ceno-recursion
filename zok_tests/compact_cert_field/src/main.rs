@@ -311,14 +311,14 @@ fn main() {
     // u32 signed_weight,
     writeln!(&mut f, "signed_weight {}", compact_cert_proof.signed_weight).unwrap();
     // u32[0] t_i_list,
-    write!(&mut f, "t_i_list [ ").unwrap();
+    write!(&mut f, "t_i_list [ro ").unwrap();
     for i in &compact_cert_proof.t_list {
         write!(&mut f, "{} ", i.i).unwrap();
     }
     writeln!(&mut f, "]").unwrap();
     // All memory entries within T (i_bits || s || pi_s.path || p || pi_p.path)
     // field[0] t_mem,
-    write!(&mut f, "t_mem [ ").unwrap();
+    write!(&mut f, "t_mem [ro ").unwrap();
     // i_bits
     let merkle_depth: usize = NUM_ATTESTORS.next_power_of_two().ilog2().div_ceil(1).try_into().unwrap();
     for i in &compact_cert_proof.t_list {
@@ -361,32 +361,32 @@ fn main() {
     // List of pointers (input format field[0])
     let num_reveals = att_list.len();
     // bool[0][0] t_i_bits_list
-    write!(&mut f, "t_i_bits_list [ ").unwrap();
+    write!(&mut f, "t_i_bits_list [ro ").unwrap();
     // Account for t_i_list in the offset
     for p in (0..num_reveals).map(|i| num_reveals + i * merkle_depth) {
         write!(&mut f, "{} ", p).unwrap();
     }
     writeln!(&mut f, "]").unwrap();
     // field[0][0] t_s_list,
-    write!(&mut f, "t_s_list [ ").unwrap();
+    write!(&mut f, "t_s_list [ro ").unwrap();
     for p in (0..num_reveals).map(|i| num_reveals * (merkle_depth + 1) + i * 5) {
         write!(&mut f, "{} ", p).unwrap();
     }
     writeln!(&mut f, "]").unwrap();
     // field[0][0] t_pi_s_path_list,
-    write!(&mut f, "t_pi_s_path_list [ ").unwrap();
+    write!(&mut f, "t_pi_s_path_list [ro ").unwrap();
     for p in (0..num_reveals).map(|i| num_reveals * (merkle_depth + 6) + i * merkle_depth) {
         write!(&mut f, "{} ", p).unwrap();
     }
     writeln!(&mut f, "]").unwrap();
     // field[0][0] t_p_list,
-    write!(&mut f, "t_p_list [ ").unwrap();
+    write!(&mut f, "t_p_list [ro ").unwrap();
     for p in (0..num_reveals).map(|i| num_reveals * (2 * merkle_depth + 6) + i * 5) {
         write!(&mut f, "{} ", p).unwrap();
     }
     writeln!(&mut f, "]").unwrap();
     // field[0][0] t_pi_p_path_list,
-    write!(&mut f, "t_pi_p_path_list [ ").unwrap();
+    write!(&mut f, "t_pi_p_path_list [ro ").unwrap();
     for p in (0..num_reveals).map(|i| num_reveals * (2 * merkle_depth + 11) + i * merkle_depth) {
         write!(&mut f, "{} ", p).unwrap();
     }
@@ -404,7 +404,7 @@ fn main() {
     writeln!(&mut f, "att_root {}", Integer::from(&att_root)).unwrap();
     // Memory entries of e_bits || s_bits
     // field[0] e_s_mem,
-    write!(&mut f, "e_s_mem [ ").unwrap();
+    write!(&mut f, "e_s_mem [ro ").unwrap();
     for i in 0..num_reveals {
         let next_att = compact_cert_proof.t_list[i].i;
         let mut e = e_list[next_att].clone();
@@ -433,19 +433,19 @@ fn main() {
     writeln!(&mut f, "]").unwrap();
     // List of pointers (input format field[0])
     // bool[0][0] e_bits_list
-    write!(&mut f, "e_bits_list [ ").unwrap();
+    write!(&mut f, "e_bits_list [ro ").unwrap();
     for p in (0..num_reveals).map(|i| num_reveals * (3 * merkle_depth + 16) + i * SIG_WIDTH) {
         write!(&mut f, "{} ", p).unwrap();
     }
     writeln!(&mut f, "]").unwrap();
     // bool[0][0] s_bits_list
-    write!(&mut f, "s_bits_list [ ").unwrap();
+    write!(&mut f, "s_bits_list [ro ").unwrap();
     for p in (0..num_reveals).map(|i| num_reveals * (3 * merkle_depth + 16 + SIG_WIDTH) + i * SIG_WIDTH) {
         write!(&mut f, "{} ", p).unwrap();
     }
     writeln!(&mut f, "]").unwrap();
     // field[0] coins
-    write!(&mut f, "coins [ ").unwrap();
+    write!(&mut f, "coins [ro ").unwrap();
     for c in coin_list {
         write!(&mut f, "{} ", c).unwrap();
     }

@@ -24,7 +24,7 @@ def mix(field[6] state, field[81] m) -> field[6]:
     endfor
     return out
 
-def poseidon(u32 N, field[0] inputs) -> field:
+def poseidon(u32 N, field[ro 0] inputs) -> field:
     assert(N == 5)
     u32 t = N + 1
     u32 f = 8
@@ -133,7 +133,7 @@ def poseidon(u32 N, field[0] inputs) -> field:
 
 def main() -> field:
     u32 n = 5
-    field[n] inputs = [1, 2, 3, 4, 5]
+    field[ro n] inputs = [1, 2, 3, 4, 5]
     field hash = poseidon(n, inputs)
 
     return hash

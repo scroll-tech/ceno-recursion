@@ -102,10 +102,10 @@ def point_double_add_batch(
 def point_mul_batch(
     Point a_0, 
     field k_0, 
-    field[0] k_bits_0,
+    field[ro 0] k_bits_0,
     Point a_1, 
     field k_1, 
-    field[0] k_bits_1
+    field[ro 0] k_bits_1
 ) -> DoublePoint:
     // Hack: set (0, 0) to be the identity
     Point a_k_0 = Point {
@@ -156,13 +156,13 @@ struct Signature {
     field s
 }
 
-def verify_signature(field msg, PublicKey pk, Signature sig, field[0] e_bits, field[0] s_bits) -> u32:
+def verify_signature(field msg, PublicKey pk, Signature sig, field[ro 0] e_bits, field[ro 0] s_bits) -> u32:
     // Check all points are on the curve
     assert(pk.p.y * pk.p.y == pk.p.x * pk.p.x * pk.p.x + A * pk.p.x + B)
     assert(pk.q.y * pk.q.y == pk.q.x * pk.q.x * pk.q.x + A * pk.q.x + B)
     assert(sig.r.y * sig.r.y == sig.r.x * sig.r.x * sig.r.x + A * sig.r.x + B)
 
-    field[5] inputs = [msg, sig.r.x, sig.r.y, 0, 0]
+    field[ro 5] inputs = [ro msg, sig.r.x, sig.r.y, 0, 0]
     field e = poseidon(5, inputs)
     // Point eq = point_mul(pk.q, e, e_bits)
     // Point sp = point_mul(pk.p, sig.s, s_bits)

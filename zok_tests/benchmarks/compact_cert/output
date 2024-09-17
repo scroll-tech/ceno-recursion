@@ -36,7 +36,7 @@ Proof size: 162.3kB
 --
 Num Att = 10, Num Reveal = 9
 
-Opt 3:
+Opt 4:
 Num Blocks: 21
 Compiler time: 1043ms
 Preprocess time: 1114ms
@@ -44,7 +44,7 @@ Prover time: 416.9s
 Verifier time: 1311ms
 Proof size: 2.561MB
 
-Opt 4:
+Opt 5:
 Num Blocks: 21
 Compiler time: 1115ms
 Preprocess time: 1115ms
@@ -52,7 +52,7 @@ Prover time: 426.9s
 Verifier time: 1297ms
 Proof size: 2.534MB
 
-Opt 5:
+Opt 6:
 Num Blocks: 21
 Compiler time: 1131ms
 Preprocess time: 1124ms
@@ -60,7 +60,7 @@ Prover time: 310.9s
 Verifier time: 1028ms
 Proof size: 1.852MB
 
-Opt 6:
+Opt 7:
 Num Blocks: 17
 Compiler time: 680ms
 Preprocess time: 1127ms
@@ -68,7 +68,7 @@ Prover time: 115.7s
 Verifier time: 706ms
 Proof size: 1.36MB
 
-Opt 7:
+Opt 8:
 Num Blocks: 17
 Compiler time: 615ms
 Preprocess time: 1077ms
@@ -76,10 +76,18 @@ Prover time: 30.21s
 Verifier time: 515.07ms
 Proof size: 988.9kB
 
-Opt 8:
+Opt 9:
 Num Blocks: 17
 Compiler time: 615ms
 Preprocess time: 1104ms
 Prover time: 30.13s
 Verifier time: 509.04ms
 Proof size: 979.8kB
+
+Opt 10:
+Num Blocks: 17
+Compiler time: 545ms
+Preprocess time: 1065ms
+Prover time: 26.48s
+Verifier time: 463.24ms
+Proof size: 914.4kB

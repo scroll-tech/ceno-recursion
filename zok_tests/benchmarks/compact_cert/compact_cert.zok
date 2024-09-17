@@ -5,17 +5,17 @@ from "./schnorr.zok" import WIDTH, Point, DoublePoint, QuadPoint, PublicKey, Sig
 // Reveal Proof Entry
 struct T {
     u32 i
-    field[0] i_bits
-    field[5] s // sig_r_x, sig_r_y, sig_s, l, r
+    field[ro 0] i_bits
+    field[ro 5] s // sig_r_x, sig_r_y, sig_s, l, r
     MerkleProof pi_s
-    field[5] p // pk_p_x, pk_p_y, pk_q_x, pk_q_y, w
+    field[ro 5] p // pk_p_x, pk_p_y, pk_q_x, pk_q_y, w
     MerkleProof pi_p
 }
 
 struct CompactCertProof {
     field sig_root
     u32 signed_weight
-    T[0] t_list
+    T[ro 0] t_list
 }
 
 // Verifier of a compact certificate function
@@ -26,9 +26,9 @@ def verifier(
     field message,
     u32 merkle_depth,
     field att_root,
-    field[0][0] e_bits_list,
-    field[0][0] s_bits_list,
-    field[0] coins
+    field[ro 0][ro 0] e_bits_list,
+    field[ro 0][ro 0] s_bits_list,
+    field[ro 0] coins
 ) -> u32:
     u32 signed_weight = compact_cert_proof.signed_weight
     assert(signed_weight > proven_weight)
@@ -69,15 +69,15 @@ def main(
     // For compact_cert_proof
     field sig_root,
     u32 signed_weight,
-    u32[0] t_i_list,
+    u32[ro 0] t_i_list,
     // All memory entries within T (i_bits || s || pi_s.path || p || pi_p.path)
-    field[0] t_mem,
+    field[ro 0] t_mem,
     // List of pointers (input format field[0])
-    field[0][0] t_i_bits_list,
-    field[0][5] t_s_list,
-    field[0][0] t_pi_s_path_list,
-    field[0][5] t_p_list,
-    field[0][0] t_pi_p_path_list,
+    field[ro 0][ro 0] t_i_bits_list,
+    field[ro 0][ro 5] t_s_list,
+    field[ro 0][ro 0] t_pi_s_path_list,
+    field[ro 0][ro 5] t_p_list,
+    field[ro 0][ro 0] t_pi_p_path_list,
     // For others
     u32 proven_weight,
     u32 num_reveals,
@@ -85,13 +85,13 @@ def main(
     u32 merkle_depth,
     field att_root,
     // Memory entries of e_bits || s_bits
-    field[0] e_s_mem,
+    field[ro 0] e_s_mem,
     // List of pointers (input format field[0])
-    field[0][0] e_bits_list,
-    field[0][0] s_bits_list,
-    field[0] coins
+    field[ro 0][ro 0] e_bits_list,
+    field[ro 0][ro 0] s_bits_list,
+    field[ro 0] coins
 ) -> u32:
-    array_decl T[num_reveals] t_list
+    array_decl T[ro num_reveals] t_list
     for u32 k in 0..num_reveals do
         t_list[k] = T {
             i: t_i_list[k],

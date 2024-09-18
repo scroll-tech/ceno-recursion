@@ -1,8 +1,11 @@
+from "poseidon" import poseidon
+from "poseidon_hash" import compress
+
 struct Transcript {
-    field hash
+    field[12] state
 }
 
-def new_transcript() -> Transcript:
+def new_transcript(field[0] label) -> Transcript:
     return Transcript {
         hash: 4
     }

@@ -3,9 +3,10 @@ use rand::Rng;
 use ff::PrimeField;
 use crate::field::Fp;
 use crate::poseidon;
-use crate::Integer;
+use rug::{Integer, integer::Order};
+use serde::{Serializer, Serialize, ser::SerializeStruct};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct PublicKey {
     pub p: Point,
     pub q: Point,
@@ -21,6 +22,30 @@ pub struct SecretKey {
 pub struct Signature {
     pub r: Point,
     pub s: Integer,
+}
+
+impl Serialize for SecretKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("SecretKey", 2)?;
+        state.serialize_field("a", &self.a.to_digits::<u8>(Order::MsfBe))?;
+        state.serialize_field("pk", &self.pk)?;
+        state.end()
+    }
+}
+
+impl Serialize for Signature {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("Signature", 2)?;
+        state.serialize_field("r", &self.r)?;
+        state.serialize_field("s", &self.s.to_digits::<u8>(Order::MsfBe))?;
+        state.end()
+    }
 }
 
 pub fn gen_r(num_bits: usize) -> (Integer, Vec<bool>) {

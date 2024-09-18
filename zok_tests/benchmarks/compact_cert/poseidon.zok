@@ -1,12 +1,5 @@
-def poseidon(u32 N, field[ro 0] inputs) -> field:
-    assert(N == 5)
-
+def poseidon(field state1, field state2, field state3, field state4, field state5) -> field:
     field state0 = 0
-    field state1 = inputs[0]
-    field state2 = inputs[1]
-    field state3 = inputs[2]
-    field state4 = inputs[3]
-    field state5 = inputs[4]
 
     field c0 = 758662019503705074
     field c1 = 9958560809385864598

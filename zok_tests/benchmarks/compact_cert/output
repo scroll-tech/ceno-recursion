@@ -110,3 +110,27 @@ Preprocess time: 1023ms
 Prover time: 12.15s
 Verifier time: 369.19ms
 Proof size: 772.9kB
+
+Opt 11: (Unroll poseidon, partial unroll schnorr)
+Num Blocks: 15
+Compiler time: 1390ms
+Preprocess time: 1016ms
+Prover time: 9.915s
+Verifier time: 329.03ms
+Proof size: 715.2kB
+
+Opt 12: (Unroll poseidon, partial unroll & more efficient schnorr)
+Num Blocks: 15
+Compiler time: 1390ms
+Preprocess time: 1016ms
+Prover time: 9.915s
+Verifier time: 329.03ms
+Proof size: 715.2kB
+
+Opt 13: (Other cleanup)
+Num Blocks: 15
+Compiler time: 1605ms
+Preprocess time: 1020ms
+Prover time: 9.205s
+Verifier time: 328.70ms
+Proof size: 693.0kB

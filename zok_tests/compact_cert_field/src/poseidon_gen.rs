@@ -11,15 +11,8 @@ pub fn poseidon_gen() {
     let file_name = format!("../benchmarks/compact_cert/poseidon.zok");
     let mut f = File::create(file_name).unwrap();
 
-    writeln!(&mut f, "def poseidon(u32 N, field[ro 0] inputs) -> field:").unwrap();
-    writeln!(&mut f, "    assert(N == 5)").unwrap();
-    writeln!(&mut f, "").unwrap();
+    writeln!(&mut f, "def poseidon(field state1, field state2, field state3, field state4, field state5) -> field:").unwrap();
     writeln!(&mut f, "    field state0 = 0").unwrap();
-    writeln!(&mut f, "    field state1 = inputs[0]").unwrap();
-    writeln!(&mut f, "    field state2 = inputs[1]").unwrap();
-    writeln!(&mut f, "    field state3 = inputs[2]").unwrap();
-    writeln!(&mut f, "    field state4 = inputs[3]").unwrap();
-    writeln!(&mut f, "    field state5 = inputs[4]").unwrap();
     writeln!(&mut f, "").unwrap();
     for i in 0..c.len() {
         writeln!(&mut f, "    field c{} = {}", i, Integer::from(&c[i])).unwrap();

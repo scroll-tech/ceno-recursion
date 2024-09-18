@@ -1,6 +1,8 @@
 use crate::field::Fp;
 use crate::poseidon::*;
+use serde::{Serialize};
 
+#[derive(Serialize)]
 pub struct MerkleTree {
     pub depth: usize,
     pub root: Fp,
@@ -11,6 +13,7 @@ pub struct MerkleTree {
     pub leaf_hashes: Vec<Fp>,
 }
 
+#[derive(Clone, Serialize)]
 pub struct MerkleProof {
     // All internal nodes on the path
     pub path: Vec<Fp>,

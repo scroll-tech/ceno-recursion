@@ -15,9 +15,10 @@ use ff::PrimeField;
 use std::fs::File;
 use std::io::Write;
 use rug::{Integer, integer::Order};
+use serde::{Serialize};
 
 // Attestor info
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 struct Attestor {
     sig: Signature,
     pk: PublicKey,
@@ -42,7 +43,7 @@ impl Attestor {
 }
 
 // Signature Info
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 struct Sig {
     l: usize,
     r: usize,
@@ -73,6 +74,7 @@ impl Sig {
 }
 
 // Reveal Proof Entry
+#[derive(Clone, Serialize)]
 struct T {
     i: usize,
     s: Fp,
@@ -93,10 +95,25 @@ impl T {
 }
 
 // Proof
+#[derive(Clone, Serialize)]
 struct CompactCertProof {
     sig_root: Fp,
     signed_weight: usize,
     t_list: Vec<T>
+}
+
+// For serialization & compute size
+#[derive(Serialize)]
+struct CompleteProof {
+    compact_cert_proof: CompactCertProof,
+    proven_weight: usize,
+    k: usize,
+    q: usize,
+    message: Fp,
+    att_len: usize,
+    att_root: Fp,
+    att_list: Vec<Attestor>,
+    sig_list: Vec<Sig>,
 }
 
 const NUM_ATTESTORS: usize = 1000;
@@ -299,6 +316,19 @@ fn main() {
     // VERIFIER
     verifier(&compact_cert_proof, PROVEN_WEIGHT, k, q, &message, attestors.len(), att_root, &att_list, &sig_list);
 
+    let complete_proof = CompleteProof {
+        compact_cert_proof: compact_cert_proof.clone(), 
+        proven_weight: PROVEN_WEIGHT, 
+        k, 
+        q,
+        message, 
+        att_len: attestors.len(), 
+        att_root, 
+        att_list: att_list.clone(), 
+        sig_list: sig_list.clone(),
+    };
+    let proof_size = bincode::serialize(&complete_proof).unwrap().len();
+    println!("Proof Size: {}", proof_size);
     println!("Verification Successful!");
 
     // Generate input for Zok
@@ -454,5 +484,5 @@ fn main() {
     write!(&mut f, "END").unwrap();
 
     // Generate poseidon file
-    poseidon_gen::poseidon_gen();
+    // poseidon_gen::poseidon_gen();
 }

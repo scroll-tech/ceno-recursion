@@ -102,6 +102,7 @@ Proof size: 672.7kB
 
 --
 Num Att = 1000, Num Reveal = 14
+Proof Size: 15.406kB
 
 Opt 10: (Unroll poseidon)
 Num Blocks: 15
@@ -134,3 +135,16 @@ Preprocess time: 1020ms
 Prover time: 9.205s
 Verifier time: 328.70ms
 Proof size: 693.0kB
+
+--
+Num Att = 10000, Num Reveal = 92
+Verifier time: 39.079s
+Proof Size: 123.89kB
+
+Opt 13: (Other cleanup)
+Num Blocks: 15
+Compiler time: 1613ms
+Preprocess time: 1012ms
+Prover time: 69.266s
+Verifier time: 662.98ms
+Proof size: 1166.38kB

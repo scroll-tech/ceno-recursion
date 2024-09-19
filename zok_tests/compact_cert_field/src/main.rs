@@ -16,6 +16,7 @@ use std::fs::File;
 use std::io::Write;
 use rug::{Integer, integer::Order};
 use serde::{Serialize};
+use std::time::*;
 
 // Attestor info
 #[derive(Clone, Serialize)]
@@ -116,10 +117,10 @@ struct CompleteProof {
     sig_list: Vec<Sig>,
 }
 
-const NUM_ATTESTORS: usize = 1000;
+const NUM_ATTESTORS: usize = 10000;
 const PROVEN_WEIGHT: usize = 8;
-const KNOWLEDGE_SOUNDNESS: usize = 8; // knowledge soundness of 2^{-k}
-const MAX_NUM_REVEALS: usize = 200; // num reveals 2^q
+const KNOWLEDGE_SOUNDNESS: usize = 10; // knowledge soundness of 2^{-k}
+const MAX_NUM_REVEALS: usize = 2000; // num reveals 2^q
 const SIG_WIDTH: usize = 253;
 
 // Commit all attestors as a merkle tree
@@ -314,7 +315,10 @@ fn main() {
     let (compact_cert_proof, att_list, sig_list, coin_list) = prover(&attestors, PROVEN_WEIGHT, k, q, &message, &att_root, &att_tree).unwrap();
 
     // VERIFIER
+    let verifier_start = Instant::now();
     verifier(&compact_cert_proof, PROVEN_WEIGHT, k, q, &message, attestors.len(), att_root, &att_list, &sig_list);
+    let verifier_time = verifier_start.elapsed();
+    println!("\n--\nVerifier time: {}ms", verifier_time.as_millis());
 
     let complete_proof = CompleteProof {
         compact_cert_proof: compact_cert_proof.clone(), 

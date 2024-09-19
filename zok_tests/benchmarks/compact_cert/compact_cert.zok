@@ -14,14 +14,14 @@ struct T {
 
 struct CompactCertProof {
     field sig_root
-    u32 signed_weight
+    u64 signed_weight
     T[ro 0] t_list
 }
 
 // Verifier of a compact certificate function
 def verifier(
     CompactCertProof compact_cert_proof,
-    u32 proven_weight,
+    u64 proven_weight,
     u32 num_reveals,
     field message,
     u32 merkle_depth,
@@ -30,7 +30,7 @@ def verifier(
     field[ro 0][ro 0] s_bits_list,
     field[ro 0] coins
 ) -> u32:
-    u32 signed_weight = compact_cert_proof.signed_weight
+    u64 signed_weight = compact_cert_proof.signed_weight
     assert(signed_weight > proven_weight)
     // let num_reveals: usize = (k + q).div_ceil((signed_weight / proven_weight).ilog2() as usize);
 
@@ -68,7 +68,7 @@ def main(
     u32 num_attestors,
     // For compact_cert_proof
     field sig_root,
-    u32 signed_weight,
+    u64 signed_weight,
     u32[ro 0] t_i_list,
     // All memory entries within T (i_bits || s || pi_s.path || p || pi_p.path)
     field[ro 0] t_mem,
@@ -79,7 +79,7 @@ def main(
     field[ro 0][ro 5] t_p_list,
     field[ro 0][ro 0] t_pi_p_path_list,
     // For others
-    u32 proven_weight,
+    u64 proven_weight,
     u32 num_reveals,
     field message,
     u32 merkle_depth,

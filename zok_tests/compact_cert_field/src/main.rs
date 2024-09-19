@@ -117,10 +117,10 @@ struct CompleteProof {
     sig_list: Vec<Sig>,
 }
 
-const NUM_ATTESTORS: usize = 10000;
+const NUM_ATTESTORS: usize = 100000;
 const PROVEN_WEIGHT: usize = 8;
 const KNOWLEDGE_SOUNDNESS: usize = 10; // knowledge soundness of 2^{-k}
-const MAX_NUM_REVEALS: usize = 2000; // num reveals 2^q
+const MAX_NUM_REVEALS: usize = 20000; // num reveals 2^q
 const SIG_WIDTH: usize = 253;
 
 // Commit all attestors as a merkle tree

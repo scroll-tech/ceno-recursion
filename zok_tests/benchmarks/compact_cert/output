@@ -102,7 +102,7 @@ Proof size: 672.7kB
 
 --
 Num Att = 1000, Soundness = 2^-8, Num Reveal = 14
-Verifier time: 4.741s
+Verifier time: 232ms
 Proof Size: 15.406kB
 
 Opt 10: (Unroll poseidon)
@@ -137,9 +137,17 @@ Prover time: 9.205s
 Verifier time: 328.70ms
 Proof size: 693.0kB
 
+Opt 14: (Witness registers)
+Num Blocks: 15
+Compiler time: 1733ms
+Preprocess time: 1015ms
+Prover time: 4.608s
+Verifier time: 270.84ms
+Proof size: 634.5kB
+
 --
 Num Att = 10000, Soundness = 2^-10, Num Reveal = 92
-Verifier time: 39.079s
+Verifier time: 1876ms
 Proof Size: 123.89kB
 
 Opt 13: (Other cleanup)
@@ -147,12 +155,22 @@ Prover time: 69.266s
 Verifier time: 662.98ms
 Proof size: 1166.38kB
 
+Opt 14: (Witness registers)
+Prover time: 28.511s
+Verifier time: 509.54ms
+Proof size: 1028.86kB
+
 --
 Num Att = 100000, Soundness = 2^-10, Num Reveal = 690
-Verifier time: 337.16s
+Verifier time: 16.06s
 Proof Size: 1.06MB
 
 Opt 13: (Other cleanup)
 Prover time: 925.26s
 Verifier time: 1.623s
 Proof size: 2.519MB
+
+Opt 14: (Witness registers)
+Prover time: 221.28s
+Verifier time: 1.082s
+Proof size: 2.08MB

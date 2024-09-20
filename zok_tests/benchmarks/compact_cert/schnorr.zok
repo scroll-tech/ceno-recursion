@@ -131,7 +131,7 @@ def point_double_add_batch_1(
         p1: Point { x: x1, y: y1 },
         p2: Point { x: x2, y: y2 },
         p3: Point { x: x3, y: y3 }
-    }// Perform two point multiplications together
+    }
 def point_double_add_batch_2(
     Point a_0,
     Point b_0,
@@ -240,64 +240,31 @@ def point_double_add_batch_4(
         p2: Point { x: x2, y: y2 },
         p3: Point { x: x3, y: y3 }
     }
+
 // Specifically built for signature verification
 def point_mul_batch(
     Point a_0, 
     field k_0, 
-    field[ro 0] k_bits_0,
     Point a_1, 
-    field k_1, 
-    field[ro 0] k_bits_1
+    field k_1
 ) -> DoublePoint:
     // Hack: set (0, 0) to be the identity
     Point a_k_0 = a_0
     Point a_k_1 = a_1
     field k_assemb_0 = 0
     field k_assemb_1 = 0
-    u32 i = 0
 
     // Do not start computation until after the first 1-bit
     bool active_0 = false
     bool active_1 = false
-    // first one
-    k_assemb_0 = k_assemb_0 * 2
-    k_assemb_1 = k_assemb_1 * 2
-    field next_bit_0 = k_bits_0[i]
-    assert(next_bit_0 * (next_bit_0 - 1) == 0)
-    k_assemb_0 = k_assemb_0 + next_bit_0
-    field next_bit_1 = k_bits_1[i]
-    assert(next_bit_1 * (next_bit_1 - 1) == 0)
-    k_assemb_1 = k_assemb_1 + next_bit_1
-    QuadPoint tmp = point_double_add_batch_4(a_k_0, a_0, a_k_1, a_1)
-    if active_0 then
-        if next_bit_0 == 1 then
-            a_k_0 = tmp.p2
-        else
-            a_k_0 = tmp.p0
-        endif
-    endif
-    if next_bit_0 == 1 then
-        active_0 = true
-    endif
-    if active_1 then
-        if next_bit_1 == 1 then
-            a_k_1 = tmp.p3
-        else
-            a_k_1 = tmp.p1
-        endif
-    endif
-    if next_bit_1 == 1 then
-        active_1 = true
-    endif
-    i = i + 1
-    // Unroll 4 iterations
+    u32 i = 0
     for u32 it in 0..63 do
         k_assemb_0 = k_assemb_0 * 2
         k_assemb_1 = k_assemb_1 * 2
-        field next_bit_0 = k_bits_0[i]
+        witness field next_bit_0
         assert(next_bit_0 * (next_bit_0 - 1) == 0)
         k_assemb_0 = k_assemb_0 + next_bit_0
-        field next_bit_1 = k_bits_1[i]
+        witness field next_bit_1
         assert(next_bit_1 * (next_bit_1 - 1) == 0)
         k_assemb_1 = k_assemb_1 + next_bit_1
         QuadPoint tmp = point_double_add_batch_0(a_k_0, a_0, a_k_1, a_1)
@@ -324,10 +291,10 @@ def point_mul_batch(
         i = i + 1
         k_assemb_0 = k_assemb_0 * 2
         k_assemb_1 = k_assemb_1 * 2
-        field next_bit_0 = k_bits_0[i]
+        witness field next_bit_0
         assert(next_bit_0 * (next_bit_0 - 1) == 0)
         k_assemb_0 = k_assemb_0 + next_bit_0
-        field next_bit_1 = k_bits_1[i]
+        witness field next_bit_1
         assert(next_bit_1 * (next_bit_1 - 1) == 0)
         k_assemb_1 = k_assemb_1 + next_bit_1
         QuadPoint tmp = point_double_add_batch_1(a_k_0, a_0, a_k_1, a_1)
@@ -354,10 +321,10 @@ def point_mul_batch(
         i = i + 1
         k_assemb_0 = k_assemb_0 * 2
         k_assemb_1 = k_assemb_1 * 2
-        field next_bit_0 = k_bits_0[i]
+        witness field next_bit_0
         assert(next_bit_0 * (next_bit_0 - 1) == 0)
         k_assemb_0 = k_assemb_0 + next_bit_0
-        field next_bit_1 = k_bits_1[i]
+        witness field next_bit_1
         assert(next_bit_1 * (next_bit_1 - 1) == 0)
         k_assemb_1 = k_assemb_1 + next_bit_1
         QuadPoint tmp = point_double_add_batch_2(a_k_0, a_0, a_k_1, a_1)
@@ -384,10 +351,10 @@ def point_mul_batch(
         i = i + 1
         k_assemb_0 = k_assemb_0 * 2
         k_assemb_1 = k_assemb_1 * 2
-        field next_bit_0 = k_bits_0[i]
+        witness field next_bit_0
         assert(next_bit_0 * (next_bit_0 - 1) == 0)
         k_assemb_0 = k_assemb_0 + next_bit_0
-        field next_bit_1 = k_bits_1[i]
+        witness field next_bit_1
         assert(next_bit_1 * (next_bit_1 - 1) == 0)
         k_assemb_1 = k_assemb_1 + next_bit_1
         QuadPoint tmp = point_double_add_batch_3(a_k_0, a_0, a_k_1, a_1)
@@ -413,6 +380,36 @@ def point_mul_batch(
         endif
         i = i + 1
     endfor
+    // Last one
+    k_assemb_0 = k_assemb_0 * 2
+    k_assemb_1 = k_assemb_1 * 2
+    witness field next_bit_0
+    assert(next_bit_0 * (next_bit_0 - 1) == 0)
+    k_assemb_0 = k_assemb_0 + next_bit_0
+    witness field next_bit_1
+    assert(next_bit_1 * (next_bit_1 - 1) == 0)
+    k_assemb_1 = k_assemb_1 + next_bit_1
+    QuadPoint tmp = point_double_add_batch_4(a_k_0, a_0, a_k_1, a_1)
+    if active_0 then
+        if next_bit_0 == 1 then
+            a_k_0 = tmp.p2
+        else
+            a_k_0 = tmp.p0
+        endif
+    endif
+    if next_bit_0 == 1 then
+        active_0 = true
+    endif
+    if active_1 then
+        if next_bit_1 == 1 then
+            a_k_1 = tmp.p3
+        else
+            a_k_1 = tmp.p1
+        endif
+    endif
+    if next_bit_1 == 1 then
+        active_1 = true
+    endif
     assert(k_assemb_0 == k_0)
     assert(k_assemb_1 == k_1)
     return DoublePoint {
@@ -430,7 +427,7 @@ struct Signature {
     field s
 }
 
-def verify_signature(field msg, PublicKey pk, Signature sig, field[ro 0] e_bits, field[ro 0] s_bits) -> u32:
+def verify_signature(field msg, PublicKey pk, Signature sig) -> u32:
     // Check all points are on the curve
     assert(pk.p.y * pk.p.y == pk.p.x * pk.p.x * pk.p.x + A * pk.p.x + B)
     assert(pk.q.y * pk.q.y == pk.q.x * pk.q.x * pk.q.x + A * pk.q.x + B)
@@ -439,7 +436,7 @@ def verify_signature(field msg, PublicKey pk, Signature sig, field[ro 0] e_bits,
     field e = poseidon(msg, sig.r.x, sig.r.y, 0, 0)
     // Point eq = point_mul(pk.q, e, e_bits)
     // Point sp = point_mul(pk.p, sig.s, s_bits)
-    DoublePoint tmp = point_mul_batch(pk.q, e, e_bits, pk.p, sig.s, s_bits)
+    DoublePoint tmp = point_mul_batch(pk.q, e, pk.p, sig.s)
     Point eq = tmp.p0
     Point sp = tmp.p1
     Point res = point_add(sig.r, eq)

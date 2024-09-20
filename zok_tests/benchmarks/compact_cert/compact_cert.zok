@@ -5,11 +5,8 @@ from "./schnorr.zok" import WIDTH, Point, DoublePoint, QuadPoint, PublicKey, Sig
 // Reveal Proof Entry
 struct T {
     u32 i
-    field[ro 0] i_bits
     field[ro 5] s // sig_r_x, sig_r_y, sig_s, l, r
-    MerkleProof pi_s
     field[ro 5] p // pk_p_x, pk_p_y, pk_q_x, pk_q_y, w
-    MerkleProof pi_p
 }
 
 struct CompactCertProof {
@@ -26,8 +23,6 @@ def verifier(
     field message,
     u32 merkle_depth,
     field att_root,
-    field[ro 0][ro 0] e_bits_list,
-    field[ro 0][ro 0] s_bits_list,
     field[ro 0] coins
 ) -> u32:
     u64 signed_weight = compact_cert_proof.signed_weight
@@ -42,11 +37,8 @@ def verifier(
         field coin = coins[j]
 
         T t = compact_cert_proof.t_list[j]
-        // Sig Opening
-        // assert(verify_merkle(5, t.pi_s, compact_cert_proof.sig_root, t.i, t.i_bits, t.s, merkle_depth) == 1)
-        // Att Opening
-        // assert(verify_merkle(5, t.pi_p, att_root, t.i, t.i_bits, t.p, merkle_depth) == 1)
-        assert(verify_merkle_batch(t.i, t.i_bits, t.pi_s, compact_cert_proof.sig_root, t.s, t.pi_p, att_root, t.p, merkle_depth) == 1)
+        // Sig Opening & Att Opening
+        assert(verify_merkle_batch(t.i, compact_cert_proof.sig_root, t.s, att_root, t.p, merkle_depth) == 1)
         // Validity of signature
         PublicKey pk = PublicKey {
             p: Point { x: t.p[0], y: t.p[1] },
@@ -56,7 +48,7 @@ def verifier(
             r: Point{ x: t.s[0], y: t.s[1] },
             s: t.s[2]
         }
-        assert(verify_signature(message, pk, sig, e_bits_list[j], s_bits_list[j]) == 1)
+        assert(verify_signature(message, pk, sig) == 1)
         // L < coin <= L + Weight
         assert(t.s[3] <= coin && coin < t.s[3] + t.p[4])
     endfor
@@ -70,36 +62,25 @@ def main(
     field sig_root,
     u64 signed_weight,
     u32[ro 0] t_i_list,
-    // All memory entries within T (i_bits || s || pi_s.path || p || pi_p.path)
+    // All memory entries within T (s || p)
     field[ro 0] t_mem,
     // List of pointers (input format field[0])
-    field[ro 0][ro 0] t_i_bits_list,
     field[ro 0][ro 5] t_s_list,
-    field[ro 0][ro 0] t_pi_s_path_list,
     field[ro 0][ro 5] t_p_list,
-    field[ro 0][ro 0] t_pi_p_path_list,
     // For others
     u64 proven_weight,
     u32 num_reveals,
     field message,
     u32 merkle_depth,
     field att_root,
-    // Memory entries of e_bits || s_bits
-    field[ro 0] e_s_mem,
-    // List of pointers (input format field[0])
-    field[ro 0][ro 0] e_bits_list,
-    field[ro 0][ro 0] s_bits_list,
     field[ro 0] coins
 ) -> u32:
     array_decl T[ro num_reveals] t_list
     for u32 k in 0..num_reveals do
         t_list[k] = T {
             i: t_i_list[k],
-            i_bits: t_i_bits_list[k],
             s: t_s_list[k],
-            pi_s: MerkleProof { path: t_pi_s_path_list[k] },
-            p: t_p_list[k],
-            pi_p: MerkleProof { path: t_pi_p_path_list[k] }
+            p: t_p_list[k]
         }
     endfor
     CompactCertProof compact_cert_proof = CompactCertProof {
@@ -115,8 +96,6 @@ def main(
         message,
         merkle_depth,
         att_root,
-        e_bits_list,
-        s_bits_list,
         coins
     )
 /*

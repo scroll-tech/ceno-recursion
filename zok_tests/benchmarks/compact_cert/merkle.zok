@@ -1,40 +1,18 @@
 from "./poseidon.zok" import poseidon, ark, sbox, mix
 
-struct MerkleProof {
-    // All internal nodes on the path
-    field[ro 0] path
-}
-
-def verify_merkle(MerkleProof proof, field root, u32 index, field[ro 0] index_bits, field[ro 5] entry, u32 depth) -> u32:
-    field index_assemb = 0
-    // hash of leaf
-    field cur_node = poseidon(entry[0], entry[1], entry[2], entry[3], entry[4])
-    // hash of internal nodes
-    for u32 i in 0..depth do
-        field next_bit = index_bits[i]
-        assert(next_bit * (next_bit - 1) == 0)
-        index_assemb = index_assemb * 2 + next_bit
-        // Depending on index, cur_node and proof[i] will be on two sides of the inputs
-        field next_bit = index_bits[depth - i - 1]
-        field next_path = proof.path[i]
-        field state1 = next_bit == 0 ? cur_node : next_path
-        field state2 = next_bit == 0 ? next_path : cur_node
-        cur_node = poseidon(state1, state2, 0, 0, 0)
-    endfor
-    assert(index_assemb == (F)index)
-    assert(cur_node == root)
-    return 1
+// Merkle paths are now directly supplied as witnesses
+// struct MerkleProof {
+//     // All internal nodes on the path
+//     field[ro 0] path
+// }
 
 // Perform two merkle tree verification together
 // Both tree are of the same size, opening the same index
 // Specifically built for compact certificate
 def verify_merkle_batch(
-    u32 index, 
-    field[ro 0] index_bits,  
-    MerkleProof proof_0, 
+    u32 index,
     field root_0, 
     field[ro 5] entry_0,
-    MerkleProof proof_1, 
     field root_1, 
     field[ro 5] entry_1, 
     u32 depth
@@ -43,18 +21,19 @@ def verify_merkle_batch(
     // hash of leaf
     field cur_node_0 = poseidon(entry_0[0], entry_0[1], entry_0[2], entry_0[3], entry_0[4])
     field cur_node_1 = poseidon(entry_1[0], entry_1[1], entry_1[2], entry_1[3], entry_1[4])
+    field factor = 1
     // hash of internal nodes
     for u32 i in 0..depth do
-        field next_bit = index_bits[i]
-        assert(next_bit * (next_bit - 1) == 0)
-        index_assemb = index_assemb * 2 + next_bit
         // Depending on index, cur_node and proof[i] will be on two sides of the inputs
-        field next_bit = index_bits[depth - i - 1]
-        field next_path = proof_0.path[i]
+        witness field next_bit
+        assert(next_bit * (next_bit - 1) == 0)
+        index_assemb = index_assemb + next_bit * factor
+        factor = factor * 2
+        witness field next_path
         field state1 = next_bit == 0 ? cur_node_0 : next_path
         field state2 = next_bit == 0 ? next_path : cur_node_0
         cur_node_0 = poseidon(state1, state2, 0, 0, 0)
-        field next_path = proof_1.path[i]
+        witness field next_path
         field state1 = next_bit == 0 ? cur_node_1 : next_path
         field state2 = next_bit == 0 ? next_path : cur_node_1
         cur_node_1 = poseidon(state1, state2, 0, 0, 0)
@@ -63,14 +42,3 @@ def verify_merkle_batch(
     assert(cur_node_0 == root_0)
     assert(cur_node_1 == root_1)
     return 1
-
-def main() -> bool:
-    // construct proof for depth = 2, index = 2
-    u32 depth = 2
-    u32 index = 2
-    field[ro 2] index_bits = [ro 0, 1]
-    MerkleProof proof = MerkleProof {
-        path: [ro 1456623673339096257817090108755639590551884867406093321072892464683931189590, 511154968495907440281207254976660066699316103824895525946267243518485200632]
-    }
-    field root = 4025061991628092675460898405984409787580357548626371141566464220460064800482
-    return verify_merkle(proof, root, index, index_bits, [ro 1, 2, 3, 4, 5], depth) == 1

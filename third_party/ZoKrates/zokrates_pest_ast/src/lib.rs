@@ -14,7 +14,7 @@ pub use ast::{
     BinaryOperator, BooleanLiteralExpression, BooleanType, CallAccess, ConditionalStatement, 
     CondStoreStatement, ConstantDefinition, ConstantGenericValue, Curve, DecimalLiteralExpression,
     DecimalNumber, DecimalSuffix, DefinitionStatement, DimRO, ExplicitGenerics, Expression, FieldSuffix,
-    FieldType, File, FromExpression, FromImportDirective, FunctionDefinition, HexLiteralExpression,
+    FieldType, File, FromExpression, FromImportDirective, FuncInline, FunctionDefinition, HexLiteralExpression,
     HexNumberExpression, IdentifierExpression, ImportDirective, ImportSymbol,
     InlineArrayExpression, InlineStructExpression, InlineStructMember, IterationStatement,
     LiteralExpression, MainImportDirective, MemberAccess, NegOperator, NotOperator, Parameter,
@@ -180,8 +180,16 @@ mod ast {
     }
 
     #[derive(Debug, FromPest, PartialEq, Clone)]
+    #[pest_ast(rule(Rule::func_inline))]
+    pub struct FuncInline<'ast> {
+        #[pest_ast(outer())]
+        pub span: Span<'ast>,
+    }
+
+    #[derive(Debug, FromPest, PartialEq, Clone)]
     #[pest_ast(rule(Rule::function_definition))]
     pub struct FunctionDefinition<'ast> {
+        pub inline: Option<FuncInline<'ast>>,
         pub id: IdentifierExpression<'ast>,
         pub generics: Vec<IdentifierExpression<'ast>>,
         pub parameters: Vec<Parameter<'ast>>,
@@ -453,7 +461,6 @@ mod ast {
     pub struct WitnessStatement<'ast> {
         pub ty: Type<'ast>,
         pub id: IdentifierExpression<'ast>,
-        pub expression: Expression<'ast>,
         #[pest_ast(outer())]
         pub span: Span<'ast>,
     }

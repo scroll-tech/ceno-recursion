@@ -87,7 +87,13 @@ impl FrontEnd for ZSharpFE {
 
 impl ZSharpFE {
     /// Execute the Z# front-end interpreter on the supplied file with the supplied inputs
-    pub fn interpret(i: Inputs, entry_regs: &Vec<Integer>, entry_stacks: &Vec<Vec<Integer>>, entry_arrays: &Vec<Vec<Integer>>) -> (
+    pub fn interpret(
+        i: Inputs, 
+        entry_regs: &Vec<Integer>, 
+        entry_stacks: &Vec<Vec<Integer>>, 
+        entry_arrays: &Vec<Vec<Integer>>,
+        entry_witnesses: &Vec<Integer>,
+    ) -> (
         T, // Return Value
         Vec<usize>, // Block IDs
         Vec<Vec<Option<Value>>>, // Prog Input | Block Outputs
@@ -119,7 +125,17 @@ impl ZSharpFE {
             init_vir_mem_list,
             phy_mem_list, 
             vir_mem_list
-        ) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(entry_bl, &inputs, &input_liveness, &entry_regs, entry_stacks, entry_arrays, &blks, io_size)
+        ) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(
+            entry_bl, 
+            &inputs, 
+            &input_liveness, 
+            &entry_regs, 
+            entry_stacks, 
+            entry_arrays,
+            entry_witnesses,
+            &blks, 
+            io_size
+        )
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
         // prover::print_state_list(&bl_exec_state);
         // let _ = prover::sort_by_block(&bl_exec_state);
@@ -199,6 +215,13 @@ impl ZSharpFE {
                 let ts = to_const_value(state.vir_mem_op[j].ts_t.clone().unwrap())
                 .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 inputs.insert(format!("{}%vm{:06}t{}", prefix, j, suffix), ts);
+            }
+            // Process witnesses
+            for j in 0..state.wit_op.len() {
+                // witness
+                let wit = to_const_value(state.wit_op[j].clone())
+                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                inputs.insert(format!("{}%wt{:06}{}", prefix, j, suffix), wit);
             }
             block_io_map_list.push(inputs);
         }
@@ -1625,25 +1648,7 @@ impl<'ast> ZGen<'ast> {
                     Ok(())
                 }
             }
-            ast::Statement::Witness(d) => {
-                if self.in_witness_gen.get() {
-                    return Err("already in witness generation".into());
-                }
-                self.in_witness_gen.set(true);
-                let wit_e = self.expr_impl_::<IS_CNST>(&d.expression)?;
-                self.in_witness_gen.set(false);
-                let decl_ty = self.type_impl_::<IS_CNST>(&d.ty)?;
-                let ty = wit_e.type_();
-                if &decl_ty != ty {
-                    return Err(format!(
-                        "Assignment type mismatch: {decl_ty} annotated vs {ty} actual",
-                    ));
-                }
-                let mut e = wit_e;
-                e.term = term![Op::Witness("wit".into()); e.term];
-                self.declare_init_impl_::<IS_CNST>(d.id.value.clone(), decl_ty, e)?;
-                Ok(())
-            }
+            ast::Statement::Witness(_) => { panic!("Witness statements not supported!") }
             ast::Statement::ArrayDecl(_) => { panic!("Array declaration statements not supported!") }
         }
         .map_err(|err| format!("{}; context:\n{}", err, span_to_string(s.span())))

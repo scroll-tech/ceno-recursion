@@ -6,6 +6,8 @@
 //       Can try eliminate ternaries with a constant condition
 //       What would happen if block 0 is a loop to itself? Many analyses would break down!!!
 
+use blocks_optimization::bl_trans_map;
+use blocks_optimization::rp_replacement_stmt;
 use log::debug;
 
 use zokrates_pest_ast::*;
@@ -226,6 +228,8 @@ pub struct Block<'ast> {
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum BlockContent<'ast> {
+    //       val   type  liveness
+    Witness((String, Ty, bool)), // Dead witnesses will still be provided by the prover, and thus liveness must be explicitly stated
     //       val   type  offset  
     MemPush((String, Ty, usize)), // %PHY[%SP + offset] = val
     MemPop((String, Ty, usize)),  // val = %PHY[%BP + offset]
@@ -575,9 +579,8 @@ impl<'ast> ZGen<'ast> {
         // XXX: %AS is now a program input
         // blks[blks_len - 1].instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS", &Ty::Field)));
 
-        // Create a mapping from each function name to the beginning of their blocks
-        let mut func_blk_map = BTreeMap::new();
-        func_blk_map.insert("main".to_string(), 0);
+        // Create a mapping from each function name to (entry_bl, exit_bl, inline?)
+        let mut func_blk_map: BTreeMap<String, (usize, usize, bool)> = BTreeMap::new();
         // Create global variable scope info
         let mut var_scope_info: VarScopeInfo = VarScopeInfo::new();
         // constants
@@ -588,28 +591,79 @@ impl<'ast> ZGen<'ast> {
         let inputs: Vec<(String, Ty)>;
         (blks, blks_len, inputs, var_scope_info) = self.bl_gen_function_init_::<true>(blks, blks_len, f_file.clone(), f_name, var_scope_info)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+        func_blk_map.insert("main".to_string(), (0, blks_len - 1, false));
         // other functions
         for (func_file, funcs) in &self.functions {
-            for (f_name, _) in funcs {
+            for (f_name, f) in funcs {
                 if f_name != "main" {
-                    func_blk_map.insert(f_name.to_string(), blks_len);
+                    let entry_bl = blks_len;
                     (blks, blks_len, _, var_scope_info) = self.bl_gen_function_init_::<false>(blks, blks_len, func_file.clone(), f_name.to_string(), var_scope_info)
                         .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                    func_blk_map.insert(f_name.to_string(), (entry_bl, blks_len - 1, f.inline.is_some()));
                 }
             }
         }
 
+        // Convert func call terminators into coresponding block label
         let mut new_blks = Vec::new();
-        // Convert all FuncCall to actual Block number
-        for mut blk in blks {
-            if let BlockTerminator::FuncCall(f_name) = blk.terminator {
-                let f_label = func_blk_map.get(&f_name).unwrap();
-                blk.terminator = BlockTerminator::Transition(bl_coda(NextBlock::Label(*f_label)));
+        let mut next_new_blk_label = blks_len;
+        for next_bl in 0..blks_len {
+            (new_blks, next_new_blk_label) = self.bl_gen_func_call_to_bl_label(&blks, &func_blk_map, new_blks, next_new_blk_label, next_bl, 0, &BTreeMap::new());
+        }
+        (new_blks.into_iter().map(|i| i.unwrap()).collect(), 0, inputs)
+    }
+
+    fn bl_gen_func_call_to_bl_label(
+        &'ast self,
+        blks: &Vec<Block<'ast>>,
+        func_blk_map: &BTreeMap<String, (usize, usize, bool)>,
+        mut new_blks: Vec<Option<Block<'ast>>>,
+        mut next_new_blk_label: usize,
+        cur_bl: usize,
+        offset: usize,
+        label_map: &BTreeMap<usize, usize>,
+    ) -> (Vec<Option<Block<'ast>>>, usize) {
+        let mut blk = Block::clone(cur_bl + offset, &blks[cur_bl]);
+        // If we encounter any rp@ = <counter>, update <counter> to label_map[<counter>]
+        for i in 0..blk.instructions.len() {
+            let bc = blk.instructions[i].clone();
+            if let Some(new_bc) = rp_replacement_stmt(bc, label_map.clone()) {
+                println!("{:?}", new_bc);
+                blk.instructions[i] = new_bc;
             }
-            new_blks.push(blk);
         }
 
-        (new_blks, 0, inputs)
+        match &blk.terminator {
+            BlockTerminator::FuncCall(f_name) => {
+                let (entry_bl, exit_bl, inline) = func_blk_map.get(f_name).unwrap();
+                // if inline, copy all blocks
+                if *inline {
+                    blk.terminator = BlockTerminator::Transition(bl_coda(NextBlock::Label(next_new_blk_label)));
+                    let offset = next_new_blk_label - entry_bl;
+                    next_new_blk_label += exit_bl - entry_bl + 1;
+                    let mut next_label_map = BTreeMap::new();
+                    for next_bl in *entry_bl..*exit_bl + 1 {
+                        next_label_map.insert(next_bl, next_bl + offset);
+                    }
+                    for next_bl in *entry_bl..*exit_bl + 1 {
+                        (new_blks, next_new_blk_label) = self.bl_gen_func_call_to_bl_label(blks, func_blk_map, new_blks, next_new_blk_label, next_bl, offset, &next_label_map);
+                    }
+                } else {
+                    blk.terminator = BlockTerminator::Transition(bl_coda(NextBlock::Label(*entry_bl)));
+                }
+            },
+            BlockTerminator::Transition(e) => {
+                // Update terminator
+                blk.terminator = BlockTerminator::Transition(bl_trans_map(e, label_map));
+            },
+            BlockTerminator::ProgTerm => {}
+        }
+
+        if new_blks.len() <= cur_bl + offset {
+            new_blks.extend(vec![None; cur_bl + offset + 1 - new_blks.len()]);
+        }
+        new_blks[cur_bl + offset] = Some(blk);
+        (new_blks, next_new_blk_label)
     }
 
     // Treat constants as normal variables and pass all of them along every function call
@@ -1145,7 +1199,12 @@ impl<'ast> ZGen<'ast> {
                 (blks, blks_len, var_scope_info) = self.bl_gen_assign_::<IS_MAIN>(blks, blks_len, d, f_name, cur_scope, var_scope_info)?;
             }
             Statement::CondStore(_) => { panic!("Conditional store statements unsupported.") }
-            Statement::Witness(_) => { panic!("Witness statements unsupported.") }
+            Statement::Witness(w, ) => {
+                let wit_ty = self.type_impl_::<false>(&w.ty)?;
+                let wit_name = w.id.value.to_string();
+                let wit_extended_name = var_scope_info.declare_var(&wit_name, f_name, cur_scope, wit_ty.clone());
+                blks[blks_len - 1].instructions.push(BlockContent::Witness((wit_extended_name, wit_ty, true)));
+            }
             Statement::ArrayDecl(a) => {
                 // Convert the statement into an ArrayInit
                 let arr_ty = self.type_impl_::<false>(&a.ty)?;
@@ -2184,12 +2243,39 @@ impl<'ast> ZGen<'ast> {
     pub fn inst_to_circ<const ESTIMATE: bool>(&self, 
         i: &BlockContent, 
         f: &str,
+        mut wit_count: usize,
         mut phy_mem_op_count: usize,
         mut ro_mem_op_count: usize, 
-        mut vir_mem_op_count: usize
-    ) -> (usize, usize, usize) {
+        mut vir_mem_op_count: usize,
+    ) -> (usize, usize, usize, usize) {
         debug!("Inst to Circ: {:?}", i);
         match i {
+            BlockContent::Witness((var, ty, alive)) => {
+                // Witness statements are never in brnaches, so can be declared sequentially
+                if *alive {
+                    // Non-deterministically supply WIT
+                    self.circ_declare_input(
+                        &f,
+                        format!("%wt{:06}", wit_count),
+                        if let Ty::Array(..) = ty { &Ty::Field } else { ty },
+                        ZVis::Private(0),
+                        None,
+                        true,
+                        &None,
+                    ).unwrap();
+                    // Assign VAR to WIT
+                    let e = self.expr_impl_::<false>(&Expression::Identifier(IdentifierExpression {
+                        value: format!("%wt{:06}", wit_count),
+                        span: Span::new("", 0, 0).unwrap()
+                    })).unwrap();
+                    self.declare_init_impl_::<false>(
+                        var.clone(),
+                        ty.clone(),
+                        e,
+                    ).unwrap();
+                    wit_count += 1;
+                }
+            }
             BlockContent::MemPush((var, _, offset)) => {
                 // Non-deterministically supply ADDR
                 self.circ_declare_input(
@@ -2473,6 +2559,8 @@ impl<'ast> ZGen<'ast> {
                 let cbool = bool(cond.clone()).unwrap();
 
                 // Mem_ops overlap in two branches
+                let mut if_wit_count = wit_count;
+                let mut else_wit_count = wit_count;
                 let mut if_phy_mem_op_count = phy_mem_op_count;
                 let mut if_ro_mem_op_count = ro_mem_op_count;
                 let mut if_vir_mem_op_count = vir_mem_op_count;
@@ -2482,15 +2570,18 @@ impl<'ast> ZGen<'ast> {
 
                 self.circ_enter_condition(cbool.clone());
                 for i in if_insts {
-                    (if_phy_mem_op_count, if_ro_mem_op_count, if_vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, if_phy_mem_op_count, if_ro_mem_op_count, if_vir_mem_op_count);
+                    (if_wit_count, if_phy_mem_op_count, if_ro_mem_op_count, if_vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, wit_count, if_phy_mem_op_count, if_ro_mem_op_count, if_vir_mem_op_count);
                 }
                 self.circ_exit_condition();
                 self.circ_enter_condition(term![NOT; cbool]);
                 for i in else_insts {
-                    (else_phy_mem_op_count, else_ro_mem_op_count, else_vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, else_phy_mem_op_count, else_ro_mem_op_count, else_vir_mem_op_count);
+                    (else_wit_count, else_phy_mem_op_count, else_ro_mem_op_count, else_vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, wit_count, else_phy_mem_op_count, else_ro_mem_op_count, else_vir_mem_op_count);
                 }
                 self.circ_exit_condition();
 
+                // No witness should be declared in branches
+                assert_eq!(if_wit_count, wit_count);
+                assert_eq!(else_wit_count, wit_count);
                 // No phy_op should every occur in branches, and the same amount of vir_op should occur in two branches
                 assert_eq!(if_phy_mem_op_count, phy_mem_op_count);
                 assert_eq!(else_phy_mem_op_count, phy_mem_op_count);
@@ -2505,7 +2596,7 @@ impl<'ast> ZGen<'ast> {
                 self.stmt_impl_::<false>(&stmt).unwrap();
             }
         }
-        (phy_mem_op_count, ro_mem_op_count, vir_mem_op_count)
+        (wit_count, phy_mem_op_count, ro_mem_op_count, vir_mem_op_count)
     }
 
     // Convert a block to circ_ir
@@ -2554,6 +2645,8 @@ impl<'ast> ZGen<'ast> {
             }
         }
 
+        // How many witnesses have we encountered?
+        let mut wit_count = 0;
         // How many scoping memory operations have we encountered? Counter starts at b.num_ro_ops
         let mut phy_mem_op_count = b.num_ro_ops;
         // How many read-only memory operations have we encountered?
@@ -2632,7 +2725,7 @@ impl<'ast> ZGen<'ast> {
 
         // Iterate over instructions, convert memory accesses into statements and then IR
         for i in &b.instructions {
-            (phy_mem_op_count, ro_mem_op_count, vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, phy_mem_op_count, ro_mem_op_count, vir_mem_op_count);
+            (wit_count, phy_mem_op_count, ro_mem_op_count, vir_mem_op_count) = self.inst_to_circ::<ESTIMATE>(i, f, wit_count, phy_mem_op_count, ro_mem_op_count, vir_mem_op_count);
         }
         
         // If in estimation mode, declare and assert all outputs of the block

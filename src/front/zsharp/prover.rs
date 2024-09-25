@@ -95,7 +95,8 @@ pub struct ExecState {
     pub reg_out: Vec<Option<T>>,    // Output register State
     pub succ_id: usize,     // ID of the successor block
     pub phy_mem_op: Vec<MemOp>,  // List of physical memory operations within the block
-    pub vir_mem_op: Vec<MemOp>  // List of virtual memory operations within the block
+    pub vir_mem_op: Vec<MemOp>,  // List of virtual memory operations within the block
+    pub wit_op: Vec<T>, // List of witnesses in the block
 }
 
 impl ExecState {
@@ -106,6 +107,7 @@ impl ExecState {
             succ_id: 0,
             phy_mem_op: Vec::new(),
             vir_mem_op: Vec::new(),
+            wit_op: Vec::new(),
         };
         input
     }
@@ -203,6 +205,7 @@ impl<'ast> ZGen<'ast> {
         entry_regs: &Vec<Integer>, // Entry regs should match the input of the entry block
         entry_stacks: &Vec<Vec<Integer>>,
         entry_arrays: &Vec<Vec<Integer>>,
+        entry_witnesses: &Vec<Integer>,
         bls: &Vec<Block<'ast>>,
         io_size: usize
     ) -> Result<(
@@ -236,8 +239,6 @@ impl<'ast> ZGen<'ast> {
         let mut terminated = false;
         let mut init_phy_mem_list: Vec<MemOp> = Vec::new();
         let mut init_vir_mem_list: Vec<MemOp> = Vec::new();
-        let mut phy_mem_op: Vec<MemOp>;
-        let mut vir_mem_op: Vec<MemOp>;
         
         // Process input variables & arrays
         // Add %BN, %SP, and %AS to the front of inputs
@@ -325,6 +326,8 @@ impl<'ast> ZGen<'ast> {
             i += 1;
         }
         
+        // The next witness to use
+        let mut witness_count = 0;
         // Execute program
         while !terminated {
             bl_exec_count[nb] += 1;
@@ -436,13 +439,17 @@ impl<'ast> ZGen<'ast> {
                 let _ = &bls[nb].pretty();
                 println!();
             }
-            (nb, phy_mem, vir_mem, terminated, phy_mem_op, vir_mem_op) = self.bl_eval_impl_(&bls[nb], phy_mem, vir_mem)?;
 
+            let phy_mem_op: Vec<MemOp>;
+            let vir_mem_op: Vec<MemOp>;
+            let wit_op: Vec<T>;
+            (nb, phy_mem, vir_mem, terminated, phy_mem_op, vir_mem_op, wit_op, witness_count) = self.bl_eval_impl_(&bls[nb], phy_mem, vir_mem, entry_witnesses, witness_count)?;
             // Update successor block ID
             bl_exec_state[tr_size].succ_id = nb;
             // Update Memory Op
             bl_exec_state[tr_size].phy_mem_op = phy_mem_op;
             bl_exec_state[tr_size].vir_mem_op = vir_mem_op;
+            bl_exec_state[tr_size].wit_op = wit_op;
             tr_size += 1;
         }
         
@@ -489,28 +496,31 @@ impl<'ast> ZGen<'ast> {
         &self, 
         bl: &Block<'ast>,
         mut phy_mem: Vec<Option<T>>,
-        mut vir_mem: Vec<Option<T>>
-    ) -> Result<(usize, Vec<Option<T>>, Vec<Option<T>>, bool, Vec<MemOp>, Vec<MemOp>), String> {
+        mut vir_mem: Vec<Option<T>>,
+        entry_witnesses: &Vec<Integer>,
+        mut witness_count: usize,
+    ) -> Result<(usize, Vec<Option<T>>, Vec<Option<T>>, bool, Vec<MemOp>, Vec<MemOp>, Vec<T>, usize), String> {
         debug!("Block eval impl: {}", bl.name);
 
         // Record all RO mem ops before any PHY mem ops
         let mut phy_mem_op: Vec<MemOp> = Vec::new();
         let mut ro_mem_op: Vec<MemOp> = Vec::new();
         let mut vir_mem_op: Vec<MemOp> = Vec::new();
+        let mut wit_op: Vec<T> = Vec::new();
 
-        (phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op) = self.bl_eval_inst_impl_(&bl.instructions, phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op)?;
+        (phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op, wit_op, witness_count) = self.bl_eval_inst_impl_(&bl.instructions, phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op, wit_op, entry_witnesses, witness_count)?;
         ro_mem_op.extend(phy_mem_op);
         let phy_mem_op = ro_mem_op;
 
         match &bl.terminator {
             BlockTerminator::Transition(e) => {
                 match self.t_to_usize(self.expr_impl_::<true>(&e)?) {
-                    Ok(nb) => { return Ok((nb, phy_mem, vir_mem, false, phy_mem_op, vir_mem_op)); }, 
+                    Ok(nb) => { return Ok((nb, phy_mem, vir_mem, false, phy_mem_op, vir_mem_op, wit_op, witness_count)); }, 
                     _ => { return Err("Evaluation failed: block transition evaluated to an invalid block label".to_string()); }
                 }
             }
             BlockTerminator::FuncCall(fc) => Err(format!("Evaluation failed: function call to {} needs to be converted to block label.", fc)),
-            BlockTerminator::ProgTerm => Ok((0, phy_mem, vir_mem, true, phy_mem_op, vir_mem_op))
+            BlockTerminator::ProgTerm => Ok((0, phy_mem, vir_mem, true, phy_mem_op, vir_mem_op, wit_op, witness_count))
         }
     }
 
@@ -522,10 +532,26 @@ impl<'ast> ZGen<'ast> {
         mut phy_mem_op: Vec<MemOp>,
         mut ro_mem_op: Vec<MemOp>,
         mut vir_mem_op: Vec<MemOp>,
-    ) -> Result<(Vec<Option<T>>, Vec<Option<T>>, Vec<MemOp>, Vec<MemOp>, Vec<MemOp>), String> {
+        mut wit_op: Vec<T>, 
+        entry_witnesses: &Vec<Integer>,
+        mut witness_count: usize,
+    ) -> Result<(Vec<Option<T>>, Vec<Option<T>>, Vec<MemOp>, Vec<MemOp>, Vec<MemOp>, Vec<T>, usize), String> {
         for s in inst {
             debug!("Block eval inst impl: {:?}", s);
             match s {
+                BlockContent::Witness((var, ty, alive)) => {
+                    if *alive {
+                        let ty = if let Ty::Array(..) = ty { &Ty::Field } else { ty };
+                        let val = self.int_to_t(&entry_witnesses[witness_count], &ty)?;
+                        self.declare_init_impl_::<true>(
+                            var.to_string(),
+                            ty.clone(),
+                            val.clone(),
+                        )?;
+                        wit_op.push(val);
+                    }
+                    witness_count += 1;
+                }
                 BlockContent::MemPush((var, _, offset)) => {
                     let sp_t = self.cvar_lookup(W_SP).ok_or(format!("Push to %PHY failed: %SP is uninitialized."))?;
                     let sp = self.t_to_usize(sp_t)?;
@@ -768,10 +794,10 @@ impl<'ast> ZGen<'ast> {
                             .ok_or_else(|| "interpreting expr as const bool failed".to_string())
                     }) {
                         Ok(true) => {
-                            (phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op) = self.bl_eval_inst_impl_(if_inst, phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op)?;
+                            (phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op, wit_op, witness_count) = self.bl_eval_inst_impl_(if_inst, phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op, wit_op, entry_witnesses, witness_count)?;
                         },
                         Ok(false) => {
-                            (phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op) = self.bl_eval_inst_impl_(else_inst, phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op)?;
+                            (phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op, wit_op, witness_count) = self.bl_eval_inst_impl_(else_inst, phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op, wit_op, entry_witnesses, witness_count)?;
                         },
                         Err(err) => return Err(format!(
                             "Const conditional expression eval failed: {} at\n{}",
@@ -785,7 +811,7 @@ impl<'ast> ZGen<'ast> {
                 }
             }
         };
-        Ok((phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op))
+        Ok((phy_mem, vir_mem, phy_mem_op, ro_mem_op, vir_mem_op, wit_op, witness_count))
     }
 
     fn bl_eval_stmt_impl_(

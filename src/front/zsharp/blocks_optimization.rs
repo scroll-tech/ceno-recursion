@@ -137,7 +137,7 @@ fn rp_find_val(bc: &BlockContent) -> Option<usize> {
 
 // If bc is a statement of form rp@ = old_val and old_val is a key in val_map,
 // replace it with rp@ = val_map[val]
-fn rp_replacement_stmt(bc: BlockContent, val_map: BTreeMap<usize, usize>) -> Option<BlockContent> {
+pub fn rp_replacement_stmt(bc: BlockContent, val_map: BTreeMap<usize, usize>) -> Option<BlockContent> {
     if let BlockContent::Stmt(Statement::Definition(d)) = bc {
         let mut var_is_rp = false;
         let mut rp_var = "".to_string(); // the actual name: rp@.<f_name>
@@ -218,7 +218,7 @@ fn bl_trans_find_val(e: &Expression) -> Vec<NextBlock> {
 // Given an expression consisted of only ternary, literals, and identifiers,
 // Replace all literal values according to label_map
 // Skip all rp@ or other references to variables
-fn bl_trans_map<'ast>(e: &Expression<'ast>, label_map: &BTreeMap<usize, usize>) -> Expression<'ast> {
+pub fn bl_trans_map<'ast>(e: &Expression<'ast>, label_map: &BTreeMap<usize, usize>) -> Expression<'ast> {
     match e {
         Expression::Ternary(te) => {
             let new_second = bl_trans_map(&te.second, label_map);
@@ -237,7 +237,7 @@ fn bl_trans_map<'ast>(e: &Expression<'ast>, label_map: &BTreeMap<usize, usize>) 
         Expression::Literal(le) => {
             if let LiteralExpression::DecimalLiteral(dle) = le {
                 let val: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: rp@ is assigned to a non-constant value");
-                return bl_coda(NextBlock::Label(*label_map.get(&val).unwrap()));
+                return bl_coda(NextBlock::Label(*label_map.get(&val).or(Some(&val)).unwrap()));
             } else { panic!("Unexpected value in Block Transition") }
         }
         Expression::Identifier(_) => {
@@ -749,6 +749,14 @@ fn term_to_instr<'ast>(
         Expression::Ternary(t) => {
             let (mut left_instr, left_ro_count, left_vm_count, left_repeat) = term_to_instr(bls, &t.second, instr_list, ro_count_list, vm_count_list, cur_bl);
             let (mut right_instr, right_ro_count, right_vm_count, right_repeat) = term_to_instr(bls, &t.third, instr_list, ro_count_list, vm_count_list, cur_bl);
+
+            // Assert that no witness statements are within branches as that would be confusing
+            for i in left_instr.iter().chain(right_instr.iter()) {
+                if let BlockContent::Witness(_) = i {
+                    panic!("Block merge failed: witness statements should not be present within branches!")
+                }
+            }
+
             // If both left and right are empty, don't construct if / else
             if left_instr.len() == 0 && right_instr.len() == 0 {
                 return (Vec::new(), 0, 0, 1);
@@ -1138,6 +1146,15 @@ fn la_inst<'ast>(
     let mut new_instructions = Vec::new();
     for i in inst.iter().rev() {
         match i {
+            BlockContent::Witness((var, ty, _)) => {
+                // All witness statements need to be kept to tell the prover which witnesses are dead
+                if is_alive(&state, var) {
+                    new_instructions.insert(0, BlockContent::Witness((var.clone(), ty.clone(), true)));
+                    state.remove(var);
+                } else {
+                    new_instructions.insert(0, BlockContent::Witness((var.clone(), ty.clone(), false)));
+                }
+            }
             BlockContent::MemPush((var, _, _)) => {
                 // Keep all push statements
                 new_instructions.insert(0, i.clone());
@@ -1289,6 +1306,9 @@ fn ty_inst<'ast>(
 ) -> BTreeMap<String, Ty> {
     for i in inst.iter().rev() {
         match i {
+            BlockContent::Witness((var, ty, _)) => {
+                state.insert(var.clone(), ty.clone());
+            }
             BlockContent::MemPush(_) => {}
             BlockContent::MemPop((id, ty, _)) => {
                 state.insert(id.clone(), ty.clone());
@@ -1333,6 +1353,10 @@ fn fm_inst<'ast, const IS_CALLER: bool>(
     let mut new_instr = Vec::new();
     for i in inst.iter().rev() {
         match i {
+            BlockContent::Witness((var, ty, alive)) => {
+                let new_var = var_fn_merge(var, old_f_name, new_f_name, scope_diff);
+                new_instr.insert(0, BlockContent::Witness((new_var, ty.clone(), alive.clone())));
+            }
             BlockContent::MemPush((name, ty, offset)) => {
                 new_instr.insert(0, BlockContent::MemPush((var_fn_merge(name, old_f_name, new_f_name, scope_diff), ty.clone(), *offset)));
             }
@@ -1383,6 +1407,11 @@ fn vtr_inst<'ast>(
 ) -> (BTreeMap<String, usize>, Vec<BlockContent<'ast>>) {
     for s in inst {
         match s {
+            BlockContent::Witness((var, ty, alive)) => {
+                let new_var_name: String;
+                (new_var_name, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
+                new_instr.push(BlockContent::Witness((new_var_name, ty.clone(), alive.clone())));
+            }
             BlockContent::MemPush((var, ty, offset)) => {
                 let new_var: String;
                 (new_var, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
@@ -1492,6 +1521,7 @@ fn bmc_inst<'ast>(
     let mut vm_liveness: Vec<bool> = Vec::new();
     for i in inst {
         match i {
+            BlockContent::Witness(_) => {}
             BlockContent::MemPop(_) => {
                 phy_mem_accesses_count += 1;
             }
@@ -2781,6 +2811,26 @@ impl<'ast> ZGen<'ast> {
                                 }
                             }
                         },
+                        BlockContent::Witness((shadower, _, _)) => {
+                            let shadower_alive = bls[cur_bl].outputs.iter().fold(false, |a, b| a || &b.0 == shadower);
+                            // Proceed if the shadower lives till the end of the block
+                            if shadower_alive && shadower.chars().next().unwrap() != '%' {
+                                let shadower_vsi = VarSpillInfo::new(shadower.to_string());
+                                // Iterate through outputs of cur_bl (live variables)
+                                for (candidate, _) in &bls[cur_bl].outputs {
+                                    // Proceed if in scope
+                                    if candidate.chars().next().unwrap() != '%' && !oos.contains(candidate) {
+                                        // Proceed if there is shadowing
+                                        if VarSpillInfo::new(candidate.to_string()).directly_below(&shadower_vsi) {
+                                            // GEN
+                                            oos.insert(candidate.to_string());
+                                            // pop_scope is current scope - 1
+                                            stack.insert((shadower.to_string(), candidate.to_string(), bls[cur_bl].fn_name.to_string(), bls[cur_bl].scope - 1));
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         // Note: all GENs within branches will be out of scope by the end of the block, no need to process
                         _ => {}
                     }
@@ -3018,21 +3068,30 @@ impl<'ast> ZGen<'ast> {
                                 new_instructions.push(i.clone());
                             }
                         },
+                        // Witness stmt can also cause shadowing
+                        BlockContent::Witness((shadower, _, _)) => {
+                            let shadower_alive = bls[cur_bl].outputs.iter().fold(false, |a, b| a || &b.0 == shadower);
+                            // Proceed if the shadower live till the end of the block
+                            if shadower_alive && shadower.chars().next().unwrap() != '%' {
+                                // Check if any variables need to be spilled
+                                if let Some(vars) = spills.get(shadower) {
+                                    for var in vars {
+                                        if !oos.contains(var) {
+                                            let var_type: Option<Ty> = bls[cur_bl].outputs.iter().fold(None, |a, b| if &b.0 == var { b.1.clone() } else { a });
+                                            if let Some(var_ty) = var_type {
+                                                // GEN
+                                                oos.insert(var.to_string());
+                                                push_list.push((var.to_string(), var_ty.clone()));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            new_instructions.push(i.clone());
+                        }
+                        BlockContent::MemPush(_) | BlockContent::MemPop(_) | BlockContent::DummyLoad(_) => { unreachable!() }
                         // Note: all GENs within branches will be out of scope by the end of the block, no need to process
-                        BlockContent::Branch(_) => {
-                            new_instructions.push(i.clone());
-                        }
-                        // Do not reason about memory operations
-                        BlockContent::ArrayInit(_) => {
-                            new_instructions.push(i.clone());
-                        }
-                        BlockContent::Store(_) => {
-                            new_instructions.push(i.clone());
-                        }
-                        BlockContent::Load(_) => {
-                            new_instructions.push(i.clone());
-                        }
-                        _ => {}
+                        _ => { new_instructions.push(i.clone()); }
                     }
                 }
 

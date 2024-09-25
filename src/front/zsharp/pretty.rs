@@ -6,6 +6,11 @@ pub fn pretty_block_content(indent: usize, bc: &BlockContent) {
         print!(" ");
     }
     match bc {
+        BlockContent ::Witness((val, ty, alive)) => {
+            print!("witness {ty} {val}");
+            if !alive { print!(", dead"); }
+            println!("");
+        }
         BlockContent::MemPush((val, ty, offset)) => { println!("%PHY[%SP + {offset}] = {} <{ty}>", pretty_name(val)) }
         BlockContent::MemPop((val, ty, offset)) => { println!("{ty} {} = %PHY[%BP + {offset}]", pretty_name(val)) }
         BlockContent::ArrayInit((arr, ty, size_expr, ro)) => {

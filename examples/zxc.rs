@@ -9,6 +9,7 @@ use bellman::groth16::{
 use bellman::Circuit;
 use bls12_381::{Bls12, Scalar};
 */
+const PRINT_PROOF: bool = false;
 const INLINE_SPARTAN_PROOF: bool = true;
 const TOTAL_NUM_VARS_BOUND: usize = 1000000000;
 
@@ -186,6 +187,17 @@ fn integer_to_bytes(mut raw: Integer) -> [u8; 32] {
     res
 }
 
+// Convert a little-endian byte array to integer
+fn bytes_to_integer(bytes: &[u8; 32]) -> Integer {
+    let mut i = Integer::from(0);
+    let mut factor = Integer::from(1);
+    for b in bytes {
+        i += Integer::from(*b as usize) * factor.clone();
+        factor *= 256;
+    }
+    i
+}
+
 fn write_bytes(mut f: &File, bytes: &[u8; 32]) -> std::io::Result<()> {
     // Disregard the trailing zeros
     let mut size = 32;
@@ -235,57 +247,89 @@ impl CompileTimeKnowledge {
     fn write_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
         let file_name = format!("../zok_tests/constraints/{}.ctk", benchmark_name);
         let mut f = File::create(file_name)?;
-        writeln!(&mut f, "{}", self.block_num_instances)?;
-        writeln!(&mut f, "{}", self.num_vars)?;
-        writeln!(&mut f, "{}", self.num_inputs_unpadded)?;
+        writeln!(&mut f, "Num Blocks: {}", self.block_num_instances)?;
+        writeln!(&mut f, "Max Num Vars: {}", self.num_vars)?;
+        writeln!(&mut f, "Num Inputs: {}", self.num_inputs_unpadded)?;
+        write!(&mut f, "{:>11}: ", "Block")?;
+        for i in 0..self.block_num_instances {
+            write!(&mut f, "{:>6}", i)?;
+        }
+        writeln!(&mut f, "")?;
+        write!(&mut f, "{:>11}: ", "Num Vars")?;
         for i in &self.num_vars_per_block {
-            write!(&mut f, "{} ", i)?;
+            write!(&mut f, "{:>6}", i)?;
         }
         writeln!(&mut f, "")?;
+        write!(&mut f, "{:>11}: ", "Num Phy Ops")?;
         for i in &self.block_num_phy_ops {
-            write!(&mut f, "{} ", i)?;
+            write!(&mut f, "{:>6}", i)?;
         }
         writeln!(&mut f, "")?;
+        write!(&mut f, "{:>11}: ", "Num Vir Ops")?;
         for i in &self.block_num_vir_ops {
-            write!(&mut f, "{} ", i)?;
+            write!(&mut f, "{:>6}", i)?;
         }
         writeln!(&mut f, "")?;
-        writeln!(&mut f, "{}", self.max_ts_width)?;
+        writeln!(&mut f, "Max TS Width: {}", self.max_ts_width)?;
 
         // Instances
         let mut counter = 0;
         for inst in &self.args {
-            writeln!(&mut f, "INST {}", counter)?;
+            writeln!(&mut f, "--\nINST {}, {} x {}", counter, inst.len(), self.num_vars_per_block[counter])?;
             for cons in inst {
-                writeln!(&mut f, "A")?;
+                write!(&mut f, "  A ")?;
+                let mut pad = false;
                 for (var, val) in &cons.0 {
-                    writeln!(&mut f, "{}", var)?;
-                    write_bytes(&mut f, &val)?;
+                    if !pad {
+                        write!(&mut f, "{} ", var)?;
+                    } else {
+                        write!(&mut f, "    {} ", var)?;
+                    }
+                    writeln!(&mut f, "{}", bytes_to_integer(&val))?;
+                    pad = true;
                 }
-                writeln!(&mut f, "B")?;
+                if !pad { writeln!(&mut f, "")?; }
+                write!(&mut f, "  B ")?;
+                let mut pad = false;
                 for (var, val) in &cons.1 {
-                    writeln!(&mut f, "{}", var)?;
-                    write_bytes(&mut f, &val.clone())?;
+                    if !pad {
+                        write!(&mut f, "{} ", var)?;
+                    } else {
+                        write!(&mut f, "    {} ", var)?;
+                    }
+                    writeln!(&mut f, "{}", bytes_to_integer(&val))?;
+                    pad = true;
                 }
-                writeln!(&mut f, "C")?;
+                if !pad { writeln!(&mut f, "")?; }
+                write!(&mut f, "  C ")?;
+                let mut pad = false;
                 for (var, val) in &cons.2 {
-                    writeln!(&mut f, "{}", var)?;
-                    write_bytes(&mut f, &val.clone())?;
+                    if !pad {
+                        write!(&mut f, "{} ", var)?;
+                    } else {
+                        write!(&mut f, "    {} ", var)?;
+                    }
+                    writeln!(&mut f, "{}", bytes_to_integer(&val))?;
+                    pad = true;
                 }
+                if !pad { writeln!(&mut f, "")?; }
+                writeln!(&mut f, "")?;
             }
             counter += 1;
         }
         writeln!(&mut f, "INST_END")?;
+        writeln!(&mut f, "")?;
 
+        write!(&mut f, "Input Liveness: ")?;
         for b in &self.input_liveness {
             write!(&mut f, "{} ", if *b { 1 } else { 0 })?;
         }
         writeln!(&mut f, "")?;
-        writeln!(&mut f, "{}", self.func_input_width)?;
-        writeln!(&mut f, "{}", self.input_offset)?;
-        writeln!(&mut f, "{}", self.input_block_num)?;
-        writeln!(&mut f, "{}", self.output_offset)?;
-        writeln!(&mut f, "{}", self.output_block_num)?;
+        writeln!(&mut f, "Prog Input Width: {}", self.func_input_width)?;
+        writeln!(&mut f, "Input Offset: {}", self.input_offset)?;
+        writeln!(&mut f, "Input Block Num: {}", self.input_block_num)?;
+        writeln!(&mut f, "Output Offset: {}", self.output_offset)?;
+        writeln!(&mut f, "Output Block Num: {}", self.output_block_num)?;
         Ok(())
     }
 }
@@ -328,16 +372,22 @@ impl RunTimeKnowledge {
     fn write_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
         let file_name = format!("../zok_tests/inputs/{}.rtk", benchmark_name);
         let mut f = File::create(file_name)?;
-        writeln!(&mut f, "{}", self.block_max_num_proofs)?;
-        for i in &self.block_num_proofs {
-            write!(&mut f, "{} ", i)?;
+        writeln!(&mut f, "Block Max Num Proofs: {}", self.block_max_num_proofs)?;
+        write!(&mut f, "{:>11}: ", "Block")?;
+        for i in 0..self.block_num_proofs.len() {
+            write!(&mut f, "{:>6}", i)?;
         }
         writeln!(&mut f, "")?;
-        writeln!(&mut f, "{}", self.consis_num_proofs)?;
-        writeln!(&mut f, "{}", self.total_num_init_phy_mem_accesses)?;
-        writeln!(&mut f, "{}", self.total_num_init_vir_mem_accesses)?;
-        writeln!(&mut f, "{}", self.total_num_phy_mem_accesses)?;
-        writeln!(&mut f, "{}", self.total_num_vir_mem_accesses)?;
+        writeln!(&mut f, "{:>11}: ", "Num Proofs")?;
+        for i in &self.block_num_proofs {
+            write!(&mut f, "{:>6}", i)?;
+        }
+        writeln!(&mut f, "")?;
+        writeln!(&mut f, "Total Num Proofs: {}", self.consis_num_proofs)?;
+        writeln!(&mut f, "Total Num Init Phy Mem Acc: {}", self.total_num_init_phy_mem_accesses)?;
+        writeln!(&mut f, "Total Num Init Vir Mem Acc: {}", self.total_num_init_vir_mem_accesses)?;
+        writeln!(&mut f, "Total Num Phy Mem Acc: {}", self.total_num_phy_mem_accesses)?;
+        writeln!(&mut f, "Total Num Vir Mem Acc: {}", self.total_num_vir_mem_accesses)?;
 
         writeln!(&mut f, "BLOCK_VARS")?;
         let mut block_counter = 0;
@@ -346,7 +396,10 @@ impl RunTimeKnowledge {
             let mut exec_counter = 0;
             for exec in block {
                 writeln!(&mut f, "EXEC {}", exec_counter)?;
-                exec.write(&mut f)?;
+                for assg in &exec.assignment {
+                    write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                }
+                writeln!(&mut f, "")?;
                 exec_counter += 1;
             }
             block_counter += 1;
@@ -355,52 +408,78 @@ impl RunTimeKnowledge {
         let mut exec_counter = 0;
         for exec in &self.exec_inputs {
             writeln!(&mut f, "EXEC {}", exec_counter)?;
-            exec.write(&mut f)?;
+            for assg in &exec.assignment {
+                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+            }
+            writeln!(&mut f, "")?;
             exec_counter += 1;
         }
         writeln!(&mut f, "INIT_PHY_MEMS")?;
         let mut addr_counter = 0;
         for addr in &self.init_phy_mems_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
-            addr.write(&mut f)?;
+            for assg in &addr.assignment {
+                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+            }
+            writeln!(&mut f, "")?;
             addr_counter += 1;
         }
         writeln!(&mut f, "INIT_VIR_MEMS")?;
         let mut addr_counter = 0;
         for addr in &self.init_vir_mems_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
-            addr.write(&mut f)?;
+            for assg in &addr.assignment {
+                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+            }
+            writeln!(&mut f, "")?;
             addr_counter += 1;
         }
         writeln!(&mut f, "ADDR_PHY_MEMS")?;
         let mut addr_counter = 0;
         for addr in &self.addr_phy_mems_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
-            addr.write(&mut f)?;
+            for assg in &addr.assignment {
+                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+            }
+            writeln!(&mut f, "")?;
             addr_counter += 1;
         }
         writeln!(&mut f, "ADDR_VIR_MEMS")?;
         let mut addr_counter = 0;
         for addr in &self.addr_vir_mems_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
-            addr.write(&mut f)?;
+            for assg in &addr.assignment {
+                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+            }
+            writeln!(&mut f, "")?;
             addr_counter += 1;
         }
         writeln!(&mut f, "ADDR_VM_BITS")?;
         let mut addr_counter = 0;
         for addr in &self.addr_ts_bits_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
-            addr.write(&mut f)?;
+            for assg in &addr.assignment {
+                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+            }
+            writeln!(&mut f, "")?;
             addr_counter += 1;
         }
-        writeln!(&mut f, "INPUTS")?;
-        Assignment::new(&self.input).unwrap().write(&mut f)?;
-        writeln!(&mut f, "INPUT_MEMS")?;
-        Assignment::new(&self.input_mem).unwrap().write(&mut f)?;
-        writeln!(&mut f, "OUTPUTS")?;
-        Assignment::new(&[self.output]).unwrap().write(&mut f)?;
-        writeln!(&mut f, "OUTPUTS_END")?;
-        writeln!(&mut f, "{}", self.output_exec_num)?;
+        write!(&mut f, "Inputs: ")?;
+        for assg in &self.input {
+            write!(&mut f, "{} ", bytes_to_integer(&assg))?;
+        }
+        writeln!(&mut f, "")?;
+        write!(&mut f, "Input Mems: ")?;
+        for assg in &self.input_mem {
+            write!(&mut f, "{} ", bytes_to_integer(&assg))?;
+        }
+        writeln!(&mut f, "")?;
+        write!(&mut f, "Outputs: ")?;
+        for assg in &[self.output] {
+            write!(&mut f, "{} ", bytes_to_integer(&assg))?;
+        }
+        writeln!(&mut f, "")?;
+        writeln!(&mut f, "Output Exec Num: {}", self.output_exec_num)?;
         Ok(())
     }
 }
@@ -685,6 +764,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     entry_regs: Vec<Integer>,
     entry_stacks: Vec<Vec<Integer>>,
     entry_arrays: Vec<Vec<Integer>>,
+    entry_witnesses: Vec<Integer>,
     ctk: &CompileTimeKnowledge,
     live_io_size: Vec<usize>,
     live_mem_size: Vec<usize>,
@@ -716,7 +796,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             no_opt: options.no_opt
         };
 
-        ZSharpFE::interpret(inputs, &entry_regs, &entry_stacks, &entry_arrays)
+        ZSharpFE::interpret(inputs, &entry_regs, &entry_stacks, &entry_arrays, &entry_witnesses)
     };
 
     // Meta info
@@ -1237,22 +1317,23 @@ fn main() {
     // Obtain Inputs
     // --
     let witness_start = Instant::now();
-    let input_file_name = format!("../zok_tests/benchmarks/{}.input", benchmark_name);
     // Assume inputs are listed in the order of the parameters
     let mut entry_regs: Vec<Integer> = Vec::new();
-    let f = File::open(input_file_name).unwrap();
-    let mut reader = BufReader::new(f);
-    let mut buffer = String::new();
-    reader.read_line(&mut buffer).unwrap();
-    let _ = buffer.trim();
-
     // Keep track of %SP and %AS and record initial memory state
     let mut stack_alloc_counter = 0;
     let mut mem_alloc_counter = 0;
     // One array per input, regardless of type. This is because arrays might be fed in as pointers.
     let mut entry_stacks: Vec<Vec<Integer>> = Vec::new(); // for read-only
     let mut entry_arrays: Vec<Vec<Integer>> = Vec::new(); // for others
-    while buffer != "END".to_string() {
+
+    let input_file_name = format!("../zok_tests/benchmarks/{}.input", benchmark_name);
+    let f = File::open(input_file_name);
+    if let Ok(f) = f {
+        let mut reader = BufReader::new(f);
+        let mut buffer = String::new();
+        reader.read_line(&mut buffer).unwrap();
+        let _ = buffer.trim();
+        while buffer != "END".to_string() {
         let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
         // split is either of form [VAR, VAL] or [VAR, "[", ENTRY_0, ENTRY_1, ..., "]"] 
         if let Ok(val) = Integer::from_str_radix(&split[1], 10) {
@@ -1278,9 +1359,28 @@ fn main() {
         buffer.clear();
         reader.read_line(&mut buffer).unwrap();
     }
+    }
     // Insert [%SP, %AS] to the front of entry_reg
     entry_regs.insert(0, Integer::from(mem_alloc_counter));
     entry_regs.insert(0, Integer::from(stack_alloc_counter));
+
+    // Obtain Witnesses,
+    let mut entry_witnesses: Vec<Integer> = Vec::new();
+    let witness_file_name = format!("../zok_tests/benchmarks/{}.witness", benchmark_name);
+    let f = File::open(witness_file_name);
+    if let Ok(f) = f {
+        let mut reader = BufReader::new(f);
+        let mut buffer = String::new();
+        reader.read_line(&mut buffer).unwrap();
+        let _ = buffer.trim();
+        while buffer != "END".to_string() {
+            let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
+            entry_witnesses.extend(split.iter().map(|entry| Integer::from_str_radix(&entry, 10).unwrap()));
+            buffer.clear();
+            reader.read_line(&mut buffer).unwrap();
+        }
+    }
+
     println!("INPUT: {:?}", entry_regs);
 
     // --
@@ -1292,6 +1392,7 @@ fn main() {
         entry_regs, 
         entry_stacks, 
         entry_arrays, 
+        entry_witnesses,
         &ctk, 
         live_io_size, 
         live_mem_size, 
@@ -1301,13 +1402,15 @@ fn main() {
     );
     let witness_time = witness_start.elapsed();
 
+    if PRINT_PROOF {
+        ctk.write_to_file(benchmark_name.to_string()).unwrap();
+        rtk.write_to_file(benchmark_name.to_string()).unwrap();
+    }
     if !INLINE_SPARTAN_PROOF {
         // --
         // Write CTK, RTK to file
         // --
-        // ctk.write_to_file(benchmark_name.to_string()).unwrap();
         ctk.serialize_to_file(benchmark_name.to_string()).unwrap();
-        // rtk.write_to_file(benchmark_name.to_string()).unwrap();
         rtk.serialize_to_file(benchmark_name.to_string()).unwrap();
     } else {
         run_spartan_proof(ctk, rtk);

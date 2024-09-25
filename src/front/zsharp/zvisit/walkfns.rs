@@ -756,7 +756,6 @@ pub fn walk_witness_statement<'ast, Z: ZVisitorMut<'ast>>(
 ) -> ZVisitorResult {
     visitor.visit_type(&mut def.ty)?;
     visitor.visit_identifier_expression(&mut def.id)?;
-    visitor.visit_expression(&mut def.expression)?;
     visitor.visit_span(&mut def.span)
 }
 

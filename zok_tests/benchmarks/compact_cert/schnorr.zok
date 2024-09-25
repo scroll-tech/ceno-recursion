@@ -1,4 +1,4 @@
-from "./poseidon.zok" import poseidon, ark, sbox, mix
+from "./poseidon3.zok" import poseidon3
 
 const field A = 526
 const field B = 265
@@ -60,151 +60,7 @@ struct QuadPoint {
 // Specifically built for signature verification
 // Returns: (a_0 + a_0, a_1 + a_1, a_0 + a_0 + b_0, a_1 + a_1 + b_1)
 // a_0, a_1 might be (0, 0), b_0, b_1 are not
-def point_double_add_batch_0(
-    Point a_0,
-    Point b_0,
-    Point a_1,
-    Point b_1
-) -> QuadPoint:
-    // a_0 + a_0
-    field m_num = 3 * a_0.x * a_0.x + A
-    field m_denom = 2 * a_0.y // Just to avoid division by 0
-    field m = m_num / m_denom
-    field x0 = m * m - a_0.x - a_0.x
-    field y0 = m * (a_0.x - x0) - a_0.y
-    // a_1 + a_1
-    field m_num = 3 * a_1.x * a_1.x + A
-    field m_denom = 2 * a_1.y // Just to avoid division by 0
-    field m = m_num / m_denom
-    field x1 = m * m - a_1.x - a_1.x
-    field y1 = m * (a_1.x - x1) - a_1.y
-    // (x0, y0) + b_0
-    field m_num = b_0.y - y0
-    field m_denom = b_0.x - x0
-    field m = m_num / m_denom
-    field x2 = m * m - x0 - b_0.x
-    field y2 = m * (x0 - x2) - y0
-    // (x1, y1) + b_1
-    field m_num = b_1.y - y1
-    field m_denom = b_1.x - x1
-    field m = m_num / m_denom
-    field x3 = m * m - x1 - b_1.x
-    field y3 = m * (x1 - x3) - y1
-    return QuadPoint {
-        p0: Point { x: x0, y: y0 },
-        p1: Point { x: x1, y: y1 },
-        p2: Point { x: x2, y: y2 },
-        p3: Point { x: x3, y: y3 }
-    }
-def point_double_add_batch_1(
-    Point a_0,
-    Point b_0,
-    Point a_1,
-    Point b_1
-) -> QuadPoint:
-    // a_0 + a_0
-    field m_num = 3 * a_0.x * a_0.x + A
-    field m_denom = 2 * a_0.y // Just to avoid division by 0
-    field m = m_num / m_denom
-    field x0 = m * m - a_0.x - a_0.x
-    field y0 = m * (a_0.x - x0) - a_0.y
-    // a_1 + a_1
-    field m_num = 3 * a_1.x * a_1.x + A
-    field m_denom = 2 * a_1.y // Just to avoid division by 0
-    field m = m_num / m_denom
-    field x1 = m * m - a_1.x - a_1.x
-    field y1 = m * (a_1.x - x1) - a_1.y
-    // (x0, y0) + b_0
-    field m_num = b_0.y - y0
-    field m_denom = b_0.x - x0
-    field m = m_num / m_denom
-    field x2 = m * m - x0 - b_0.x
-    field y2 = m * (x0 - x2) - y0
-    // (x1, y1) + b_1
-    field m_num = b_1.y - y1
-    field m_denom = b_1.x - x1
-    field m = m_num / m_denom
-    field x3 = m * m - x1 - b_1.x
-    field y3 = m * (x1 - x3) - y1
-    return QuadPoint {
-        p0: Point { x: x0, y: y0 },
-        p1: Point { x: x1, y: y1 },
-        p2: Point { x: x2, y: y2 },
-        p3: Point { x: x3, y: y3 }
-    }
-def point_double_add_batch_2(
-    Point a_0,
-    Point b_0,
-    Point a_1,
-    Point b_1
-) -> QuadPoint:
-    // a_0 + a_0
-    field m_num = 3 * a_0.x * a_0.x + A
-    field m_denom = 2 * a_0.y // Just to avoid division by 0
-    field m = m_num / m_denom
-    field x0 = m * m - a_0.x - a_0.x
-    field y0 = m * (a_0.x - x0) - a_0.y
-    // a_1 + a_1
-    field m_num = 3 * a_1.x * a_1.x + A
-    field m_denom = 2 * a_1.y // Just to avoid division by 0
-    field m = m_num / m_denom
-    field x1 = m * m - a_1.x - a_1.x
-    field y1 = m * (a_1.x - x1) - a_1.y
-    // (x0, y0) + b_0
-    field m_num = b_0.y - y0
-    field m_denom = b_0.x - x0
-    field m = m_num / m_denom
-    field x2 = m * m - x0 - b_0.x
-    field y2 = m * (x0 - x2) - y0
-    // (x1, y1) + b_1
-    field m_num = b_1.y - y1
-    field m_denom = b_1.x - x1
-    field m = m_num / m_denom
-    field x3 = m * m - x1 - b_1.x
-    field y3 = m * (x1 - x3) - y1
-    return QuadPoint {
-        p0: Point { x: x0, y: y0 },
-        p1: Point { x: x1, y: y1 },
-        p2: Point { x: x2, y: y2 },
-        p3: Point { x: x3, y: y3 }
-    }
-def point_double_add_batch_3(
-    Point a_0,
-    Point b_0,
-    Point a_1,
-    Point b_1
-) -> QuadPoint:
-    // a_0 + a_0
-    field m_num = 3 * a_0.x * a_0.x + A
-    field m_denom = 2 * a_0.y // Just to avoid division by 0
-    field m = m_num / m_denom
-    field x0 = m * m - a_0.x - a_0.x
-    field y0 = m * (a_0.x - x0) - a_0.y
-    // a_1 + a_1
-    field m_num = 3 * a_1.x * a_1.x + A
-    field m_denom = 2 * a_1.y // Just to avoid division by 0
-    field m = m_num / m_denom
-    field x1 = m * m - a_1.x - a_1.x
-    field y1 = m * (a_1.x - x1) - a_1.y
-    // (x0, y0) + b_0
-    field m_num = b_0.y - y0
-    field m_denom = b_0.x - x0
-    field m = m_num / m_denom
-    field x2 = m * m - x0 - b_0.x
-    field y2 = m * (x0 - x2) - y0
-    // (x1, y1) + b_1
-    field m_num = b_1.y - y1
-    field m_denom = b_1.x - x1
-    field m = m_num / m_denom
-    field x3 = m * m - x1 - b_1.x
-    field y3 = m * (x1 - x3) - y1
-    return QuadPoint {
-        p0: Point { x: x0, y: y0 },
-        p1: Point { x: x1, y: y1 },
-        p2: Point { x: x2, y: y2 },
-        p3: Point { x: x3, y: y3 }
-    }
-def point_double_add_batch_4(
+def inline point_double_add_batch(
     Point a_0,
     Point b_0,
     Point a_1,
@@ -258,7 +114,7 @@ def point_mul_batch(
     bool active_0 = false
     bool active_1 = false
     u32 i = 0
-    for u32 it in 0..63 do
+    for u32 it in 0..36 do
         k_assemb_0 = k_assemb_0 * 2
         k_assemb_1 = k_assemb_1 * 2
         witness field next_bit_0
@@ -267,7 +123,7 @@ def point_mul_batch(
         witness field next_bit_1
         assert(next_bit_1 * (next_bit_1 - 1) == 0)
         k_assemb_1 = k_assemb_1 + next_bit_1
-        QuadPoint tmp = point_double_add_batch_0(a_k_0, a_0, a_k_1, a_1)
+        QuadPoint tmp = point_double_add_batch(a_k_0, a_0, a_k_1, a_1)
         if active_0 then
             if next_bit_0 == 1 then
                 a_k_0 = tmp.p2
@@ -297,7 +153,7 @@ def point_mul_batch(
         witness field next_bit_1
         assert(next_bit_1 * (next_bit_1 - 1) == 0)
         k_assemb_1 = k_assemb_1 + next_bit_1
-        QuadPoint tmp = point_double_add_batch_1(a_k_0, a_0, a_k_1, a_1)
+        QuadPoint tmp = point_double_add_batch(a_k_0, a_0, a_k_1, a_1)
         if active_0 then
             if next_bit_0 == 1 then
                 a_k_0 = tmp.p2
@@ -327,7 +183,7 @@ def point_mul_batch(
         witness field next_bit_1
         assert(next_bit_1 * (next_bit_1 - 1) == 0)
         k_assemb_1 = k_assemb_1 + next_bit_1
-        QuadPoint tmp = point_double_add_batch_2(a_k_0, a_0, a_k_1, a_1)
+        QuadPoint tmp = point_double_add_batch(a_k_0, a_0, a_k_1, a_1)
         if active_0 then
             if next_bit_0 == 1 then
                 a_k_0 = tmp.p2
@@ -357,7 +213,97 @@ def point_mul_batch(
         witness field next_bit_1
         assert(next_bit_1 * (next_bit_1 - 1) == 0)
         k_assemb_1 = k_assemb_1 + next_bit_1
-        QuadPoint tmp = point_double_add_batch_3(a_k_0, a_0, a_k_1, a_1)
+        QuadPoint tmp = point_double_add_batch(a_k_0, a_0, a_k_1, a_1)
+        if active_0 then
+            if next_bit_0 == 1 then
+                a_k_0 = tmp.p2
+            else
+                a_k_0 = tmp.p0
+            endif
+        endif
+        if next_bit_0 == 1 then
+            active_0 = true
+        endif
+        if active_1 then
+            if next_bit_1 == 1 then
+                a_k_1 = tmp.p3
+            else
+                a_k_1 = tmp.p1
+            endif
+        endif
+        if next_bit_1 == 1 then
+            active_1 = true
+        endif
+        i = i + 1
+        k_assemb_0 = k_assemb_0 * 2
+        k_assemb_1 = k_assemb_1 * 2
+        witness field next_bit_0
+        assert(next_bit_0 * (next_bit_0 - 1) == 0)
+        k_assemb_0 = k_assemb_0 + next_bit_0
+        witness field next_bit_1
+        assert(next_bit_1 * (next_bit_1 - 1) == 0)
+        k_assemb_1 = k_assemb_1 + next_bit_1
+        QuadPoint tmp = point_double_add_batch(a_k_0, a_0, a_k_1, a_1)
+        if active_0 then
+            if next_bit_0 == 1 then
+                a_k_0 = tmp.p2
+            else
+                a_k_0 = tmp.p0
+            endif
+        endif
+        if next_bit_0 == 1 then
+            active_0 = true
+        endif
+        if active_1 then
+            if next_bit_1 == 1 then
+                a_k_1 = tmp.p3
+            else
+                a_k_1 = tmp.p1
+            endif
+        endif
+        if next_bit_1 == 1 then
+            active_1 = true
+        endif
+        i = i + 1
+        k_assemb_0 = k_assemb_0 * 2
+        k_assemb_1 = k_assemb_1 * 2
+        witness field next_bit_0
+        assert(next_bit_0 * (next_bit_0 - 1) == 0)
+        k_assemb_0 = k_assemb_0 + next_bit_0
+        witness field next_bit_1
+        assert(next_bit_1 * (next_bit_1 - 1) == 0)
+        k_assemb_1 = k_assemb_1 + next_bit_1
+        QuadPoint tmp = point_double_add_batch(a_k_0, a_0, a_k_1, a_1)
+        if active_0 then
+            if next_bit_0 == 1 then
+                a_k_0 = tmp.p2
+            else
+                a_k_0 = tmp.p0
+            endif
+        endif
+        if next_bit_0 == 1 then
+            active_0 = true
+        endif
+        if active_1 then
+            if next_bit_1 == 1 then
+                a_k_1 = tmp.p3
+            else
+                a_k_1 = tmp.p1
+            endif
+        endif
+        if next_bit_1 == 1 then
+            active_1 = true
+        endif
+        i = i + 1
+        k_assemb_0 = k_assemb_0 * 2
+        k_assemb_1 = k_assemb_1 * 2
+        witness field next_bit_0
+        assert(next_bit_0 * (next_bit_0 - 1) == 0)
+        k_assemb_0 = k_assemb_0 + next_bit_0
+        witness field next_bit_1
+        assert(next_bit_1 * (next_bit_1 - 1) == 0)
+        k_assemb_1 = k_assemb_1 + next_bit_1
+        QuadPoint tmp = point_double_add_batch(a_k_0, a_0, a_k_1, a_1)
         if active_0 then
             if next_bit_0 == 1 then
                 a_k_0 = tmp.p2
@@ -389,7 +335,7 @@ def point_mul_batch(
     witness field next_bit_1
     assert(next_bit_1 * (next_bit_1 - 1) == 0)
     k_assemb_1 = k_assemb_1 + next_bit_1
-    QuadPoint tmp = point_double_add_batch_4(a_k_0, a_0, a_k_1, a_1)
+    QuadPoint tmp = point_double_add_batch(a_k_0, a_0, a_k_1, a_1)
     if active_0 then
         if next_bit_0 == 1 then
             a_k_0 = tmp.p2
@@ -427,13 +373,13 @@ struct Signature {
     field s
 }
 
-def verify_signature(field msg, PublicKey pk, Signature sig) -> u32:
+def verify_signature(field msg, PublicKey pk, Signature sig) -> field:
     // Check all points are on the curve
     assert(pk.p.y * pk.p.y == pk.p.x * pk.p.x * pk.p.x + A * pk.p.x + B)
     assert(pk.q.y * pk.q.y == pk.q.x * pk.q.x * pk.q.x + A * pk.q.x + B)
     assert(sig.r.y * sig.r.y == sig.r.x * sig.r.x * sig.r.x + A * sig.r.x + B)
 
-    field e = poseidon(msg, sig.r.x, sig.r.y, 0, 0)
+    field e = poseidon3(msg, sig.r.x, sig.r.y)
     // Point eq = point_mul(pk.q, e, e_bits)
     // Point sp = point_mul(pk.p, sig.s, s_bits)
     DoublePoint tmp = point_mul_batch(pk.q, e, pk.p, sig.s)

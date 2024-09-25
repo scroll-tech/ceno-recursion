@@ -1,4 +1,4 @@
-def poseidon(field state1, field state2, field state3, field state4, field state5) -> field:
+def poseidon5(field state1, field state2, field state3, field state4, field state5) -> field:
     field state0 = 0
 
     field c0 = 758662019503705074
@@ -2008,11 +2008,11 @@ def poseidon(field state1, field state2, field state3, field state4, field state
     state5 = state5 + c389
     // sbox
     field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
-    field new_state3 = state3
-    field new_state4 = state4
-    field new_state5 = state5
+    field new_state1 = state1 ** 5
+    field new_state2 = state2 ** 5
+    field new_state3 = state3 ** 5
+    field new_state4 = state4 ** 5
+    field new_state5 = state5 ** 5
     // mix
     state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2 + new_state3 * m3 + new_state4 * m4 + new_state5 * m5
     state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11 + new_state3 * m12 + new_state4 * m13 + new_state5 * m14
@@ -2031,11 +2031,11 @@ def poseidon(field state1, field state2, field state3, field state4, field state
     state5 = state5 + c395
     // sbox
     field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
-    field new_state3 = state3
-    field new_state4 = state4
-    field new_state5 = state5
+    field new_state1 = state1 ** 5
+    field new_state2 = state2 ** 5
+    field new_state3 = state3 ** 5
+    field new_state4 = state4 ** 5
+    field new_state5 = state5 ** 5
     // mix
     state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2 + new_state3 * m3 + new_state4 * m4 + new_state5 * m5
     state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11 + new_state3 * m12 + new_state4 * m13 + new_state5 * m14
@@ -2054,11 +2054,11 @@ def poseidon(field state1, field state2, field state3, field state4, field state
     state5 = state5 + c401
     // sbox
     field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
-    field new_state3 = state3
-    field new_state4 = state4
-    field new_state5 = state5
+    field new_state1 = state1 ** 5
+    field new_state2 = state2 ** 5
+    field new_state3 = state3 ** 5
+    field new_state4 = state4 ** 5
+    field new_state5 = state5 ** 5
     // mix
     state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2 + new_state3 * m3 + new_state4 * m4 + new_state5 * m5
     state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11 + new_state3 * m12 + new_state4 * m13 + new_state5 * m14
@@ -2077,98 +2077,6 @@ def poseidon(field state1, field state2, field state3, field state4, field state
     state5 = state5 + c407
     // sbox
     field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
-    field new_state3 = state3
-    field new_state4 = state4
-    field new_state5 = state5
-    // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2 + new_state3 * m3 + new_state4 * m4 + new_state5 * m5
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11 + new_state3 * m12 + new_state4 * m13 + new_state5 * m14
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20 + new_state3 * m21 + new_state4 * m22 + new_state5 * m23
-    state3 = new_state0 * m27 + new_state1 * m28 + new_state2 * m29 + new_state3 * m30 + new_state4 * m31 + new_state5 * m32
-    state4 = new_state0 * m36 + new_state1 * m37 + new_state2 * m38 + new_state3 * m39 + new_state4 * m40 + new_state5 * m41
-    state5 = new_state0 * m45 + new_state1 * m46 + new_state2 * m47 + new_state3 * m48 + new_state4 * m49 + new_state5 * m50
-    // --
-    // r = 68
-    // ark
-    state0 = state0 + c408
-    state1 = state1 + c409
-    state2 = state2 + c410
-    state3 = state3 + c411
-    state4 = state4 + c412
-    state5 = state5 + c413
-    // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1 ** 5
-    field new_state2 = state2 ** 5
-    field new_state3 = state3 ** 5
-    field new_state4 = state4 ** 5
-    field new_state5 = state5 ** 5
-    // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2 + new_state3 * m3 + new_state4 * m4 + new_state5 * m5
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11 + new_state3 * m12 + new_state4 * m13 + new_state5 * m14
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20 + new_state3 * m21 + new_state4 * m22 + new_state5 * m23
-    state3 = new_state0 * m27 + new_state1 * m28 + new_state2 * m29 + new_state3 * m30 + new_state4 * m31 + new_state5 * m32
-    state4 = new_state0 * m36 + new_state1 * m37 + new_state2 * m38 + new_state3 * m39 + new_state4 * m40 + new_state5 * m41
-    state5 = new_state0 * m45 + new_state1 * m46 + new_state2 * m47 + new_state3 * m48 + new_state4 * m49 + new_state5 * m50
-    // --
-    // r = 69
-    // ark
-    state0 = state0 + c414
-    state1 = state1 + c415
-    state2 = state2 + c416
-    state3 = state3 + c417
-    state4 = state4 + c418
-    state5 = state5 + c419
-    // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1 ** 5
-    field new_state2 = state2 ** 5
-    field new_state3 = state3 ** 5
-    field new_state4 = state4 ** 5
-    field new_state5 = state5 ** 5
-    // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2 + new_state3 * m3 + new_state4 * m4 + new_state5 * m5
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11 + new_state3 * m12 + new_state4 * m13 + new_state5 * m14
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20 + new_state3 * m21 + new_state4 * m22 + new_state5 * m23
-    state3 = new_state0 * m27 + new_state1 * m28 + new_state2 * m29 + new_state3 * m30 + new_state4 * m31 + new_state5 * m32
-    state4 = new_state0 * m36 + new_state1 * m37 + new_state2 * m38 + new_state3 * m39 + new_state4 * m40 + new_state5 * m41
-    state5 = new_state0 * m45 + new_state1 * m46 + new_state2 * m47 + new_state3 * m48 + new_state4 * m49 + new_state5 * m50
-    // --
-    // r = 70
-    // ark
-    state0 = state0 + c420
-    state1 = state1 + c421
-    state2 = state2 + c422
-    state3 = state3 + c423
-    state4 = state4 + c424
-    state5 = state5 + c425
-    // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1 ** 5
-    field new_state2 = state2 ** 5
-    field new_state3 = state3 ** 5
-    field new_state4 = state4 ** 5
-    field new_state5 = state5 ** 5
-    // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2 + new_state3 * m3 + new_state4 * m4 + new_state5 * m5
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11 + new_state3 * m12 + new_state4 * m13 + new_state5 * m14
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20 + new_state3 * m21 + new_state4 * m22 + new_state5 * m23
-    state3 = new_state0 * m27 + new_state1 * m28 + new_state2 * m29 + new_state3 * m30 + new_state4 * m31 + new_state5 * m32
-    state4 = new_state0 * m36 + new_state1 * m37 + new_state2 * m38 + new_state3 * m39 + new_state4 * m40 + new_state5 * m41
-    state5 = new_state0 * m45 + new_state1 * m46 + new_state2 * m47 + new_state3 * m48 + new_state4 * m49 + new_state5 * m50
-    // --
-    // r = 71
-    // ark
-    state0 = state0 + c426
-    state1 = state1 + c427
-    state2 = state2 + c428
-    state3 = state3 + c429
-    state4 = state4 + c430
-    state5 = state5 + c431
-    // sbox
-    field new_state0 = state0 ** 5
     field new_state1 = state1 ** 5
     field new_state2 = state2 ** 5
     field new_state3 = state3 ** 5
@@ -2182,3 +2090,6 @@ def poseidon(field state1, field state2, field state3, field state4, field state
     state4 = new_state0 * m36 + new_state1 * m37 + new_state2 * m38 + new_state3 * m39 + new_state4 * m40 + new_state5 * m41
     state5 = new_state0 * m45 + new_state1 * m46 + new_state2 * m47 + new_state3 * m48 + new_state4 * m49 + new_state5 * m50
     return state0
+
+def main() -> field:
+    return poseidon5(1, 2, 3, 4, 5)

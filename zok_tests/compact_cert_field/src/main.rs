@@ -118,7 +118,7 @@ struct CompleteProof {
 }
 
 const NUM_ATTESTORS: usize = 100000;
-const PROVEN_WEIGHT: usize = 500;
+const PROVEN_WEIGHT: usize = 50;
 const KNOWLEDGE_SOUNDNESS: usize = 3; // knowledge soundness of 2^{-k}
 const MAX_NUM_REVEALS: usize = 200; // num reveals 2^q
 const NUM_REVEALS: usize = 690;
@@ -446,5 +446,7 @@ fn main() {
     write!(&mut f, "END").unwrap();
 
     // Generate poseidon file
-    // poseidon_gen::poseidon_gen();
+    // poseidon_gen::poseidon_gen(2);
+    // poseidon_gen::poseidon_gen(3);
+    // poseidon_gen::poseidon_gen(5);
 }

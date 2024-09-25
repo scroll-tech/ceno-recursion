@@ -1,6 +1,8 @@
-from "./poseidon.zok" import poseidon, ark, sbox, mix
+from "./poseidon2.zok" import poseidon2
+from "./poseidon3.zok" import poseidon3
+from "./poseidon5.zok" import poseidon5
 from "./merkle.zok" import MerkleProof, verify_merkle, verify_merkle_batch
-from "./schnorr.zok" import WIDTH, Point, DoublePoint, QuadPoint, PublicKey, Signature, verify_signature, point_add, point_mul, point_double_add_batch_0, point_double_add_batch_1, point_double_add_batch_2, point_double_add_batch_3, point_double_add_batch_4, point_mul_batch
+from "./schnorr.zok" import WIDTH, Point, DoublePoint, QuadPoint, PublicKey, Signature, verify_signature, point_add, point_mul, point_double_add_batch, point_mul_batch
 
 // Reveal Proof Entry
 struct T {
@@ -24,7 +26,7 @@ def verifier(
     u32 merkle_depth,
     field att_root,
     field[ro 0] coins
-) -> u32:
+) -> field:
     u64 signed_weight = compact_cert_proof.signed_weight
     assert(signed_weight > proven_weight)
     // let num_reveals: usize = (k + q).div_ceil((signed_weight / proven_weight).ilog2() as usize);
@@ -74,7 +76,7 @@ def main(
     u32 merkle_depth,
     field att_root,
     field[ro 0] coins
-) -> u32:
+) -> field:
     array_decl T[ro num_reveals] t_list
     for u32 k in 0..num_reveals do
         t_list[k] = T {

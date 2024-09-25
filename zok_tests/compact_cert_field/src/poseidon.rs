@@ -1,5 +1,6 @@
 use crate::field::Fp;
 use crate::poseidon_constants::*;
+use rug::Integer;
 
 fn ark(state: &mut [Fp], c: [Fp; 441], it: usize) {
     for i in 0..state.len() {
@@ -28,10 +29,10 @@ fn mix(state: &[Fp], m: [Fp; 81]) -> Vec<Fp> {
 
 pub fn poseidon(inputs: &[Fp]) -> Fp {
     let n = inputs.len();
-    assert_eq!(n, 5);
     let t = n + 1;
     let f = 8;
-    let p = 64;
+    let rounds_p = [56, 57, 56, 60, 60, 63, 64, 63];
+    let p = rounds_p[t - 2];
 
     // Constants are padded with zeroes to the maximum value calculated by
     // t * (f + p) = 497, where `t` (number of inputs + 1) is a max of 7.

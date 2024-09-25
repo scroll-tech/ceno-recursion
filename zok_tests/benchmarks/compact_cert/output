@@ -139,11 +139,19 @@ Proof size: 693.0kB
 
 Opt 14: (Witness registers)
 Num Blocks: 15
-Compiler time: 1733ms
-Preprocess time: 1015ms
-Prover time: 4.608s
-Verifier time: 270.84ms
-Proof size: 634.5kB
+Compiler time: 1939ms
+Preprocess time: 1012ms
+Prover time: 4.172s
+Verifier time: 256.11ms
+Proof size: 630.7kB
+
+Opt 15: (3 Versions of Poseidon)
+Num Blocks: 15
+Compiler time: 1895ms
+Preprocess time: 1093ms
+Prover time: 3.575s
+Verifier time: 240.54ms
+Proof size: 613.2kB
 
 --
 Num Att = 10000, Soundness = 2^-10, Num Reveal = 92
@@ -156,9 +164,14 @@ Verifier time: 662.98ms
 Proof size: 1166.38kB
 
 Opt 14: (Witness registers)
-Prover time: 28.511s
-Verifier time: 509.54ms
-Proof size: 1028.86kB
+Prover time: 25.604s
+Verifier time: 472.88ms
+Proof size: 967.76kB
+
+Opt 15: (3 Versions of Poseidon)
+Prover time: 17.150s
+Verifier time: 414.50ms
+Proof size: 903.8kB
 
 --
 Num Att = 100000, Soundness = 2^-10, Num Reveal = 690
@@ -171,6 +184,11 @@ Verifier time: 1.623s
 Proof size: 2.519MB
 
 Opt 14: (Witness registers)
-Prover time: 221.28s
-Verifier time: 1.082s
-Proof size: 2.08MB
+Prover time: 204.29s
+Verifier time: 1.012s
+Proof size: 2.072MB
+
+Opt 15: (3 Versions of Poseidon)
+Prover time: 123.55s
+Verifier time: 869.92ms
+Proof size: 1.863MB

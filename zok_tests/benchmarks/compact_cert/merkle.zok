@@ -1,5 +1,6 @@
-from "./poseidon2.zok" import poseidon2
-from "./poseidon5.zok" import poseidon5
+from "./poseidon_struct.zok" import DoubleHash
+from "./poseidon2.zok" import poseidon2_batch2
+from "./poseidon5.zok" import poseidon5_batch2
 
 // Merkle paths are now directly supplied as witnesses
 // struct MerkleProof {
@@ -20,8 +21,7 @@ def verify_merkle_batch(
 ) -> field:
     field index_assemb = 0
     // hash of leaf
-    field cur_node_0 = poseidon5(entry_0[0], entry_0[1], entry_0[2], entry_0[3], entry_0[4])
-    field cur_node_1 = poseidon5(entry_1[0], entry_1[1], entry_1[2], entry_1[3], entry_1[4])
+    DoubleHash cur_nodes = poseidon5_batch2(entry_0[0], entry_0[1], entry_0[2], entry_0[3], entry_0[4], entry_1[0], entry_1[1], entry_1[2], entry_1[3], entry_1[4])
     field factor = 1
     // hash of internal nodes
     for u32 i in 0..depth do
@@ -31,15 +31,14 @@ def verify_merkle_batch(
         index_assemb = index_assemb + next_bit * factor
         factor = factor * 2
         witness field next_path
-        field state1 = next_bit == 0 ? cur_node_0 : next_path
-        field state2 = next_bit == 0 ? next_path : cur_node_0
-        cur_node_0 = poseidon2(state1, state2)
+        field state1 = next_bit == 0 ? cur_nodes.hash0 : next_path
+        field state2 = next_bit == 0 ? next_path : cur_nodes.hash0
         witness field next_path
-        field state1 = next_bit == 0 ? cur_node_1 : next_path
-        field state2 = next_bit == 0 ? next_path : cur_node_1
-        cur_node_1 = poseidon2(state1, state2)
+        field state3 = next_bit == 0 ? cur_nodes.hash1 : next_path
+        field state4 = next_bit == 0 ? next_path : cur_nodes.hash1
+        cur_nodes = poseidon2_batch2(state1, state2, state3, state4)
     endfor
     assert(index_assemb == (F)index)
-    assert(cur_node_0 == root_0)
-    assert(cur_node_1 == root_1)
+    assert(cur_nodes.hash0 == root_0)
+    assert(cur_nodes.hash1 == root_1)
     return 1

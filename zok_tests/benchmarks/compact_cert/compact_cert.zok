@@ -1,6 +1,7 @@
-from "./poseidon2.zok" import poseidon2
+from "./poseidon_struct.zok" import DoubleHash
+from "./poseidon2.zok" import poseidon2_batch2
 from "./poseidon3.zok" import poseidon3
-from "./poseidon5.zok" import poseidon5
+from "./poseidon5.zok" import poseidon5_batch2
 from "./merkle.zok" import MerkleProof, verify_merkle, verify_merkle_batch
 from "./schnorr.zok" import WIDTH, Point, DoublePoint, QuadPoint, PublicKey, Signature, verify_signature, point_add, point_mul, point_double_add_batch, point_mul_batch
 

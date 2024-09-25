@@ -153,6 +153,14 @@ Prover time: 3.575s
 Verifier time: 240.54ms
 Proof size: 613.2kB
 
+Opt 16: (Batched Poseidon)
+Num Blocks: 9
+Compiler time: 2474ms
+Preprocess time: 1202ms
+Prover time: 2.998s
+Verifier time: 202.67ms
+Proof size: 507.8kB
+
 --
 Num Att = 10000, Soundness = 2^-10, Num Reveal = 92
 Verifier time: 1876ms
@@ -173,6 +181,11 @@ Prover time: 17.150s
 Verifier time: 414.50ms
 Proof size: 903.8kB
 
+Opt 16: (Batched Poseidon)
+Prover time: 12.728s
+Verifier time: 344.62ms
+Proof size: 704.9kB
+
 --
 Num Att = 100000, Soundness = 2^-10, Num Reveal = 690
 Verifier time: 16.06s
@@ -192,3 +205,8 @@ Opt 15: (3 Versions of Poseidon)
 Prover time: 123.55s
 Verifier time: 869.92ms
 Proof size: 1.863MB
+
+Opt 16: (Batched Poseidon)
+Prover time: 89.82s
+Verifier time: 660.72ms
+Proof size: 1.268MB

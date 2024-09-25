@@ -446,7 +446,7 @@ fn main() {
     write!(&mut f, "END").unwrap();
 
     // Generate poseidon file
-    // poseidon_gen::poseidon_gen(2);
-    // poseidon_gen::poseidon_gen(3);
-    // poseidon_gen::poseidon_gen(5);
+    // poseidon_gen::poseidon_gen(2, 2);
+    // poseidon_gen::poseidon_gen(3, 1);
+    // poseidon_gen::poseidon_gen(5, 2);
 }

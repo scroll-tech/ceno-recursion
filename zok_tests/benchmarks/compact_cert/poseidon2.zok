@@ -1,5 +1,7 @@
-def poseidon2(field state1, field state2) -> field:
-    field state0 = 0
+from "./poseidon_struct.zok" import DoubleHash
+def poseidon2_batch2(field state1_0, field state2_0, field state1_1, field state2_1) -> DoubleHash:
+    field state0_0 = 0
+    field state0_1 = 0
 
     field c0 = 758662019503705074
     field c1 = 9958560809385864598
@@ -528,914 +530,1824 @@ def poseidon2(field state1, field state2) -> field:
     // --
     // r = 0
     // ark
-    state0 = state0 + c0
-    state1 = state1 + c1
-    state2 = state2 + c2
+    state0_0 = state0_0 + c0
+    state1_0 = state1_0 + c1
+    state2_0 = state2_0 + c2
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1 ** 5
-    field new_state2 = state2 ** 5
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0 ** 5
+    field new_state2_0 = state2_0 ** 5
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 1
     // ark
-    state0 = state0 + c3
-    state1 = state1 + c4
-    state2 = state2 + c5
+    state0_0 = state0_0 + c3
+    state1_0 = state1_0 + c4
+    state2_0 = state2_0 + c5
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1 ** 5
-    field new_state2 = state2 ** 5
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0 ** 5
+    field new_state2_0 = state2_0 ** 5
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 2
     // ark
-    state0 = state0 + c6
-    state1 = state1 + c7
-    state2 = state2 + c8
+    state0_0 = state0_0 + c6
+    state1_0 = state1_0 + c7
+    state2_0 = state2_0 + c8
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1 ** 5
-    field new_state2 = state2 ** 5
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0 ** 5
+    field new_state2_0 = state2_0 ** 5
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 3
     // ark
-    state0 = state0 + c9
-    state1 = state1 + c10
-    state2 = state2 + c11
+    state0_0 = state0_0 + c9
+    state1_0 = state1_0 + c10
+    state2_0 = state2_0 + c11
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1 ** 5
-    field new_state2 = state2 ** 5
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0 ** 5
+    field new_state2_0 = state2_0 ** 5
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 4
     // ark
-    state0 = state0 + c12
-    state1 = state1 + c13
-    state2 = state2 + c14
+    state0_0 = state0_0 + c12
+    state1_0 = state1_0 + c13
+    state2_0 = state2_0 + c14
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 5
     // ark
-    state0 = state0 + c15
-    state1 = state1 + c16
-    state2 = state2 + c17
+    state0_0 = state0_0 + c15
+    state1_0 = state1_0 + c16
+    state2_0 = state2_0 + c17
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 6
     // ark
-    state0 = state0 + c18
-    state1 = state1 + c19
-    state2 = state2 + c20
+    state0_0 = state0_0 + c18
+    state1_0 = state1_0 + c19
+    state2_0 = state2_0 + c20
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 7
     // ark
-    state0 = state0 + c21
-    state1 = state1 + c22
-    state2 = state2 + c23
+    state0_0 = state0_0 + c21
+    state1_0 = state1_0 + c22
+    state2_0 = state2_0 + c23
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 8
     // ark
-    state0 = state0 + c24
-    state1 = state1 + c25
-    state2 = state2 + c26
+    state0_0 = state0_0 + c24
+    state1_0 = state1_0 + c25
+    state2_0 = state2_0 + c26
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 9
     // ark
-    state0 = state0 + c27
-    state1 = state1 + c28
-    state2 = state2 + c29
+    state0_0 = state0_0 + c27
+    state1_0 = state1_0 + c28
+    state2_0 = state2_0 + c29
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 10
     // ark
-    state0 = state0 + c30
-    state1 = state1 + c31
-    state2 = state2 + c32
+    state0_0 = state0_0 + c30
+    state1_0 = state1_0 + c31
+    state2_0 = state2_0 + c32
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 11
     // ark
-    state0 = state0 + c33
-    state1 = state1 + c34
-    state2 = state2 + c35
+    state0_0 = state0_0 + c33
+    state1_0 = state1_0 + c34
+    state2_0 = state2_0 + c35
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 12
     // ark
-    state0 = state0 + c36
-    state1 = state1 + c37
-    state2 = state2 + c38
+    state0_0 = state0_0 + c36
+    state1_0 = state1_0 + c37
+    state2_0 = state2_0 + c38
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 13
     // ark
-    state0 = state0 + c39
-    state1 = state1 + c40
-    state2 = state2 + c41
+    state0_0 = state0_0 + c39
+    state1_0 = state1_0 + c40
+    state2_0 = state2_0 + c41
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 14
     // ark
-    state0 = state0 + c42
-    state1 = state1 + c43
-    state2 = state2 + c44
+    state0_0 = state0_0 + c42
+    state1_0 = state1_0 + c43
+    state2_0 = state2_0 + c44
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 15
     // ark
-    state0 = state0 + c45
-    state1 = state1 + c46
-    state2 = state2 + c47
+    state0_0 = state0_0 + c45
+    state1_0 = state1_0 + c46
+    state2_0 = state2_0 + c47
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 16
     // ark
-    state0 = state0 + c48
-    state1 = state1 + c49
-    state2 = state2 + c50
+    state0_0 = state0_0 + c48
+    state1_0 = state1_0 + c49
+    state2_0 = state2_0 + c50
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 17
     // ark
-    state0 = state0 + c51
-    state1 = state1 + c52
-    state2 = state2 + c53
+    state0_0 = state0_0 + c51
+    state1_0 = state1_0 + c52
+    state2_0 = state2_0 + c53
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 18
     // ark
-    state0 = state0 + c54
-    state1 = state1 + c55
-    state2 = state2 + c56
+    state0_0 = state0_0 + c54
+    state1_0 = state1_0 + c55
+    state2_0 = state2_0 + c56
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 19
     // ark
-    state0 = state0 + c57
-    state1 = state1 + c58
-    state2 = state2 + c59
+    state0_0 = state0_0 + c57
+    state1_0 = state1_0 + c58
+    state2_0 = state2_0 + c59
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 20
     // ark
-    state0 = state0 + c60
-    state1 = state1 + c61
-    state2 = state2 + c62
+    state0_0 = state0_0 + c60
+    state1_0 = state1_0 + c61
+    state2_0 = state2_0 + c62
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 21
     // ark
-    state0 = state0 + c63
-    state1 = state1 + c64
-    state2 = state2 + c65
+    state0_0 = state0_0 + c63
+    state1_0 = state1_0 + c64
+    state2_0 = state2_0 + c65
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 22
     // ark
-    state0 = state0 + c66
-    state1 = state1 + c67
-    state2 = state2 + c68
+    state0_0 = state0_0 + c66
+    state1_0 = state1_0 + c67
+    state2_0 = state2_0 + c68
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 23
     // ark
-    state0 = state0 + c69
-    state1 = state1 + c70
-    state2 = state2 + c71
+    state0_0 = state0_0 + c69
+    state1_0 = state1_0 + c70
+    state2_0 = state2_0 + c71
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 24
     // ark
-    state0 = state0 + c72
-    state1 = state1 + c73
-    state2 = state2 + c74
+    state0_0 = state0_0 + c72
+    state1_0 = state1_0 + c73
+    state2_0 = state2_0 + c74
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 25
     // ark
-    state0 = state0 + c75
-    state1 = state1 + c76
-    state2 = state2 + c77
+    state0_0 = state0_0 + c75
+    state1_0 = state1_0 + c76
+    state2_0 = state2_0 + c77
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 26
     // ark
-    state0 = state0 + c78
-    state1 = state1 + c79
-    state2 = state2 + c80
+    state0_0 = state0_0 + c78
+    state1_0 = state1_0 + c79
+    state2_0 = state2_0 + c80
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 27
     // ark
-    state0 = state0 + c81
-    state1 = state1 + c82
-    state2 = state2 + c83
+    state0_0 = state0_0 + c81
+    state1_0 = state1_0 + c82
+    state2_0 = state2_0 + c83
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 28
     // ark
-    state0 = state0 + c84
-    state1 = state1 + c85
-    state2 = state2 + c86
+    state0_0 = state0_0 + c84
+    state1_0 = state1_0 + c85
+    state2_0 = state2_0 + c86
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 29
     // ark
-    state0 = state0 + c87
-    state1 = state1 + c88
-    state2 = state2 + c89
+    state0_0 = state0_0 + c87
+    state1_0 = state1_0 + c88
+    state2_0 = state2_0 + c89
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 30
     // ark
-    state0 = state0 + c90
-    state1 = state1 + c91
-    state2 = state2 + c92
+    state0_0 = state0_0 + c90
+    state1_0 = state1_0 + c91
+    state2_0 = state2_0 + c92
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 31
     // ark
-    state0 = state0 + c93
-    state1 = state1 + c94
-    state2 = state2 + c95
+    state0_0 = state0_0 + c93
+    state1_0 = state1_0 + c94
+    state2_0 = state2_0 + c95
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 32
     // ark
-    state0 = state0 + c96
-    state1 = state1 + c97
-    state2 = state2 + c98
+    state0_0 = state0_0 + c96
+    state1_0 = state1_0 + c97
+    state2_0 = state2_0 + c98
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 33
     // ark
-    state0 = state0 + c99
-    state1 = state1 + c100
-    state2 = state2 + c101
+    state0_0 = state0_0 + c99
+    state1_0 = state1_0 + c100
+    state2_0 = state2_0 + c101
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 34
     // ark
-    state0 = state0 + c102
-    state1 = state1 + c103
-    state2 = state2 + c104
+    state0_0 = state0_0 + c102
+    state1_0 = state1_0 + c103
+    state2_0 = state2_0 + c104
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 35
     // ark
-    state0 = state0 + c105
-    state1 = state1 + c106
-    state2 = state2 + c107
+    state0_0 = state0_0 + c105
+    state1_0 = state1_0 + c106
+    state2_0 = state2_0 + c107
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 36
     // ark
-    state0 = state0 + c108
-    state1 = state1 + c109
-    state2 = state2 + c110
+    state0_0 = state0_0 + c108
+    state1_0 = state1_0 + c109
+    state2_0 = state2_0 + c110
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 37
     // ark
-    state0 = state0 + c111
-    state1 = state1 + c112
-    state2 = state2 + c113
+    state0_0 = state0_0 + c111
+    state1_0 = state1_0 + c112
+    state2_0 = state2_0 + c113
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 38
     // ark
-    state0 = state0 + c114
-    state1 = state1 + c115
-    state2 = state2 + c116
+    state0_0 = state0_0 + c114
+    state1_0 = state1_0 + c115
+    state2_0 = state2_0 + c116
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 39
     // ark
-    state0 = state0 + c117
-    state1 = state1 + c118
-    state2 = state2 + c119
+    state0_0 = state0_0 + c117
+    state1_0 = state1_0 + c118
+    state2_0 = state2_0 + c119
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 40
     // ark
-    state0 = state0 + c120
-    state1 = state1 + c121
-    state2 = state2 + c122
+    state0_0 = state0_0 + c120
+    state1_0 = state1_0 + c121
+    state2_0 = state2_0 + c122
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 41
     // ark
-    state0 = state0 + c123
-    state1 = state1 + c124
-    state2 = state2 + c125
+    state0_0 = state0_0 + c123
+    state1_0 = state1_0 + c124
+    state2_0 = state2_0 + c125
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 42
     // ark
-    state0 = state0 + c126
-    state1 = state1 + c127
-    state2 = state2 + c128
+    state0_0 = state0_0 + c126
+    state1_0 = state1_0 + c127
+    state2_0 = state2_0 + c128
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 43
     // ark
-    state0 = state0 + c129
-    state1 = state1 + c130
-    state2 = state2 + c131
+    state0_0 = state0_0 + c129
+    state1_0 = state1_0 + c130
+    state2_0 = state2_0 + c131
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 44
     // ark
-    state0 = state0 + c132
-    state1 = state1 + c133
-    state2 = state2 + c134
+    state0_0 = state0_0 + c132
+    state1_0 = state1_0 + c133
+    state2_0 = state2_0 + c134
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 45
     // ark
-    state0 = state0 + c135
-    state1 = state1 + c136
-    state2 = state2 + c137
+    state0_0 = state0_0 + c135
+    state1_0 = state1_0 + c136
+    state2_0 = state2_0 + c137
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 46
     // ark
-    state0 = state0 + c138
-    state1 = state1 + c139
-    state2 = state2 + c140
+    state0_0 = state0_0 + c138
+    state1_0 = state1_0 + c139
+    state2_0 = state2_0 + c140
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 47
     // ark
-    state0 = state0 + c141
-    state1 = state1 + c142
-    state2 = state2 + c143
+    state0_0 = state0_0 + c141
+    state1_0 = state1_0 + c142
+    state2_0 = state2_0 + c143
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 48
     // ark
-    state0 = state0 + c144
-    state1 = state1 + c145
-    state2 = state2 + c146
+    state0_0 = state0_0 + c144
+    state1_0 = state1_0 + c145
+    state2_0 = state2_0 + c146
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 49
     // ark
-    state0 = state0 + c147
-    state1 = state1 + c148
-    state2 = state2 + c149
+    state0_0 = state0_0 + c147
+    state1_0 = state1_0 + c148
+    state2_0 = state2_0 + c149
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 50
     // ark
-    state0 = state0 + c150
-    state1 = state1 + c151
-    state2 = state2 + c152
+    state0_0 = state0_0 + c150
+    state1_0 = state1_0 + c151
+    state2_0 = state2_0 + c152
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 51
     // ark
-    state0 = state0 + c153
-    state1 = state1 + c154
-    state2 = state2 + c155
+    state0_0 = state0_0 + c153
+    state1_0 = state1_0 + c154
+    state2_0 = state2_0 + c155
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 52
     // ark
-    state0 = state0 + c156
-    state1 = state1 + c157
-    state2 = state2 + c158
+    state0_0 = state0_0 + c156
+    state1_0 = state1_0 + c157
+    state2_0 = state2_0 + c158
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 53
     // ark
-    state0 = state0 + c159
-    state1 = state1 + c160
-    state2 = state2 + c161
+    state0_0 = state0_0 + c159
+    state1_0 = state1_0 + c160
+    state2_0 = state2_0 + c161
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 54
     // ark
-    state0 = state0 + c162
-    state1 = state1 + c163
-    state2 = state2 + c164
+    state0_0 = state0_0 + c162
+    state1_0 = state1_0 + c163
+    state2_0 = state2_0 + c164
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 55
     // ark
-    state0 = state0 + c165
-    state1 = state1 + c166
-    state2 = state2 + c167
+    state0_0 = state0_0 + c165
+    state1_0 = state1_0 + c166
+    state2_0 = state2_0 + c167
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 56
     // ark
-    state0 = state0 + c168
-    state1 = state1 + c169
-    state2 = state2 + c170
+    state0_0 = state0_0 + c168
+    state1_0 = state1_0 + c169
+    state2_0 = state2_0 + c170
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 57
     // ark
-    state0 = state0 + c171
-    state1 = state1 + c172
-    state2 = state2 + c173
+    state0_0 = state0_0 + c171
+    state1_0 = state1_0 + c172
+    state2_0 = state2_0 + c173
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 58
     // ark
-    state0 = state0 + c174
-    state1 = state1 + c175
-    state2 = state2 + c176
+    state0_0 = state0_0 + c174
+    state1_0 = state1_0 + c175
+    state2_0 = state2_0 + c176
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 59
     // ark
-    state0 = state0 + c177
-    state1 = state1 + c178
-    state2 = state2 + c179
+    state0_0 = state0_0 + c177
+    state1_0 = state1_0 + c178
+    state2_0 = state2_0 + c179
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 60
     // ark
-    state0 = state0 + c180
-    state1 = state1 + c181
-    state2 = state2 + c182
+    state0_0 = state0_0 + c180
+    state1_0 = state1_0 + c181
+    state2_0 = state2_0 + c182
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1
-    field new_state2 = state2
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0
+    field new_state2_0 = state2_0
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 61
     // ark
-    state0 = state0 + c183
-    state1 = state1 + c184
-    state2 = state2 + c185
+    state0_0 = state0_0 + c183
+    state1_0 = state1_0 + c184
+    state2_0 = state2_0 + c185
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1 ** 5
-    field new_state2 = state2 ** 5
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0 ** 5
+    field new_state2_0 = state2_0 ** 5
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 62
     // ark
-    state0 = state0 + c186
-    state1 = state1 + c187
-    state2 = state2 + c188
+    state0_0 = state0_0 + c186
+    state1_0 = state1_0 + c187
+    state2_0 = state2_0 + c188
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1 ** 5
-    field new_state2 = state2 ** 5
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0 ** 5
+    field new_state2_0 = state2_0 ** 5
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 63
     // ark
-    state0 = state0 + c189
-    state1 = state1 + c190
-    state2 = state2 + c191
+    state0_0 = state0_0 + c189
+    state1_0 = state1_0 + c190
+    state2_0 = state2_0 + c191
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1 ** 5
-    field new_state2 = state2 ** 5
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0 ** 5
+    field new_state2_0 = state2_0 ** 5
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
     // --
     // r = 64
     // ark
-    state0 = state0 + c192
-    state1 = state1 + c193
-    state2 = state2 + c194
+    state0_0 = state0_0 + c192
+    state1_0 = state1_0 + c193
+    state2_0 = state2_0 + c194
     // sbox
-    field new_state0 = state0 ** 5
-    field new_state1 = state1 ** 5
-    field new_state2 = state2 ** 5
+    field new_state0_0 = state0_0 ** 5
+    field new_state1_0 = state1_0 ** 5
+    field new_state2_0 = state2_0 ** 5
     // mix
-    state0 = new_state0 * m0 + new_state1 * m1 + new_state2 * m2
-    state1 = new_state0 * m9 + new_state1 * m10 + new_state2 * m11
-    state2 = new_state0 * m18 + new_state1 * m19 + new_state2 * m20
-    return state0
-
-def main() -> field:
-    return poseidon2(1, 2)
+    state0_0 = new_state0_0 * m0 + new_state1_0 * m1 + new_state2_0 * m2
+    state1_0 = new_state0_0 * m9 + new_state1_0 * m10 + new_state2_0 * m11
+    state2_0 = new_state0_0 * m18 + new_state1_0 * m19 + new_state2_0 * m20
+    // --
+    // r = 0
+    // ark
+    state0_1 = state0_1 + c0
+    state1_1 = state1_1 + c1
+    state2_1 = state2_1 + c2
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1 ** 5
+    field new_state2_1 = state2_1 ** 5
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 1
+    // ark
+    state0_1 = state0_1 + c3
+    state1_1 = state1_1 + c4
+    state2_1 = state2_1 + c5
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1 ** 5
+    field new_state2_1 = state2_1 ** 5
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 2
+    // ark
+    state0_1 = state0_1 + c6
+    state1_1 = state1_1 + c7
+    state2_1 = state2_1 + c8
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1 ** 5
+    field new_state2_1 = state2_1 ** 5
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 3
+    // ark
+    state0_1 = state0_1 + c9
+    state1_1 = state1_1 + c10
+    state2_1 = state2_1 + c11
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1 ** 5
+    field new_state2_1 = state2_1 ** 5
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 4
+    // ark
+    state0_1 = state0_1 + c12
+    state1_1 = state1_1 + c13
+    state2_1 = state2_1 + c14
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 5
+    // ark
+    state0_1 = state0_1 + c15
+    state1_1 = state1_1 + c16
+    state2_1 = state2_1 + c17
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 6
+    // ark
+    state0_1 = state0_1 + c18
+    state1_1 = state1_1 + c19
+    state2_1 = state2_1 + c20
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 7
+    // ark
+    state0_1 = state0_1 + c21
+    state1_1 = state1_1 + c22
+    state2_1 = state2_1 + c23
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 8
+    // ark
+    state0_1 = state0_1 + c24
+    state1_1 = state1_1 + c25
+    state2_1 = state2_1 + c26
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 9
+    // ark
+    state0_1 = state0_1 + c27
+    state1_1 = state1_1 + c28
+    state2_1 = state2_1 + c29
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 10
+    // ark
+    state0_1 = state0_1 + c30
+    state1_1 = state1_1 + c31
+    state2_1 = state2_1 + c32
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 11
+    // ark
+    state0_1 = state0_1 + c33
+    state1_1 = state1_1 + c34
+    state2_1 = state2_1 + c35
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 12
+    // ark
+    state0_1 = state0_1 + c36
+    state1_1 = state1_1 + c37
+    state2_1 = state2_1 + c38
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 13
+    // ark
+    state0_1 = state0_1 + c39
+    state1_1 = state1_1 + c40
+    state2_1 = state2_1 + c41
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 14
+    // ark
+    state0_1 = state0_1 + c42
+    state1_1 = state1_1 + c43
+    state2_1 = state2_1 + c44
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 15
+    // ark
+    state0_1 = state0_1 + c45
+    state1_1 = state1_1 + c46
+    state2_1 = state2_1 + c47
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 16
+    // ark
+    state0_1 = state0_1 + c48
+    state1_1 = state1_1 + c49
+    state2_1 = state2_1 + c50
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 17
+    // ark
+    state0_1 = state0_1 + c51
+    state1_1 = state1_1 + c52
+    state2_1 = state2_1 + c53
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 18
+    // ark
+    state0_1 = state0_1 + c54
+    state1_1 = state1_1 + c55
+    state2_1 = state2_1 + c56
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 19
+    // ark
+    state0_1 = state0_1 + c57
+    state1_1 = state1_1 + c58
+    state2_1 = state2_1 + c59
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 20
+    // ark
+    state0_1 = state0_1 + c60
+    state1_1 = state1_1 + c61
+    state2_1 = state2_1 + c62
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 21
+    // ark
+    state0_1 = state0_1 + c63
+    state1_1 = state1_1 + c64
+    state2_1 = state2_1 + c65
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 22
+    // ark
+    state0_1 = state0_1 + c66
+    state1_1 = state1_1 + c67
+    state2_1 = state2_1 + c68
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 23
+    // ark
+    state0_1 = state0_1 + c69
+    state1_1 = state1_1 + c70
+    state2_1 = state2_1 + c71
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 24
+    // ark
+    state0_1 = state0_1 + c72
+    state1_1 = state1_1 + c73
+    state2_1 = state2_1 + c74
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 25
+    // ark
+    state0_1 = state0_1 + c75
+    state1_1 = state1_1 + c76
+    state2_1 = state2_1 + c77
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 26
+    // ark
+    state0_1 = state0_1 + c78
+    state1_1 = state1_1 + c79
+    state2_1 = state2_1 + c80
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 27
+    // ark
+    state0_1 = state0_1 + c81
+    state1_1 = state1_1 + c82
+    state2_1 = state2_1 + c83
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 28
+    // ark
+    state0_1 = state0_1 + c84
+    state1_1 = state1_1 + c85
+    state2_1 = state2_1 + c86
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 29
+    // ark
+    state0_1 = state0_1 + c87
+    state1_1 = state1_1 + c88
+    state2_1 = state2_1 + c89
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 30
+    // ark
+    state0_1 = state0_1 + c90
+    state1_1 = state1_1 + c91
+    state2_1 = state2_1 + c92
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 31
+    // ark
+    state0_1 = state0_1 + c93
+    state1_1 = state1_1 + c94
+    state2_1 = state2_1 + c95
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 32
+    // ark
+    state0_1 = state0_1 + c96
+    state1_1 = state1_1 + c97
+    state2_1 = state2_1 + c98
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 33
+    // ark
+    state0_1 = state0_1 + c99
+    state1_1 = state1_1 + c100
+    state2_1 = state2_1 + c101
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 34
+    // ark
+    state0_1 = state0_1 + c102
+    state1_1 = state1_1 + c103
+    state2_1 = state2_1 + c104
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 35
+    // ark
+    state0_1 = state0_1 + c105
+    state1_1 = state1_1 + c106
+    state2_1 = state2_1 + c107
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 36
+    // ark
+    state0_1 = state0_1 + c108
+    state1_1 = state1_1 + c109
+    state2_1 = state2_1 + c110
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 37
+    // ark
+    state0_1 = state0_1 + c111
+    state1_1 = state1_1 + c112
+    state2_1 = state2_1 + c113
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 38
+    // ark
+    state0_1 = state0_1 + c114
+    state1_1 = state1_1 + c115
+    state2_1 = state2_1 + c116
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 39
+    // ark
+    state0_1 = state0_1 + c117
+    state1_1 = state1_1 + c118
+    state2_1 = state2_1 + c119
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 40
+    // ark
+    state0_1 = state0_1 + c120
+    state1_1 = state1_1 + c121
+    state2_1 = state2_1 + c122
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 41
+    // ark
+    state0_1 = state0_1 + c123
+    state1_1 = state1_1 + c124
+    state2_1 = state2_1 + c125
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 42
+    // ark
+    state0_1 = state0_1 + c126
+    state1_1 = state1_1 + c127
+    state2_1 = state2_1 + c128
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 43
+    // ark
+    state0_1 = state0_1 + c129
+    state1_1 = state1_1 + c130
+    state2_1 = state2_1 + c131
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 44
+    // ark
+    state0_1 = state0_1 + c132
+    state1_1 = state1_1 + c133
+    state2_1 = state2_1 + c134
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 45
+    // ark
+    state0_1 = state0_1 + c135
+    state1_1 = state1_1 + c136
+    state2_1 = state2_1 + c137
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 46
+    // ark
+    state0_1 = state0_1 + c138
+    state1_1 = state1_1 + c139
+    state2_1 = state2_1 + c140
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 47
+    // ark
+    state0_1 = state0_1 + c141
+    state1_1 = state1_1 + c142
+    state2_1 = state2_1 + c143
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 48
+    // ark
+    state0_1 = state0_1 + c144
+    state1_1 = state1_1 + c145
+    state2_1 = state2_1 + c146
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 49
+    // ark
+    state0_1 = state0_1 + c147
+    state1_1 = state1_1 + c148
+    state2_1 = state2_1 + c149
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 50
+    // ark
+    state0_1 = state0_1 + c150
+    state1_1 = state1_1 + c151
+    state2_1 = state2_1 + c152
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 51
+    // ark
+    state0_1 = state0_1 + c153
+    state1_1 = state1_1 + c154
+    state2_1 = state2_1 + c155
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 52
+    // ark
+    state0_1 = state0_1 + c156
+    state1_1 = state1_1 + c157
+    state2_1 = state2_1 + c158
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 53
+    // ark
+    state0_1 = state0_1 + c159
+    state1_1 = state1_1 + c160
+    state2_1 = state2_1 + c161
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 54
+    // ark
+    state0_1 = state0_1 + c162
+    state1_1 = state1_1 + c163
+    state2_1 = state2_1 + c164
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 55
+    // ark
+    state0_1 = state0_1 + c165
+    state1_1 = state1_1 + c166
+    state2_1 = state2_1 + c167
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 56
+    // ark
+    state0_1 = state0_1 + c168
+    state1_1 = state1_1 + c169
+    state2_1 = state2_1 + c170
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 57
+    // ark
+    state0_1 = state0_1 + c171
+    state1_1 = state1_1 + c172
+    state2_1 = state2_1 + c173
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 58
+    // ark
+    state0_1 = state0_1 + c174
+    state1_1 = state1_1 + c175
+    state2_1 = state2_1 + c176
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 59
+    // ark
+    state0_1 = state0_1 + c177
+    state1_1 = state1_1 + c178
+    state2_1 = state2_1 + c179
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 60
+    // ark
+    state0_1 = state0_1 + c180
+    state1_1 = state1_1 + c181
+    state2_1 = state2_1 + c182
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1
+    field new_state2_1 = state2_1
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 61
+    // ark
+    state0_1 = state0_1 + c183
+    state1_1 = state1_1 + c184
+    state2_1 = state2_1 + c185
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1 ** 5
+    field new_state2_1 = state2_1 ** 5
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 62
+    // ark
+    state0_1 = state0_1 + c186
+    state1_1 = state1_1 + c187
+    state2_1 = state2_1 + c188
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1 ** 5
+    field new_state2_1 = state2_1 ** 5
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 63
+    // ark
+    state0_1 = state0_1 + c189
+    state1_1 = state1_1 + c190
+    state2_1 = state2_1 + c191
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1 ** 5
+    field new_state2_1 = state2_1 ** 5
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    // --
+    // r = 64
+    // ark
+    state0_1 = state0_1 + c192
+    state1_1 = state1_1 + c193
+    state2_1 = state2_1 + c194
+    // sbox
+    field new_state0_1 = state0_1 ** 5
+    field new_state1_1 = state1_1 ** 5
+    field new_state2_1 = state2_1 ** 5
+    // mix
+    state0_1 = new_state0_1 * m0 + new_state1_1 * m1 + new_state2_1 * m2
+    state1_1 = new_state0_1 * m9 + new_state1_1 * m10 + new_state2_1 * m11
+    state2_1 = new_state0_1 * m18 + new_state1_1 * m19 + new_state2_1 * m20
+    return DoubleHash {
+        hash0: state0_0,
+        hash1: state0_1
+    }

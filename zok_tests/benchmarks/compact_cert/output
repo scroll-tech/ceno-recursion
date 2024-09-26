@@ -210,3 +210,13 @@ Opt 16: (Batched Poseidon)
 Prover time: 89.82s
 Verifier time: 660.72ms
 Proof size: 1.268MB
+
+--
+Num Att = 100000, Num Reveal = 400
+Verifier time: 8.58s
+Proof Size: 614.9kB
+
+Opt 16: (Batched Poseidon)
+Prover time: 52.63s
+Verifier time: 546.44ms
+Proof size: 1.026MB

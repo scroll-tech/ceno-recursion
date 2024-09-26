@@ -1,13 +1,42 @@
 from "poseidon" import poseidon
+from "poseidon_permutation" import PoseidonPermutation, set_from_slice, permute, squeeze
 
-def compress(u32 digest_width, field[0] x, field[0] y) -> field[0] {
-    field[12] perm = [0; 12]
-    for u32 i in 0..digest_width {
-        perm[i] = x[i]
-        perm[digest_width + i] = y[i]
+def hash_n_to_m_no_pad(u32 num_inputs, field[0] inputs, u32 num_outputs) -> field[0]:
+    PoseidonPermutation perm = PoseidonPermutation {
+        state: [0; 12]
     }
-    perm = poseidon(perm)
+    
+    // Absorb all input chunks.
+    u32 j = 0
+    for u32 i in 0..num_inputs do
+        // Overwrite the first r elements with the inputs. This differs from a standard sponge,
+        // where we would xor or add in the inputs. This is a well-known variant, though,
+        // sometimes called "overwrite mode".
+        perm.state[j] = inputs[i]
+        j = j + 1
+        if j == 8 || i == num_inputs - 1 then
+            perm = permute(perm)
+            j = 0
+        endif
+    endfor
 
-    // Returns a len-(digest_width) array reusing the same pointer as perm
-    return perm
-}
+    // Squeeze until we have the desired number of outputs
+    field[num_outputs] outputs = [0; num_outputs]
+    u32 output_count = 0
+    while true do
+        field[0] ps = squeeze(perm)
+        for u32 i in 0..8 do
+            outputs[output_count] = ps[i]
+            output_count = output_count + 1
+            if output_count == num_outputs then
+                return outputs
+            endif
+        endfor
+        perm = permute(perm)
+    endwhile
+    return [] // this return statement is unreachable
+
+def main() -> field:
+    field[16] inputs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    field[0] outputs = hash_n_to_m_no_pad(16, inputs, 4)
+    return outputs[1]

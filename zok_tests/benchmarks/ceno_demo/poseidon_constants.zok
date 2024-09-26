@@ -1,4 +1,8 @@
+// constants only used for cross-referencing
+// DO NOT USE THEM unless constant-propagation is implemented
 const u32 SPONGE_WIDTH = 12
+const u32 SPONGE_RATE = 8
+const u32 DIGEST_WIDTH = 4
 
 const field[360] ALL_ROUND_CONSTANTS = [
     (F)0xb585f766f2144405, (F)0x7746a55f43921ad7, (F)0xb2fb0d31cee799b4, (F)0x0f6760a4803427d7,

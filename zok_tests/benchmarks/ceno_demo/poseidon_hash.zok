@@ -1,6 +1,20 @@
 from "poseidon" import poseidon
 from "poseidon_permutation" import PoseidonPermutation, set_from_slice, permute, squeeze
 
+def compress(field[4] left, field[4] right) -> field[0]:
+    PoseidonPermutation perm = PoseidonPermutation {
+        state: [0; 12]
+    }
+    for u32 i in 0..4 do
+        perm.state[i] = left[i]
+        perm_state[i + 4] = right[i]
+    endfor
+    perm = permute(perm)
+    return squeeze(perm)
+
+def two_to_one(field[4] left, field[4] right) -> field[0]:
+    return compress(left, right)
+
 def hash_n_to_m_no_pad(u32 num_inputs, field[0] inputs, u32 num_outputs) -> field[0]:
     PoseidonPermutation perm = PoseidonPermutation {
         state: [0; 12]
@@ -36,7 +50,18 @@ def hash_n_to_m_no_pad(u32 num_inputs, field[0] inputs, u32 num_outputs) -> fiel
     endwhile
     return [] // this return statement is unreachable
 
+def hash_or_noop(u32 inputs_len, field[0] inputs) -> field[0]:
+    if inputs_len <= 4 then
+        field[4] digest = [0; 4]
+        for u32 i in 0..inputs_len do
+            digest[i] = inputs[i]
+        endfor
+        return digest
+    else
+        return hash_n_to_m_no_pad(inputs_len, inputs, 4)
+    endif
+
 def main() -> field:
     field[16] inputs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-    field[0] outputs = hash_n_to_m_no_pad(16, inputs, 4)
+    field[0] outputs = hash_or_noop(16, inputs)
     return outputs[1]

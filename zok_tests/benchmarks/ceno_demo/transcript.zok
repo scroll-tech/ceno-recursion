@@ -1,19 +1,33 @@
 from "poseidon" import poseidon
-from "poseidon_hash" import compress
+from "poseidon_permutation" import PoseidonPermutation, set_from_slice, permute, squeeze
+from "poseidon_hash" import compress, hash_or_noop
 
 struct Transcript {
-    field[12] state
+    field[0] digest
 }
 
-def new_transcript(field[0] label) -> Transcript:
+def new_transcript(u32 label_len, field[0] label) -> Transcript:
     return Transcript {
-        hash: 4
+        digest: hash_or_noop(label_len, label)
     }
 
-def append_message_u32(Transcript t, u32 f) -> Transcript:
-    // t.hash = t.hash + (F)f
-    return t
+// Append the message to the transcript.
+def append_message(Transcript self, u32 msg_len, field[0] msg) -> Transcript:
+    field msg_digest = hash_or_noop(msg_len, msg)
+    return Transcript {
+        digest: two_to_one(self.digest, msg_digest)
+    }
 
-def append_message_field(Transcript t, field f) -> Transcript:
-    // t.hash = t.hash + f
-    return t
+// Generate the challenge from the current transcript
+// and append it to the transcript.
+//
+// The output field element is statistical uniform as long
+// as the field has a size less than 2^384.
+def get_and_append_challenge(Transcript self, u32 label_len, field[0] label) -> Field {
+    self = append_message(self, label_len, label)
+
+    let challenge = Challenge {
+        elements: Ext::from_limbs(self.digest.elements()),
+    };
+    challenge
+}

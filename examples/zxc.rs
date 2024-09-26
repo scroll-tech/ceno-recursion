@@ -10,8 +10,8 @@ use bellman::Circuit;
 use bls12_381::{Bls12, Scalar};
 */
 const PRINT_PROOF: bool = false;
-const INLINE_SPARTAN_PROOF: bool = true;
-const TOTAL_NUM_VARS_BOUND: usize = 1000000000;
+const INLINE_SPARTAN_PROOF: bool = false;
+const TOTAL_NUM_VARS_BOUND: usize = 10000000;
 
 use core::cmp::min;
 use rug::Integer;

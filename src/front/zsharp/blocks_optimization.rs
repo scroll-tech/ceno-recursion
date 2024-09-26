@@ -2134,6 +2134,8 @@ impl<'ast> ZGen<'ast> {
         for callee in 0..bls.len() {
             if entry_bls_fn.contains(&callee) && predecessor[callee].len() == 1 {
                 let caller = predecessor[callee].first().unwrap().clone();
+                // Update fn_num_exec_bound of callee
+                let num_exec_factor = bls[caller].fn_num_exec_bound;
                 let caller_fn = &bls[caller].fn_name.clone();
                 let callee_fn = &bls[callee].fn_name.clone();
                 let scope_diff = bls[caller].scope + 1;
@@ -2159,6 +2161,7 @@ impl<'ast> ZGen<'ast> {
                         assert_eq!(&bls[cur_bl].fn_name, callee_fn);
                         bls[cur_bl].fn_name = caller_fn.clone();
                         bls[cur_bl].scope += scope_diff;
+                        bls[cur_bl].fn_num_exec_bound *= num_exec_factor;
                         bls[cur_bl].instructions = fm_inst::<false>(&bls[cur_bl].instructions, callee_fn, caller_fn, scope_diff);
                         // Update terminator
                         if let BlockTerminator::Transition(e) = &bls[cur_bl].terminator {

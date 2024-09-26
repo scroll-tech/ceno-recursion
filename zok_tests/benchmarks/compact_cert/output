@@ -187,7 +187,7 @@ Verifier time: 344.62ms
 Proof size: 704.9kB
 
 --
-Num Att = 100000, Soundness = 2^-10, Num Reveal = 690
+Num Att = 100000, Num Reveal = 690
 Verifier time: 16.06s
 Proof Size: 1.06MB
 
@@ -211,6 +211,12 @@ Prover time: 89.82s
 Verifier time: 660.72ms
 Proof size: 1.268MB
 
+Opt 17: (Improved Input)
+Num Blocks: 7
+Prover time:87.29s
+Verifier time: 650.94ms
+Proof size: 1.212MB
+
 --
 Num Att = 100000, Num Reveal = 400
 Verifier time: 8.58s
@@ -220,3 +226,8 @@ Opt 16: (Batched Poseidon)
 Prover time: 52.63s
 Verifier time: 546.44ms
 Proof size: 1.026MB
+
+Opt 17: (Improved Input)
+Prover time: 44.87s
+Verifier time: 538.24ms
+Proof size: 954.9kB

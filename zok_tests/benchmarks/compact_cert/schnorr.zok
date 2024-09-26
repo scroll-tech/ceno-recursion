@@ -12,11 +12,11 @@ struct Point {
 // Hack: set (0, 0) to be the identity
 def point_add(Point a, Point b) -> Point:
     // Compute numerator & denominator separately to avoid division by 0
-    field m_num = a.x != b.x ? (b.y - a.y) : (3 * a.x * a.x + A)
-    field m_denom = a.x != b.x ? (b.x - a.x) : (2 * a.y)
+    field m_num = b.y - a.y
+    field m_denom = b.x - a.x
     field m = m_num / m_denom
-    field x3 = a.x == 0 && a.y == 0 ? b.x : m * m - a.x - b.x
-    field y3 = a.x == 0 && a.y == 0 ? b.y : m * (a.x - x3) - a.y
+    field x3 = m * m - a.x - b.x
+    field y3 = m * (a.x - x3) - a.y
     return Point {
         x: x3,
         y: y3
@@ -68,13 +68,13 @@ def inline point_double_add_batch(
 ) -> QuadPoint:
     // a_0 + a_0
     field m_num = 3 * a_0.x * a_0.x + A
-    field m_denom = 2 * a_0.y // Just to avoid division by 0
+    field m_denom = 2 * a_0.y // To avoid division by 0
     field m = m_num / m_denom
     field x0 = m * m - a_0.x - a_0.x
     field y0 = m * (a_0.x - x0) - a_0.y
     // a_1 + a_1
     field m_num = 3 * a_1.x * a_1.x + A
-    field m_denom = 2 * a_1.y // Just to avoid division by 0
+    field m_denom = 2 * a_1.y // To avoid division by 0
     field m = m_num / m_denom
     field x1 = m * m - a_1.x - a_1.x
     field y1 = m * (a_1.x - x1) - a_1.y

@@ -737,18 +737,21 @@ fn term_to_instr<'ast>(
     bls: &Vec<Block>,
     term: &Expression<'ast>,
     instr_list: &Vec<Vec<BlockContent<'ast>>>,
+    cons_count_list: &Vec<usize>,
     ro_count_list: &Vec<usize>,
     vm_count_list: &Vec<usize>,
     cur_bl: usize,
-) -> (Vec<BlockContent<'ast>>, usize, usize, usize) {
+) -> (Vec<BlockContent<'ast>>, usize, usize, usize, usize) {
     // There are three cases for the terminator
     // A ternary should be converted to a branching instruction
     // A constant literal should be converted to the corresponding instruction list x looping
     // Any reference to rp@ should result in the termination of the conversion
     match term {
         Expression::Ternary(t) => {
-            let (mut left_instr, left_ro_count, left_vm_count, left_repeat) = term_to_instr(bls, &t.second, instr_list, ro_count_list, vm_count_list, cur_bl);
-            let (mut right_instr, right_ro_count, right_vm_count, right_repeat) = term_to_instr(bls, &t.third, instr_list, ro_count_list, vm_count_list, cur_bl);
+            let (mut left_instr, left_cons_count, left_ro_count, left_vm_count, left_repeat) = 
+                term_to_instr(bls, &t.second, instr_list, cons_count_list, ro_count_list, vm_count_list, cur_bl);
+            let (mut right_instr, right_cons_count, right_ro_count, right_vm_count, right_repeat) = 
+                term_to_instr(bls, &t.third, instr_list, cons_count_list, ro_count_list, vm_count_list, cur_bl);
 
             // Assert that no witness statements are within branches as that would be confusing
             for i in left_instr.iter().chain(right_instr.iter()) {
@@ -759,7 +762,7 @@ fn term_to_instr<'ast>(
 
             // If both left and right are empty, don't construct if / else
             if left_instr.len() == 0 && right_instr.len() == 0 {
-                return (Vec::new(), 0, 0, 1);
+                return (Vec::new(), 0, 0, 0, 1);
             }
 
             // Restrictions on loop structure
@@ -785,7 +788,13 @@ fn term_to_instr<'ast>(
                 right_instr
             ));
 
-            (vec![branch_inst; left_repeat], max(left_ro_count, right_ro_count) * left_repeat, max(left_vm_count, right_vm_count) * left_repeat, 1)
+            (
+                vec![branch_inst; left_repeat], 
+                max(left_cons_count, right_cons_count) * left_repeat, 
+                max(left_ro_count, right_ro_count) * left_repeat, 
+                max(left_vm_count, right_vm_count) * left_repeat, 
+                1
+            )
         }
         Expression::Literal(le) => {
             if let LiteralExpression::DecimalLiteral(dle) = le {
@@ -795,9 +804,9 @@ fn term_to_instr<'ast>(
                 if next_scope > cur_scope {
                     // Copy from instr_list only if scope of next_bl is higher than cur_scope
                     // DO NOT unroll the loops here. We need to unroll with the condition
-                    (instr_list[next_bl].clone(), ro_count_list[next_bl], vm_count_list[next_bl], bls[next_bl].fn_num_exec_bound / bls[cur_bl].fn_num_exec_bound)
+                    (instr_list[next_bl].clone(), cons_count_list[next_bl], ro_count_list[next_bl], vm_count_list[next_bl], bls[next_bl].fn_num_exec_bound / bls[cur_bl].fn_num_exec_bound)
                 } else {
-                    (Vec::new(), 0, 0, 1)
+                    (Vec::new(), 0, 0, 0, 1)
                 }
             } else {
                 panic!("Terminator to instruction failed: terminator cannot contain boolean or hex")
@@ -2473,6 +2482,10 @@ impl<'ast> ZGen<'ast> {
         }
         // Reset self.circ
         self.circ.borrow_mut().reset(ZSharp::new());
+        // Update num_cons for each block
+        for i in 0..bls.len() {
+            bls[i].num_cons = bl_num_cons[i];
+        }
         // Maximum # of constraints is max(MAX_BLOCK_SIZE, bl_num_cons.max().next_power_of_two())
         let max_num_cons = max(MAX_BLOCK_SIZE, bl_num_cons.iter().max().unwrap().next_power_of_two());
 
@@ -2599,6 +2612,7 @@ impl<'ast> ZGen<'ast> {
                     // 2. number of read-only ops of all merged blocks of the current scope
                     // 3. number of vm ops of all merged blocks of the current scope
                     let mut instr_list: Vec<Vec<BlockContent<'ast>>> = vec![Vec::new(); bls.len()];
+                    let mut cons_count_list: Vec<usize> = vec![0; bls.len()];
                     let mut ro_count_list: Vec<usize> = vec![0; bls.len()];
                     let mut vm_count_list: Vec<usize> = vec![0; bls.len()];
                     let mut visited: Vec<bool> = vec![false; bls.len()];
@@ -2613,17 +2627,21 @@ impl<'ast> ZGen<'ast> {
 
                         // Instructions of cur_bl
                         let mut instr_state = bls[cur_bl].instructions.clone();
+                        let mut cons_count_state = bls[cur_bl].num_cons;
                         let mut ro_count_state = bls[cur_bl].num_ro_ops;
                         let mut vm_count_state = bls[cur_bl].num_vm_ops;
                         // Instructions of successors & next block in scope, if not comp_tail
                         if cur_bl != comp_tail {                  
                             if let BlockTerminator::Transition(t) = &bls[cur_bl].terminator {
-                                let (merged_instr, merged_ro_count, merged_vm_count, _) = term_to_instr(&bls, t, &instr_list, &ro_count_list, &vm_count_list, cur_bl);
+                                let (merged_instr, merged_cons_count, merged_ro_count, merged_vm_count, _) = 
+                                    term_to_instr(&bls, t, &instr_list, &cons_count_list, &ro_count_list, &vm_count_list, cur_bl);
                                 instr_state.extend(merged_instr);
+                                cons_count_state += merged_cons_count;
                                 ro_count_state += merged_ro_count;
                                 vm_count_state += merged_vm_count;
                             }
                             instr_state.extend(instr_list[scope_list[cur_bl][cur_scope]].clone());
+                            cons_count_state += cons_count_list[scope_list[cur_bl][cur_scope]];
                             ro_count_state += ro_count_list[scope_list[cur_bl][cur_scope]];
                             vm_count_state += vm_count_list[scope_list[cur_bl][cur_scope]];
                         }
@@ -2631,6 +2649,7 @@ impl<'ast> ZGen<'ast> {
                         if !visited[cur_bl] || instr_state != instr_list[cur_bl] {
                             visited[cur_bl] = true;
                             instr_list[cur_bl] = instr_state;
+                            cons_count_list[cur_bl] = cons_count_state;
                             ro_count_list[cur_bl] = ro_count_state;
                             vm_count_list[cur_bl] = vm_count_state;
                             if cur_bl != comp_head {
@@ -2658,6 +2677,7 @@ impl<'ast> ZGen<'ast> {
                     count_list[comp_tail] = 0;
 
                     bls[comp_head].instructions = instr_list[comp_head].clone();
+                    bls[comp_head].num_cons = cons_count_list[comp_head];
                     bls[comp_head].num_ro_ops = ro_count_list[comp_head];
                     bls[comp_head].num_vm_ops = vm_count_list[comp_head];
                     bls[comp_head].terminator = bls[comp_tail].terminator.clone();
@@ -3234,10 +3254,18 @@ impl<'ast> ZGen<'ast> {
             visited[cur_bl] = true;
 
             // If the block only has one successor and the successor only has one predecessor
-            // And the transition does not involve function calls / returns, merge the two blocks
+            // AND the transition does not involve function calls / returns, 
+            // AND the merged block size (num cons) does not exceed MAX_BLOCK_SIZE,
+            // merge the two blocks
             if !exit_bls_fn.contains(&cur_bl) && successor[cur_bl].len() == 1 {
                 let s = Vec::from_iter(successor[cur_bl].clone())[0];
-                if !entry_bls_fn.contains(&s) && predecessor[s].len() == 1 {
+                if !entry_bls_fn.contains(&s) && 
+                    predecessor[s].len() == 1 &&
+                    (bls[cur_bl].num_cons + bls[s].num_cons > MAX_BLOCK_SIZE || // Limit the size of the merged block
+                        bls[cur_bl].num_cons * 4 < bls[s].num_cons || // But also allow merges between a large block and a small one
+                        bls[s].num_cons * 4 < bls[cur_bl].num_cons
+                    )
+                {
                     // Append s to cur_bl
                     let s_inst = bls[s].clone();
                     bls[cur_bl].concat(s_inst);

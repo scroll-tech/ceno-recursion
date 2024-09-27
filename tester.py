@@ -1,6 +1,6 @@
 import os
 
-REPEAT = 5
+REPEAT = 1
 TIMEOUT = 3000
 
 # Process A * B or A + B or A - B by reading A & B from consts
@@ -110,9 +110,9 @@ def preprocess(b_name):
         os.system(f"echo \"{const_list}\" >> {f_result_name}")
 
         # Produce code
-        with open(f"zok_tests/benchmarks/{b_name}.zok", "w") as f_baseline:
+        with open(f"zok_tests/benchmarks/benchmarks/{b_name}.zok", "w") as f_baseline:
             f_baseline.write(baseline(cur_const))
-        with open(f"zok_tests/benchmarks/{b_name}_cobbl.zok", "w") as f_cobbl:
+        with open(f"zok_tests/benchmarks/benchmarks/{b_name}_cobbl.zok", "w") as f_cobbl:
             f_cobbl.write(cobbl(cur_const))
 
         for _ in range(REPEAT):
@@ -122,10 +122,10 @@ def preprocess(b_name):
             for c in cur_const:
                 v = c[4:]
                 inputs[v] = cur_const[c]
-            with open(f"zok_tests/benchmarks/{b_name}.input", "w") as f_input:
+            with open(f"zok_tests/benchmarks/benchmarks/{b_name}.input", "w") as f_input:
                 f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
                 f_input.write("END")
-            with open(f"zok_tests/benchmarks/{b_name}_cobbl.input", "w") as f_input:
+            with open(f"zok_tests/benchmarks/benchmarks/{b_name}_cobbl.input", "w") as f_input:
                 f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
                 f_input.write("END")
 
@@ -144,7 +144,7 @@ def preprocess(b_name):
             for c in cur_const:
                 v = c[4:]
                 inputs[v] = cur_const[c] * 3 // 4
-            with open(f"zok_tests/benchmarks/{b_name}_cobbl.input", "w") as f_input:
+            with open(f"zok_tests/benchmarks/benchmarks/{b_name}_cobbl.input", "w") as f_input:
                 f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
                 f_input.write("END")
             execute_cobbl_while(b_name, f_result_name, 75)
@@ -154,7 +154,7 @@ def preprocess(b_name):
             for c in cur_const:
                 v = c[4:]
                 inputs[v] = cur_const[c] // 2
-            with open(f"zok_tests/benchmarks/{b_name}_cobbl.input", "w") as f_input:
+            with open(f"zok_tests/benchmarks/benchmarks/{b_name}_cobbl.input", "w") as f_input:
                 f_input.writelines([f"{var} {inputs[var]}\n" for var in inputs])
                 f_input.write("END")
             execute_cobbl_while(b_name, f_result_name, 50)
@@ -162,7 +162,7 @@ def preprocess(b_name):
 def execute_baseline(b_name, f_name):
     print("BASELINE")
     os.system(f"echo 'BASELINE' >> {f_name}")
-    os.system(f"timeout {TIMEOUT} bash -c \"cd circ_baseline && target/release/examples/circ --language zsharp {b_name} r1cs | \
+    os.system(f"timeout {TIMEOUT} bash -c \"cd circ_baseline && target/release/examples/circ --language zsharp benchmarks/{b_name} r1cs | \
                 sed -n -e 's/Compiler time: //p' \
                     -e 's/Final R1cs size: //p' \
                     -e 's/  \* number_of_variables //p' \
@@ -178,10 +178,10 @@ def execute_baseline(b_name, f_name):
 def execute_cobbl_for(b_name, f_name):
     print("COBBL - FOR")
     os.system(f"echo 'COBBL_FOR' >> {f_name}")
-    os.system(f"timeout {TIMEOUT} bash -c \"cd circ_blocks && target/release/examples/zxc {b_name} | \
+    os.system(f"timeout {TIMEOUT} bash -c \"cd circ_blocks && target/release/examples/zxc benchmarks/{b_name} | \
             sed -n 's/Compiler time: //p' \
                 >> ../{f_name}\"")
-    os.system(f"timeout {TIMEOUT} bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
+    os.system(f"timeout {TIMEOUT} bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface benchmarks/{b_name} | \
                 sed -n -e 's/Preprocess time: //p' \
                     -e 's/Total Num of Blocks: //p' \
                     -e 's/Total Inst Commit Size: //p' \
@@ -196,10 +196,10 @@ def execute_cobbl_while(b_name, f_name, perc):
     b_name += "_cobbl"
     print("COBBL - WHILE")
     os.system(f"echo 'COBBL_WHILE {perc}' >> {f_name}")
-    os.system(f"timeout {TIMEOUT} bash -c \"cd circ_blocks && target/release/examples/zxc {b_name} | \
+    os.system(f"timeout {TIMEOUT} bash -c \"cd circ_blocks && target/release/examples/zxc benchmarks/{b_name} | \
             sed -n 's/Compiler time: //p' \
                 >> ../{f_name}\"")
-    os.system(f"timeout {TIMEOUT} bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
+    os.system(f"timeout {TIMEOUT} bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface benchmarks/{b_name} | \
                 sed -n -e 's/Preprocess time: //p' \
                     -e 's/Total Num of Blocks: //p' \
                     -e 's/Total Inst Commit Size: //p' \
@@ -214,10 +214,10 @@ def execute_cobbl_no_opt(b_name, f_name, perc):
     b_name += "_cobbl"
     print("COBBL - NO_OPT")
     os.system(f"echo 'COBBL_NO_OPT {perc}' >> {f_name}")
-    os.system(f"timeout {TIMEOUT} bash -c \"cd circ_blocks && target/release/examples/zxc --no_opt {b_name} | \
+    os.system(f"timeout {TIMEOUT} bash -c \"cd circ_blocks && target/release/examples/zxc --no_opt benchmarks/{b_name} | \
             sed -n 's/Compiler time: //p' \
                 >> ../{f_name}\"")
-    os.system(f"timeout {TIMEOUT} bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface {b_name} | \
+    os.system(f"timeout {TIMEOUT} bash -c \"cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface benchmarks/{b_name} | \
                 sed -n -e 's/Preprocess time: //p' \
                     -e 's/Total Num of Blocks: //p' \
                     -e 's/Total Inst Commit Size: //p' \
@@ -228,9 +228,9 @@ def execute_cobbl_no_opt(b_name, f_name, perc):
                     -e 's/Total Proof Size: //p' \
                 >> ../{f_name}\"")
 
-# BENCHMARK = ["find_min"] #, "mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256", "poseidon"]
+# BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256", "poseidon"]
 # BENCHMARK = ["find_min_ff", "mat_mult_ff"]
-BENCHMARK = ["poseidon"]
+BENCHMARK = ["dna_align"]
 os.system(f"./setup.sh 2> /dev/null")
 for b in BENCHMARK:
     preprocess(b)

@@ -86,4 +86,4 @@ def main() -> field:
     transcript = t1.transcript
     Challenge r_merge = t1.challenge
     Challenge c = read_challenge(transcript)
-    return initial_rt.elements.b0
+    return r_merge.elements.b1

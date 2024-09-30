@@ -13,7 +13,7 @@ pub mod moduli {
     pub use super::ff_field::{F_BLS12381_FMOD_ARC, F_BN254_FMOD_ARC, F_CURVE25519_FMOD_ARC};
 }
 
-use ff_field::{FBls12381, FBn254, FCurve25519};
+use ff_field::{FBls12381, FBn254, FCurve25519, FGoldilocks};
 use ext_field::FGoldilocksExt2;
 use ff_field::{F_BLS12381_FMOD, F_BN254_FMOD, F_CURVE25519_FMOD, F_GOLDILOCKS_FMOD};
 use ff_field::{F_BLS12381_FMOD_ARC, F_BN254_FMOD_ARC, F_CURVE25519_FMOD_ARC, F_GOLDILOCKS_FMOD_ARC};
@@ -41,6 +41,8 @@ pub enum FieldT {
     FCurve25519,
     /// Generic field element based on `rug::Integer`
     IntField(Arc<Integer>),
+    /// Goldilock base field
+    FGoldilocks,
     /// Goldilock extension field
     FGoldilocksExt2,
 }
@@ -52,6 +54,7 @@ impl Display for FieldT {
             Self::FBn254 => write!(f, "FieldT::FBn254"),
             Self::FCurve25519 => write!(f, "FieldT::FCurve25519"),
             Self::IntField(m) => write!(f, "FieldT::(mod {})", m),
+            Self::FGoldilocks => write!(f, "FieldT::Goldilocks"),
             Self::FGoldilocksExt2 => write!(f, "FieldT::GoldilocksExt2"),
         }
     }
@@ -88,7 +91,7 @@ impl FieldT {
             m if m == &*F_BLS12381_FMOD => Some(Self::FBls12381),
             m if m == &*F_BN254_FMOD => Some(Self::FBn254),
             m if m == &*F_CURVE25519_FMOD => Some(Self::FCurve25519),
-            m if m == &*F_GOLDILOCKS_FMOD => Some(Self::FGoldilocksExt2),
+            m if m == &*F_GOLDILOCKS_FMOD => Some(Self::FGoldilocks),
             _ => None,
         }
     }
@@ -100,6 +103,7 @@ impl FieldT {
             FieldT::FBn254 => Some(InlineFieldTag::Bn254),
             FieldT::FCurve25519 => Some(InlineFieldTag::FCurve25519),
             FieldT::IntField(_) => None,
+            FieldT::FGoldilocks => Some(InlineFieldTag::FGoldilocks),
             FieldT::FGoldilocksExt2 => Some(InlineFieldTag::FGoldilocksExt2),
         }
     }
@@ -112,6 +116,7 @@ impl FieldT {
             Self::FBn254 => &F_BN254_FMOD,
             Self::FCurve25519 => &F_CURVE25519_FMOD,
             Self::IntField(m) => m.as_ref(),
+            Self::FGoldilocks => &F_GOLDILOCKS_FMOD,
             Self::FGoldilocksExt2 => &F_GOLDILOCKS_FMOD,
         }
     }
@@ -124,6 +129,7 @@ impl FieldT {
             Self::FBn254 => F_BN254_FMOD_ARC.clone(),
             Self::FCurve25519 => F_CURVE25519_FMOD_ARC.clone(),
             Self::IntField(m) => m.clone(),
+            Self::FGoldilocks => F_GOLDILOCKS_FMOD_ARC.clone(),
             Self::FGoldilocksExt2 => F_GOLDILOCKS_FMOD_ARC.clone(),
         }
     }
@@ -136,6 +142,7 @@ impl FieldT {
             Self::FBn254 => FieldV::from(InlineFieldV(0, InlineFieldTag::Bn254)),
             Self::FCurve25519 => FieldV::from(InlineFieldV(0, InlineFieldTag::FCurve25519)),
             Self::IntField(_) => self.new_v(0),
+            Self::FGoldilocks => self.new_v(0),
             Self::FGoldilocksExt2 => self.new_v(0),
         }
     }
@@ -200,6 +207,7 @@ enum FieldTag {
     InlineBls12381,
     InlineBn254,
     InlineFCurve25519,
+    InlineFGolfilocks,
     InlineFGolfilocksExt2,
 }
 
@@ -208,6 +216,7 @@ enum InlineFieldTag {
     Bls12381,
     Bn254,
     FCurve25519,
+    FGoldilocks,
     FGoldilocksExt2,
 }
 
@@ -218,7 +227,8 @@ impl From<u8> for FieldTag {
             1 => FieldTag::InlineBls12381,
             2 => FieldTag::InlineBn254,
             3 => FieldTag::InlineFCurve25519,
-            4 => FieldTag::InlineFGolfilocksExt2,
+            4 => FieldTag::InlineFGolfilocks,
+            5 => FieldTag::InlineFGolfilocksExt2,
             _ => panic!("Invalid field tag {}", value),
         }
     }
@@ -230,6 +240,7 @@ impl From<InlineFieldTag> for FieldTag {
             InlineFieldTag::Bls12381 => FieldTag::InlineBls12381,
             InlineFieldTag::Bn254 => FieldTag::InlineBn254,
             InlineFieldTag::FCurve25519 => FieldTag::InlineFCurve25519,
+            InlineFieldTag::FGoldilocks => FieldTag::InlineFGolfilocks,
             InlineFieldTag::FGoldilocksExt2 => FieldTag::InlineFGolfilocksExt2,
         }
     }
@@ -242,6 +253,7 @@ impl From<FieldTag> for InlineFieldTag {
             FieldTag::InlineBn254 => InlineFieldTag::Bn254,
             FieldTag::InlineFCurve25519 => InlineFieldTag::FCurve25519,
             FieldTag::FullField => panic!("Tag {:?} is not inline", value),
+            FieldTag::InlineFGolfilocks => InlineFieldTag::FGoldilocks,
             FieldTag::InlineFGolfilocksExt2 => InlineFieldTag::FGoldilocksExt2,
         }
     }
@@ -254,7 +266,8 @@ impl FieldTag {
             FieldTag::InlineBls12381 => 1,
             FieldTag::InlineBn254 => 2,
             FieldTag::InlineFCurve25519 => 3,
-            FieldTag::InlineFGolfilocksExt2 => 4,
+            FieldTag::InlineFGolfilocks => 4,
+            FieldTag::InlineFGolfilocksExt2 => 5,
         }
     }
 }
@@ -265,6 +278,7 @@ impl InlineFieldTag {
             InlineFieldTag::Bls12381 => FieldT::FBls12381,
             InlineFieldTag::Bn254 => FieldT::FBn254,
             InlineFieldTag::FCurve25519 => FieldT::FCurve25519,
+            InlineFieldTag::FGoldilocks => FieldT::FGoldilocks,
             InlineFieldTag::FGoldilocksExt2 => FieldT::FGoldilocksExt2,
         }
     }
@@ -273,6 +287,7 @@ impl InlineFieldTag {
             InlineFieldTag::Bls12381 => &F_BLS12381_FMOD,
             InlineFieldTag::Bn254 => &F_BN254_FMOD,
             InlineFieldTag::FCurve25519 => &F_CURVE25519_FMOD,
+            InlineFieldTag::FGoldilocks => &F_GOLDILOCKS_FMOD,
             InlineFieldTag::FGoldilocksExt2 => &F_GOLDILOCKS_FMOD,
         }
     }
@@ -281,6 +296,7 @@ impl InlineFieldTag {
             (InlineFieldTag::Bls12381, FullFieldV::FBls12381(_)) => true,
             (InlineFieldTag::Bn254, FullFieldV::FBn254(_)) => true,
             (InlineFieldTag::FCurve25519, FullFieldV::FCurve25519(_)) => true,
+            (InlineFieldTag::FGoldilocks, FullFieldV::FGoldilocks(_)) => true,
             (InlineFieldTag::FGoldilocksExt2, FullFieldV::FGoldilocksExt2(_)) => true,
             _ => false,
         }
@@ -445,6 +461,8 @@ pub enum FullFieldV {
     FCurve25519(FCurve25519),
     /// Generic field element based on `rug::Integer`
     IntField(IntField),
+    /// Goldilock base field element
+    FGoldilocks(FGoldilocks),
     /// Goldilock extension field element
     FGoldilocksExt2(FGoldilocksExt2),
 }
@@ -455,6 +473,7 @@ impl From<InlineFieldV> for FullFieldV {
             InlineFieldTag::Bls12381 => FullFieldV::FBls12381(value.0.into()),
             InlineFieldTag::Bn254 => FullFieldV::FBn254(value.0.into()),
             InlineFieldTag::FCurve25519 => FullFieldV::FCurve25519(value.0.into()),
+            InlineFieldTag::FGoldilocks => FullFieldV::FGoldilocks(value.0.into()),
             InlineFieldTag::FGoldilocksExt2 => FullFieldV::FGoldilocksExt2(value.0.into()),
         }
     }
@@ -469,6 +488,7 @@ impl FullFieldV {
             FullFieldV::FBn254(_) => FieldT::FBn254,
             FullFieldV::FCurve25519(_) => FieldT::FCurve25519,
             FullFieldV::IntField(i) => FieldT::IntField(i.modulus_arc()),
+            FullFieldV::FGoldilocks(_) => FieldT::FGoldilocks,
             FullFieldV::FGoldilocksExt2(_) => FieldT::FGoldilocksExt2,
         }
     }
@@ -484,6 +504,7 @@ impl FullFieldV {
                 i.i.clone().pow_mod(&Integer::from(u), i.modulus()).unwrap(),
                 i.modulus_arc(),
             )),
+            FullFieldV::FGoldilocks(f) => FullFieldV::FGoldilocks(f.pow_vartime(&[u])),
             FullFieldV::FGoldilocksExt2(f) => FullFieldV::FGoldilocksExt2(f.pow_vartime(&[u])),
         }
     }
@@ -540,6 +561,7 @@ impl FieldV {
             Err(FullFieldV::FBn254(_)) => &F_BN254_FMOD,
             Err(FullFieldV::FCurve25519(_)) => &F_CURVE25519_FMOD,
             Err(FullFieldV::IntField(i)) => i.modulus(),
+            Err(FullFieldV::FGoldilocks(_)) => &F_GOLDILOCKS_FMOD,
             Err(FullFieldV::FGoldilocksExt2(_)) => &F_GOLDILOCKS_FMOD,
         }
     }
@@ -553,6 +575,7 @@ impl FieldV {
             FullFieldV::FBn254(pf) => Self::from(FullFieldV::FBn254(pf.invert().unwrap())),
             FullFieldV::FCurve25519(pf) => Self::from(FullFieldV::FCurve25519(pf.invert().unwrap())),
             FullFieldV::IntField(i) => Self::from(FullFieldV::IntField(i.clone().recip())),
+            FullFieldV::FGoldilocks(pf) => Self::from(FullFieldV::FGoldilocks(pf.invert().unwrap())),
             FullFieldV::FGoldilocksExt2(pf) => Self::from(FullFieldV::FGoldilocksExt2(pf.invert().unwrap())),
         }
     }
@@ -566,6 +589,7 @@ impl FieldV {
             FullFieldV::FBn254(pf) => Self::from(FullFieldV::FBn254(pf.invert().unwrap())),
             FullFieldV::FCurve25519(pf) => Self::from(FullFieldV::FCurve25519(pf.invert().unwrap())),
             FullFieldV::IntField(i) => Self::from(FullFieldV::IntField(i.clone().recip())),
+            FullFieldV::FGoldilocks(pf) => Self::from(FullFieldV::FGoldilocks(pf.invert().unwrap())),
             FullFieldV::FGoldilocksExt2(pf) => Self::from(FullFieldV::FGoldilocksExt2(pf.invert().unwrap())),
         }
     }
@@ -585,6 +609,7 @@ impl FieldV {
             Err(FullFieldV::FBn254(pf)) => bool::from(pf.is_zero()),
             Err(FullFieldV::FCurve25519(pf)) => bool::from(pf.is_zero()),
             Err(FullFieldV::IntField(i)) => i.is_zero(),
+            Err(FullFieldV::FGoldilocks(pf)) => bool::from(pf.is_zero()),
             Err(FullFieldV::FGoldilocksExt2(pf)) => bool::from(pf.is_zero()),
         }
     }
@@ -599,6 +624,7 @@ impl FieldV {
             Err(FullFieldV::FBn254(pf)) => bool::from(pf.is_one()),
             Err(FullFieldV::FCurve25519(pf)) => bool::from(pf.is_one()),
             Err(FullFieldV::IntField(i)) => i.i == 1,
+            Err(FullFieldV::FGoldilocks(pf)) => bool::from(pf.is_one()),
             Err(FullFieldV::FGoldilocksExt2(pf)) => { pf == &FGoldilocksExt2::one() },
         }
     }
@@ -612,7 +638,7 @@ impl FieldV {
         let i = Integer::from(i);
         if i.signed_bits() < 64 - N_TAG_BITS as u32 {
             if let Some(t) = ty.inline_tag() {
-                if t != InlineFieldTag::FGoldilocksExt2 {
+                if t != InlineFieldTag::FGoldilocks && t != InlineFieldTag::FGoldilocksExt2 {
                     return Self::from(InlineFieldV(i.to_i64_wrapping(), t));
                 }
             }
@@ -622,6 +648,7 @@ impl FieldV {
             FieldT::FBn254 => FullFieldV::FBn254(FBn254::from(i)),
             FieldT::FCurve25519 => FullFieldV::FCurve25519(FCurve25519::from(i)),
             FieldT::IntField(m) => FullFieldV::IntField(IntField::new(i, m)),
+            FieldT::FGoldilocks => FullFieldV::FGoldilocks(FGoldilocks::from(i)),
             FieldT::FGoldilocksExt2 => FullFieldV::FGoldilocksExt2(FGoldilocksExt2::from(i)),
         })
     }
@@ -647,6 +674,7 @@ impl FieldV {
             FieldT::FBn254 => FullFieldV::FBn254(FBn254::from(i)),
             FieldT::FCurve25519 => FullFieldV::FCurve25519(FCurve25519::from(i)),
             FieldT::IntField(m) => FullFieldV::IntField(IntField::new(Integer::from(i), m)),
+            FieldT::FGoldilocks => FullFieldV::FGoldilocks(FGoldilocks::from(i)),
             FieldT::FGoldilocksExt2 => FullFieldV::FGoldilocksExt2(FGoldilocksExt2::from(i)),
         })
     }
@@ -656,6 +684,7 @@ impl FieldV {
             FieldT::FBls12381 => FullFieldV::FBls12381(FBls12381::random(rng)),
             FieldT::FBn254 => FullFieldV::FBn254(FBn254::random(rng)),
             FieldT::FCurve25519 => FullFieldV::FCurve25519(FCurve25519::random(rng)),
+            FieldT::FGoldilocks => FullFieldV::FGoldilocks(FGoldilocks::random(rng)),
             FieldT::FGoldilocksExt2 => FullFieldV::FGoldilocksExt2(FGoldilocksExt2::random(rng)),
             FieldT::IntField(m) => {
                 let mut rug_rng = rug::rand::RandState::new_mersenne_twister();
@@ -779,6 +808,7 @@ macro_rules! arith_impl {
                         (Self::FBls12381(f1), Self::FBls12381(f2)) => f1.[<$fn _assign>](f2),
                         (Self::FBn254(f1), Self::FBn254(f2)) => f1.[<$fn _assign>](f2),
                         (Self::FCurve25519(f1), Self::FCurve25519(f2)) => f1.[<$fn _assign>](f2),
+                        (Self::FGoldilocks(f1), Self::FGoldilocks(f2)) => f1.[<$fn _assign>](f2),
                         (Self::FGoldilocksExt2(f1), Self::FGoldilocksExt2(f2)) => f1.[<$fn _assign>](f2),
                         (Self::IntField(i1), Self::IntField(i2)) => i1.[<$fn _assign>](i2),
                         (s, o) => panic!("Operation [<$Trait Assign>] on {} and {}", s.ty(), o.ty()),
@@ -792,6 +822,7 @@ macro_rules! arith_impl {
                         Self::FBls12381(f1) => f1.[<$fn _assign>](other),
                         Self::FBn254(f1) => f1.[<$fn _assign>](other),
                         Self::FCurve25519(f1) => f1.[<$fn _assign>](other),
+                        Self::FGoldilocks(f1) => f1.[<$fn _assign>](other),
                         Self::FGoldilocksExt2(f1) => f1.[<$fn _assign>](other),
                         Self::IntField(f1) => f1.[<$fn _assign>](other),
                     }
@@ -880,6 +911,7 @@ impl Neg for FieldV {
                 FullFieldV::FBls12381(pf) => Self::from(FullFieldV::FBls12381(pf.clone().neg())),
                 FullFieldV::FBn254(pf) => Self::from(FullFieldV::FBn254(pf.clone().neg())),
                 FullFieldV::FCurve25519(pf) => Self::from(FullFieldV::FCurve25519(pf.clone().neg())),
+                FullFieldV::FGoldilocks(pf) => Self::from(FullFieldV::FGoldilocks(pf.clone().neg())),
                 FullFieldV::FGoldilocksExt2(pf) => Self::from(FullFieldV::FGoldilocksExt2(pf.clone().neg())),
                 FullFieldV::IntField(i) => Self::from(FullFieldV::IntField(i.clone().neg())),
             }
@@ -925,12 +957,20 @@ impl Into<FullFieldV> for IntField {
 }
 
 #[allow(clippy::from_over_into)]
+impl Into<FullFieldV> for FGoldilocks {
+    fn into(self) -> FullFieldV {
+        FullFieldV::FGoldilocks(self)
+    }
+}
+
+#[allow(clippy::from_over_into)]
 impl Into<Integer> for FullFieldV {
     fn into(self) -> Integer {
         match self {
             FullFieldV::FBls12381(f) => Integer::from(&f),
             FullFieldV::FBn254(f) => Integer::from(&f),
             FullFieldV::FCurve25519(f) => Integer::from(&f),
+            FullFieldV::FGoldilocks(f) => Integer::from(&f),
             FullFieldV::FGoldilocksExt2(f) => Integer::from(&f),
             FullFieldV::IntField(i) => i.i,
         }
@@ -944,6 +984,7 @@ impl Into<Integer> for &FullFieldV {
             FullFieldV::FBls12381(f) => Integer::from(f),
             FullFieldV::FBn254(f) => Integer::from(f),
             FullFieldV::FCurve25519(f) => Integer::from(f),
+            FullFieldV::FGoldilocks(f) => Integer::from(f),
             FullFieldV::FGoldilocksExt2(f) => Integer::from(f),
             FullFieldV::IntField(i) => i.i.clone(),
         }

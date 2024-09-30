@@ -636,7 +636,6 @@ impl<'ast> ZGen<'ast> {
         for i in 0..blk.instructions.len() {
             let bc = blk.instructions[i].clone();
             if let Some(new_bc) = rp_replacement_stmt(bc, label_map.clone()) {
-                println!("{:?}", new_bc);
                 blk.instructions[i] = new_bc;
             }
         }

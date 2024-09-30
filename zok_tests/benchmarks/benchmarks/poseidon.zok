@@ -1,38 +1,38 @@
 from "poseidon_constants" import POSEIDON_C, POSEIDON_M
 
-def ark(u32 n, field[3 + 1] state, field[455] c, u32 it) -> field[3 + 1]:
-    for u32 i in 0..3 do
+def ark(u32 n, field[6 + 1] state, field[455] c, u32 it) -> field[6 + 1]:
+    for u32 i in 0..6 do
         if i < n then
             state[i] = state[i] + c[it + i]
         endif
     endfor
     return state
 
-def sbox(u32 n, field[3 + 1] state, u32 f, u32 p, u32 r) -> field[3 + 1]:
+def sbox(u32 n, field[6 + 1] state, u32 f, u32 p, u32 r) -> field[6 + 1]:
     state[0] = state[0]**5
-    for u32 i in 1..3 do
+    for u32 i in 1..6 do
         if i < n then
             state[i] = ((r < f/2) || (r >= f/2 + p)) ? state[i]**5 : state[i]
         endif
     endfor
     return state
 
-def mix(u32 n, field[3 + 1] state, field[49] m) -> field[3 + 1]:
-    field[3 + 1] out = [0; 3 + 1]
-    for u32 i in 0..3 do
-        if i < n then
+def mix(u32 n, field[6 + 1] state, field[49] m) -> field[6 + 1]:
+    field[6 + 1] out = [0; 6 + 1]
+    for u32 i in 0..6 do
+        // if i < n then
             field acc = 0
-            for u32 j in 0..3 do
-                if j < n then
-                    acc = acc + (state[j] * m[i * 3 + 1 + j])
+            for u32 j in 0..6 do
+                if i < n && j < n then
+                    acc = acc + (state[j] * m[i * 6 + 1 + j])
                 endif
                 out[i] = acc
             endfor
-        endif
+        // endif
     endfor
     return out
 
-def poseidon(u32 n, field[3] inputs) -> field:
+def poseidon(u32 n, field[6] inputs) -> field:
     u32 t = n + 1
 
     u32 f = 8
@@ -47,8 +47,8 @@ def poseidon(u32 n, field[3] inputs) -> field:
     field[455] c = POSEIDON_C
     field[49] m = POSEIDON_M
 
-    field[3 + 1] state = [0; 3 + 1]
-    for u32 i in 1..3 + 1 do
+    field[6 + 1] state = [0; 6 + 1]
+    for u32 i in 1..6 + 1 do
         if i < t then
             state[i] = inputs[i - 1]
         endif
@@ -66,9 +66,9 @@ def poseidon(u32 n, field[3] inputs) -> field:
 
 def main(u32 n) -> field:
 
-    field[3] padded_message = [0; 3]
+    field[6] padded_message = [0; 6]
     field sum = 0
-    for field i in 0..3 do
+    for field i in 0..6 do
         sum = sum + i
         padded_message[i] = sum
     endfor

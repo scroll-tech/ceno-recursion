@@ -1,7 +1,7 @@
-from "poseidon" import poseidon
+from "poseidon" import Digest, poseidon
 from "poseidon_permutation" import PoseidonPermutation, set_from_slice, permute, squeeze
 
-def compress(field[4] left, field[4] right) -> field[0]:
+def compress(Digest left, Digest right) -> Digest:
     PoseidonPermutation perm = PoseidonPermutation {
         state: [0; 12]
     }
@@ -10,9 +10,11 @@ def compress(field[4] left, field[4] right) -> field[0]:
         perm_state[i + 4] = right[i]
     endfor
     perm = permute(perm)
-    return squeeze(perm)
+    return Digest {
+        elements: squeeze(perm)
+    }
 
-def two_to_one(field[4] left, field[4] right) -> field[0]:
+def two_to_one(Digest left, Digest right) -> Digest:
     return compress(left, right)
 
 def hash_n_to_m_no_pad(u32 num_inputs, field[0] inputs, u32 num_outputs) -> field[0]:
@@ -50,16 +52,23 @@ def hash_n_to_m_no_pad(u32 num_inputs, field[0] inputs, u32 num_outputs) -> fiel
     endwhile
     return [] // this return statement is unreachable
 
-def hash_or_noop(u32 inputs_len, field[0] inputs) -> field[0]:
+def hash_or_noop(u32 inputs_len, field[0] inputs) -> Digest:
     if inputs_len <= 4 then
         field[4] digest = [0; 4]
         for u32 i in 0..inputs_len do
             digest[i] = inputs[i]
         endfor
-        return digest
+        return Digest {
+            elements: digest
+        }
     else
-        return hash_n_to_m_no_pad(inputs_len, inputs, 4)
+        return Digest {
+            elements: hash_n_to_m_no_pad(inputs_len, inputs, 4)
+        }
     endif
+    return Digest { // this return statement is unreachable
+        elements: [0; 4]
+    }
 
 def main() -> field:
     field[16] inputs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]

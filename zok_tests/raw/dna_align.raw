@@ -1,5 +1,5 @@
 CONST:
-max_n 5
+max_n 5 30
 
 INPUT:
 x 0
@@ -127,27 +127,25 @@ def main(u32 x, u32 n) -> u32:
 
     // BASELINE
     for u32 i in 0..{max_n} do
-        if i < n then
-            LCS[i] = 0 //If A[i] is not in the LCS, this remains 0.
-            for u32 j in 0..{max_n} do
-                if j < n then
-                    if i == iPtr && j == jPtr then // Loop until we meet up with the iPtr and jPtr
-                        u32 choice = choices[i * arr_size + j]
-                        if choice == 0 then // we made a diagonal jump here
-                            LCS[i] = A[i]
+        LCS[i] = 0 //If A[i] is not in the LCS, this remains 0.
+        for u32 j in 0..{max_n} do
+            if i < n && j < n then
+                if i == iPtr && j == jPtr then // Loop until we meet up with the iPtr and jPtr
+                    u32 choice = choices[i * arr_size + j]
+                    if choice == 0 then // we made a diagonal jump here
+                        LCS[i] = A[i]
+                        iPtr = iPtr + 1
+                        jPtr = jPtr + 1
+                    else
+                        if choice == 1 then // jump down
                             iPtr = iPtr + 1
+                        else // jump right
                             jPtr = jPtr + 1
-                        else
-                            if choice == 1 then // jump down
-                                iPtr = iPtr + 1
-                            else // jump right
-                                jPtr = jPtr + 1
-                            endif
                         endif
                     endif
                 endif
-            endfor
-        endif
+            endif
+        endfor
     endfor
 
     // Now move any string terminator (\0) characters in LCS to the end ala insertion sort
@@ -174,12 +172,13 @@ def main(u32 x, u32 n) -> u32:
         u32 j = 0
         while j < n do
             if i == iPtr && j == jPtr then // Loop until we meet up with the iPtr and jPtr
-                if choices[i * arr_size + j] == 0 then // we made a diagonal jump here
+                u32 choice = choices[i * arr_size + j]
+                if choice == 0 then // we made a diagonal jump here
                     LCS[i] = A[i]
                     iPtr = iPtr + 1
                     jPtr = jPtr + 1
                 else
-                    if choices[i * arr_size + j] == 1 then // jump down
+                    if choice == 1 then // jump down
                         iPtr = iPtr + 1
                     else // jump right
                         jPtr = jPtr + 1

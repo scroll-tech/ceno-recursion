@@ -1,6 +1,6 @@
 import os
 
-REPEAT = 1
+REPEAT = 5
 TIMEOUT = 3000
 
 # Process A * B or A + B or A - B by reading A & B from consts
@@ -230,7 +230,7 @@ def execute_cobbl_no_opt(b_name, f_name, perc):
 
 # BENCHMARK = ["find_min", "mat_mult", "kmp_search", "dna_align", "rle_codec", "sha256", "poseidon"]
 # BENCHMARK = ["find_min_ff", "mat_mult_ff"]
-BENCHMARK = ["dna_align"]
+BENCHMARK = ["find_min", "dna_align", "poseidon"]
 os.system(f"./setup.sh 2> /dev/null")
 for b in BENCHMARK:
     preprocess(b)

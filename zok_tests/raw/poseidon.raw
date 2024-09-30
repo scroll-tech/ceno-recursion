@@ -43,15 +43,13 @@ def mix(u32 n, field[{max_n} + 1] state, field[49] m) -> field[{max_n} + 1]:
     field[{max_n} + 1] out = [0; {max_n} + 1]
     // BASELINE
     for u32 i in 0..{max_n} do
-        if i < n then
-            field acc = 0
-            for u32 j in 0..{max_n} do
-                if j < n then
-                    acc = acc + (state[j] * m[i * {max_n} + 1 + j])
-                endif
-                out[i] = acc
-            endfor
-        endif
+        field acc = 0
+        for u32 j in 0..{max_n} do
+            if i < n && j < n then
+                acc = acc + (state[j] * m[i * {max_n} + 1 + j])
+            endif
+            out[i] = acc
+        endfor
     endfor
     // COBBL
     u32 i = 0

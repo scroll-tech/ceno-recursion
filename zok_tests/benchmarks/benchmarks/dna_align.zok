@@ -3,33 +3,33 @@
  * length m and the other of length n in O(m*n) time
  */
 def main(u32 x, u32 n) -> u32:
-    u32[5] A = [0; 5]
-    u32[5] B = [0; 5]
+    u32[2] A = [0; 2]
+    u32[2] B = [0; 2]
 
     u32 sum = 0
-    for u32 i in 0..5 do
+    for u32 i in 0..2 do
         sum = sum + i
         A[i] = sum
         B[i] = 10 - sum
     endfor
 
-    u32[5] LCS = [0; 5]
-    u32 arr_size = 5
+    u32[2] LCS = [0; 2]
+    u32 arr_size = 2
 
     // Dynamic programming memo
-    u32[31] LL = [0; 31]
+    u32[7] LL = [0; 7]
     // Hold choices made at each step, for use when backtracking
-    u32[31] choices = [0; 31]
+    u32[7] choices = [0; 7]
     // Used when backtracking
     u32 diag = 0
     u32 down = 0
     u32 right = 0
 
     u32 i = n - 1
-    for u32 count_i in 0..5 do
+    for u32 count_i in 0..2 do
         if i + 1 > 0 then
             u32 j = n - 1
-            for u32 count_j in 0..5 do
+            for u32 count_j in 0..2 do
                 if j + 1 > 0 then
                     if A[i] == B[j] then
                         if i+1 < n && j+1 < n then
@@ -69,14 +69,15 @@ def main(u32 x, u32 n) -> u32:
         endif
     endfor
 
+
     // Construct LCS, allowing it to have intermittent zero characters
     u32 iPtr = 0
     u32 jPtr = 0 // Pointers to where in LL we are with respect to backtracking
 
-    for u32 i in 0..5 do
+    for u32 i in 0..2 do
         if i < n then
-            LCS[i] = 0 // If A[i] is not in the LCS, this remains 0.
-            for u32 j in 0..n do
+            LCS[i] = 0 //If A[i] is not in the LCS, this remains 0.
+            for u32 j in 0..2 do
                 if j < n then
                     if i == iPtr && j == jPtr then // Loop until we meet up with the iPtr and jPtr
                         u32 choice = choices[i * arr_size + j]
@@ -98,10 +99,10 @@ def main(u32 x, u32 n) -> u32:
     endfor
 
     // Now move any string terminator (\0) characters in LCS to the end ala insertion sort
-    for u32 i in 1..5 do
+    for u32 i in 1..2 do
         if i < n then
             u32 inserted = 0
-            for u32 j in 0..5 do
+            for u32 j in 0..2 do
                 if j < i then
                     if LCS[j] == 0 && inserted == 0 then
                         // Swap LCS[j] and LCS[i].
@@ -113,5 +114,6 @@ def main(u32 x, u32 n) -> u32:
             endfor
         endif
     endfor
+
 
     return LCS[x]

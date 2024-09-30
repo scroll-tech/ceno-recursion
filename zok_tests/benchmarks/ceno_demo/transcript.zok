@@ -1,33 +1,76 @@
-from "poseidon" import poseidon
+from "ext_field" import ExtField, ext_add, ext_sub, ext_mul, Challenge
+
+from "poseidon" import Digest, poseidon
 from "poseidon_permutation" import PoseidonPermutation, set_from_slice, permute, squeeze
 from "poseidon_hash" import compress, hash_or_noop
 
 struct Transcript {
-    field[0] digest
+    Digest digest
 }
 
-def new_transcript(u32 label_len, field[0] label) -> Transcript:
+def inline new_transcript(u32 label_len, field[0] label) -> Transcript:
     return Transcript {
         digest: hash_or_noop(label_len, label)
     }
 
 // Append the message to the transcript.
-def append_message(Transcript self, u32 msg_len, field[0] msg) -> Transcript:
-    field msg_digest = hash_or_noop(msg_len, msg)
+def inline append_message(Transcript self, u32 msg_len, field[0] msg) -> Transcript:
+    Digest msg_digest = hash_or_noop(msg_len, msg)
     return Transcript {
         digest: two_to_one(self.digest, msg_digest)
     }
+
+// Append the field extension element to the transcript.
+def inline append_field_element_ext(Transcript self, ExtField element) -> Transcript:
+    Digest elem_f = hash_or_noop(2, [element.b0, element.b1])
+    return Transcript {
+        digest: two_to_one(self.digest, elem_f)
+    }
+
+def inline append_field_element_exts(Transcript self, u32 elem_len, ExtField[0] elements) -> Transcript:
+    for u32 i in 0..elem_len do
+        self = append_field_element_ext(self, elements[i])
+    endfor
+    return self
+
+// Append the field elemetn to the transcript.
+def inline append_field_element(Transcript self, field element) -> Transcript:
+    Digest elem_f = hash_or_noop(1, [element])
+    self.digest = two_to_one(self.digest, elem_f)
+    return self
+
+// Append the challenge to the transcript.
+def append_challenge(Transcript self, Challenge challenge) {
+    Digest elem_f = hash_or_noop(2, [challenge.elements.b0, challenge.elements.b1]);
+    self.digest = two_to_one(self.digest, elem_f)
+    return self
+}
+
+struct TranscriptAndChallenge {
+    Transcript transcript
+    ExtField challenge
+}
 
 // Generate the challenge from the current transcript
 // and append it to the transcript.
 //
 // The output field element is statistical uniform as long
 // as the field has a size less than 2^384.
-def get_and_append_challenge(Transcript self, u32 label_len, field[0] label) -> Field {
+def get_and_append_challenge(Transcript self, u32 label_len, field[0] label) -> TranscriptAndChallenge:
     self = append_message(self, label_len, label)
+    Challenge challenge = Challenge {
+        elements: ExtField {
+            b0: self.digest.elements[0],
+            b1: self.digest.elements[1]
+        }
+    }
+    return TranscriptAndChallenge {
+        transcript: self,
+        challenge: challenge
+    }
 
-    let challenge = Challenge {
-        elements: Ext::from_limbs(self.digest.elements()),
-    };
-    challenge
-}
+def main() -> field:
+    Transcript transcript = new_transcript(1, [508474648946]) // b"riscv"
+    // let initial_rt = transcript.get_and_append_challenge(b"product_sum")
+    // let r_merge = transcript.get_and_append_challenge(b"merge")
+    return transcript.digest.elements[0]

@@ -1,3 +1,7 @@
+struct Digest {
+    field[4] elements
+}
+
 def poseidon(field[12] input) -> field[12]:
     field state0 = input[0]
     field state1 = input[1]

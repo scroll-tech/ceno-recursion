@@ -79,9 +79,22 @@ def read_challenge(Transcript self) -> Challenge:
 
 def main() -> field:
     Transcript transcript = new_transcript(1, [508474648946]) // b"riscv"
+    // Challenge 0
     TranscriptAndChallenge t0 = get_and_append_challenge(transcript, 4, [6878231886748938864, 7173491, 0, 0]) // b"product_sum"
     transcript = t0.transcript
     Challenge initial_rt = t0.challenge
+    // Ext 0
+    transcript = append_field_element_exts(transcript, 2, [
+        ExtField {
+            b0: 1,
+            b1: 2
+        },
+        ExtField {
+            b0: 3,
+            b1: 4
+        }
+    ])
+    // Challenge 1
     TranscriptAndChallenge t1 = get_and_append_challenge(transcript, 4, [435527247213, 0, 0, 0]) // b"merge"
     transcript = t1.transcript
     Challenge r_merge = t1.challenge

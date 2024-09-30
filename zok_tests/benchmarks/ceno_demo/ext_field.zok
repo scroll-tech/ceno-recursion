@@ -3,32 +3,29 @@ struct ExtField {
     field b1
 }
 
-def inline ext_add(ExtField e0, ExtField e1) -> ExtField {
+def inline ext_add(ExtField e0, ExtField e1) -> ExtField:
     return ExtField {
         b0: e0.b0 + e1.b0,
         b1: e0.b1 + e1.b1
     }
-}
 
-def inline ext_sub(ExtField e0, ExtField e1) -> ExtField {
+def inline ext_sub(ExtField e0, ExtField e1) -> ExtField:
     return ExtField {
         b0: e0.b0 - e1.b0,
         b1: e0.b1 - e1.b1
     }
-}
 
-def inline ext_mul(ExtField e0, ExtField e1) -> ExtField {
-    field t0 = e0.b0 * e1.b0;
-    field t1 = e0.b0 * e1.b1;
-    field t2 = e0.b1 * e1.b0;
-    field t3 = e0.b1 * e1.b1;
+def inline ext_mul(ExtField e0, ExtField e1) -> ExtField:
+    field t0 = e0.b0 * e1.b0
+    field t1 = e0.b0 * e1.b1
+    field t2 = e0.b1 * e1.b0
+    field t3 = e0.b1 * e1.b1
     field c0 = t0 + 7 * t3
     field c1 = t1 + t2
     return ExtField {
         b0: c0,
         b1: c1
     }
-}
 
 struct Challenge {
     ExtField elements

@@ -6,8 +6,8 @@ def compress(Digest left, Digest right) -> Digest:
         state: [0; 12]
     }
     for u32 i in 0..4 do
-        perm.state[i] = left[i]
-        perm_state[i + 4] = right[i]
+        perm.state[i] = left.elements[i]
+        perm.state[i + 4] = right.elements[i]
     endfor
     perm = permute(perm)
     return Digest {
@@ -72,5 +72,5 @@ def hash_or_noop(u32 inputs_len, field[0] inputs) -> Digest:
 
 def main() -> field:
     field[16] inputs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-    field[0] outputs = hash_or_noop(16, inputs)
-    return outputs[1]
+    Digest outputs = hash_or_noop(16, inputs)
+    return outputs.elements[1]

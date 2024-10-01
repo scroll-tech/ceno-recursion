@@ -568,7 +568,7 @@ circ_b_name_list = [
     "dna_align - max_n 5",
     "rle_codec - max_n 20",
     "sha256 - max_n 1",
-    "poseidon - max_n 2"
+    "poseidon - max_n 3"
 ]
 jolt_b_name_list = [
     "find_min - max_high 1200", 
@@ -587,7 +587,7 @@ circ_benchmark_names = [
     "LCS, len = 5",
     "RLE, len = 20",
     "Sha256, len = 1",
-    "Poseidon, len = 2"
+    "Poseidon, len = 3"
 ]
 jolt_benchmark_names = [
     "Find Min, len = 1200", 

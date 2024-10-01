@@ -104,7 +104,7 @@ sha256 - max_n 6
 8084189
 
 --
-poseidon - max_n 2
+poseidon - max_n 3
 5931ms
 1307874ms
 8397ms

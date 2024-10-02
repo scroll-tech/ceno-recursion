@@ -1,5 +1,5 @@
 CONST:
-max_n 4
+max_n 16
 
 INPUT:
 x 0
@@ -25,24 +25,20 @@ def main(u32 x, u32 y, u32 z, u32 n) -> u32:
 
     // BASELINE
     for u32 i in 0..{max_n} do
-        if i < n then
-            for u32 j in 0..{max_n} do
-                if j < n then
-                    for u32 k in 0..{max_n} do
-                        if k < n then
-                            C[get_index(n, i, k)] = A[get_index(n, i, j)] * B[get_index(n, j, k)]
-                        endif
-                    endfor
+        for u32 j in 0..{max_n} do
+            for u32 k in 0..{max_n} do
+                if k < n then
+                    C[get_index(n, i, k)] = A[get_index(n, i, j)] * B[get_index(n, j, k)]
                 endif
             endfor
-        endif
+        endfor
     endfor
 
     // COBBL
     u32 i = 0
-    while i < n do
+    while i < {max_n} do
         u32 j = 0
-        while j < n do
+        while j < {max_n} do
             u32 k = 0
             while k < n do
                 C[get_index(n, i, k)] = A[get_index(n, i, j)] * B[get_index(n, j, k)]

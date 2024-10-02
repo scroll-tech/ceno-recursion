@@ -443,7 +443,7 @@ def gen_benchmark_plot(num_expand, runtime_data, constraint_data):
         plt.title(runtime_subplot_name[i])
         plt.legend(loc='upper left')
 
-    constraint_subplot_name = ["Instance Size (non-zero entries)", "Number of Witnesses", "Number of Executed Constraints"]
+    constraint_subplot_name = ["Circuit Size (non-zero entries)", "Number of Witnesses", "Number of Executed Constraints"]
     # Compiler, Prover, Verifier
     for i in range(3):
         plt.subplot(2, 3, 3 + i + 1)
@@ -563,7 +563,7 @@ for b in BENCHMARK:
 # CirC & Jolt Graph
 circ_b_name_list = [
     "find_min - max_high 1200", 
-    "mat_mult - max_n 4", 
+    "mat_mult - max_n 16", 
     "kmp_search - max_n 480; max_m 48",
     "dna_align - max_n 5",
     "rle_codec - max_n 20",
@@ -572,7 +572,7 @@ circ_b_name_list = [
 ]
 jolt_b_name_list = [
     "find_min - max_high 1200", 
-    "mat_mult - max_n 4", 
+    "mat_mult - max_n 16", 
     "kmp_search - max_n 480; max_m 48",
     "dna_align - max_n 30",
     "rle_codec - max_n 60",
@@ -582,7 +582,7 @@ jolt_b_name_list = [
 (circ_data, jolt_data) = extract_circ_jolt_plot(BENCHMARK, jolt_time_result, circ_b_name_list, jolt_b_name_list)
 circ_benchmark_names = [
     "Find Min, len = 1200", 
-    "Mat Mult, size = 4x4",
+    "Mat Mult, size = 16x16",
     "Pat Match, len = 480 / 48",
     "LCS, len = 5",
     "RLE, len = 20",
@@ -591,7 +591,7 @@ circ_benchmark_names = [
 ]
 jolt_benchmark_names = [
     "Find Min, len = 1200", 
-    "Mat Mult, size = 4x4",
+    "Mat Mult, size = 16x16",
     "Pat Match, len = 480 / 48",
     "LCS, len = 30",
     "RLE, len = 60",

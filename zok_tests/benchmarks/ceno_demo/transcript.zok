@@ -1,4 +1,4 @@
-from "ext_field" import ExtField, ext_add, ext_sub, ext_mul, Challenge
+from "ext_field" import ExtField, Challenge
 
 from "poseidon" import Digest, poseidon
 from "poseidon_permutation" import PoseidonPermutation, set_from_slice, permute, squeeze

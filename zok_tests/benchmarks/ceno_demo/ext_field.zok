@@ -3,6 +3,18 @@ struct ExtField {
     field b1
 }
 
+def inline to_ext(u32 i) -> ExtField:
+    return ExtField {
+        b0: (F)i,
+        b1: 0
+    }
+
+def inline ext_eq(ExtField e0, ExtField e1) -> bool:
+    return e0.b0 == e1.b0 && e0.b1 == e1.b1
+
+def inline ext_neq(ExtField e0, ExtField e1) -> bool:
+    return e0.b0 != e1.b0 || e0.b1 != e1.b1
+
 def inline ext_add(ExtField e0, ExtField e1) -> ExtField:
     return ExtField {
         b0: e0.b0 + e1.b0,
@@ -27,6 +39,25 @@ def inline ext_mul(ExtField e0, ExtField e1) -> ExtField:
         b1: c1
     }
 
+def inline ext_invert(ExtField e) -> ExtField:
+    // Non-deterministically supply the inverse
+    witness field inv_b0
+    witness field inv_b1
+    ExtField inv = ExtField {
+        b0: inv_b0,
+        b1: inv_b1
+    }
+    assert(ext_eq(ext_mul(e, inv), to_ext(1)))
+    return inv
+
 struct Challenge {
     ExtField elements
 }
+
+def main(field b0, field b1) -> u32:
+    ExtField e = ExtField {
+        b0: b0,
+        b1: b1
+    }
+    ExtField inv = ext_invert(e)
+    return 1

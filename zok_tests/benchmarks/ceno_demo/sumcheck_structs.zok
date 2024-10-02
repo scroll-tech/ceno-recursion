@@ -1,9 +1,11 @@
+from "ext_field" import ExtField, Challenge
+
 struct IOPProverMessage {
-    field[0] evaluations
+    ExtField[0] evaluations
 }
 
 struct SumcheckProof {
-    field[0] points
+    ExtField[0] points
     IOPProverMessage[0] proofs
 }
 
@@ -13,8 +15,8 @@ struct VPAuxInfo {
 }
 
 struct SumCheckSubClaim {
-    field[0] point
-    field expected_evaluation    
+    Challenge[0] point
+    ExtField expected_evaluation    
 }
 
 struct SumcheckIOPVerifierState {
@@ -22,6 +24,6 @@ struct SumcheckIOPVerifierState {
     u32 num_vars
     u32 max_degree
     bool finished
-    field[0][0] polynomials_received
-    field[0] challenges
+    ExtField[0][0] polynomials_received
+    ExtField[0] challenges
 }

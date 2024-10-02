@@ -1,6 +1,9 @@
-from "transcript" import Transcript, new_transcript, append_message_u32, append_message_field
+from "ext_field" import ExtField, to_ext, ext_eq, ext_neq, ext_add, ext_sub, ext_mul, ext_invert Challenge
+
+from "transcript" import Transcript, TranscriptAndChallenge, new_transcript, append_message, append_field_element_ext, get_and_append_challenge
 from "sumcheck_structs" import SumcheckProof, IOPProverMessage, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState
 
+// Despite the original function returning the challenge, the return value is never used
 def verify_round_and_update_state(SumcheckIOPVerifierState self, IOPProverMessage prover_msg, Transcript transcript) -> SumcheckIOPVerifierState:
     assert(!self.finished)
 
@@ -11,7 +14,9 @@ def verify_round_and_update_state(SumcheckIOPVerifierState self, IOPProverMessag
     //
     // When we turn the protocol to a non-interactive one, it is sufficient to defer
     // such checks to `check_and_generate_subclaim` after the last round.
-    field challenge = transcript.hash
+    TranscriptAndChallenge tc = get_and_append_challenge(transcript, 4, [7809644666444607049, 110425579418144, 0, 0]) // b"Internal round"
+    transcript = tc.transcript
+    Challenge challenge = tc.challenge
     self.challenges[self.round - 1] = challenge
     self.polynomials_received[self.round - 1] = prover_msg.evaluations
 
@@ -24,29 +29,26 @@ def verify_round_and_update_state(SumcheckIOPVerifierState self, IOPProverMessag
     endif
     return self
 
-def interpolate_uni_poly(u32 p_i_len, field[0] p_i, field eval_at) -> field:
+def interpolate_uni_poly(u32 p_i_len, ExtField[0] p_i, ExtField eval_at) -> ExtField:
     u32 len = p_i_len
-    array_decl field[len] evals
+    array_decl ExtField[len] evals
 
     // Combine `prod = \prod_{j} (eval_at - j)`
     // with `denom_up = field_factorial(len - 1)`
-    field prod = eval_at
+    ExtField prod = eval_at
     evals[0] = eval_at
-    field res = 0
-    field denom_up = 1
+    ExtField res = to_ext(0)
+    ExtField denom_up = to_ext(1)
     for u32 e in 1..len do
-        // BLOCK 15
-        field tmp = eval_at - (F)e
+        ExtField tmp = ext_sub(eval_at, to_ext(e))
         evals[e] = tmp
-        prod = prod * tmp
-        denom_up = denom_up * (F)e
+        prod = ext_mul(prod, tmp)
+        denom_up = ext_mul(denom_up, to_ext(e))
     endfor
-    // BLOCK 16
-    field denom_down = 1
+    ExtField denom_down = to_ext(1)
 
     u32 it = len
     while it > 0 do
-        // BLOCK 17
         u32 i = it - 1
         res = res + p_i[i] * prod * denom_down / (denom_up * evals[i])
 

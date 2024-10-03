@@ -4,11 +4,11 @@ from "poseidon" import Digest, poseidon
 from "poseidon_permutation" import PoseidonPermutation, set_from_slice, permute, squeeze
 from "poseidon_hash" import compress, two_to_one, hash_n_to_m_no_pad, hash_or_noop
 
-from "transcript" import Transcript, TranscriptAndChallenge, new_transcript, append_message, append_field_element_ext, get_and_append_challenge
-from "sumcheck_structs" import SumcheckProof, IOPProverMessage, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState
+from "transcript" import Transcript, TranscriptAndChallenge, new_transcript, append_message, append_field_element_ext, get_and_append_challenge, read_challenge
+from "sumcheck_structs" import SumcheckProof, IOPProverMessage, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState, SumcheckIOPVerifierStateAndTranscript, SumCheckSubClaimAndTranscript
 
 // Despite the original function returning the challenge, the return value is never used
-def verify_round_and_update_state(SumcheckIOPVerifierState self, IOPProverMessage prover_msg, Transcript transcript) -> SumcheckIOPVerifierState:
+def verify_round_and_update_state(SumcheckIOPVerifierState self, IOPProverMessage prover_msg, Transcript transcript) -> SumcheckIOPVerifierStateAndTranscript:
     assert(!self.finished)
 
     // In an interactive protocol, the verifier should
@@ -31,7 +31,10 @@ def verify_round_and_update_state(SumcheckIOPVerifierState self, IOPProverMessag
         // proceed to the next round
         self.round = self.round + 1
     endif
-    return self
+    return SumcheckIOPVerifierStateAndTranscript {
+        vs: self,
+        t: transcript
+    }
 
 def interpolate_uni_poly(u32 p_i_len, ExtField[0] p_i, ExtField eval_at) -> ExtField:
     u32 len = p_i_len
@@ -94,11 +97,14 @@ def check_and_generate_subclaim(SumcheckIOPVerifierState self, ExtField asserted
         expected_evaluation: expected_vec[self.num_vars]
     }
 
-def verify_sumcheck(ExtField claimed_sum, SumcheckProof proof, VPAuxInfo aux_info, Transcript t) -> SumCheckSubClaim:
+def verify_sumcheck(ExtField claimed_sum, SumcheckProof proof, VPAuxInfo aux_info, Transcript t) -> SumCheckSubClaimAndTranscript:
     if aux_info.num_variables == 0 then
-        return SumCheckSubClaim {
-            point: [],
-            expected_evaluation: claimed_sum
+        return SumCheckSubClaimAndTranscript {
+            sc: SumCheckSubClaim {
+                point: [],
+                expected_evaluation: claimed_sum
+            },
+            t: t
         }
     endif
     t = append_message(t, 1, [(F)aux_info.num_variables])
@@ -120,13 +126,24 @@ def verify_sumcheck(ExtField claimed_sum, SumcheckProof proof, VPAuxInfo aux_inf
         for u32 j in 0..aux_info.max_degree + 1 do
             t = append_field_element_ext(t, prover_msg.evaluations[j])
         endfor
-        vs = verify_round_and_update_state(vs, prover_msg, t)
+        SumcheckIOPVerifierStateAndTranscript vs_t = verify_round_and_update_state(vs, prover_msg, t)
+        vs = vs_t.vs
+        t = vs_t.t
     endfor
 
     SumCheckSubClaim sc = check_and_generate_subclaim(vs, claimed_sum)
-    return sc
+    return SumCheckSubClaimAndTranscript {
+        sc: sc,
+        t: t
+    }
 
 def test_interpolate() -> field:
+    // Set witness to:
+    // 3422123670988231386 8889334368442912150
+    // 2225733715509307194 15762865419865432889
+    // 4960992493428924768 10273779273946489277
+    // END
+
     ExtField[3] p_i = [from_bases(15678723806118748918, 14585743363388262804), from_bases(12626525691067507048, 3590243693800794359), from_bases(3595969447797403251, 7449824999286603398)]
     ExtField eval_at = from_bases(3913593284460471747, 10549698575852840021)
     ExtField res = interpolate_uni_poly(3, p_i, eval_at)
@@ -135,29 +152,79 @@ def test_interpolate() -> field:
     return 1
 
 def test_sumcheck() -> field:
+    // Set witness to:
+    // 18078561273735370596 3086177915100371006
+    // 10731743732731319955 6688762412911683264
+    // 2942335295110235772 12367212084057960516
+    // 2739002639838912068 3580045187895814160
+    // 15449715767943939853 14262418620552914845
+    // 820396128303822539 8728895413732539162
+    // 15994474545663573355 11338516812759620779
+    // 8157021487473643380 9209196909174551946
+    // 6440002672026340213 5012184286294173133
+    // 11075536605609952711 14675272217706085710
+    // 7113211821499393854 8111168751072925534
+    // 12460957923259925713 14701810999035173401
+    // 1017073281892050677 6877475132590264140
+    // 15324263890161525720 9990779642489630237
+    // 3295601358029991117 12141349695895188873
+    // 17676698465541350341 15800507712587132330
+    // 1962229289977650248 9798402555766775578
+    // 17818612048468516454 4922459893566428141
+    // 14758276606125422110 3066800740179028454
+    // 5853352951769921333 3090957076633011327
+    // 6974693472801661494 9167483402480020670
+    // 1344576836453469711 18381545573152048442
+    // 10810158635112663068 14842735071838293571
+    // 17093909679813323454 17351939480081116217
+    // 11411226966556025360 16563801543066033434
+    // 12422809064337115127 4328820682197143801
+    // 11877577317046161687 7493812575249282678
+    // 3422123670988231386 8889334368442912150
+    // 2225733715509307194 15762865419865432889
+    // 4960992493428924768 10273779273946489277
+    // END
+
+    u32 max_degree = 2
+    u32 num_vars = 10
     ExtField claimed_sum = from_bases(5381739234459659577, 0)
-    
-
-
-    u32 num_vars = 1
-    u32 max_degree = 3
-
-    // Generate structs
-    field claimed_sum = 2
     SumcheckProof proof = SumcheckProof {
-        points: [0; num_vars],
-        proofs: [IOPProverMessage {
-            evaluations: [2, 0, 2, 0]
-        }; num_vars]
+        points: [
+            from_bases(464104474354546735, 13863969747043259053), 
+            from_bases(11929357039037205499, 7937941768421913624), 
+            from_bases(9973634923763782295, 14508294033406117717),
+            from_bases(8228133564419514483, 7732418363424196404), 
+            from_bases(12971311491386097479, 1131191781530416326), 
+            from_bases(15331377821242805728, 10364276110741496352), 
+            from_bases(7221166248222946029, 2164464738623974862), 
+            from_bases(4602324375683597885, 1315491026529551616), 
+            from_bases(13508842816853248716, 7466166025030907243), 
+            from_bases(3913593284460471747, 10549698575852840021)
+        ],
+        proofs: [
+            IOPProverMessage { evaluations: [from_bases(15625839883379815370, 0), from_bases(8202643420494428528, 0), from_bases(9123088646716015485, 0)] }, 
+            IOPProverMessage { evaluations: [from_bases(8969798675637341832, 2989787511075279527), from_bases(1463905264850047140, 2206427826649749942), from_bases(7223592415554983503, 17349700811886251700)] }, 
+            IOPProverMessage { evaluations: [from_bases(18337393096638029671, 2336780798665360134), from_bases(2463093348407340366, 10782016189428587358), from_bases(8136174329773208515, 11378319739897255851)] }, 
+            IOPProverMessage { evaluations: [from_bases(14210607920643078280, 7099918309407970145), from_bases(6365312723346648468, 14059429725672921602), from_bases(7268851991931526187, 16726319131438723293)] }, 
+            IOPProverMessage { evaluations: [from_bases(18080769441539437685, 3761078766272050768), from_bases(15446475756143401980, 3174463502085589308), from_bases(6791815150085446209, 17437856027427798292)] }, 
+            IOPProverMessage { evaluations: [from_bases(15344421145133670983, 15503264394893703693), from_bases(9527579782274077222, 10572251155300458038), from_bases(17115941211744724647, 9062237115122508)] }, 
+            IOPProverMessage { evaluations: [from_bases(2585707719448607747, 15864525892292017570), from_bases(14365004279034422237, 15229300525156890777), from_bases(17041241587536086873, 11815643904648075366)] }, 
+            IOPProverMessage { evaluations: [from_bases(16698279040996974157, 2100157845407522177), from_bases(16528913159676307740, 9179888399079444210), from_bases(951247008771513074, 14322560143012082237)] }, 
+            IOPProverMessage { evaluations: [from_bases(14016371929812836973, 3114846401135917066), from_bases(3118259410638252272, 15702657425993476441), from_bases(9265045695293576831, 651096382258778666)] }, 
+            IOPProverMessage { evaluations: [from_bases(15678723806118748918, 14585743363388262804), from_bases(12626525691067507048, 3590243693800794359), from_bases(3595969447797403251, 7449824999286603398)] }
+        ]
     }
     VPAuxInfo aux_info = VPAuxInfo {
         max_degree: max_degree,
         num_variables: num_vars,
     }
-    Transcript t = new_transcript()
+    Transcript t = new_transcript(1, [1953719668])
 
-    SumCheckSubClaim sc = verify_sumcheck(claimed_sum, proof, aux_info, t)
-    return sc.point[0] * 1000 + sc.expected_evaluation
+    SumCheckSubClaimAndTranscript sc_t = verify_sumcheck(claimed_sum, proof, aux_info, t)
+    t = sc_t.t
+    Challenge c = read_challenge(t)
+    return c.elements.b0
+    // return sc.point[0].elements.b0
 
 def main() -> field:
-    return test_interpolate()
+    return test_sumcheck()

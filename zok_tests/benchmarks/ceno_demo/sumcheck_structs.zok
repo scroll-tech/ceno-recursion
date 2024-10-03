@@ -1,4 +1,5 @@
 from "ext_field" import ExtField, Challenge
+from "transcript" import Transcript
 
 struct IOPProverMessage {
     ExtField[0] evaluations
@@ -26,4 +27,14 @@ struct SumcheckIOPVerifierState {
     bool finished
     ExtField[0][0] polynomials_received
     Challenge[0] challenges
+}
+
+struct SumcheckIOPVerifierStateAndTranscript {
+    SumcheckIOPVerifierState vs
+    Transcript t
+}
+
+struct SumCheckSubClaimAndTranscript {
+    SumCheckSubClaim sc
+    Transcript t 
 }

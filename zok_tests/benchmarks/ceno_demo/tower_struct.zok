@@ -6,19 +6,19 @@ struct TowerProofs {
     IOPProverMessage[0][0] proofs
     u32[0] layer_per_spec
     // specs -> layers -> evals
-    field[0][0][0] prod_specs_eval
+    ExtField[0][0][0] prod_specs_eval
     // specs -> layers -> evals
-    field[0][0][0] logup_specs_eval
+    ExtField[0][0][0] logup_specs_eval
 }
 
 struct TowerVerifierOutput {
-    field[0] rt_tower
-    field[0] record_evals
-    field[0] logup_p_evals
-    field[0] logup_q_evals
+    ExtField[0] rt_tower
+    ExtField[0] record_evals
+    ExtField[0] logup_p_evals
+    ExtField[0] logup_q_evals
 }
 
 struct PointAndEval {
-    field[0] point
-    field eval
+    ExtField[0] point
+    ExtField eval
 }

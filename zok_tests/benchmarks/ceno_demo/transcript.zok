@@ -1,4 +1,4 @@
-from "ext_field" import ExtField, Challenge
+from "ext_field" import ExtField, Challenge, to_ext, ext_mul, ext_eq
 
 from "poseidon" import Digest, poseidon
 from "poseidon_permutation" import PoseidonPermutation, set_from_slice, permute, squeeze
@@ -75,6 +75,27 @@ def read_challenge(Transcript self) -> Challenge:
     }
     return Challenge {
         elements: r
+    }
+
+struct TranscriptAndChallengePows {
+    Transcript transcript
+    ExtField[0] challenge_pows
+}
+
+// derive challenge from transcript and return all pows result
+def get_challenge_pows(u32 size, Transcript transcript) -> TranscriptAndChallengePows:
+    TranscriptAndChallenge t_c = get_and_append_challenge(transcript, 4, [2334393380763430755, 7286952176161813875, 1936482678, 0]) // b"combine subset evals"
+    transcript = t_c.transcript
+    ExtField alpha = t_c.challenge.elements
+    array_decl ExtField[size] alpha_pows
+    ExtField state = to_ext(1)
+    for u32 i in 0..size do
+        alpha_pows[i] = state
+        state = ext_mul(state, alpha)
+    endfor
+    return TranscriptAndChallengePows {
+        transcript: transcript,
+        challenge_pows: alpha_pows
     }
 
 def main() -> field:

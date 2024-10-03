@@ -1,4 +1,8 @@
-from "ext_field" import ExtField, to_ext, ext_eq, ext_neq, ext_add, ext_sub, ext_mul, ext_invert Challenge
+from "ext_field" import ExtField, from_bases, to_ext, ext_eq, ext_neq, ext_add, ext_sub, ext_neg, ext_mul, ext_invert, Challenge
+
+from "poseidon" import Digest, poseidon
+from "poseidon_permutation" import PoseidonPermutation, set_from_slice, permute, squeeze
+from "poseidon_hash" import compress, two_to_one, hash_n_to_m_no_pad, hash_or_noop
 
 from "transcript" import Transcript, TranscriptAndChallenge, new_transcript, append_message, append_field_element_ext, get_and_append_challenge
 from "sumcheck_structs" import SumcheckProof, IOPProverMessage, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState
@@ -50,62 +54,58 @@ def interpolate_uni_poly(u32 p_i_len, ExtField[0] p_i, ExtField eval_at) -> ExtF
     u32 it = len
     while it > 0 do
         u32 i = it - 1
-        res = res + p_i[i] * prod * denom_down / (denom_up * evals[i])
+        // res = res + p_i[i] * prod * denom_down / (denom_up * evals[i])
+        res = ext_add(res, ext_mul(ext_mul(ext_mul(p_i[i], prod), denom_down), ext_invert(ext_mul(denom_up, evals[i]))))
 
         // compute denom for the next step is current_denom * (len-i)/i
         if i != 0 then
-            denom_up = -1 * denom_up * (F)(len - i)
-            denom_down = denom_down * (F)i
+            // denom_up = -1 * denom_up * (F)(len - i)
+            denom_up = ext_neg(ext_mul(denom_up, to_ext(len - i)))
+            // denom_down = denom_down * (F)i
+            denom_down = ext_mul(denom_down, to_ext(i))
         endif
         it = it - 1
     endwhile
-    // BLOCK 18
     return res
 
-def check_and_generate_subclaim(SumcheckIOPVerifierState self, field asserted_sum) -> SumCheckSubClaim:
+def check_and_generate_subclaim(SumcheckIOPVerifierState self, ExtField asserted_sum) -> SumCheckSubClaim:
     assert(self.finished)
     // assert(self.polynomials_received.len() == self.num_vars)
 
     // the deferred check during the interactive phase:
     // 2. set `expected` to P(r)`
 
-    array_decl field[self.num_vars + 1] expected_vec
+    array_decl ExtField[self.num_vars + 1] expected_vec
     // insert the asserted_sum to the first position of the expected vector
     expected_vec[0] = asserted_sum
     // generate and verify expected_vec in the same loop
     for u32 i in 0..self.num_vars do
-        // BLOCK 13 - 18
-        field[self.max_degree + 1] evaluations = self.polynomials_received[i]
-        field challenge = self.challenges[i]
+        ExtField[self.max_degree + 1] evaluations = self.polynomials_received[i]
+        Challenge challenge = self.challenges[i]
         // assert(evaluations.len() == self.max_degree + 1)
-        expected_vec[i + 1] = interpolate_uni_poly(self.max_degree + 1, evaluations, challenge)
-        field expected = expected_vec[i]
-        assert(evaluations[0] + evaluations[1] == expected)
+        expected_vec[i + 1] = interpolate_uni_poly(self.max_degree + 1, evaluations, challenge.elements)
+        ExtField expected = expected_vec[i]
+        assert(ext_eq(ext_add(evaluations[0], evaluations[1]), expected))
     endfor
 
-    // BLOCK 14
     return SumCheckSubClaim {
         point: self.challenges,
         // the last expected value (not checked within this function) will be included in the subclaim
         expected_evaluation: expected_vec[self.num_vars]
     }
 
-def verify_sumcheck(field claimed_sum, SumcheckProof proof, VPAuxInfo aux_info, Transcript t) -> SumCheckSubClaim:
-    // BLOCK 19
+def verify_sumcheck(ExtField claimed_sum, SumcheckProof proof, VPAuxInfo aux_info, Transcript t) -> SumCheckSubClaim:
     if aux_info.num_variables == 0 then
         return SumCheckSubClaim {
             point: [],
             expected_evaluation: claimed_sum
         }
     endif
-    // BLOCK 20
-    t = append_message_u32(t, aux_info.num_variables)
-    // BLOCK 21
-    t = append_message_u32(t, aux_info.max_degree)
-    // BLOCK 22
+    t = append_message(t, 1, [(F)aux_info.num_variables])
+    t = append_message(t, 1, [(F)aux_info.max_degree])
 
-    array_decl field[aux_info.num_variables] challenges
-    array_decl field[aux_info.num_variables][0] polynomials_received
+    array_decl Challenge[aux_info.num_variables] challenges
+    array_decl ExtField[aux_info.num_variables][0] polynomials_received
     SumcheckIOPVerifierState vs = SumcheckIOPVerifierState {
         round: 1,
         num_vars: aux_info.num_variables,
@@ -116,22 +116,29 @@ def verify_sumcheck(field claimed_sum, SumcheckProof proof, VPAuxInfo aux_info, 
         challenges: challenges
     }
     for u32 i in 0..aux_info.num_variables do
-        // BLOCK 23
         IOPProverMessage prover_msg = proof.proofs[i]
         for u32 j in 0..aux_info.max_degree + 1 do
-            // BLOCK 24
-            t = append_message_field(t, prover_msg.evaluations[j])
-            // BLOCK 25
+            t = append_field_element_ext(t, prover_msg.evaluations[j])
         endfor
-        // BLOCK 26, FOLDED verify_round_and_update_state
         vs = verify_round_and_update_state(vs, prover_msg, t)
     endfor
 
-    // BLOCK 27
     SumCheckSubClaim sc = check_and_generate_subclaim(vs, claimed_sum)
     return sc
 
-def main() -> field:
+def test_interpolate() -> field:
+    ExtField[3] p_i = [from_bases(15678723806118748918, 14585743363388262804), from_bases(12626525691067507048, 3590243693800794359), from_bases(3595969447797403251, 7449824999286603398)]
+    ExtField eval_at = from_bases(3913593284460471747, 10549698575852840021)
+    ExtField res = interpolate_uni_poly(3, p_i, eval_at)
+    assert(res.b0 == 8823930939427754050)
+    assert(res.b1 == 9987631307788400781)
+    return 1
+
+def test_sumcheck() -> field:
+    ExtField claimed_sum = from_bases(5381739234459659577, 0)
+    
+
+
     u32 num_vars = 1
     u32 max_degree = 3
 
@@ -151,3 +158,6 @@ def main() -> field:
 
     SumCheckSubClaim sc = verify_sumcheck(claimed_sum, proof, aux_info, t)
     return sc.point[0] * 1000 + sc.expected_evaluation
+
+def main() -> field:
+    return test_interpolate()

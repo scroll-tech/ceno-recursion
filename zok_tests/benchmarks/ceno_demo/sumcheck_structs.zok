@@ -25,5 +25,5 @@ struct SumcheckIOPVerifierState {
     u32 max_degree
     bool finished
     ExtField[0][0] polynomials_received
-    ExtField[0] challenges
+    Challenge[0] challenges
 }

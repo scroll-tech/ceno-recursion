@@ -10,8 +10,8 @@ use bellman::Circuit;
 use bls12_381::{Bls12, Scalar};
 */
 const PRINT_PROOF: bool = false;
-const INLINE_SPARTAN_PROOF: bool = false;
-const TOTAL_NUM_VARS_BOUND: usize = 10000000;
+const INLINE_SPARTAN_PROOF: bool = true;
+const TOTAL_NUM_VARS_BOUND: usize = 100000000;
 
 use core::cmp::min;
 use rug::Integer;
@@ -1118,7 +1118,6 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
     num_vars, 
     &ctk.args,
     num_inputs_unpadded,
-    max_block_num_phy_ops > 0 || max_block_num_vir_ops > 0,
     &block_num_phy_ops,
     &block_num_vir_ops,
     &ctk.num_vars_per_block,

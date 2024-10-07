@@ -49,7 +49,7 @@ pub fn ty_to_dec_suffix<'ast>(ty: &Type<'ast>) -> DecimalSuffix<'ast> {
         Type::Basic(BasicType::U16(_)) => { DecimalSuffix::U16(U16Suffix { span }) }
         Type::Basic(BasicType::U32(_)) => { DecimalSuffix::U32(U32Suffix { span }) }
         Type::Basic(BasicType::U64(_)) => { DecimalSuffix::U64(U64Suffix { span }) }
-        _ => { panic!("Type not supported for loop iterator.") }
+        _ => { panic!("Type not supported for loop iterator: {:?}.", ty) }
     }
 }
 
@@ -159,14 +159,24 @@ pub fn bl_gen_init_stmt<'ast>(var: &str, ty: &Ty) -> Statement<'ast> {
             },
             span: Span::new("", 0, 0).unwrap()
         })],
-        expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-            value: DecimalNumber {
-                value: "0".to_string(),
-                span: Span::new("", 0, 0).unwrap()
+        expression: match ty {
+            Ty::Bool => {
+                Expression::Literal(LiteralExpression::BooleanLiteral(BooleanLiteralExpression {
+                    value: "false".to_string(),
+                    span: Span::new("", 0, 0).unwrap()
+                }))
             },
-            suffix: Some(ty_to_dec_suffix(&typ)),
-            span: Span::new("", 0, 0).unwrap()
-        })),
+            _ => {
+                Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                    value: DecimalNumber {
+                        value: "0".to_string(),
+                        span: Span::new("", 0, 0).unwrap()
+                    },
+                    suffix: Some(ty_to_dec_suffix(&typ)),
+                    span: Span::new("", 0, 0).unwrap()
+                }))
+            }
+        },
         span: Span::new("", 0, 0).unwrap()
     });
     var_init_stmt

@@ -756,7 +756,8 @@ fn term_to_instr<'ast>(
             // Assert that no witness statements are within branches as that would be confusing
             for i in left_instr.iter().chain(right_instr.iter()) {
                 if let BlockContent::Witness(_) = i {
-                    panic!("Block merge failed: witness statements should not be present within branches!")
+                    // Assume that the programmer knows better
+                    // panic!("Block merge failed: witness statements should not be present within branches!")
                 }
             }
 
@@ -3260,11 +3261,12 @@ impl<'ast> ZGen<'ast> {
             if !exit_bls_fn.contains(&cur_bl) && successor[cur_bl].len() == 1 {
                 let s = Vec::from_iter(successor[cur_bl].clone())[0];
                 if !entry_bls_fn.contains(&s) && 
-                    predecessor[s].len() == 1 &&
-                    (bls[cur_bl].num_cons + bls[s].num_cons > MAX_BLOCK_SIZE || // Limit the size of the merged block
-                        bls[cur_bl].num_cons * 4 < bls[s].num_cons || // But also allow merges between a large block and a small one
-                        bls[s].num_cons * 4 < bls[cur_bl].num_cons
-                    )
+                    predecessor[s].len() == 1// &&
+                    // (
+                        // bls[cur_bl].num_cons + bls[s].num_cons > MAX_BLOCK_SIZE || // Limit the size of the merged block
+                        // bls[cur_bl].num_cons * 4 < bls[s].num_cons || // But also allow merges between a large block and a small one
+                        // bls[s].num_cons * 4 < bls[cur_bl].num_cons
+                    // )
                 {
                     // Append s to cur_bl
                     let s_inst = bls[s].clone();

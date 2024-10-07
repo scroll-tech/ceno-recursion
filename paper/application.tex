@@ -1,0 +1,10 @@
+\section{Application}
+
+The results in section \ref{sec:eval} illustrates \CoBBl's main advantage against existing SNARK systems: it outperforms direct-translators on benchmarks with highly repetitive\red{[?]} loops, and virtual machines on specialized computations, like field operations in the Poseidon benchmark. In this section, we discuss one particular use case for \CoBBl: improving the verification of a compact certificate\cite{micali20compact}.
+
+\subsection{Verifying a Compact Certificate through SNARK}
+A compact certificate scheme\cite{micali20compact} allows a prover $\P$ to gather signatures of a huge quantity of attestors on a message, potentially of various weights, and compress them to a much shorter certificate. The scheme achieves so by randomly sampling attestors based on their weight, which, if all sampled signatures are valid, convinces a verifier $\V$ that at least a percentage of the total weight claimed by $\P$ are signed by valid attestors. Compact certificates can be applied to blockchains to prove that a block receives sufficient vote.
+
+In cases where $\V$ needs a high percentage of claimed weight to be valid, $\P$ needs to sample a large quantity of attestors, resulting in large certificate size. In these cases, $\P$ can further compact the proof by verifying the sampled signatures itself and then convince $\V$ that it has performed all verifications correctly through a SNARK proof. Below we present our implementation of the compact certificate scheme in \CoBBl, compare it against similar implementations in CirC and Jolt, and discuss its effectiveness in reducing the certificate size.
+
+\subsection{\CoBBl's Performance as a Compact Certificate}

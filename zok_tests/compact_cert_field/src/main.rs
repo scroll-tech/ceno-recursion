@@ -117,11 +117,12 @@ struct CompleteProof {
     sig_list: Vec<Sig>,
 }
 
-const NUM_ATTESTORS: usize = 100000;
+const NUM_ATTESTORS: usize = 200000;
+const NUM_REVEALS: usize = 1000;
+
 const PROVEN_WEIGHT: usize = 50;
 const KNOWLEDGE_SOUNDNESS: usize = 3; // knowledge soundness of 2^{-k}
 const MAX_NUM_REVEALS: usize = 200; // num reveals 2^q
-const NUM_REVEALS: usize = 690;
 const SIG_WIDTH: usize = 253;
 
 // Commit all attestors as a merkle tree
@@ -354,16 +355,10 @@ fn main() {
         write!(&mut f, "{} ", i.i).unwrap();
     }
     writeln!(&mut f, "]").unwrap();
-    // All memory entries within T (i_bits || s || pi_s.path || p || pi_p.path)
+    // All memory entries within T (just p now)
     // field[0] t_mem,
     write!(&mut f, "t_mem [ro ").unwrap();
     let merkle_depth: usize = NUM_ATTESTORS.next_power_of_two().ilog2().div_ceil(1).try_into().unwrap();
-    // s: sig_r_x, sig_r_y, sig_s, l, r
-    for s in &sig_list {
-        for e in &s.to_list() {
-            write!(&mut f, "{} ", Integer::from(e)).unwrap();
-        }
-    }
     // p
     for p in &att_list {
         for e in &p.to_list() {
@@ -373,15 +368,9 @@ fn main() {
     writeln!(&mut f, "]").unwrap();
     // List of pointers (input format field[0])
     let num_reveals = att_list.len();
-    // field[0][0] t_s_list,
-    write!(&mut f, "t_s_list [ro ").unwrap();
-    for p in (0..num_reveals).map(|i| num_reveals + i * 5) {
-        write!(&mut f, "{} ", p).unwrap();
-    }
-    writeln!(&mut f, "]").unwrap();
     // field[0][0] t_p_list,
     write!(&mut f, "t_p_list [ro ").unwrap();
-    for p in (0..num_reveals).map(|i| num_reveals * 6 + i * 5) {
+    for p in (0..num_reveals).map(|i| num_reveals + i * 5) {
         write!(&mut f, "{} ", p).unwrap();
     }
     writeln!(&mut f, "]").unwrap();
@@ -409,6 +398,10 @@ fn main() {
     let mut f = File::create(file_name).unwrap();
     // field[0] e_s_mem,
     for i in 0..num_reveals {
+        // s: sig_r_x, sig_r_y, sig_s, l, r
+        for e in &sig_list[i].to_list() {
+            write!(&mut f, "{} ", Integer::from(e)).unwrap();
+        }
         // i_bits
         let next_att = compact_cert_proof.t_list[i].i;
         let mut next_i = compact_cert_proof.t_list[i].i.clone();

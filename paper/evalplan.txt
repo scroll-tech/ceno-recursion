@@ -54,3 +54,11 @@
 # Discussions / Limitations
 - Without the usage of lookup tables, it might be difficult to match Jolt on 32-bit operations. Incorporating lookup tables can be of a future work.
 - Efficiency of CoBBl relies on effective compiler analysis. Future work can be done to find "the optimal" circuit representation for each benchmark. 
+
+Evaluation for Compact Certificate
+1. Comparing CoBBl with CirC and Jolt
+  - The comparison _should_ show CoBBl beat CirC and Jolt in both compiler and prover time (maybe run CirC and Jolt till the highest number of reveals possible?)
+2. Comparing CoBBl proof with the original compact certificate
+  - A graph depicting CoBBl and CC size of fixed # of attestors based on % of verified signers
+3. Exploration of other commitment scheme
+  - Potentially a pseudo HyperBKG implementation to further reduce proof size

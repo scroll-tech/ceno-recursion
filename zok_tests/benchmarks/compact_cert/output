@@ -213,9 +213,15 @@ Proof size: 1.268MB
 
 Opt 17: (Improved Input)
 Num Blocks: 7
-Prover time:87.29s
+Prover time: 87.29s
 Verifier time: 650.94ms
 Proof size: 1.212MB
+
+Opt 18: (Improved Backend)
+Num Blocks: 7
+Prover time: 84.37s
+Verifier time: 616.74ms
+Proof size: 1.170MB
 
 --
 Num Att = 100000, Num Reveal = 400
@@ -231,3 +237,13 @@ Opt 17: (Improved Input)
 Prover time: 44.87s
 Verifier time: 538.24ms
 Proof size: 954.9kB
+
+--
+Num Att = 200000, Num Reveal = 1000
+Verifier time: 22.78s
+Proof Size: 1.601MB
+
+Opt 18: (Improved Backend)
+Prover time: 135.87s
+Verifier time: 686.67ms
+Proof size: 1.236MB

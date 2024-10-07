@@ -16,7 +16,6 @@ struct CompactCertProof {
     field sig_root
     u64 signed_weight
     u32[ro 0] t_i_list
-    field[ro 0][ro 5] t_s_list
     field[ro 0][ro 5] t_p_list
 }
 
@@ -42,23 +41,28 @@ def verifier(
         field coin = coins[j]
 
         u32 t_i = compact_cert_proof.t_i_list[j]
-        field[ro 5] t_s = compact_cert_proof.t_s_list[j]
         field[ro 5] t_p = compact_cert_proof.t_p_list[j]
+        witness field sig_r_x
+        witness field sig_r_y
+        witness field sig_s
+        witness field l
+        witness field r
         // Sig Opening & Att Opening
-        assert(verify_merkle_batch(t_i, compact_cert_proof.sig_root, t_s, att_root, t_p, merkle_depth) == 1)
+        assert(verify_merkle_batch(t_i, compact_cert_proof.sig_root, sig_r_x, sig_r_y, sig_s, l, r, att_root, t_p, merkle_depth) == 1)
         // Validity of signature
         PublicKey pk = PublicKey {
             p: Point { x: t_p[0], y: t_p[1] },
             q: Point { x: t_p[2], y: t_p[3] }
         }
         Signature sig = Signature {
-            r: Point{ x: t_s[0], y: t_s[1] },
-            s: t_s[2]
+            r: Point{ x: sig_r_x, y: sig_r_y },
+            s: sig_s
         }
         assert(verify_signature(message, pk, sig) == 1)
         // L < coin <= L + Weight
-        field t_s_3 = t_s[3]
-        assert(t_s_3 <= coin && coin < t_s_3 + t_p[4])
+        field t_p_4 = t_p[4]
+        assert(l + t_p_4 == r)
+        assert(l <= coin && coin < r)
     endfor
 
     return 1
@@ -70,10 +74,9 @@ def main(
     field sig_root,
     u64 signed_weight,
     u32[ro 0] t_i_list,
-    // All memory entries within T (s || p)
+    // All memory entries within T (p)
     field[ro 0] t_mem,
     // List of pointers (input format field[0])
-    field[ro 0][ro 5] t_s_list,
     field[ro 0][ro 5] t_p_list,
     // For others
     u64 proven_weight,
@@ -87,7 +90,6 @@ def main(
         sig_root: sig_root,
         signed_weight: signed_weight,
         t_i_list: t_i_list,
-        t_s_list: t_s_list,
         t_p_list: t_p_list
     }
 

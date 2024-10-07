@@ -1,4 +1,4 @@
-\section{Evaluation}
+\section{Evaluation}\label{sec:eval}
 
 Our experiment with \CoBBl~aims to answer the following questions:
 \begin{enumerate}
@@ -19,7 +19,7 @@ The backend proof system for \CoBBl~is a custom variant of Spartan~\cite{setty19
 
 \paragraph{Jolt} Our Jolt evaluation uses the released codebase~\cite{jolt_codebase}.
 
-\paragraph{Benchmarks} Figure \ref{fig:benchmark_overview} lists our benchmarks. We implement each benchmark in two programming languages: the Zokrates version is used by \CoBBl~and CirC, while the Rust version is used by Jolt, compiled with release mode (\code{--release}). The two versions of each benchmark are identical up to grammatical differences. Since CirC generally performs far worse than Jolt, we choose a different set of parameters when comparing \CoBBl~against CirC than Jolt. All benchmarks except for Poseidon are computed exclusively using 32-bit registers -- the native instruction set for Jolt -- to ensure Jolt's maximum efficiency. We explore the special scenario introduced by Poseidon later in the section.
+\paragraph{Benchmarks} Figure \ref{fig:benchmark_overview} lists our benchmarks. We implement each benchmark in two programming languages: the Zokrates version is used by \CoBBl~and CirC, while the Rust version is used by Jolt, compiled with release mode (\code{--release}). The two versions of each benchmark are identical up to grammatical differences, with the exception of field operations, which are natively supported by Zokrates and implemented through \code{ff} in Rust. Since CirC generally performs far worse than Jolt, we choose a different set of parameters when comparing \CoBBl~against CirC than Jolt. All benchmarks except for Poseidon are computed exclusively using 32-bit registers -- the native instruction set for Jolt -- to ensure Jolt's maximum efficiency. We explore the special scenario introduced by Poseidon later in the section.
 
 \paragraph{Special Benchmark} To answer question \ref{q:tradeoff}, we conduct a separate test on the Find Min benchmark, recording detailed performance of CirC and \CoBBl~for array length ranging from 200 to 1600.
 

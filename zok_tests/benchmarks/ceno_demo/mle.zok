@@ -1,29 +1,30 @@
+from "ext_field" import ExtField, from_bases, to_ext, ext_eq, ext_neq, ext_add, ext_sub, ext_neg, ext_mul, ext_invert
+
 /// Evaluate mle polynomial
-// Block 8 - 12
-def mle_eval(field[0] self, u32 mle_len, field[0] point, u32 point_len) -> field:
+def inline mle_eval(ExtField[0] self, u32 mle_len, ExtField[0] point, u32 point_len) -> ExtField:
     // TODO: what if length of self is not a power of 2?
     // assert(2 ** point_len == mle_len)
     for u32 i in 0..point_len do
         mle_len = mle_len / 2
         for u32 j in 0..mle_len do
-            self[j] = (1 - point[i]) * self[j] + point[i] * self[mle_len + j]
+            // self[j] = (1 - point[i]) * self[j] + point[i] * self[mle_len + j]
+            self[j] = ext_add(ext_mul(ext_sub(to_ext(1), point[i]), self[j]), ext_mul(point[i], self[mle_len + j]))
         endfor
     endfor
     return self[0]
 
 /// Evaluate eq polynomial.
-// Block 5 - 7
-def eq_eval(u32 len, field[0] x, field[0] y) -> field:
-    field res = 1
+def inline eq_eval(u32 len, ExtField[0] x, ExtField[0] y) -> ExtField:
+    ExtField res = to_ext(1)
     for u32 i in 0..len do
-        field xi = x[i]
-        field yi = y[i]
-        field xi_yi = xi * yi
-        res = res * (xi_yi + xi_yi - xi - yi + 1)
+        ExtField xi = x[i]
+        ExtField yi = y[i]
+        ExtField xi_yi = ext_mul(xi, yi)
+        res = ext_mul(res, ext_add(ext_sub(ext_sub(ext_add(xi_yi, xi_yi), xi), yi), to_ext(1)))
     endfor
     return res
 
-def build_eq_x_r_vec_sequential(u32 r_len, u32 r_len_pow2, field[0] r) -> field[0]:
+def build_eq_x_r_vec_sequential(u32 r_len, u32 r_len_pow2, ExtField[0] r) -> ExtField[0]:
     // we build eq(x,r) from its evaluations
     // we want to evaluate eq(x,r) over x \in {0, 1}^num_vars
     // for example, with num_vars = 4, x is a binary vector of 4, then
@@ -34,12 +35,12 @@ def build_eq_x_r_vec_sequential(u32 r_len, u32 r_len_pow2, field[0] r) -> field[
     //  ....
     //  1 1 1 1 -> r0       * r1        * r2        * r3
     // we will need 2^num_var evaluations
-    array_decl field[r_len_pow2] evals
-    evals[0] = 1
+    array_decl ExtField[r_len_pow2] evals
+    evals[0] = to_ext(1)
     u32 next_size = 1
     for u32 i in 0..r_len do
         // BLOCK 1
-        field r_i = r[r_len - 1 - i]
+        ExtField r_i = r[r_len - 1 - i]
         // suppose at the previous step we processed buf [0..size]
         // for the current step we are populating new buf[0..2*size]
         // for j travese 0..size
@@ -47,29 +48,33 @@ def build_eq_x_r_vec_sequential(u32 r_len, u32 r_len_pow2, field[0] r) -> field[
         // buf[2*j] = (1 - r) * buf[j]
         u32 j = next_size
         while j != 0 do
-            // BLOCK 2
             j = j - 1
-            evals[2 * j + 1] = r_i * evals[j]
-            evals[2 * j] = (1 - r_i) * evals[j]
+            ExtField evals_j = evals[j]
+            evals[2 * j + 1] = ext_mul(r_i, evals_j)
+            evals[2 * j] = ext_mul(ext_sub(to_ext(1), r_i), evals_j)
         endwhile
-        // BLOCK 3
         next_size = next_size * 2
     endfor
-    // BLOCK 4
     return evals
 
+def main() -> field:
+    // mle_eval
+    u32 mle_len = 2
+    u32 point_len = 1
+    ExtField[mle_len] mle = [from_bases(5776537094569350917, 9468953519750172577), from_bases(15864288018568153012, 17365951549160487914)]
+    ExtField[point_len] point = [from_bases(7233995320706378435, 2657299230691424422)]
+    
+    ExtField eval = mle_eval(mle, mle_len, point, point_len)
+    assert(eval.b0 == 16904280516521906543)
+    assert(eval.b1 == 14734707163833427575)
 
-def main(u32 mle_len, u32 point_len) -> field:
-    // assert(2 ** point_len == mle_len)
-    // Generate mle
-    array_decl field[mle_len] mle
-    for u32 i in 0..mle_len do
-        mle[i] = (F)i
-    endfor
-    // Generate point
-    array_decl field[point_len] point
-    for u32 i in 0..point_len do
-        point[i] = (F)i
-    endfor
-
-    return mle_eval(mle, mle_len, point, point_len)
+    // build_eq_x_r
+    u32 r_len = 1
+    u32 r_len_pow2 = 2
+    ExtField[r_len] r = [from_bases(11939726188552112554, 10602951947458784821)]
+    ExtField[0] eval = build_eq_x_r_vec_sequential(r_len, r_len_pow2, r)
+    assert(eval[0].b0 == 6507017880862471768)
+    assert(eval[0].b1 == 7843792121955799500)
+    assert(eval[1].b0 == 11939726188552112554)
+    assert(eval[1].b1 == 10602951947458784821)
+    return 1

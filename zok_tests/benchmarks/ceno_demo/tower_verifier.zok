@@ -38,11 +38,11 @@ def tower_verify(
     transcript = t_cp.transcript
     ExtField[0] alpha_pows = t_cp.challenge_pows
 
-    array_decl field[log2_num_fanin] initial_rt
+    array_decl ExtField[log2_num_fanin] initial_rt
     for u32 i in 0..log2_num_fanin do
-        // decimal expression of "product_sum"
-        t = append_message_field(t, 135940096403279116418381165)
-        // initial_rt[i] = t.hash
+        TranscriptAndChallenge t0 = get_and_append_challenge(transcript, 2, [6878231886748938864, 7173491]) // b"product_sum"
+        transcript = t0.transcript
+        initial_rt[i] = t0.challenge.elements
     endfor
 
     // --
@@ -53,8 +53,8 @@ def tower_verify(
     // out_j[rt] := (logup_q{j}[rt])
     field initial_claim = 0
     for u32 i in 0..initial_prod_evals_len do
-        field[0] evals = initial_prod_evals[i]
-        field alpha = alpha_pows[i]
+        ExtField[0] evals = initial_prod_evals[i]
+        ExtField alpha = alpha_pows[i]
         initial_claim = initial_claim + mle_eval(evals, num_fanin, initial_rt, log2_num_fanin) * alpha
     endfor
     for u32 i in 0..initial_logup_evals_len do

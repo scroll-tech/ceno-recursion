@@ -1,5 +1,5 @@
 from "transcript" import Transcript, TranscriptAndChallenge, TranscriptAndChallengePows, new_transcript, append_message, append_field_element_ext, get_and_append_challenge, read_challenge, get_challenge_pows
-from "sumcheck_structs" import IOPProverMessage, SumcheckProof, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState
+from "sumcheck_structs" import IOPProverMessage, SumcheckProof, VPAuxInfo, SumCheckSubClaim, SumcheckIOPVerifierState, SumCheckSubClaimAndTranscript
 from "sumcheck_verifier" import verify_round_and_update_state, interpolate_uni_poly, check_and_generate_subclaim, verify_sumcheck
 from "mle" import mle_eval, eq_eval, build_eq_x_r_vec_sequential
 from "tower_struct" import TowerProofs, TowerVerifierOutput, PointAndEval
@@ -34,14 +34,14 @@ def tower_verify(
     u32 initial_prod_evals_len = tower_proofs.prod_spec_size
     u32 initial_logup_evals_len = tower_proofs.logup_spec_size
 
-    TranscriptAndChallengePows t_cp = get_challenge_pows(num_prod_spec + num_logup_spec * 2, transcript);
+    TranscriptAndChallengePows t_cp = get_challenge_pows(num_prod_spec + num_logup_spec * 2, t);
     transcript = t_cp.transcript
     ExtField[0] alpha_pows = t_cp.challenge_pows
 
     array_decl ExtField[log2_num_fanin] initial_rt
     for u32 i in 0..log2_num_fanin do
-        TranscriptAndChallenge t0 = get_and_append_challenge(transcript, 2, [6878231886748938864, 7173491]) // b"product_sum"
-        transcript = t0.transcript
+        TranscriptAndChallenge t0 = get_and_append_challenge(t, 2, [6878231886748938864, 7173491]) // b"product_sum"
+        t = t0.transcript
         initial_rt[i] = t0.challenge.elements
     endfor
 
@@ -58,18 +58,18 @@ def tower_verify(
         initial_claim = initial_claim + mle_eval(evals, num_fanin, initial_rt, log2_num_fanin) * alpha
     endfor
     for u32 i in 0..initial_logup_evals_len do
-        field alpha_numerator = alpha_pows[initial_prod_evals_len + 2 * i]
-        field alpha_denominator = alpha_pows[initial_prod_evals_len + 2 * i + 1]
-        field[2] mle_numerator = [initial_logup_evals[i][0], initial_logup_evals[i][1]]
-        field[2] mle_denominator = [initial_logup_evals[i][2], initial_logup_evals[i][3]]
+        ExtField alpha_numerator = alpha_pows[initial_prod_evals_len + 2 * i]
+        ExtField alpha_denominator = alpha_pows[initial_prod_evals_len + 2 * i + 1]
+        ExtField[2] mle_numerator = [initial_logup_evals[i][0], initial_logup_evals[i][1]]
+        ExtField[2] mle_denominator = [initial_logup_evals[i][2], initial_logup_evals[i][3]]
         initial_claim = initial_claim + mle_eval(mle_numerator, num_fanin, initial_rt, log2_num_fanin) * alpha_numerator
         initial_claim = initial_claim + mle_eval(mle_denominator, num_fanin, initial_rt, log2_num_fanin) * alpha_denominator
     endfor
 
     // evaluation in the tower input layer
-    array_decl field[tower_proofs.prod_spec_size] prod_spec_input_layer_eval
-    array_decl field[tower_proofs.logup_spec_size] logup_spec_p_input_layer_eval
-    array_decl field[tower_proofs.logup_spec_size] logup_spec_q_input_layer_eval
+    array_decl ExtField[tower_proofs.prod_spec_size] prod_spec_input_layer_eval
+    array_decl ExtField[tower_proofs.logup_spec_size] logup_spec_p_input_layer_eval
+    array_decl ExtField[tower_proofs.logup_spec_size] logup_spec_q_input_layer_eval
 
     PointAndEval next_rt = PointAndEval {
         point: initial_rt,
@@ -77,11 +77,11 @@ def tower_verify(
     }
     u32 eval_len = 1
     for u32 round in 0..expected_max_round - 1 do
-        field[0] out_rt = next_rt.point
-        field out_claim = next_rt.eval
+        ExtField[0] out_rt = next_rt.point
+        ExtField out_claim = next_rt.eval
         u32 rt_len = (round + 1) * log2_num_fanin
         // FOLDED verify_sumcheck
-        SumCheckSubClaim sumcheck_claim = verify_sumcheck(
+        SumCheckSubClaimAndTranscript sc_t = verify_sumcheck(
             out_claim,
             SumcheckProof {
                 points: [], // final claimed point will be derive from sumcheck protocol
@@ -93,82 +93,91 @@ def tower_verify(
             },
             t
         )
+        SumCheckSubClaim sumcheck_claim = sc_t.sc
+        t = sc_t.t
 
         // check expected_evaluation
-        field[0] rt = sumcheck_claim.point
-        field expected_evaluation = 0
+        array_decl ExtField[rt_len] rt
+        for u32 i in 0..rt_len do
+            rt[i] = sumcheck_claim.point[i].elements
+        endfor
+        ExtField expected_evaluation = to_ext(0)
         for u32 spec_index in 0..tower_proofs.prod_spec_size do
             if tower_proofs.layer_per_spec[spec_index] < round then
-                field alpha = alpha_pows[spec_index]
-                field prod = 1
+                ExtField alpha = alpha_pows[spec_index]
+                ExtField prod = to_ext(1)
                 for u32 i in 0..eval_len do
-                    prod = prod * tower_proofs.prod_specs_eval[spec_index][round][i]
+                    prod = ext_mul(prod, tower_proofs.prod_specs_eval[spec_index][round][i])
                 endfor
-                expected_evaluation = expected_evaluation + eq_eval(rt_len, out_rt, rt) * alpha * prod
+                // expected_evaluation = expected_evaluation + eq_eval(rt_len, out_rt, rt) * alpha * prod
+                expected_evaluation = ext_add(expected_evaluation, ext_mul(ext_mul(eq_eval(rt_len, out_rt, rt), alpha), prod))
             endif
         endfor
         for u32 spec_index in 0..tower_proofs.logup_spec_size do
             if tower_proofs.layer_per_spec[spec_index] < round then
-                field alpha_numerator = alpha_pows[initial_prod_evals_len + 2 * spec_index]
-                field alpha_denominator = alpha_pows[initial_prod_evals_len + 2 * spec_index + 1]
-                field p1 = tower_proofs.logup_specs_eval[spec_index][round][0]
-                field p2 = tower_proofs.logup_specs_eval[spec_index][round][1]
-                field q1 = tower_proofs.logup_specs_eval[spec_index][round][2]
-                field q2 = tower_proofs.logup_specs_eval[spec_index][round][3]
-                expected_evaluation = expected_evaluation + eq_eval(rt_len, out_rt, rt) * (alpha_numerator * (p1 * q2 + p2 * q1) + alpha_denominator * (q1 * q2))
+                ExtField alpha_numerator = alpha_pows[initial_prod_evals_len + 2 * spec_index]
+                ExtField alpha_denominator = alpha_pows[initial_prod_evals_len + 2 * spec_index + 1]
+                ExtField p1 = tower_proofs.logup_specs_eval[spec_index][round][0]
+                ExtField p2 = tower_proofs.logup_specs_eval[spec_index][round][1]
+                ExtField q1 = tower_proofs.logup_specs_eval[spec_index][round][2]
+                ExtField q2 = tower_proofs.logup_specs_eval[spec_index][round][3]
+                // expected_evaluation = expected_evaluation + eq_eval(rt_len, out_rt, rt) * (alpha_numerator * (p1 * q2 + p2 * q1) + alpha_denominator * (q1 * q2))
+                expected_evaluation = ext_add(expected_evaluation, ext_add(ext_mul(eq_eval(rt_len, out_rt, rt), ext_mul(alpha_numerator, ext_add((ext_mul(p1, q2), ext_mul(p2, q1)))), ext_mul(alpha_denominator, ext_mul(q1, q2)))))
             endif
         endfor
-        assert(expected_evaluation == sumcheck_claim.expected_evaluation)
+        assert(ext_eq(expected_evaluation, sumcheck_claim.expected_evaluation) == 1)
 
         // derive single eval
         // rt' = r_merge || rt
         // r_merge.len() == ceil_log2(num_product_fanin)
-        array_decl field[log2_num_fanin] r_merge
-        array_decl field[rt_len + log2_num_fanin] rt_prime
+        array_decl ExtField[log2_num_fanin] r_merge
+        array_decl ExtField[rt_len + log2_num_fanin] rt_prime
         for u32 i in 0..rt_len do
             rt_prime[i] = rt[i]
         endfor
         for u32 i in 0..log2_num_fanin do
-            // decimal expression of "merge"
-            t = append_message_field(t, 469853431653)
-            r_merge[i] = t.hash
-            rt_prime[rt_len + i] = t.hash
+            TranscriptAndChallenge t0 = get_and_append_challenge(t, 1, [435527247213]) // b"merge"
+            t = t0.transcript
+            r_merge[i] = t0.challenge.elements
+            rt_prime[rt_len + i] = t0.challenge.elements
         endfor
-        // Block 1 - 4: FOLDED build_eq_x_r_vec_sequential
-        field[num_fanin] coeffs = build_eq_x_r_vec_sequential(log2_num_fanin, num_fanin, r_merge)
+        ExtField[num_fanin] coeffs = build_eq_x_r_vec_sequential(log2_num_fanin, num_fanin, r_merge)
 
-        field prod_spec_evals = 0
-        // 
+        // generate next round challenge
+        ExtField prod_spec_evals = to_ext(0)
         for u32 spec_index in 0..tower_proofs.prod_spec_size do
             if tower_proofs.layer_per_spec[spec_index] < round then
-                field alpha = alpha_pows[spec_index]
-                field evals = 0
+                ExtField alpha = alpha_pows[spec_index]
+                ExtField evals = to_ext(0)
                 for u32 i in 0..eval_len do
-                    evals = evals + tower_proofs.prod_specs_eval[spec_index][round][i] * coeffs[i]
+                    evals = ext_add(evals, ext_mul(tower_proofs.prod_specs_eval[spec_index][round][i], coeffs[i]))
                 endfor
                 prod_spec_input_layer_eval[spec_index] = evals
-                prod_spec_evals = prod_spec_evals + alpha * evals
+                prod_spec_evals = ext_add(prod_spec_evals, ext_mul(alpha, evals))
             else
-                prod_spec_input_layer_eval[spec_index] = 0 
+                prod_spec_input_layer_eval[spec_index] = tp_ext(0) 
             endif
         endfor
-        field logup_spec_evals = 0
+        ExtField logup_spec_evals = to_ext(0)
         for u32 spec_index in 0..tower_proofs.logup_spec_size do
             if tower_proofs.layer_per_spec[spec_index] < round then
-                field alpha_numerator = alpha_pows[initial_prod_evals_len + 2 * spec_index]
-                field alpha_denominator = alpha_pows[initial_prod_evals_len + 2 * spec_index + 1]
-                field p_evals = tower_proofs.logup_specs_eval[spec_index][round][0] * coeffs[0] + tower_proofs.logup_specs_eval[spec_index][round][1] * coeffs[1]
-                field q_evals = tower_proofs.logup_specs_eval[spec_index][round][2] * coeffs[0] + tower_proofs.logup_specs_eval[spec_index][round][3] * coeffs[1]
+                ExtField alpha_numerator = alpha_pows[initial_prod_evals_len + 2 * spec_index]
+                ExtField alpha_denominator = alpha_pows[initial_prod_evals_len + 2 * spec_index + 1]
+                // ExtField p_evals = tower_proofs.logup_specs_eval[spec_index][round][0] * coeffs[0] + tower_proofs.logup_specs_eval[spec_index][round][1] * coeffs[1]
+                ExtField p_evals = ext_add(ext_mul(tower_proofs.logup_specs_eval[spec_index][round][0], coeffs[0]), ext_mul(tower_proofs.logup_specs_eval[spec_index][round][1], coeffs[1]))
+                // ExtField q_evals = tower_proofs.logup_specs_eval[spec_index][round][2] * coeffs[0] + tower_proofs.logup_specs_eval[spec_index][round][3] * coeffs[1]
+                ExtField q_evals = ext_add(ext_mul(tower_proofs.logup_specs_eval[spec_index][round][2], coeffs[0]), ext_mul(tower_proofs.logup_specs_eval[spec_index][round][3], coeffs[1]))
                 logup_spec_p_input_layer_eval[spec_index] = p_evals
                 logup_spec_q_input_layer_eval[spec_index] = q_evals
-                logup_spec_evals = logup_spec_evals + alpha_numerator * p_evals + alpha_denominator * q_evals
+                // logup_spec_evals = logup_spec_evals + alpha_numerator * p_evals + alpha_denominator * q_evals
+                logup_spec_evals = ext_add(logup_spec_evals, ext_add(ext_mul(alpha_numerator, p_evals), ext_mul(alpha_denominator, q_evals)))
             else 
-                logup_spec_p_input_layer_eval[spec_index] = 0 
-                logup_spec_q_input_layer_eval[spec_index] = 0
+                logup_spec_p_input_layer_eval[spec_index] = to_ext(0) 
+                logup_spec_q_input_layer_eval[spec_index] = to_ext(0)
             endif
         endfor
 
-        field next_eval = prod_spec_evals + logup_spec_evals
+        ExtField next_eval = ext_add(prod_spec_evals, logup_spec_evals)
         next_rt = PointAndEval {
             point: rt_prime,
             eval: next_eval

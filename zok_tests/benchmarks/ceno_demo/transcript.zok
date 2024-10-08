@@ -1,31 +1,32 @@
 from "ext_field" import ExtField, Challenge, to_ext, ext_mul, ext_eq
 
 from "poseidon" import Digest, poseidon
-from "poseidon_permutation" import PoseidonPermutation, set_from_slice, permute, squeeze
+from "poseidon_permutation" import PoseidonPermutation, new_poseidon_permutation, set_from_slice, permute, squeeze
 from "poseidon_hash" import compress, two_to_one, hash_n_to_m_no_pad, hash_or_noop
 
 struct Transcript {
-    Digest digest
+    PoseidonPermutation permutation
 }
 
 def inline new_transcript(u32 label_len, field[0] label) -> Transcript:
+    PoseidonPermutation perm = new_poseidon_permutation(0, [])
+    perm = set_from_slice(perm, label_len, label, 0)
+    perm = permute(perm)
     return Transcript {
-        digest: hash_or_noop(label_len, label)
+        permutation: perm
     }
 
 // Append the message to the transcript.
 def inline append_message(Transcript self, u32 msg_len, field[0] msg) -> Transcript:
-    Digest msg_digest = hash_or_noop(msg_len, msg)
-    return Transcript {
-        digest: two_to_one(self.digest, msg_digest)
-    }
+    self.permutation = set_from_slice(self.permutation, msg_len, msg, 0)
+    self.permutation = permute(self.permutation)
+    return self
 
 // Append the field extension element to the transcript.
 def inline append_field_element_ext(Transcript self, ExtField element) -> Transcript:
-    Digest elem_f = hash_or_noop(2, [element.b0, element.b1])
-    return Transcript {
-        digest: two_to_one(self.digest, elem_f)
-    }
+    self.permutation = set_from_slice(self.permutation, 2, [element.b0, element.b1], 0)
+    self.permutation = permute(self.permutation)
+    return self
 
 def inline append_field_element_exts(Transcript self, u32 elem_len, ExtField[0] elements) -> Transcript:
     for u32 i in 0..elem_len do
@@ -35,14 +36,14 @@ def inline append_field_element_exts(Transcript self, u32 elem_len, ExtField[0] 
 
 // Append the field elemetn to the transcript.
 def inline append_field_element(Transcript self, field element) -> Transcript:
-    Digest elem_f = hash_or_noop(1, [element])
-    self.digest = two_to_one(self.digest, elem_f)
+    self.permutation = set_from_slice(self.permutation, 1, [element], 0)
+    self.permutation = permute(self.permutation)
     return self
 
 // Append the challenge to the transcript.
 def append_challenge(Transcript self, Challenge challenge) -> Transcript:
-    Digest elem_f = hash_or_noop(2, [challenge.elements.b0, challenge.elements.b1])
-    self.digest = two_to_one(self.digest, elem_f)
+    self.permutation = set_from_slice(self.permutation, 2, [challenge.elements.b0, challenge.elements.b1], 0)
+    self.permutation = permute(self.permutation)
     return self
 
 struct TranscriptAndChallenge {
@@ -57,10 +58,11 @@ struct TranscriptAndChallenge {
 // as the field has a size less than 2^384.
 def get_and_append_challenge(Transcript self, u32 label_len, field[0] label) -> TranscriptAndChallenge:
     self = append_message(self, label_len, label)
+    field[8] sq = squeeze(self.permutation)
     Challenge challenge = Challenge {
         elements: ExtField {
-            b0: self.digest.elements[0],
-            b1: self.digest.elements[1]
+            b0: sq[0],
+            b1: sq[1]
         }
     }
     return TranscriptAndChallenge {
@@ -69,12 +71,12 @@ def get_and_append_challenge(Transcript self, u32 label_len, field[0] label) -> 
     }
 
 def read_challenge(Transcript self) -> Challenge:
-    ExtField r = ExtField {
-        b0: self.digest.elements[0],
-        b1: self.digest.elements[1]
-    }
+    field[8] sq = squeeze(self.permutation)
     return Challenge {
-        elements: r
+        elements: ExtField {
+            b0: sq[0],
+            b1: sq[1]
+        }
     }
 
 struct TranscriptAndChallengePows {
@@ -84,7 +86,7 @@ struct TranscriptAndChallengePows {
 
 // derive challenge from transcript and return all pows result
 def get_challenge_pows(u32 size, Transcript transcript) -> TranscriptAndChallengePows:
-    TranscriptAndChallenge t_c = get_and_append_challenge(transcript, 4, [2334393380763430755, 7286952176161813875, 1936482678, 0]) // b"combine subset evals"
+    TranscriptAndChallenge t_c = get_and_append_challenge(transcript, 3, [2334393380763430755, 7286952176161813875, 1936482678]) // b"combine subset evals"
     transcript = t_c.transcript
     ExtField alpha = t_c.challenge.elements
     array_decl ExtField[size] alpha_pows
@@ -101,7 +103,7 @@ def get_challenge_pows(u32 size, Transcript transcript) -> TranscriptAndChalleng
 def main() -> field:
     Transcript transcript = new_transcript(1, [508474648946]) // b"riscv"
     // Challenge 0
-    TranscriptAndChallenge t0 = get_and_append_challenge(transcript, 4, [6878231886748938864, 7173491, 0, 0]) // b"product_sum"
+    TranscriptAndChallenge t0 = get_and_append_challenge(transcript, 2, [6878231886748938864, 7173491]) // b"product_sum"
     transcript = t0.transcript
     Challenge initial_rt = t0.challenge
     // Ext 0
@@ -116,7 +118,7 @@ def main() -> field:
         }
     ])
     // Challenge 1
-    TranscriptAndChallenge t1 = get_and_append_challenge(transcript, 4, [435527247213, 0, 0, 0]) // b"merge"
+    TranscriptAndChallenge t1 = get_and_append_challenge(transcript, 1, [435527247213]) // b"merge"
     transcript = t1.transcript
     Challenge r_merge = t1.challenge
     Challenge c = read_challenge(transcript)

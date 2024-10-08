@@ -15,11 +15,11 @@ def inline to_ext(u32 i) -> ExtField:
         b1: 0
     }
 
-def inline ext_eq(ExtField e0, ExtField e1) -> bool:
-    return e0.b0 == e1.b0 && e0.b1 == e1.b1
+def inline ext_eq(ExtField e0, ExtField e1) -> field:
+    return e0.b0 == e1.b0 && e0.b1 == e1.b1 ? 1 : 0
 
-def inline ext_neq(ExtField e0, ExtField e1) -> bool:
-    return e0.b0 != e1.b0 || e0.b1 != e1.b1
+def inline ext_neq(ExtField e0, ExtField e1) -> field:
+    return e0.b0 != e1.b0 || e0.b1 != e1.b1 ? 1 : 0
 
 def inline ext_add(ExtField e0, ExtField e1) -> ExtField:
     return ExtField {
@@ -59,7 +59,7 @@ def inline ext_invert(ExtField e) -> ExtField:
         b0: inv_b0,
         b1: inv_b1
     }
-    assert(ext_eq(ext_mul(e, inv), to_ext(1)))
+    assert(ext_eq(ext_mul(e, inv), to_ext(1)) == 1)
     return inv
 
 struct Challenge {

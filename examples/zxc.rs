@@ -10,7 +10,7 @@ use bellman::Circuit;
 use bls12_381::{Bls12, Scalar};
 */
 const PRINT_PROOF: bool = false;
-const INLINE_SPARTAN_PROOF: bool = true;
+const INLINE_SPARTAN_PROOF: bool = false;
 const TOTAL_NUM_VARS_BOUND: usize = 100000000;
 
 use core::cmp::min;

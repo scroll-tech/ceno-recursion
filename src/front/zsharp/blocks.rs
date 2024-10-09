@@ -1254,7 +1254,7 @@ impl<'ast> ZGen<'ast> {
         match (lhs, rhs) {
             (Ty::Array(lhs_ro, lhs_len, lhs_entry_ty), Ty::Array(rhs_ro, rhs_len, rhs_entry_ty)) => {
                 let ro_check = lhs_ro == rhs_ro;
-                let len_check = lhs_len == rhs_len || *lhs_len == 0;
+                let len_check = lhs_len == rhs_len || *lhs_len == 0 || *rhs_len == 0;
                 let entry_ty_check = Self::bl_gen_type_check(lhs_entry_ty, rhs_entry_ty);
                 if ro_check && len_check && entry_ty_check.is_ok() {
                     Ok(())
@@ -1916,6 +1916,7 @@ impl<'ast> ZGen<'ast> {
 
         // Any form of array initialization involves allocation
         let is_alloc = true;
+        let cur_array_count = array_count; // used by init
 
         let cur_scope = blks[blks_len - 1].scope;
         let entry_ty = array_init_info.entry_ty.clone();
@@ -1944,7 +1945,7 @@ impl<'ast> ZGen<'ast> {
             (blks, blks_len, var_scope_info, content_expr, func_count, array_count, struct_count, load_count) = 
                 self.bl_gen_expr_::<IS_MAIN>(blks, blks_len, &array_init_info.unique_contents[i], f_name, func_count, array_count, struct_count, load_count, var_scope_info)?;
             // Then assign it to a temporary variable init^X
-            let init_name = format!("init^{}", i);
+            let init_name = format!("init^{}^{}", cur_array_count, i);
             var_scope_info.declare_var(&init_name, &f_name, cur_scope, entry_ty.clone());
             (blks, blks_len) = self.bl_gen_def_stmt_(blks, blks_len, &init_name, &content_expr, &entry_ty, f_name, f_name, &var_scope_info)?;
         }
@@ -1971,7 +1972,7 @@ impl<'ast> ZGen<'ast> {
             let loop_header = blks_len - 1;
 
             // Store stmt & increment iterator
-            let entry_name = format!("init^0");
+            let entry_name = format!("init^{}^0", cur_array_count);
             let entry_extended_name = var_scope_info.reference_var(&entry_name, &f_name)?.0;
             let new_entry_expr = Expression::Identifier(IdentifierExpression {
                 value: entry_extended_name,
@@ -2011,7 +2012,7 @@ impl<'ast> ZGen<'ast> {
         else {
             let mut index = 0;
             for entry in array_init_info.arr_entries.unwrap() {
-                let entry_name = format!("init^{}", entry);
+                let entry_name = format!("init^{}^{}", cur_array_count, entry);
                 let entry_extended_name = var_scope_info.reference_var(&entry_name, &f_name)?.0;
                 let new_entry_expr = Expression::Identifier(IdentifierExpression {
                     value: entry_extended_name,

@@ -140,8 +140,8 @@ pub struct FieldOpt {
         env = "FIELD_BUILTIN",
         value_enum,
         // default_value = "bls12381"
-        default_value = "curve25519"
-        // default_value = "goldilocks"
+        // default_value = "curve25519"
+        default_value = "goldilocks"
         // default_value = "goldilocks-ext2"
     )]
     pub builtin: BuiltinField,
@@ -173,8 +173,8 @@ pub enum BuiltinField {
 impl Default for BuiltinField {
     fn default() -> Self {
         // BuiltinField::Bls12381
-        BuiltinField::Curve25519
-        // BuiltinField::Goldilocks
+        // BuiltinField::Curve25519
+        BuiltinField::Goldilocks
         // BuiltinField::GoldilocksExt2
     }
 }

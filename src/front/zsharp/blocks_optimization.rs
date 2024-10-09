@@ -2370,7 +2370,7 @@ impl<'ast> ZGen<'ast> {
                 for (name, ty) in &bl_out[*s] {
                     if let Some(k) = state.get(name) {
                         if *ty != *k {
-                            panic!("Dynamic and generic types not supported!")
+                            panic!("Type analysis failed: mismatched types on variable {} of block {}, expected {:?} but obtained {:?}", name, cur_bl, ty, k)
                         }
                     }
                     if state.get(name) == None {

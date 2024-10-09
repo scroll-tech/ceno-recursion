@@ -4,7 +4,6 @@ struct TowerProofs {
     u32 prod_spec_size
     u32 logup_spec_size
     IOPProverMessage[0][0] proofs
-    u32[0] layer_per_spec
     // specs -> layers -> evals
     ExtField[0][0][0] prod_specs_eval
     // specs -> layers -> evals

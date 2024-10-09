@@ -1,3 +1,4 @@
+from "ext_field" import ExtField
 from "sumcheck_structs" import IOPProverMessage
 
 struct TowerProofs {

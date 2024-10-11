@@ -10,3 +10,6 @@
 [submodule "ff"]
 	path = ff
 	url = git@github.com:Jiangkm3/ff.git
+[submodule "Spartan"]
+	path = Spartan
+	url = git@github.com:microsoft/Spartan.git

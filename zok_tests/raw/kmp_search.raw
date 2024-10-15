@@ -1,0 +1,128 @@
+CONST:
+max_n 480
+max_m 48
+
+INPUT:
+b 0
+c 0
+
+PROGRAM:
+def lps_gen(u32 m, u32[{max_m}] pat) -> u32[{max_m}]:
+    u32[{max_m}] lps = [0; {max_m}]
+    u32 len = 0
+    u32 i = 1
+
+    // BASELINE
+    for u32 count in 0..{max_m + max_m} do
+        if i < m then
+            // if pat[i] == pat[len] then
+            if pat[len] == pat[len] then
+                len = len + 1
+                // lps[i] = len
+                lps[2] = len
+                i = i + 1
+            else
+                if len != 0 then
+                    // len = lps[len - 1]
+                    len = lps[2]
+                else
+                    i = i + 1
+                endif
+            endif
+        endif
+    endfor
+
+    // COBBL
+    while i < m do
+        if pat[i] == pat[len] then
+            len = len + 1
+            lps[i] = len
+            i = i + 1
+        else
+            if len != 0 then
+                len = lps[len - 1]
+            else
+                i = i + 1
+            endif
+        endif
+    endwhile
+
+    // END_SPLIT
+
+    return lps
+
+def main(u32 b, u32 c, u32 n, u32 m) -> u32:
+    u32[{max_n}] txt = [0; {max_n}]
+    u32[{max_m}] pat = [0; {max_m}]
+
+    // Initialize arrays
+    u32 sum = 0
+    for u32 i in 0..{max_n} do
+        sum = sum + i
+        txt[i] = sum
+    endfor
+    for u32 i in 0..{max_m} do
+        pat[i] = txt[n - m - b + i]
+    endfor
+    // random access to ensure array is written in memory
+    u32 x = pat[b]
+    u32 y = txt[b]
+
+    // Generate LPS
+    u32[{max_m}] lps = lps_gen(m, pat)
+
+    u32 i = 0
+    u32 j = 0
+    u32 found = 0
+
+    // BASELINE
+    for u32 count in 0..{max_m + max_n} do
+        if m - j <= n - i then
+            // if pat[j] == txt[i] then
+            if pat[b] == txt[b] then
+                i = i + 1
+                j = j + 1
+            endif
+
+            if j == m then
+                // j = lps[j - 1]
+                j = lps[b]
+                found = i - j
+            else
+                // if i < n && pat[j] != txt[i] then
+                if i < n && pat[b] != txt[b] then
+                    if j != 0 then
+                        // j = lps[j - 1]
+                        j = lps[b]
+                    else
+                        i = i + 1
+                    endif
+                endif
+            endif
+        endif
+    endfor
+
+    // COBBL
+    while m - j <= n - i do
+        if pat[j] == txt[i] then
+            i = i + 1
+            j = j + 1
+        endif
+
+        if j == m then
+            j = lps[j - 1]
+            found = i - j
+        else
+            if i < n && pat[j] != txt[i] then
+                if j != 0 then
+                    j = lps[j - 1]
+                else
+                    i = i + 1
+                endif
+            endif
+        endif
+    endwhile
+    
+    // END_SPLIT
+
+    return found + (x + y) * c

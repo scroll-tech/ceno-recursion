@@ -1,0 +1,72 @@
+/// Evaluate mle polynomial
+def mle_eval(field[0] self, u32 mle_len, field[0] point, u32 point_len) -> field:
+    // TODO: what if length of self is not a power of 2?
+    // assert(2 ** point_len == mle_len)
+    u32 i = 0
+    while i != point_len do
+        mle_len = mle_len / 2
+        i = i + 1
+        for u32 j in 0..mle_len do
+            self[j] = (1 - point[i - 1]) * self[j] + point[i - 1] * self[mle_len + j]
+        endfor
+    endwhile
+    return self[0]
+
+/// Evaluate eq polynomial.
+def eq_eval(u32 len, field[0] x, field[0] y) -> field:
+    field res = 1
+    for u32 i in 0..len do
+        field xi = x[i]
+        field yi = y[i]
+        field xi_yi = xi * yi
+        res = res * (xi_yi + xi_yi - xi - yi + 1)
+    endfor
+    return res
+
+def build_eq_x_r_vec_sequential(u32 r_len, u32 r_len_pow2, field[0] r) -> field[0]:
+    // we build eq(x,r) from its evaluations
+    // we want to evaluate eq(x,r) over x \in {0, 1}^num_vars
+    // for example, with num_vars = 4, x is a binary vector of 4, then
+    //  0 0 0 0 -> (1-r0)   * (1-r1)    * (1-r2)    * (1-r3)
+    //  1 0 0 0 -> r0       * (1-r1)    * (1-r2)    * (1-r3)
+    //  0 1 0 0 -> (1-r0)   * r1        * (1-r2)    * (1-r3)
+    //  1 1 0 0 -> r0       * r1        * (1-r2)    * (1-r3)
+    //  ....
+    //  1 1 1 1 -> r0       * r1        * r2        * r3
+    // we will need 2^num_var evaluations
+    array_decl field[r_len_pow2] evals
+    evals[0] = 1
+    u32 next_size = 1
+    u32 i = 0
+    while i != r_len do
+        field r_i = r[r_len - 1 - i]
+        // suppose at the previous step we processed buf [0..size]
+        // for the current step we are populating new buf[0..2*size]
+        // for j travese 0..size
+        // buf[2*j + 1] = r * buf[j]
+        // buf[2*j] = (1 - r) * buf[j]
+        u32 j = next_size
+        next_size = next_size * 2
+        i = i + 1
+        while j != 0 do
+            j = j - 1
+            evals[2 * j + 1] = r_i * evals[j]
+            evals[2 * j] = (1 - r_i) * evals[j]
+        endwhile
+    endwhile
+    return evals
+
+def main(u32 mle_len, u32 point_len) -> field:
+    // assert(2 ** point_len == mle_len)
+    // Generate mle
+    array_decl field[mle_len] mle
+    for u32 i in 0..mle_len do
+        mle[i] = (F)i
+    endfor
+    // Generate point
+    array_decl field[point_len] point
+    for u32 i in 0..point_len do
+        point[i] = (F)i
+    endfor
+
+    return mle_eval(mle, mle_len, point, point_len)

@@ -1,0 +1,469 @@
+TODO: How to handle the scope of the loop iterator?
+    Need to LOAD at the beginning of the first block after the loop.
+    This also means that iterators cannot be pre-processed like other variables.
+    Also, there seems to be some ambiguities on what the iterator actually is.
+
+--
+Case 1: No Function Call
+
+    def main() -> u32:
+        u32 a = 5
+        u32 b = 4
+        for u32 i in 0..4 do    
+            a = a + 1
+            u32 a = 60
+            for u32 j in 0..5 do
+                u32 a = 80
+            endfor
+            b = b + 1
+        endfor
+        a = a + 10
+        return a + b
+
+Strategy 1 - Rename all variables
+
+    def main() -> u32:
+        u32 a1 = 5
+        u32 b = 4
+        for u32 i in 0..4 do    
+            a1 = a1 + 1
+            u32 a2 = 60
+            for u32 j in 0..5 do
+                u32 a3 = 80
+            endfor
+            b = b + 1
+        endfor
+        a1 = a1 + 10
+        ret = a1 + b
+    
+    # of states: 5
+    # of identifiers: 5 (a1, a2, a3, b, ret)
+    # of additional operations: 0
+
+    Strategy:
+        1. Keep track of all known identifiers.
+        2. When reach a duplicated identifier, 
+            rename all its occurences in the remaining of the current scope.
+
+Strategy 2 - Use Physical Memory as stack
+
+    def main() -> u32:
+        u32 a = 5
+        u32 b = 4
+        for u32 i in 0..4 do    
+            a = a + 1
+            STORE(a, 0)
+            u32 a = 60
+            for u32 j in 0..5 do
+                STORE(a, 1)
+                u32 a = 80
+                LOAD(a, 1)
+            endfor
+            LOAD(a, 0)
+            b = b + 1
+        endfor
+        a = a + 10
+        ret =  a + b
+
+    # of states: 5
+    # of identifiers: 3 (a, b, ret)
+    # of additional operations: 2 to 4 Mem Ops
+
+    Strategy:
+        1. Keep track of all known identifiers.
+        2. Initialize a stack pointer (sp) to 0, which points to physical memory.
+        3. When reach a duplicated identifier, 
+            STORE its value into addr sp, 
+            add a LOAD at the end of the current scope, and
+            increment sp by 1. (sp never decrements).
+    
+    Note:
+        1. LOAD and STORE on line 51 and 53 are unnecessary, one may attempt to instead rename "a" on line 52
+            However, one should be clever about not to cause a gap in the physical memory.
+    
+--
+Case 2: Non-Generic Function Call
+
+    def add_five(u32 a) -> u32:
+        u32 b = 5
+        return a + b
+
+    def main() -> u32:
+        u32 a = 5
+        u32 b = 4
+        for u32 i in 0..4 do    
+            a = a + 1
+            a = add_five(a)
+            for u32 j in 0..5 do
+                u32 a = 80
+            endfor
+            b = b + 1
+        endfor
+        a = a + 10
+        return a + b
+
+Strategy 1 - Rename all variables
+
+    def add_five(u32 add_five@a) -> u32:
+        u32 add_five@b = 5
+        add_five@ret = add_five@a + add_five@b
+
+    def main() -> u32:
+        u32 main@a1 = 5
+        u32 main@b = 4
+        for u32 i in 0..4 do    
+            main@a1 = main@a1 + 1
+            add_five@a = main@a1
+            call add_five
+            main@a1 = add_five@ret
+            for u32 j in 0..5 do
+                u32 main@a2 = 80
+            endfor
+            main@b = main@b + 1
+        endfor
+        main@a1 = main@a1 + 10
+        main@ret = main@a1 + main@b
+    
+    # of states: 7
+    # of identifiers: 7 (main: a1, a2, b, ret; add_five: a, b, ret)
+    # of additional operations: 2 Reg Ops
+    
+    Strategy:
+    1. Append function names before all local variables.
+    2. Apply Case 1 Strategy 1.
+
+Strategy 2 - Use Physical Memory as stack
+
+    def add_five(u32 a) -> u32:
+        STORE(b, 1)
+        u32 b = 5
+        ret = a + b
+        LOAD(b, 1)
+
+    def main() -> u32:
+        u32 a = 5
+        u32 b = 4
+        for u32 i in 0..4 do    
+            a = a + 1
+            STORE(a, 0)
+            call add_five(a)
+            LOAD(a, 0)
+            a = ret
+            for u32 j in 0..5 do
+                STORE(a, 2)
+                u32 a = 80
+                LOAD(a, 2)
+            endfor
+            b = b + 1
+        endfor
+        a = a + 10
+        ret = a + b
+
+    # of states: 7
+    # of identifiers: 3 (a, b, ret)
+    # of additional operations: 0 to 6 Mem Ops
+
+    Strategy:
+        1. Keep track of all known identifiers.
+        2. Initialize a stack pointer (sp) to 0, which points to physical memory.
+        3. When reach a duplicated identifier, 
+            STORE its value into addr sp, 
+            add a LOAD at the end of the current scope, and
+            increment sp by 1. (sp never decrements).
+        4. When we reach a function call, read all PARAMETERS of the function. If any parameter uses an identifier
+            currently in use, STORE that parameter and LOAD it BEFORE processing the function return value.
+    
+    Note:
+        None of the Mem Ops here are actually necessary. Line 133 / 136 and line 148 / 150 follow the same argument
+        as in Case 1 Strategy 2. Line 145 can be avoided because a is immediately reassigned, and thus line 143 is
+        also unnecessary. Again, precaution should be taken to prevent gaps in Physical memory.
+
+--
+Case 3: Generic Function Call
+
+    def mult<c>(u32 a) -> u32:
+        u32 b = 0
+        for u32 i in 0..c do
+            b = b + a
+        endfor
+        return b
+
+    def main() -> u32:
+        u32 a = 5
+        u32 b = 4
+        b = mult::<6>(b)
+        for u32 i in 0..4 do    
+            a = a + 1
+            a = mult::<4>(a)
+            for u32 j in 0..5 do
+                u32 a = 80
+            endfor
+            b = b + 1
+        endfor
+        a = a + 10
+        return a + b
+
+    Note:
+        1. The generic value "c" is always known at compile time.
+        2. "c" is always of the type u32.
+
+    The only ways generics differ from ordinary parameters are for array size or loop bounds.
+    (Generic operation doesn't seem possible since "c" has fix type.)
+    Let's observe the 2 cases:
+
+    a. Array Size
+    Array size doesn't matter at all. Virtual addresses doesn't correspond to physical addresses anyways.
+
+    b. Loop Bound
+    Again, doesn't matter since we are not unrolling.
+
+    Conclusion:
+    We can simply turn "def mult<c>(u32 a)" to "def mult(u32 a, u32 c)", and
+    "b = mult::<6>(b)" to "b = mult(b, 6)", and
+    "field[3] a; a = sum(a)" to "field[3] a; a = sum(a, 3)". Although this may require some analysis.
+
+--
+Case 4: Putting Them All Together
+
+    def sum<N>(field[N] a) -> field:
+        field res = 0
+        for u32 i in 0..N do
+            res = res + a[i]
+        endfor
+        return res
+
+    def main() -> u32:
+        field[3] a = [0, 1, 2]
+        field b = sum(a)
+        field c = 0
+        for u32 i in 0..4 do    
+            b = b + 1
+            for u32 j in 0..5 do
+                field[4] c = [0, 1, 2, 3]
+                c[2] = b
+                field b = sum(c)
+            endfor
+            b = b + 1
+        endfor
+        return b + c
+
+Step 1: Handle variable scoping
+    Use STORE_P for physical addr and STORE_V for virtual addr
+
+    def sum(field[N] a, u32 N) -> field:
+        field res = 0
+        for u32 i in 0..N do
+            res = res + a[i]
+        endfor
+        ret = res
+
+    def main() -> u32:
+        field[3] a = [0, 1, 2]
+        STORE_P(a, 0)
+        u32 N = 3
+        CALL SUM
+        LOAD_P(a, 0)
+        field b = ret
+        field c = 0
+        for u32 i in 0..4 do    
+            b = b + 1
+            for u32 j in 0..5 do
+                STORE_P(c, 1)
+                field[4] c = [0, 1, 2, 3]
+                c[2] = b
+                STORE_P(a, 2)
+                field[N] a = c
+                // No N in scope, so no need to STORE / LOAD
+                N = 4
+                CALL SUM
+                LOAD(a, 2)
+                STORE_P(b, 3)
+                field b = ret
+                LOAD_P(b, 3)
+                LOAD_P(c, 1)
+            endfor
+            b = b + 1
+        endfor
+        ret = b + c
+
+Step 2: Translate array accesses
+    "a" and "c" now become u32 indicating offsets in Virtual Mem
+
+    def sum(field[N] a, u32 N) -> field:
+        field res = 0
+        for u32 i in 0..N do
+            res = res + a[i]
+        endfor
+        ret = res
+
+    def main() -> u32:
+        u32 a = 0
+        STORE_V(0, a + 0)
+        STORE_V(1, a + 1)
+        STORE_V(2, a + 2)
+        STORE_P(a, 0)
+        u32 N = 3
+        call sum
+        LOAD_P(a, 0)
+        field b = ret
+        field c = 0
+        for u32 i in 0..4 do    
+            b = b + 1
+            for u32 j in 0..5 do
+                STORE_P(c, 1)
+                u32 c = 3
+                STORE_V(0, c + 0)
+                STORE_V(1, c + 1)
+                STORE_V(2, c + 2)
+                STORE_P(3, c + 3)
+                LOAD_V(b, c + 2)
+                STORE_P(a, 2)
+                u32 a = c
+                N = 4
+                CALL SUM
+                LOAD(a, 2)
+                STORE_P(b, 3)
+                field b = ret
+                LOAD_P(b, 3)
+                LOAD_P(c, 1)
+            endfor
+            b = b + 1
+        endfor
+        ret = b + c
+
+Step 3: Flatten the loops
+    Since iterators might require new scoping, notice that LOAD of the old scopes do not occur at the end
+    of the loop block, but rather the beginning of the block after the loop
+
+    def sum(field[N] a, u32 N) -> field:
+        field res = 0
+        STORE_P(i, 4)
+        i = 0
+        if i < N goto l5 else goto l6
+        l5: 
+            res = res + a[i]
+            i = i + 1
+            if i < N goto l5 else goto l6
+        l6:
+        LOAD_P(i, 4)
+        ret = res
+
+    def main() -> u32:
+        u32 a = 0
+        STORE_V(0, a + 0)
+        STORE_V(1, a + 1)
+        STORE_V(2, a + 2)
+        STORE_P(a, 0)
+        u32 N = 3
+        call sum
+        LOAD_P(a, 0)
+        field b = ret
+        field c = 0
+        i = 0
+        if i < 4 goto l1 else goto l2
+        l1:
+            b = b + 1
+            j = 0
+            if j < 5 goto l3 else goto l4
+            l3:
+                STORE_P(c, 1)
+                u32 c = 3
+                STORE_V(0, c + 0)
+                STORE_V(1, c + 1)
+                STORE_V(2, c + 2)
+                STORE_P(3, c + 3)
+                LOAD_V(b, c + 2)
+                STORE_P(a, 2)
+                u32 a = c
+                N = 4
+                CALL SUM
+                LOAD(a, 2)
+                STORE_P(b, 3)
+                field b = ret
+                LOAD_P(b, 3)
+                LOAD_P(c, 1)
+                j = j + 1
+                if j < 5 goto l3 else goto l4
+            l4:
+            b = b + 1
+            i = i + 1
+            if i < 4 goto l1 else go to l2
+        l2:
+        ret = b + c
+
+Step 4: Breaking into blocks
+
+    Head Block: 0
+    Coda Block: 10
+
+    // Main
+    Block 0:
+        u32 a = 0
+        STORE_V(0, a + 0)
+        STORE_V(1, a + 1)
+        STORE_V(2, a + 2)
+        STORE_P(a, 0)
+        u32 N = 3
+        u32 BP = 1
+    Block Transition: -> 7 (function call)
+
+    Block 1:
+        LOAD_P(a, 0)
+        field b = ret
+        field c = 0
+        u32 i = 0
+    Block Transition: if i < 4 then -> 2 else -> 6
+
+    Block 2:
+        b = b + 1
+        u32 j = 0
+    Block Transition: if j < 5 then -> 3 else -> 5
+
+    Block 3:
+        STORE_P(c, 1)
+        u32 c = 3
+        STORE_V(0, c + 0)
+        STORE_V(1, c + 1)
+        STORE_V(2, c + 2)
+        STORE_P(3, c + 3)
+        LOAD_V(b, c + 2)
+        STORE_P(a, 2)
+        u32 a = c
+        N = 4
+        BP = 4
+    Block Transition: -> 7 (function call)
+
+    Block 4:
+        LOAD(a, 2)
+        STORE_P(b, 3)
+        field b = ret
+        LOAD_P(b, 3)
+        LOAD_P(c, 1)
+        j = j + 1
+    Block Transition: if j < 5 then -> 3 else -> 5
+
+    Block 5:
+        b = b + 1
+        i = i + 1
+    Block Transition: if i < 4 then -> 2 else -> 6
+
+    Block 6:
+        ret = b + c
+    Block Coda: -> 10
+
+    // Sum
+    Block 7:
+        field res = 0
+        STORE_P(i, 4)
+        i = 0
+    Block Transition: if i < N then -> 8 else -> 9
+
+    Block 8:
+        res = res + a[i]
+        i = i + 1
+    Block Transition: if i < N then -> 8 else -> 9
+
+    Block 9:
+        LOAD_P(i, 4)
+        ret = res
+    Block Transition: -> BP (end function call)

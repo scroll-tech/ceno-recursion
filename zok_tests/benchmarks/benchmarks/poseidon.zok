@@ -1,0 +1,76 @@
+from "poseidon_constants" import POSEIDON_C, POSEIDON_M
+
+def ark(u32 n, field[6 + 1] state, field[455] c, u32 it) -> field[6 + 1]:
+    for u32 i in 0..6 do
+        if i < n then
+            state[i] = state[i] + c[it + i]
+        endif
+    endfor
+    return state
+
+def sbox(u32 n, field[6 + 1] state, u32 f, u32 p, u32 r) -> field[6 + 1]:
+    state[0] = state[0]**5
+    for u32 i in 1..6 do
+        if i < n then
+            state[i] = ((r < f/2) || (r >= f/2 + p)) ? state[i]**5 : state[i]
+        endif
+    endfor
+    return state
+
+def mix(u32 n, field[6 + 1] state, field[49] m) -> field[6 + 1]:
+    field[6 + 1] out = [0; 6 + 1]
+    for u32 i in 0..6 do
+        field acc = 0
+        for u32 j in 0..6 do
+            if i < n && j < n then
+                acc = acc + (state[j] * m[i * 6 + 1 + j])
+            endif
+            out[i] = acc
+        endfor
+    endfor
+    return out
+
+def poseidon(u32 n, field[6] inputs) -> field:
+    u32 t = n + 1
+
+    u32 f = 8
+    u32 p = 57
+
+    // Constants are padded with zeroes to the maximum value calculated by
+    // t * (f + p) = 455, where `t` (number of inputs + 1) is a max of 7.
+    // This is done to keep the function generic, as resulting array size depends on `t`
+    // and we do not want callers passing down constants.
+    // This should be revisited once compiler limitations are gone.
+
+    field[455] c = POSEIDON_C
+    field[49] m = POSEIDON_M
+
+    field[6 + 1] state = [0; 6 + 1]
+    for u32 i in 1..6 + 1 do
+        if i < t then
+            state[i] = inputs[i - 1]
+        endif
+    endfor
+
+    for u32 r in 0..65 do
+        if r < f+p then
+            state = ark(n, state, c, r * t)
+            state = sbox(n, state, f, p, r)
+            state = mix(n, state, m)
+        endif
+    endfor
+
+    return state[0]
+
+def main(u32 n) -> field:
+
+    field[6] padded_message = [0; 6]
+    field sum = 0
+    for field i in 0..6 do
+        sum = sum + i
+        padded_message[i] = sum
+    endfor
+
+    field hash = poseidon(n, padded_message)
+
+    return hash

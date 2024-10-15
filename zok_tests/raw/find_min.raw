@@ -1,0 +1,43 @@
+CONST:
+max_high 200 400 600 800 1000 1200 1400 1600
+
+INPUT:
+low 0
+b 0
+c 0
+
+PROGRAM:
+def main(u32 low, u32 b, u32 c, u32 high) -> u32:
+    u32[{max_high}] arr = [0; {max_high}]
+    u32 sum = 0
+    for u32 i in 0..{max_high} do
+        sum = sum + i
+        arr[i] = sum
+    endfor
+    // random access to ensure array is written in memory
+    u32 x = arr[b]
+
+    u32 min = arr[low]
+    u32 min_idx = low
+
+    // BASELINE
+    for u32 i in 0..{max_high} do
+        if low < i && i < high && arr[i] < min then
+            min = arr[i]
+            min_idx = i
+        endif
+    endfor
+
+    // COBBL
+    u32 i = low + 1
+    while i < high do
+        if arr[i] < min then
+            min = arr[i]
+            min_idx = i
+        endif
+        i = i + 1
+    endwhile
+
+    // END_SPLIT
+
+    return min + (min_idx + x) * c

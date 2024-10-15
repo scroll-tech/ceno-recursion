@@ -1,0 +1,11 @@
+// Test the type check of read-only arrays
+def main(field[0] a, field[ro 0] b, field c) -> field:
+    field x = 0
+    if c == 1 then
+        if c == 0 then
+            x = a[0]
+        else
+            x = b[0]
+        endif
+    endif
+    return x

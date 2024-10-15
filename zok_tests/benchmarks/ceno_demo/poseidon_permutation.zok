@@ -1,0 +1,40 @@
+from "poseidon" import poseidon
+
+struct PoseidonPermutation {
+    field[12] state
+}
+
+/// Initialises internal state with values from `iter` until
+/// `iter` is exhausted or `SPONGE_WIDTH` values have been
+/// received; remaining state (if any) initialised with
+/// `T::default()`. To initialise remaining elements with a
+/// different value, instead of your original `iter` pass
+/// `iter.chain(core::iter::repeat(F::from_canonical_u64(12345)))`
+/// or similar.
+def inline new_poseidon_permutation(u32 elts_len, field[0] elts) -> PoseidonPermutation:
+    field[12] state = [0; 12]
+    for u32 i in 0..elts_len do
+        state[i] = elts[i]
+    endfor
+    return PoseidonPermutation {
+        state: state
+    }
+
+/// Set state element `i` to be `elts[i] for i =
+/// start_idx..start_idx + n` where `n = min(elts.len(),
+/// WIDTH-start_idx)`. Panics if `start_idx > SPONGE_WIDTH`.
+def inline set_from_slice(PoseidonPermutation self, u32 elts_len, field[0] elts, u32 start_idx) -> PoseidonPermutation:
+    for u32 i in 0..elts_len do
+        self.state[start_idx + i] = elts[i]
+    endfor
+    return self
+
+/// Apply permutation to internal state
+def inline permute(PoseidonPermutation self) -> PoseidonPermutation:
+    self.state = poseidon(self.state)
+    return self
+
+/// Return a slice of `RATE` elements
+def inline squeeze(PoseidonPermutation self) -> field[8]:
+    // Same pointer, no actual squeezing
+    return self.state

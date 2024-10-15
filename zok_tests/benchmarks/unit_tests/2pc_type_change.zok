@@ -1,0 +1,13 @@
+// Test Circ_Block's behavior when a variable is shadowed in the same scope with a different type
+// Test includes %RET
+
+def add(field a, field b) -> field:
+  return a + b
+
+def main(u32 a, u32 b) -> u32:
+  u32 d = a
+  u32 e = b
+  field a = 10
+  field b = 20
+  u32 r = add(a, b) == a + b ? d : e
+  return r

@@ -1,0 +1,16 @@
+// Test array appearance in all weird locations
+def foo(u32[0] arr, u32 b) -> u32[0]:
+  return [arr[b]; 2 * b]
+
+def main(u32 a, u32 b) -> u32:
+  u32[a] s = [0; a]
+  for u32 i in 0..a do
+    s[i] = i
+  endfor
+  u32 t = 0
+  for u32 i in 0..s[1] do
+    u32[2 * b] tmp = foo([0, 1, 2, 3, 4, 5], b)
+    t = tmp[0]
+  endfor
+
+  return t

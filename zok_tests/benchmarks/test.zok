@@ -1,0 +1,50 @@
+struct Point {
+    field x
+    field y
+}
+
+struct PublicKey {
+    Point p
+    Point q
+}
+
+struct SecretKey {
+    u32 s
+    PublicKey pk
+}
+
+def main() -> field:
+    u32 i = 2
+    array_decl SecretKey[3] sk_list
+    sk_list[0] = SecretKey {
+        s: 0,
+        pk: PublicKey {
+            p: Point {
+                x: 2,
+                y: 3
+            },
+            q: Point {
+                x: 2,
+                y: 3
+            }
+        }
+    }
+    sk_list[1].s = 0
+    sk_list[1].pk = PublicKey {
+        p: Point {
+            x: 2,
+            y: 3
+        },
+        q: Point {
+            x: 2,
+            y: 3
+        }
+    }
+    sk_list[2].s = 0
+    sk_list[2].pk.p = Point {
+        x: 2,
+        y: 3
+    }
+    sk_list[2].pk.q.x = 2
+    sk_list[2].pk.q.y = 2
+    return sk_list[i].pk.q.x

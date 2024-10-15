@@ -1,0 +1,40 @@
+from "ext_field" import ExtField, Challenge
+from "transcript" import Transcript
+
+struct IOPProverMessage {
+    ExtField[0] evaluations
+}
+
+struct SumcheckProof {
+    ExtField[0] points
+    IOPProverMessage[0] proofs
+}
+
+struct VPAuxInfo {
+    u32 max_degree
+    u32 num_variables
+}
+
+struct SumCheckSubClaim {
+    Challenge[0] point
+    ExtField expected_evaluation    
+}
+
+struct SumcheckIOPVerifierState {
+    u32 round
+    u32 num_vars
+    u32 max_degree
+    bool finished
+    ExtField[0][0] polynomials_received
+    Challenge[0] challenges
+}
+
+struct SumcheckIOPVerifierStateAndTranscript {
+    SumcheckIOPVerifierState vs
+    Transcript t
+}
+
+struct SumCheckSubClaimAndTranscript {
+    SumCheckSubClaim sc
+    Transcript t 
+}

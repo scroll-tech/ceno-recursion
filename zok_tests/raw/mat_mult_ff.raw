@@ -1,0 +1,60 @@
+CONST:
+max_n 2
+
+INPUT:
+x 0
+y 0
+z 0
+
+PROGRAM:
+def get_index(field i, field j, field n) -> field:
+    return n * i + j
+
+def main(field x, field y, field z, field n) -> field:
+    field[{max_n * max_n}] A = [0; {max_n * max_n}]
+    field[{max_n * max_n}] B = [0; {max_n * max_n}]
+    field[{max_n * max_n}] C = [0; {max_n * max_n}]
+
+    for field i in 0..{max_n * max_n} do
+        A[i] = i
+        B[i] = 2 * i
+    endfor
+    // random access to ensure array is written in memory
+    field c1 = A[x]
+    field c2 = B[y]
+
+    // BASELINE
+    for field i in 0..{max_n} do
+        if i < n then
+            for field j in 0..{max_n} do
+                if j < n then
+                    for field k in 0..{max_n} do
+                        if k < n then
+                            C[get_index(n, i, k)] = A[get_index(n, i, j)] * B[get_index(n, j, k)]
+                        endif
+                    endfor
+                endif
+            endfor
+        endif
+    endfor
+
+    // COBBL
+    field i = 0
+    while i < n do
+        field j = 0
+        while j < n do
+            field k = 0
+            while k < n do
+                C[get_index(n, i, k)] = A[get_index(n, i, j)] * B[get_index(n, j, k)]
+                k = k + 1
+            endwhile
+            j = j + 1
+        endwhile
+        i = i + 1
+    endwhile
+
+    // END_SPLIT
+
+    field c3 = C[z]
+
+    return c1 * c2 * c3

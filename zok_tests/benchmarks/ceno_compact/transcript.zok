@@ -1,0 +1,27 @@
+const field INIT_HASH = 2
+
+struct Transcript {
+    field hash
+}
+
+def new_transcript() -> Transcript:
+    return Transcript {
+        hash: INIT_HASH
+    }
+
+def append_message_field(Transcript t, field f) -> Transcript:
+    // t.hash = t.hash + f
+    return t
+
+// Verify that the sequence of transcript matches with the sequence of messages
+// Where msg[0] = len
+// i.e. t[i + 1] = hash(t[i], msg[i + 1])
+def verify_transcript(Transcript[0] t, field[0] msg) -> u32:
+    field t_len = msg[0]
+    assert(t[0].hash == INIT_HASH)
+    for field i in 1..t_len do
+        Transcript next_hash = append_message_field(t[i - 1], msg[i])
+        assert(t[i].hash == next_hash.hash)
+    endfor
+
+    return 1

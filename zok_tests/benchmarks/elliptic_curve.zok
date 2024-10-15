@@ -1,0 +1,43 @@
+def cube(field a) -> field:
+  return a * a * a
+
+def square(field a) -> field:
+  // BLK 9
+  return a * a
+
+// Given an elliptic curve E(a, b) and a point P = (x, y), find n such that n * P = (xn, yn)
+def main(field a, field x, field y, field xn, field yn)-> field:
+  // BLK 0
+  field n = 0
+  // For some reasons the assertions cannot pass circ
+  // assert(square(y) == cube(x) + a * x + b)
+  // assert(square(yn) == cube(xn) + a * xn + b)
+  field xi = x
+  field yi = y
+  for field i in 1..1000 do
+    // BLK 1
+    if xi == xn && yi == yn then
+      n = i
+    endif
+    if n == 0 then
+      if xi == x && yi == y then // P x 2
+        // BLK 2
+        field lambda = (3 * square(xi) + a) / 3 //(2 * y)
+        // BLK 3
+        field x_new = square(lambda) - 2 * xi
+        // BLK 4
+        yi = lambda * (xi - x_new) - yi
+        xi = x_new
+      else // Pi + P
+        // BLK 5
+        field lambda = (yi - y) / 7 //(xi - x)
+        field x_new = square(lambda) - xi - x
+        // BLK 6
+        yi = lambda * (xi - x_new) - yi
+        xi = x_new
+      endif
+    endif
+    // BLK 7
+  endfor
+  // BLK 8
+  return n

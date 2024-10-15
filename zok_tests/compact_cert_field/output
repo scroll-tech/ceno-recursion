@@ -1,0 +1,73 @@
+PERC: 0.6, NUM_R: 173
+Num Reveals: 173
+Verifier Time: 3843ms
+Proof Size: 277119
+
+
+--
+PERC: 0.65, NUM_R: 205
+Num Reveals: 205
+Verifier Time: 4552ms
+Proof Size: 328347
+
+
+--
+PERC: 0.7, NUM_R: 248
+Num Reveals: 248
+Verifier Time: 5509ms
+Proof Size: 397172
+
+
+--
+PERC: 0.75, NUM_R: 308
+Num Reveals: 308
+Verifier Time: 6842ms
+Proof Size: 493206
+
+
+--
+PERC: 0.8, NUM_R: 397
+Num Reveals: 397
+Verifier Time: 8841ms
+Proof Size: 635705
+--
+Compiler time: 2480ms
+Prover Time: 45.54s
+Verifier Time: 497.89ms
+Total Proof Size: 930472
+
+
+--
+PERC: 0.85, NUM_R: 545
+Num Reveals: 545
+Verifier Time: 12110ms
+Proof Size: 872631
+--
+Compiler time: 2538ms
+Prover Time: 72.87s
+Verifier Time: 561.69ms
+Total Proof Size: 1168288
+
+
+--
+PERC: 0.9, NUM_R: 842
+Num Reveals: 842
+Verifier Time: 18766ms
+Proof Size: 1348088
+--
+Compiler time: 2430ms
+Prover Time: 91.12s
+Verifier Time: 608.75ms
+Total Proof Size: 1186624
+
+
+--
+PERC: 0.95, NUM_R: 1729
+Num Reveals: 1729
+Verifier Time: 38426ms
+Proof Size: 2768055
+--
+Compiler time: 2427ms
+Prover Time: 184.45s
+Verifier Time: 838.05ms
+Total Proof Size: 1483224

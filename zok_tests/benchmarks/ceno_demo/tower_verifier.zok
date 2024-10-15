@@ -1,0 +1,318 @@
+from "ext_field" import ExtField, from_bases, to_ext, ext_eq, ext_neq, ext_add, ext_sub, ext_neg, ext_mul, ext_invert, Challenge
+
+from "poseidon" import Digest, poseidon
+from "poseidon_permutation" import PoseidonPermutation, new_poseidon_permutation, set_from_slice, permute, squeeze
+from "poseidon_hash" import compress, two_to_one, hash_n_to_m_no_pad, hash_or_noop
+from "transcript" import Transcript, TranscriptAndChallenge, TranscriptAndChallengePows, new_transcript, append_message, append_field_element_ext, get_and_append_challenge, read_challenge, get_challenge_pows
+
+from "sumcheck_structs" import IOPProverMessage, SumcheckProof, VPAuxInfo, SumCheckSubClaim, SumCheckSubClaimAndTranscript, SumcheckIOPVerifierState, SumcheckIOPVerifierStateAndTranscript
+from "sumcheck_verifier" import verify_round_and_update_state, interpolate_uni_poly, check_and_generate_subclaim, verify_sumcheck
+from "mle" import mle_eval, eq_eval, build_eq_x_r_vec_sequential
+from "tower_struct" import TowerProofs, TowerVerifierOutput, PointAndEval
+
+const u32 num_fanin = 2
+const u32 log2_num_fanin = 1
+
+def tower_verify(
+    ExtField[0][0] prod_out_evals,
+    ExtField[0][0] logup_out_evals,
+    TowerProofs tower_proofs,
+    u32[0] expected_rounds,
+    Transcript t
+) -> TowerVerifierOutput:
+    // XXX to sumcheck batched product argument with logup, we limit num_product_fanin to 2
+    // TODO mayber give a better naming?
+    // assert(num_fanin == 2)
+
+    u32 num_prod_spec = tower_proofs.prod_spec_size
+    u32 num_logup_spec = tower_proofs.logup_spec_size
+
+    TranscriptAndChallengePows t_cp = get_challenge_pows(num_prod_spec + num_logup_spec * 2, t)
+    t = t_cp.transcript
+    ExtField[0] alpha_pows = t_cp.challenge_pows
+
+    array_decl ExtField[log2_num_fanin] initial_rt
+    for u32 i in 0..log2_num_fanin do
+        TranscriptAndChallenge t0 = get_and_append_challenge(t, 2, [6878231886748938864, 7173491]) // b"product_sum"
+        t = t0.transcript
+        initial_rt[i] = t0.challenge.elements
+    endfor
+
+    // --
+    // initial_claim = \sum_j alpha^j * out_j[rt]
+    // out_j[rt] := (record_{j}[rt])
+    // out_j[rt] := (logup_p{j}[rt])
+    // out_j[rt] := (logup_q{j}[rt])
+    ExtField initial_claim = to_ext(0)
+    for u32 i in 0..num_prod_spec do
+        ExtField[0] evals = prod_out_evals[i]
+        ExtField alpha = alpha_pows[i]
+        initial_claim = ext_add(initial_claim, ext_mul(mle_eval(evals, num_fanin, initial_rt, log2_num_fanin), alpha))
+    endfor
+    for u32 i in 0..num_logup_spec do
+        ExtField alpha_numerator = alpha_pows[num_prod_spec + 2 * i]
+        ExtField alpha_denominator = alpha_pows[num_prod_spec + 2 * i + 1]
+        ExtField[2] mle_numerator = [logup_out_evals[i][0], logup_out_evals[i][1]]
+        ExtField[2] mle_denominator = [logup_out_evals[i][2], logup_out_evals[i][3]]
+        initial_claim = ext_add(initial_claim, ext_mul(mle_eval(mle_numerator, num_fanin, initial_rt, log2_num_fanin), alpha_numerator))
+        initial_claim = ext_add(initial_claim, ext_mul(mle_eval(mle_denominator, num_fanin, initial_rt, log2_num_fanin), alpha_denominator))
+    endfor
+
+    // evaluation in the tower input layer
+    array_decl ExtField[tower_proofs.prod_spec_size] prod_spec_input_layer_eval
+    array_decl ExtField[tower_proofs.logup_spec_size] logup_spec_p_input_layer_eval
+    array_decl ExtField[tower_proofs.logup_spec_size] logup_spec_q_input_layer_eval
+
+    u32 expected_max_round = 0
+    for u32 i in 0..num_prod_spec + num_logup_spec do
+        if expected_rounds[i] > expected_max_round then
+            expected_max_round = expected_rounds[i]
+        endif
+    endfor
+
+    PointAndEval next_rt = PointAndEval {
+        point: initial_rt,
+        eval: initial_claim
+    }
+    u32 eval_len = 1
+    for u32 round in 0..expected_max_round - 1 do
+        ExtField[0] out_rt = next_rt.point
+        ExtField out_claim = next_rt.eval
+        u32 rt_len = (round + 1) * log2_num_fanin
+        // verify_sumcheck
+        SumCheckSubClaimAndTranscript sc_t = verify_sumcheck(
+            out_claim,
+            SumcheckProof {
+                points: [], // final claimed point will be derive from sumcheck protocol
+                proofs: tower_proofs.proofs[round]
+            },
+            VPAuxInfo {
+                max_degree: num_fanin + 1, // + 1 for eq
+                num_variables: rt_len
+            },
+            t
+        )
+        SumCheckSubClaim sumcheck_claim = sc_t.sc
+        t = sc_t.t
+
+        // check expected_evaluation
+        array_decl ExtField[rt_len] rt
+        for u32 i in 0..rt_len do
+            Challenge c = sumcheck_claim.point[i]
+            rt[i] = c.elements
+        endfor
+        ExtField expected_evaluation = to_ext(0)
+        for u32 spec_index in 0..num_prod_spec do
+            if expected_rounds[spec_index] < round then
+                ExtField alpha = alpha_pows[spec_index]
+                ExtField prod = to_ext(1)
+                for u32 i in 0..eval_len do
+                    prod = ext_mul(prod, tower_proofs.prod_specs_eval[spec_index][round][i])
+                endfor
+                // expected_evaluation = expected_evaluation + eq_eval(rt_len, out_rt, rt) * alpha * prod
+                expected_evaluation = ext_add(expected_evaluation, ext_mul(ext_mul(eq_eval(rt_len, out_rt, rt), alpha), prod))
+            endif
+        endfor
+        for u32 spec_index in 0..num_logup_spec do
+            if expected_rounds[num_prod_spec + spec_index] < round then
+                ExtField alpha_numerator = alpha_pows[num_prod_spec + 2 * spec_index]
+                ExtField alpha_denominator = alpha_pows[num_prod_spec + 2 * spec_index + 1]
+                ExtField p1 = tower_proofs.logup_specs_eval[spec_index][round][0]
+                ExtField p2 = tower_proofs.logup_specs_eval[spec_index][round][1]
+                ExtField q1 = tower_proofs.logup_specs_eval[spec_index][round][2]
+                ExtField q2 = tower_proofs.logup_specs_eval[spec_index][round][3]
+                // expected_evaluation = expected_evaluation + eq_eval(rt_len, out_rt, rt) * (alpha_numerator * (p1 * q2 + p2 * q1) + alpha_denominator * (q1 * q2))
+                expected_evaluation = ext_add(expected_evaluation, ext_add(ext_mul(eq_eval(rt_len, out_rt, rt), ext_mul(alpha_numerator, ext_add(ext_mul(p1, q2), ext_mul(p2, q1)))), ext_mul(alpha_denominator, ext_mul(q1, q2))))
+            endif
+        endfor
+        assert(ext_eq(expected_evaluation, sumcheck_claim.expected_evaluation) == 1)
+
+        // derive single eval
+        // rt' = r_merge || rt
+        // r_merge.len() == ceil_log2(num_product_fanin)
+        array_decl ExtField[log2_num_fanin] r_merge
+        array_decl ExtField[rt_len + log2_num_fanin] rt_prime
+        for u32 i in 0..rt_len do
+            rt_prime[i] = rt[i]
+        endfor
+        for u32 i in 0..log2_num_fanin do
+            TranscriptAndChallenge t0 = get_and_append_challenge(t, 1, [435527247213]) // b"merge"
+            t = t0.transcript
+            r_merge[i] = t0.challenge.elements
+            rt_prime[rt_len + i] = t0.challenge.elements
+        endfor
+        ExtField[num_fanin] coeffs = build_eq_x_r_vec_sequential(log2_num_fanin, num_fanin, r_merge)
+
+        // generate next round challenge
+        ExtField prod_spec_evals = to_ext(0)
+        for u32 spec_index in 0..num_prod_spec do
+            if expected_rounds[spec_index] < round then
+                ExtField alpha = alpha_pows[spec_index]
+                ExtField evals = to_ext(0)
+                for u32 i in 0..eval_len do
+                    evals = ext_add(evals, ext_mul(tower_proofs.prod_specs_eval[spec_index][round][i], coeffs[i]))
+                endfor
+                prod_spec_input_layer_eval[spec_index] = evals
+                prod_spec_evals = ext_add(prod_spec_evals, ext_mul(alpha, evals))
+            else
+                prod_spec_input_layer_eval[spec_index] = to_ext(0) 
+            endif
+        endfor
+        ExtField logup_spec_evals = to_ext(0)
+        for u32 spec_index in 0..num_logup_spec do
+            if expected_rounds[spec_index] < round then
+                ExtField alpha_numerator = alpha_pows[num_prod_spec + 2 * spec_index]
+                ExtField alpha_denominator = alpha_pows[num_prod_spec + 2 * spec_index + 1]
+                // ExtField p_evals = tower_proofs.logup_specs_eval[spec_index][round][0] * coeffs[0] + tower_proofs.logup_specs_eval[spec_index][round][1] * coeffs[1]
+                ExtField p_evals = ext_add(ext_mul(tower_proofs.logup_specs_eval[spec_index][round][0], coeffs[0]), ext_mul(tower_proofs.logup_specs_eval[spec_index][round][1], coeffs[1]))
+                // ExtField q_evals = tower_proofs.logup_specs_eval[spec_index][round][2] * coeffs[0] + tower_proofs.logup_specs_eval[spec_index][round][3] * coeffs[1]
+                ExtField q_evals = ext_add(ext_mul(tower_proofs.logup_specs_eval[spec_index][round][2], coeffs[0]), ext_mul(tower_proofs.logup_specs_eval[spec_index][round][3], coeffs[1]))
+                logup_spec_p_input_layer_eval[spec_index] = p_evals
+                logup_spec_q_input_layer_eval[spec_index] = q_evals
+                // logup_spec_evals = logup_spec_evals + alpha_numerator * p_evals + alpha_denominator * q_evals
+                logup_spec_evals = ext_add(logup_spec_evals, ext_add(ext_mul(alpha_numerator, p_evals), ext_mul(alpha_denominator, q_evals)))
+            else 
+                logup_spec_p_input_layer_eval[spec_index] = to_ext(0) 
+                logup_spec_q_input_layer_eval[spec_index] = to_ext(0)
+            endif
+        endfor
+
+        ExtField next_eval = ext_add(prod_spec_evals, logup_spec_evals)
+        next_rt = PointAndEval {
+            point: rt_prime,
+            eval: next_eval
+        }
+        eval_len = eval_len * num_fanin
+    endfor
+
+    return TowerVerifierOutput {
+        rt_tower: next_rt.point,
+        record_evals: prod_spec_input_layer_eval,
+        logup_p_evals: logup_spec_p_input_layer_eval,
+        logup_q_evals: logup_spec_q_input_layer_eval
+    }
+
+def main() -> field:
+    ExtField[2][2] prod_out_evals = [
+        [from_bases(14646319318119199579, 10850155819563131483), from_bases(8130754973196324174, 3762094025559867441)], 
+        [from_bases(5899815862433771391, 5999711027503215609), from_bases(2346013086108367722, 4772468960465882476)]
+    ]
+    ExtField[1][4] logup_out_evals = [[
+        from_bases(9408841463564327218, 5851217081983789099), 
+        from_bases(11709386716638296949, 7788776830344228737), 
+        from_bases(15756492366208638174, 543738984021596362), 
+        from_bases(17223569427953884163, 9977041609298931304)
+    ]]
+    TowerProofs tower_proofs = TowerProofs {
+        prod_spec_size: 2,
+        logup_spec_size: 1,
+        proofs: [
+            [
+                IOPProverMessage { evaluations: [from_bases(15532223949260306006, 16597608511653539480), from_bases(6528341629284835674, 15838225936065338265), from_bases(15809810389277290835, 10677060019295317840), from_bases(801634365625157605, 6099965984565860142)] }
+            ], 
+            [
+                IOPProverMessage { evaluations: [from_bases(319160650490417830, 8296770703996279206), from_bases(8586204278602830382, 17030973845896249718), from_bases(13056774640872965968, 15627495217556817404), from_bases(801817834531475912, 10104179928044097766)] }, 
+                IOPProverMessage { evaluations: [from_bases(11919461061309404914, 12380134109252306102), from_bases(4095333260344920357, 7942761125285984411), from_bases(18399966887235574953, 370201168097739946), from_bases(11541127622559833022, 5128967802063049057)] }
+            ], 
+            [
+                IOPProverMessage { evaluations: [from_bases(6388446568553150590, 4380264731546574324), from_bases(9646580181438328760, 12140227326255568680), from_bases(6604304839730549408, 2953607073104628805), from_bases(12156448949256657489, 1143399296253318969)] }, 
+                IOPProverMessage { evaluations: [from_bases(14306902079838853866, 8104113471160540666), from_bases(7835765330860154176, 10294664122488780663), from_bases(10143887192407036376, 14061659244620867333), from_bases(2121438821327562836, 4123198953509571952)] }, 
+                IOPProverMessage { evaluations: [from_bases(4815345589027382303, 6021418208574922869), from_bases(16976742697045606965, 1066266815803589382), from_bases(5730311366304423051, 1815103537961630063), from_bases(6488808851223651070, 17616721639657523090)] }
+            ], 
+            [
+                IOPProverMessage { evaluations: [from_bases(7126994438476069018, 15062032615757921957), from_bases(7233184797346192514, 12855441902256460948), from_bases(16541876513383977299, 7850841546785712116), from_bases(10610493515094319932, 2524001500502344838)] }, 
+                IOPProverMessage { evaluations: [from_bases(13564999420444187104, 14326721689251682362), from_bases(16801530850184863407, 8118229679593961215), from_bases(6977491212336803959, 1209085269303260754), from_bases(8077317321953905478, 6037108958193009052)] }, 
+                IOPProverMessage { evaluations: [from_bases(10841657778487966185, 11134944132389381258), from_bases(3307980161445475930, 4418614971802261508), from_bases(4156174338632745487, 14398525938776657719), from_bases(13190510036255067790, 7494391142447503509)] }, 
+                IOPProverMessage { evaluations: [from_bases(5172694146656585251, 9530149685477401482), from_bases(17720286395823551632, 11228942050347039246), from_bases(6392228653718346040, 11218537817632868580), from_bases(17531949684050303899, 1112224550124023467)] }
+            ], 
+            [
+                IOPProverMessage { evaluations: [from_bases(5049192088100961795, 2556669416813202243), from_bases(456787626993508788, 5765812208920188844), from_bases(5425351350710217449, 512731653113980044), from_bases(5010775089007277866, 17417286445395293636)] }, 
+                IOPProverMessage { evaluations: [from_bases(179999422419174619, 4966422713568721749), from_bases(10897286680935546801, 12069752560634120343), from_bases(12725987924058800342, 7190230744354172992), from_bases(14896691371285112951, 3221228522849105448)] }, 
+                IOPProverMessage { evaluations: [from_bases(4134786715090257588, 10766461312696257395), from_bases(17948078895330657228, 1240243219020757073), from_bases(11172976029745649143, 7503526232823097143), from_bases(8749280428024293509, 6783873833249562739)] }, 
+                IOPProverMessage { evaluations: [from_bases(17300580309258630271, 14553324531800758725), from_bases(16711583454105863108, 3242673667681696242), from_bases(9843017015898035338, 10225701145589437518), from_bases(13106761295286677164, 6991099568291340061)] }, 
+                IOPProverMessage { evaluations: [from_bases(14498637818835234371, 16112332881824948298), from_bases(6000464894788558731, 15297558891497094861), from_bases(13040587731495475818, 8582373700742122508), from_bases(6149139730924354041, 11196132384002077972)] }
+            ], 
+            [
+                IOPProverMessage { evaluations: [from_bases(447084224803382947, 7011189104885176979), from_bases(8399938674363875990, 4847785786734921798), from_bases(5716491578551118427, 16899718245342278870), from_bases(7327722117878179260, 5437280670412222641)] }, 
+                IOPProverMessage { evaluations: [from_bases(6293079095338357031, 3806606150555143039), from_bases(10626956921930702900, 3119561769112414433), from_bases(13848131733173384288, 6779943017727590741), from_bases(994718689843937430, 4983161371150347527)] }, 
+                IOPProverMessage { evaluations: [from_bases(9608890488689829007, 13419021243649538268), from_bases(15642655728289698781, 16915955161254817212), from_bases(1388003459809578275, 14549127268504353752), from_bases(17425971283235539892, 16211039966651915755)] }, 
+                IOPProverMessage { evaluations: [from_bases(7272561779341983828, 11261495046146294601), from_bases(18443219982910976686, 14967691957018354690), from_bases(1310830011132446566, 9316379761882492092), from_bases(11573206584044835688, 8336420088497472471)] }, 
+                IOPProverMessage { evaluations: [from_bases(13167095807414763451, 18362393770343457194), from_bases(2954945929772224864, 11929252939909958943), from_bases(852229473107216115, 9980970228288431326), from_bases(17678285114541114541, 11930559226612923481)] }, 
+                IOPProverMessage { evaluations: [from_bases(16913570674843886473, 13528184791436580257), from_bases(1780258275317199799, 14078488386504187295), from_bases(5448953773230363267, 13641311176886235661), from_bases(895981883749206839, 2073989710086530473)] }
+            ], 
+            [
+                IOPProverMessage { evaluations: [from_bases(1063651464992258782, 12817473623704800631), from_bases(3610319778405888866, 8258901664476755975), from_bases(6524600761446615704, 2342813449745369289), from_bases(8498412518673062790, 5559170154761349764)] }, 
+                IOPProverMessage { evaluations: [from_bases(10919671996574865038, 5809405790676725795), from_bases(7412505757785666229, 14708387637244313139), from_bases(10593594417715840554, 10093636876783546690), from_bases(10854533635091058098, 14247088197486682963)] }, 
+                IOPProverMessage { evaluations: [from_bases(482660839943190712, 16098328338033099141), from_bases(18325529051926416712, 13971289516952162208), from_bases(9326281352047970993, 7341183178343798274), from_bases(17382248585316179961, 10758963120178730999)] }, 
+                IOPProverMessage { evaluations: [from_bases(10087435787060459552, 7392847607781497208), from_bases(16814176429874844007, 11776776368551543139), from_bases(3830936374240319167, 16776623482017558148), from_bases(9445903331785171974, 281855273314168170)] }, 
+                IOPProverMessage { evaluations: [from_bases(2245268311685590757, 10197617944982861508), from_bases(14596022695340608752, 15265097315831207945), from_bases(712218932283299299, 12700391212571886085), from_bases(5959128797785903473, 4690356561530217670)] }, 
+                IOPProverMessage { evaluations: [from_bases(12698101372483031489, 12689035679421731330), from_bases(773172357550403926, 879391705515078090), from_bases(9119194422022976459, 14650738344531511824), from_bases(2934912120782562136, 10837716122951145215)] }, 
+                IOPProverMessage { evaluations: [from_bases(635252468732727484, 13772466185841060006), from_bases(3989584398009513239, 5095913309474352961), from_bases(4668165282810590169, 8128959537062447099), from_bases(7472323775190909, 16262023472393075319)] }
+            ], 
+            [
+                IOPProverMessage { evaluations: [from_bases(13322966037110250840, 9826812946303624710), from_bases(3745660661113795338, 13919434175046320661), from_bases(7096166481429351791, 13529467537463291097), from_bases(9668376494723740078, 7526564103680144236)] }, 
+                IOPProverMessage { evaluations: [from_bases(2518706384971179335, 5355240699981782578), from_bases(14804224894645101114, 16208619433876270763), from_bases(8968284904478935780, 17634608558679555157), from_bases(12416490756606892624, 7200317357176673840)] }, 
+                IOPProverMessage { evaluations: [from_bases(14865139119195046140, 9914725028776989054), from_bases(12838614753469954931, 10638895364231293570), from_bases(8183843241552756250, 17943108694067466418), from_bases(17989982541570062619, 17820491164914107247)] }, 
+                IOPProverMessage { evaluations: [from_bases(10485329323988852558, 668424700410728008), from_bases(4767146533431937490, 14178240848559588191), from_bases(18606638872728108, 17681125354654692296), from_bases(16571895067467084141, 2118613361696104200)] }, 
+                IOPProverMessage { evaluations: [from_bases(4737559583747764354, 391071741426100510), from_bases(6976097183206303419, 15351837098660261738), from_bases(11136664177590897711, 11303662266256251701), from_bases(488856546022915723, 9016757191307455071)] }, 
+                IOPProverMessage { evaluations: [from_bases(2261133694654084477, 199292536295123073), from_bases(17459206832804013151, 1125561171820123690), from_bases(11370128127268086355, 14941951248410290318), from_bases(871770583878135361, 8729104364471763511)] }, 
+                IOPProverMessage { evaluations: [from_bases(6107916909607975428, 2270258741551895778), from_bases(3415759308220786620, 380523666954692386), from_bases(11805643710312974229, 7512568138086158305), from_bases(13651176366572565740, 1576898516234181333)] }, 
+                IOPProverMessage { evaluations: [from_bases(3116054434215954617, 13037801561445067803), from_bases(12888647587036169687, 16603106448252234765), from_bases(3948892358631070681, 10873311675516889054), from_bases(1624571495892495808, 8808210887574740296)] }
+            ], 
+            [
+                IOPProverMessage { evaluations: [from_bases(10872984486741421884, 13312233693109660211), from_bases(16502622724156305536, 14989313202972468542), from_bases(3122652785314305326, 8417522806704318171), from_bases(5671801058617938363, 5618743392203191929)] }, 
+                IOPProverMessage { evaluations: [from_bases(6497164242623827041, 17782748665338538649), from_bases(14966327785715655715, 15076930021406045074), from_bases(11978868657798262274, 4814464929498996982), from_bases(15607732139829391762, 951280510566666556)] }, 
+                IOPProverMessage { evaluations: [from_bases(10113870746721714521, 14827633672226550323), from_bases(3647969484364866964, 7478388589220887949), from_bases(3519576680927325550, 6352666256249667985), from_bases(12734460804170418889, 1424119273100475676)] }, 
+                IOPProverMessage { evaluations: [from_bases(8311950322454249792, 1248226466126389084), from_bases(10991206636519332260, 12080085524043292046), from_bases(10018193633385577765, 2807819662829592525), from_bases(1835647173556266706, 13280342033825589649)] }, 
+                IOPProverMessage { evaluations: [from_bases(14818114086451699215, 2372963084316005450), from_bases(7951365614073279854, 5688443694041977757), from_bases(2294747820160514360, 4546811679749772746), from_bases(11647672210725895101, 14992010033911318369)] }, 
+                IOPProverMessage { evaluations: [from_bases(15174211713233498486, 7896190738837013301), from_bases(2799456292714126064, 9495223483137440041), from_bases(398893894335754937, 3485339371824926123), from_bases(5317538371022234262, 3746345536241736409)] }, 
+                IOPProverMessage { evaluations: [from_bases(6321456490367792232, 17797610501035007366), from_bases(6575068038537472522, 15639864517860124062), from_bases(1750421433767866595, 16989958261908821051), from_bases(6880489822684851260, 17638242265468514780)] }, 
+                IOPProverMessage { evaluations: [from_bases(10931953522346849947, 7108759050569567082), from_bases(13002431553665913574, 12173134414343157171), from_bases(14049036053168266946, 6145676798653177010), from_bases(10078210936210823890, 7026352343334115900)] }, 
+                IOPProverMessage { evaluations: [from_bases(9403456451700595886, 13297438124116117059), from_bases(17837714911243961998, 15573240727759186405), from_bases(11088578347812653870, 9929647071785490510), from_bases(8347932581877375521, 11078041759012555352)] }
+            ]
+        ], 
+        prod_specs_eval: [
+            [
+                [from_bases(127788720906514140, 11199300518062770867), from_bases(12111109812689608038, 14535054030760578847)], 
+                [from_bases(3133234188290019638, 15559578174766831080), from_bases(11611798644993459718, 15825468184077121608)], 
+                [from_bases(4045067104523833562, 7048101111056556092), from_bases(8044008360312678180, 5032756815969928419)], 
+                [from_bases(3626873903089043146, 6286893822096124911), from_bases(15371036235343034660, 17743267930233421040)], 
+                [from_bases(8474358441873056233, 9690158317047647636), from_bases(121308336596110272, 15303420398453365064)], 
+                [from_bases(12131764444629175172, 14863495579311164136), from_bases(231589651566915937, 1430971555248838152)], 
+                [from_bases(8954176424434623237, 7787109856732378735), from_bases(2874075915361855526, 9211013814104134036)], 
+                [from_bases(12649674468129788740, 17885314990228376615), from_bases(6861780369556945985, 17813510014545726452)]
+            ], 
+            [
+                [from_bases(4729353901320007322, 120402303844533034), from_bases(1500007222355358253, 17610324019329273091)], 
+                [from_bases(12887046493541483411, 5701757658831403340), from_bases(10623766822623702000, 18337583816965358971)], 
+                [from_bases(16822991873109572202, 6366797352237871991), from_bases(6558751458808624027, 13537408085282794865)], 
+                [from_bases(14817882353359886066, 1578147089627285578), from_bases(5673491965493219732, 14159570942269749511)], 
+                [from_bases(13323596059557060857, 741147981720992557), from_bases(7078998412939138380, 10972944401984180172)], 
+                [from_bases(6125400285567204114, 9407994752067415661), from_bases(6220023042108802965, 6319622681045405535)], 
+                [from_bases(10346168208654126238, 10185256476980057781), from_bases(14643337055475310584, 10228765429408794731)], 
+                [from_bases(13669704323824153115, 12580365981629877098), from_bases(10549755713859515434, 14333313750194127029)]
+            ]
+        ],
+        logup_specs_eval: [
+            [
+                [from_bases(7874081777187953653, 14262708531838320075), from_bases(12173471333163414955, 6503299602884718347), from_bases(3328812469574333900, 1162565567954611510), from_bases(6399259623089809498, 7447855116498284520)], 
+                [from_bases(6386882620018431409, 5729927278547143432), from_bases(18118758378264151139, 10167053760843979509), from_bases(447380109401184634, 6814651720205803901), from_bases(4290152315313253197, 13409164661002524749)], 
+                [from_bases(11351734902802327688, 12855678221531336567), from_bases(14819031281155064006, 2670051299262463220), from_bases(12487314793619566936, 42544630831985866), from_bases(339444346653692808, 1769110427442667654)], 
+                [from_bases(10887354516226755240, 7910470674866558861), from_bases(15293639073225323692, 10687809621047212724), from_bases(12014262214183696740, 15820745207831985288), from_bases(10581457100462688720, 7962729672370342836)], 
+                [from_bases(12059471567811746355, 12913979373090514293), from_bases(8637641915637480024, 11751186742057679589), from_bases(6967411476195720872, 8890920297337988013), from_bases(7043671186028415407, 16085204805841281056)], 
+                [from_bases(13358030836540138365, 2906240913223389189), from_bases(17095071611575688369, 7450663356209036930), from_bases(7795120568482706427, 1486331781084232599), from_bases(10170432095667941946, 3777189515843909931)], 
+                [from_bases(13821825285129011767, 5879986514466201638), from_bases(13775136356716157860, 12787993972329730847), from_bases(16510642983701788639, 5183249323734753462), from_bases(12907080964734612259, 5583229494359537371)], 
+                [from_bases(14083471934310048526, 634876592418984911), from_bases(2171369206418509944, 2034217257931763538), from_bases(13793600612388511338, 13859011310639019471), from_bases(9865946266962179604, 308217888673928933)], 
+                [from_bases(1, 0), from_bases(1, 0), from_bases(7378323994500977791, 3214540848725747255), from_bases(11182021713838982161, 11955543402026287293)]
+            ]
+        ], 
+    }
+    u32[3] expected_rounds = [9, 9, 10]
+    Transcript t = Transcript {
+        permutation: PoseidonPermutation { 
+            state: [17272419387566199367, 12674146917781097270, 5734512607184699556, 5609013110766716568, 10160406521071277439, 12173819904036527367, 14264167552165538827, 8137076680765817538, 9167943696430826167, 6162102427751928293, 3867806113251159843, 11680072710288979251]
+        }
+    }
+    TowerVerifierOutput output = tower_verify(prod_out_evals, logup_out_evals, tower_proofs, expected_rounds, t)
+
+    return output.rt_tower[0].b0

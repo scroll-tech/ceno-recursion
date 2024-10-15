@@ -1,0 +1,30 @@
+def get_index(u32 i, u32 j, u32 n) -> u32:
+    return n * i + j
+
+def main(u32 x, u32 y, u32 z, u32 n) -> u32:
+    u32[256] A = [0; 256]
+    u32[256] B = [0; 256]
+    u32[256] C = [0; 256]
+
+    for u32 i in 0..256 do
+        A[i] = i
+        B[i] = 2 * i
+    endfor
+    // random access to ensure array is written in memory
+    u32 c1 = A[x]
+    u32 c2 = B[y]
+
+    for u32 i in 0..16 do
+        for u32 j in 0..16 do
+            for u32 k in 0..16 do
+                if k < n then
+                    C[get_index(n, i, k)] = A[get_index(n, i, j)] * B[get_index(n, j, k)]
+                endif
+            endfor
+        endfor
+    endfor
+
+
+    u32 c3 = C[z]
+
+    return c1 * c2 * c3

@@ -1,0 +1,9 @@
+def main(field a) -> field:
+    a = a < 3 ? 2 : 4
+    a = a < 3 ? 2 : 4
+    a = a < 3 ? 2 : 4
+    a = a < 3 ? 2 : 4
+    for field i in 0..2 do
+        a = a + 1
+    endfor
+    return a

@@ -1,0 +1,17 @@
+def add(field a, field b) -> field:
+    return a + b
+
+def mult(field a, field b) -> field:
+    return a * b
+
+def main() -> field:
+    field a = 5
+    field b = 4
+    field a = 3
+    for field i in 0..4 do    
+        a = a + 1
+        field a = 60
+        b = add(add(a, b), b)
+    endfor
+    a = a + 10
+    return add(a, mult(b, a))

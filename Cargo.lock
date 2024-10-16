@@ -1569,7 +1569,9 @@ dependencies = [
 
 [[package]]
 name = "spartan"
-version = "0.8.1"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c17d4afb836b39a3be2969f0ad8e805d51dc07dc1345374fdac9e4f8386a967"
 dependencies = [
  "bincode",
  "byteorder",

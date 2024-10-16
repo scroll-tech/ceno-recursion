@@ -1,2 +1,2 @@
 #!/bin/bash
-cd circ_blocks && target/release/examples/zxc ceno_demo/tower_verifier
+cd spartan_parallel && RUST_BACKTRACE=1 target/release/examples/interface ceno_demo/tower_verifier 

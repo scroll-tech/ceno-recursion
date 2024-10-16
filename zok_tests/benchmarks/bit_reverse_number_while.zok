@@ -1,9 +1,0 @@
-// Reverse the bits of A
-def main(u64 a)-> u64:
-  u64 reverse = 0
-  while a > 0 do
-    u64 r = a % 2
-    reverse = reverse * 2 + r
-    a = a / 2
-  endwhile
-  return reverse

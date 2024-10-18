@@ -27,7 +27,6 @@ pub use circ_hc::{Node, Table, Weak};
 use circ_opt::FieldToBv;
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, trace};
-use rand_chacha::rand_core::SeedableRng;
 use rug::Integer;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Borrow;
@@ -2387,6 +2386,7 @@ impl Computations {
 
 /// Compute a (deterministic) prime-field challenge.
 pub fn pf_challenge(name: &str, field: &FieldT) -> FieldV {
+    use rand_chacha::rand_core::SeedableRng;
     use rand_chacha::ChaChaRng;
     use std::hash::{Hash, Hasher};
     // hash the string

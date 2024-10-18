@@ -1,3 +1,0 @@
-[toolchain]
-# Note: we need to keep this in sync with the main ceno repository.
-channel = "nightly-2024-10-03"

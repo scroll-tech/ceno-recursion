@@ -1,6 +1,3 @@
-[submodule "spartan_parallel"]
-	path = spartan_parallel
-	url = git@github.com:Jiangkm3/spartan_parallel.git
 [submodule "ff"]
 	path = ff
 	url = git@github.com:Jiangkm3/ff.git

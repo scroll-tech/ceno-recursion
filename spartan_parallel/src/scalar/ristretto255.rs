@@ -13,7 +13,7 @@ use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
-use zeroize::Zeroize;
+use zeroize::DefaultIsZeroes;
 
 // use crate::util::{adc, mac, sbb};
 /// Compute a + b + carry, returning the result and the new carry over.
@@ -328,6 +328,8 @@ const R3: Scalar = Scalar([
   0x0e53_0b77_3599_cec7,
 ]);
 
+impl DefaultIsZeroes for Scalar {}
+
 impl Default for Scalar {
   #[inline]
   fn default() -> Self {
@@ -356,12 +358,6 @@ where
     I: Iterator<Item = T>,
   {
     iter.fold(Scalar::zero(), |acc, item| acc + item.borrow())
-  }
-}
-
-impl Zeroize for Scalar {
-  fn zeroize(&mut self) {
-    self.0 = [0u64; 4];
   }
 }
 

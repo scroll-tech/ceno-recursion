@@ -11,7 +11,7 @@ pub enum Token {
     Close,
 
     // Literals
-    #[regex(br"-?[0-9]+", priority = 2)]
+    #[regex(br"-?[0-9]+", priority = 3)]
     Int,
     #[regex(br"#x[0-9a-fA-F]+")]
     Hex,
@@ -24,17 +24,6 @@ pub enum Token {
     // Identifiers
     #[regex(br"#t|#a|#l|#m|[^()0-9#; \t\n\f][^(); \t\n\f#]*")]
     Ident,
-
-    // Logos requires one token variant to handle errors,
-    // it can be named anything you wish.
-    // We can also use this variant to define whitespace,
-    // or any other matches we wish to skip.
-    #[error]
-    // Skip space
-    #[regex(br"[ \t\n\f]+", logos::skip)]
-    // Skip comments
-    #[regex(br";[^\n]*\n", logos::skip)]
-    Error,
 }
 
 #[cfg(test)]

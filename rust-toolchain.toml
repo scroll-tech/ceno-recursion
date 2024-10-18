@@ -1,0 +1,4 @@
+[toolchain]
+# TODO: upgrade this to the same version as in the main ceno repository,
+# and then find some mechanism to keep both repositories' toolchains in sync.
+channel = "nightly-2023-11-16"

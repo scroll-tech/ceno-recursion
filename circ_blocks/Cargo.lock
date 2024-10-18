@@ -295,9 +295,9 @@ dependencies = [
  "circ_hc",
  "circ_opt",
  "circ_waksman",
- "curve25519-dalek 3.2.1",
+ "curve25519-dalek 4.1.3",
  "env_logger 0.11.5",
- "ff 0.12.2",
+ "ff 0.13.0",
  "from-pest",
  "fxhash",
  "gmp-mpfr-sys",
@@ -310,7 +310,7 @@ dependencies = [
  "lazy_static",
  "log",
  "logos",
- "lp-solvers 0.0.5",
+ "lp-solvers",
  "merlin",
  "once_cell",
  "pairing 0.23.0",
@@ -874,7 +874,7 @@ checksum = "3198bd13dea84c76a64621d6ee8ee26a4960a9a0d538eca95ca8f1320a469ac9"
 dependencies = [
  "coin_cbc",
  "fnv",
- "lp-solvers 1.0.1",
+ "lp-solvers",
 ]
 
 [[package]]
@@ -1062,15 +1062,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e5d0c5463c911ef55624739fc353238b4e310f0144be1f875dc42fec6bfd5ec"
 dependencies = [
  "logos-codegen",
-]
-
-[[package]]
-name = "lp-solvers"
-version = "0.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c9551a409fcd51b85e297ca216af2b20c5d3df9978027f095eb13fe6dc988ba"
-dependencies = [
- "tempfile",
 ]
 
 [[package]]

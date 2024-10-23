@@ -1,5 +1,5 @@
 [package]
-name = "spartan"
+name = "spartan_parallel"
 version = "0.8.0"
 authors = ["Srinath Setty <srinath@microsoft.com>"]
 edition = "2021"

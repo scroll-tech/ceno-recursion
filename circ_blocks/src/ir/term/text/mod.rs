@@ -129,18 +129,18 @@ fn parse_tok_tree(bytes: &[u8]) -> TokTree {
     let lex = Token::lexer(bytes).spanned();
     for (t, s) in lex {
         match t {
-            Token::Error => {
-                panic!("Could not tokenize: {}", from_utf8(&bytes[s]).unwrap())
+            Err(e) => {
+                panic!("Could not tokenize ({e:?}): {}", from_utf8(&bytes[s]).unwrap())
             }
-            Token::Open => {
+            Ok(Token::Open) => {
                 stack.push(vec![]);
             }
-            Token::Close => {
+            Ok(Token::Close) => {
                 assert!(stack.len() > 1, "Hanging closing paren");
                 let l = TokTree::List(stack.pop().unwrap());
                 stack.last_mut().unwrap().push(l);
             }
-            _ => {
+            Ok(t) => {
                 stack.last_mut().unwrap().push(TokTree::Leaf(t, &bytes[s]));
             }
         }
@@ -580,7 +580,7 @@ impl<'src> IrInterp<'src> {
                     Ok(o) => term(o, tts[1..].iter().map(|tti| self.term(tti)).collect()),
                 }
             }
-            Leaf(Open | Close | Error, _) => unreachable!("should be caught in tree building"),
+            Leaf(Open | Close, _) => unreachable!("should be caught in tree building"),
         }
     }
 

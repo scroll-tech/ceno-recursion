@@ -82,19 +82,12 @@ spartan = ["r1cs", "dep:spartan", "curve25519-dalek", "bincode", "gmp-mpfr-sys"]
 bellman = ["r1cs", "dep:bellman", "ff", "group", "pairing", "serde_bytes", "bincode", "gmp-mpfr-sys", "byteorder", "rayon"]
 
 [[example]]
-name = "circ"
-
-[[example]]
 name = "zk"
 required-features = ["r1cs"]
 
 [[example]]
 name = "cp"
 required-features = ["bellman", "poly"]
-
-[[example]]
-name = "zxi"
-required-features = ["smt", "zok"]
 
 [[example]]
 name = "zxc"

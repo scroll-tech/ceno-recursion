@@ -46,7 +46,7 @@ $$
 where $r_a$, $r_b$, and $r_c$ are challenges provided by the verifier. Finally, prover opens $\tilde{A}(r_x, r_y)$, $\tilde{B}(r_x, r_y)$, $\tilde{C}(r_x, r_y)$, and $\tilde{z}(r_y)$ through polynomial commitment.
 
 ### Expanding Spartan to `spartan_parallel`
-We expand Spartan to support `P` circuits, each with `Q_i` satisfying assignments (equivalent to `p\P` blocks, each executed `Q_i` times). The goal is now to prove
+We expand Spartan to support `P` circuits, each with `Q_i` satisfying assignments (equivalent to `P` blocks, each executed `Q_i` times). The goal is now to prove
 $$
 \forall_{i, j, x, y}, A_i(x, y)z_{i, j}(y) \cdot B_i(x, y)z_{i, j}(y) - C_i(x, y)z_{i, j}(y) = 0
 $$

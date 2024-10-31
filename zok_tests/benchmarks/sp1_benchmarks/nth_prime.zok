@@ -1,0 +1,28 @@
+def nth_prime(u64 n) -> u64:
+    if n == 0 then
+        return 0
+    endif
+    array_decl u64[ro n] primes
+    primes[0] = 2
+    u64 candidate = 3
+    u64 next_index = 1
+    bool divisible = false
+    u64 j = 0
+    while next_index != n do
+        divisible = candidate % primes[j] == 0
+        j = j + 1
+        if divisible then
+            candidate = candidate + 2
+            j = 0
+            divisible = false
+        endif
+        if j == next_index then
+            primes[next_index] = candidate
+            next_index = next_index + 1
+            j = 0
+        endif
+    endwhile
+    return primes[n - 1]
+
+def main(u64 n) -> u64:
+    return nth_prime(n)

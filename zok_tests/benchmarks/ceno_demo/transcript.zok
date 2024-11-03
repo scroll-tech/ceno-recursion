@@ -100,6 +100,22 @@ def get_challenge_pows(u32 size, Transcript transcript) -> TranscriptAndChalleng
         challenge_pows: alpha_pows
     }
 
+def fork_transcript(Transcript self, u32 n) -> Transcript[0]:
+    array_decl Transcript[n] forks
+    for u32 i in 0..n do
+        // Allocate 12 memory entries for poseidon permutation
+        array_decl field[12] forked_state
+        for u32 j in 0..12 do
+            forked_state[j] = self.permutation.state[j]
+        endfor
+        forks[i] = Transcript {
+            permutation: PoseidonPermutation {
+                state: forked_state
+            }
+        }
+    endfor
+    return forks
+
 def main() -> field:
     Transcript transcript = new_transcript(1, [508474648946]) // b"riscv"
     // Challenge 0

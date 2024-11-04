@@ -4,7 +4,9 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 use super::super::errors::ProofVerifyError;
+/* TODO: Alternative PCS
 use super::super::group::{CompressedGroup, GroupElement, VartimeMultiscalarMul};
+*/
 use super::super::math::Math;
 use super::super::scalar::Scalar;
 use super::super::transcript::ProofTranscript;
@@ -13,10 +15,13 @@ use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BulletReductionProof;
+/* TODO: Alternative PCS
 pub struct BulletReductionProof {
   L_vec: Vec<CompressedGroup>,
   R_vec: Vec<CompressedGroup>,
 }
+*/
 
 impl BulletReductionProof {
   /// Create an inner-product proof.
@@ -31,13 +36,16 @@ impl BulletReductionProof {
   /// either 0 or a power of 2.
   pub fn prove(
     transcript: &mut Transcript,
+    /* TODO: Alternative PCS
     Q: &GroupElement,
     G_vec: &[GroupElement],
     H: &GroupElement,
+    */
     a_vec: &[Scalar],
     b_vec: &[Scalar],
     blind: &Scalar,
     blinds_vec: &[(Scalar, Scalar)],
+  /* TODO: Alternative PCS
   ) -> (
     BulletReductionProof,
     GroupElement,
@@ -45,14 +53,24 @@ impl BulletReductionProof {
     Scalar,
     GroupElement,
     Scalar,
+  )
+  */
+  ) -> (
+    Scalar,
+    Scalar,
+    Scalar,
   ) {
     // Create slices G, H, a, b backed by their respective
     // vectors.  This lets us reslice as we compress the lengths
     // of the vectors in the main loop below.
+
+    /* TODO: Alternative PCS
     let mut G = &mut G_vec.to_owned()[..];
+    */
     let mut a = &mut a_vec.to_owned()[..];
     let mut b = &mut b_vec.to_owned()[..];
 
+    /* TODO: Alternative PCS
     // All of the input vectors must have a length that is a power of two.
     let mut n = G.len();
     assert!(n.is_power_of_two());
@@ -60,26 +78,35 @@ impl BulletReductionProof {
 
     // All of the input vectors must have the same length.
     assert_eq!(G.len(), n);
-    assert_eq!(a.len(), n);
-    assert_eq!(b.len(), n);
     assert_eq!(blinds_vec.len(), 2 * lg_n);
+    */
 
+    /* TODO: Alternative PCS
     let mut L_vec = Vec::with_capacity(lg_n);
     let mut R_vec = Vec::with_capacity(lg_n);
+    */
     let mut blinds_iter = blinds_vec.iter();
     let mut blind_fin = *blind;
+
+    // TODO: Alternative PCS
+    let mut n = a.len();
+    assert_eq!(a.len(), n);
+    assert_eq!(b.len(), n);
 
     while n != 1 {
       n /= 2;
       let (a_L, a_R) = a.split_at_mut(n);
       let (b_L, b_R) = b.split_at_mut(n);
+      /* TODO: Alternative PCS
       let (G_L, G_R) = G.split_at_mut(n);
+      */
 
       let c_L = inner_product(a_L, b_R);
       let c_R = inner_product(a_R, b_L);
 
       let (blind_L, blind_R) = blinds_iter.next().unwrap();
 
+      /* TODO: Alternative PCS
       let L = GroupElement::vartime_multiscalar_mul(
         a_L
           .iter()
@@ -98,6 +125,7 @@ impl BulletReductionProof {
 
       transcript.append_point(b"L", &L.compress());
       transcript.append_point(b"R", &R.compress());
+      */
 
       let u = transcript.challenge_scalar(b"u");
       let u_inv = u.invert().unwrap();
@@ -105,28 +133,44 @@ impl BulletReductionProof {
       for i in 0..n {
         a_L[i] = a_L[i] * u + u_inv * a_R[i];
         b_L[i] = b_L[i] * u_inv + u * b_R[i];
+        /* TODO: Alternative PCS
         G_L[i] = GroupElement::vartime_multiscalar_mul(&[u_inv, u], &[G_L[i], G_R[i]]);
+        */
       }
 
       blind_fin = blind_fin + blind_L * u * u + blind_R * u_inv * u_inv;
 
+      /* TODO: Alternative PCS
       L_vec.push(L.compress());
       R_vec.push(R.compress());
+      */
 
       a = a_L;
       b = b_L;
+      /* TODO: Alternative PCS
       G = G_L;
+      */
     }
 
+    /* TODO: Alternative PCS
     let Gamma_hat =
       GroupElement::vartime_multiscalar_mul(&[a[0], a[0] * b[0], blind_fin], &[G[0], *Q, *H]);
+    */
 
+    /* TODO: Alternative PCS
     (
       BulletReductionProof { L_vec, R_vec },
       Gamma_hat,
       a[0],
       b[0],
       G[0],
+      blind_fin,
+    )
+    */
+
+    (
+      a[0],
+      b[0],
       blind_fin,
     )
   }
@@ -139,6 +183,7 @@ impl BulletReductionProof {
     n: usize,
     transcript: &mut Transcript,
   ) -> Result<(Vec<Scalar>, Vec<Scalar>, Vec<Scalar>), ProofVerifyError> {
+    /* TODO: Alternative PCS
     let lg_n = self.L_vec.len();
     if lg_n >= 32 {
       // 4 billion multiplications should be enough for anyone
@@ -148,12 +193,28 @@ impl BulletReductionProof {
     if n != (1 << lg_n) {
       return Err(ProofVerifyError::InternalError);
     }
+    */
 
+    // TODO: Alternative PCS
+    let mut lg_n = 0usize;
+    assert!(n > 0, "n must not be 0");
+
+    let mut value = n;
+    while value > 1 {
+        value >>= 1; // Divide value by 2
+        lg_n += 1;
+    }
+    
     // 1. Recompute x_k,...,x_1 based on the proof transcript
     let mut challenges = Vec::with_capacity(lg_n);
+    /* TODO: Alternative PCS
     for (L, R) in self.L_vec.iter().zip(self.R_vec.iter()) {
       transcript.append_point(b"L", L);
       transcript.append_point(b"R", R);
+      challenges.push(transcript.challenge_scalar(b"u"));
+    }
+    */
+    for _i in 0..lg_n {
       challenges.push(transcript.challenge_scalar(b"u"));
     }
 
@@ -193,11 +254,15 @@ impl BulletReductionProof {
     n: usize,
     a: &[Scalar],
     transcript: &mut Transcript,
+    /* TODO: Alternative PCS
     Gamma: &GroupElement,
     G: &[GroupElement],
   ) -> Result<(GroupElement, GroupElement, Scalar), ProofVerifyError> {
+  */
+) -> Result<Scalar, ProofVerifyError> {
     let (u_sq, u_inv_sq, s) = self.verification_scalars(n, transcript)?;
 
+    /* TODO: Alternative PCS
     let Ls = self
       .L_vec
       .iter()
@@ -211,8 +276,10 @@ impl BulletReductionProof {
       .collect::<Result<Vec<_>, _>>()?;
 
     let G_hat = GroupElement::vartime_multiscalar_mul(s.iter(), G.iter());
+    */
     let a_hat = inner_product(a, &s);
 
+    /* TODO: Alternative PCS
     let Gamma_hat = GroupElement::vartime_multiscalar_mul(
       u_sq
         .iter()
@@ -220,8 +287,12 @@ impl BulletReductionProof {
         .chain(iter::once(&Scalar::one())),
       Ls.iter().chain(Rs.iter()).chain(iter::once(Gamma)),
     );
+    */
 
+    /* TODO: Alternative PCS
     Ok((G_hat, Gamma_hat, a_hat))
+    */
+    Ok(a_hat)
   }
 }
 

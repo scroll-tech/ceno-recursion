@@ -1,9 +1,12 @@
 #![allow(clippy::too_many_arguments)]
-use super::commitments::{Commitments, MultiCommitGens};
 use super::errors::ProofVerifyError;
+/* TODO: Alternative PCS
+use super::commitments::{Commitments, MultiCommitGens};
 use super::group::{CompressedGroup, GroupElement, VartimeMultiscalarMul};
-use super::math::Math;
 use super::nizk::{DotProductProofGens, DotProductProofLog};
+*/
+use super::nizk::DotProductProofLog;
+use super::math::Math;
 use super::random::RandomTape;
 use super::scalar::Scalar;
 use super::transcript::{AppendToTranscript, ProofTranscript};
@@ -23,6 +26,7 @@ pub struct DensePolynomial {
   Z: Vec<Scalar>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
 }
 
+/* TODO: Alternative PCS
 #[derive(Clone, Serialize)]
 pub struct PolyCommitmentGens {
   pub gens: DotProductProofGens,
@@ -35,10 +39,6 @@ impl PolyCommitmentGens {
     let gens = DotProductProofGens::new(right.pow2(), label);
     PolyCommitmentGens { gens }
   }
-}
-
-pub struct PolyCommitmentBlinds {
-  pub(crate) blinds: Vec<Scalar>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -57,6 +57,11 @@ impl PolyCommitment {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConstPolyCommitment {
   C: CompressedGroup,
+}
+*/
+
+pub struct PolyCommitmentBlinds {
+  pub(crate) blinds: Vec<Scalar>,
 }
 
 pub struct EqPolynomial {
@@ -131,7 +136,6 @@ impl EqPolynomial {
     (L, R)
   }
 }
-
 pub struct IdentityPolynomial {
   size_point: usize,
 }
@@ -182,6 +186,7 @@ impl DensePolynomial {
     )
   }
 
+  /* TODO: Alternative PCS
   #[cfg(feature = "multicore")]
   fn commit_inner(&self, blinds: &[Scalar], gens: &MultiCommitGens) -> PolyCommitment {
     let L_size = blinds.len();
@@ -212,7 +217,9 @@ impl DensePolynomial {
       .collect();
     PolyCommitment { C }
   }
+  */
 
+  /* TODO: Alternative PCS
   pub fn commit(
     &self,
     gens: &PolyCommitmentGens,
@@ -256,6 +263,7 @@ impl DensePolynomial {
 
     self.commit_inner(&blinds.blinds, &gens.gens.gens_n)
   }
+  */
 
   pub fn bound(&self, L: &[Scalar]) -> Vec<Scalar> {
     let (left_num_vars, right_num_vars) = EqPolynomial::compute_factored_lens(self.get_num_vars());
@@ -411,6 +419,7 @@ impl Index<usize> for DensePolynomial {
   }
 }
 
+/* TODO: Alternative PCS
 impl AppendToTranscript for PolyCommitment {
   fn append_to_transcript(&self, label: &'static [u8], transcript: &mut Transcript) {
     transcript.append_message(label, b"poly_commitment_begin");
@@ -420,6 +429,8 @@ impl AppendToTranscript for PolyCommitment {
     transcript.append_message(label, b"poly_commitment_end");
   }
 }
+*/
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PolyEvalProof {
@@ -437,10 +448,15 @@ impl PolyEvalProof {
     r: &[Scalar],                  // point at which the polynomial is evaluated
     Zr: &Scalar,                   // evaluation of \widetilde{Z}(r)
     blind_Zr_opt: Option<&Scalar>, // specifies a blind for Zr
+    /* TODO: Alternative PCS
     gens: &PolyCommitmentGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
+  /* TODO: Alternative PCS
   ) -> (PolyEvalProof, CompressedGroup) {
+  */
+  ) -> PolyEvalProof {
     transcript.append_protocol_name(PolyEvalProof::protocol_name());
 
     // assert vectors are of the right size
@@ -472,8 +488,13 @@ impl PolyEvalProof {
     let LZ_blind: Scalar = (0..L.len()).map(|i| blinds.blinds[i] * L[i]).sum();
 
     // a dot product proof of size R_size
+    /* TODO: Alternative PCS
     let (proof, _C_LR, C_Zr_prime) = DotProductProofLog::prove(
+    */
+    let proof = DotProductProofLog::prove(
+      /* TODO: Alternative PCS
       &gens.gens,
+      */
       transcript,
       random_tape,
       &LZ,
@@ -483,17 +504,25 @@ impl PolyEvalProof {
       blind_Zr,
     );
 
+    /* TODO: Alternative PCS
     (PolyEvalProof { proof }, C_Zr_prime)
+    */
+    PolyEvalProof { proof }
   }
 
   pub fn verify(
     &self,
+    /* TODO: Alternative PCS
     gens: &PolyCommitmentGens,
+    */
     transcript: &mut Transcript,
     r: &[Scalar],           // point at which the polynomial is evaluated
+    /* TODO: Alternative PCS
     C_Zr: &CompressedGroup, // commitment to \widetilde{Z}(r)
     comm: &PolyCommitment,
+    */
   ) -> Result<(), ProofVerifyError> {
+    /* TODO: Alternative PCS
     transcript.append_protocol_name(PolyEvalProof::protocol_name());
 
     // compute L and R
@@ -508,20 +537,29 @@ impl PolyEvalProof {
     self
       .proof
       .verify(R.len(), &gens.gens, transcript, &R, &C_LZ, C_Zr)
+    */
+    Ok(())
   }
 
   pub fn verify_plain(
     &self,
+    /* TODO: Alternative PCS
     gens: &PolyCommitmentGens,
+    */
     transcript: &mut Transcript,
     r: &[Scalar], // point at which the polynomial is evaluated
     Zr: &Scalar,  // evaluation \widetilde{Z}(r)
+    /* TODO: Alternative PCS
     comm: &PolyCommitment,
+    */
   ) -> Result<(), ProofVerifyError> {
+    /* TODO: Alternative PCS
     // compute a commitment to Zr with a blind of zero
     let C_Zr = Zr.commit(&Scalar::zero(), &gens.gens.gens_1).compress();
 
     self.verify(gens, transcript, r, &C_Zr, comm)
+    */
+    Ok(())
   }
 
   // Evaluation of multiple points on the same instance
@@ -531,7 +569,9 @@ impl PolyEvalProof {
     r_list: Vec<Vec<Scalar>>,             // point at which the polynomial is evaluated
     Zr_list: Vec<Scalar>,                 // evaluation of \widetilde{Z}(r) on each point
     blind_Zr_opt: Option<&Scalar>,        // specifies a blind for Zr
+    /* TODO: Alternative PCS
     gens: &PolyCommitmentGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
   ) -> Vec<PolyEvalProof> {
@@ -597,8 +637,13 @@ impl PolyEvalProof {
       let LZ_blind: Scalar = (0..L.len()).map(|i| blinds.blinds[i] * L[i]).sum();
 
       // a dot product proof of size R_size
+      /* TODO: Alternative PCS
       let (proof, _C_LR, _C_Zr_prime) = DotProductProofLog::prove(
+      */
+      let proof = DotProductProofLog::prove(
+        /* TODO: Alternative PCS
         &gens.gens,
+        */
         transcript,
         random_tape,
         &LZ,
@@ -615,11 +660,15 @@ impl PolyEvalProof {
 
   pub fn verify_plain_batched_points(
     proof_list: &Vec<PolyEvalProof>,
+    /* TODO: Alternative PCS
     gens: &PolyCommitmentGens,
+    */
     transcript: &mut Transcript,
     r_list: Vec<Vec<Scalar>>,   // point at which the polynomial is evaluated
     Zr_list: Vec<Scalar>,   // commitment to \widetilde{Z}(r) on each point
+    /* TODO: Alternative PCS
     comm: &PolyCommitment,
+    */
   ) -> Result<(), ProofVerifyError> {
     transcript.append_protocol_name(PolyEvalProof::protocol_name());
 
@@ -654,6 +703,7 @@ impl PolyEvalProof {
     }
     assert_eq!(L_list.len(), proof_list.len());
 
+    /* TODO: Alternative PCS
     for i in 0..L_list.len() {
       let C_Zc = Zc_list[i].commit(&Scalar::zero(), &gens.gens.gens_1).compress();
       let L = &L_list[i];
@@ -668,6 +718,7 @@ impl PolyEvalProof {
         .proof
         .verify(R.len(), &gens.gens, transcript, &R, &C_LZ, &C_Zc)?
     }
+    */
 
     Ok(())
   }
@@ -680,7 +731,9 @@ impl PolyEvalProof {
     r_list: Vec<&Vec<Scalar>>,                       // point at which the polynomial is evaluated
     Zr_list: &Vec<Scalar>,              // evaluation of \widetilde{Z}(r) on each instance
     blind_Zr_opt: Option<&Scalar>,      // specifies a blind for Zr
+    /* TODO: Alternative PCS
     gens: &PolyCommitmentGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
   ) -> Vec<PolyEvalProof> {
@@ -749,8 +802,13 @@ impl PolyEvalProof {
       let LZ_blind: Scalar = (0..L.len()).map(|i| blinds.blinds[i] * L[i]).sum();
 
       // a dot product proof of size R_size
+      /* TODO: Alternative PCS
       let (proof, _C_LR, _C_Zr_prime) = DotProductProofLog::prove(
+      */
+      let proof = DotProductProofLog::prove(
+        /* TODO: Alternative PCS
         &gens.gens,
+        */
         transcript,
         random_tape,
         &LZ_list[i],
@@ -767,19 +825,27 @@ impl PolyEvalProof {
 
   pub fn verify_plain_batched_instances(
     proof_list: &Vec<PolyEvalProof>,
+    /* TODO: Alternative PCS
     gens: &PolyCommitmentGens,
+    */
     transcript: &mut Transcript,
     r_list: Vec<&Vec<Scalar>>,  // point at which the polynomial is evaluated
     Zr_list: &Vec<Scalar>,   // commitment to \widetilde{Z}(r) of each instance
+    /* TODO: Alternative PCS
     comm_list: &Vec<PolyCommitment>, // commitment of each instance
+    */
     num_vars_list: &Vec<usize>, // size of each polynomial
   ) -> Result<(), ProofVerifyError> {
     transcript.append_protocol_name(PolyEvalProof::protocol_name());
+    /* TODO: Alternative PCS
     assert_eq!(comm_list.len(), r_list.len());
+    */
 
     // We need one proof per poly size + L size
     let mut index_map: HashMap<(usize, Vec<Scalar>), usize> = HashMap::new();
+    /* TODO: Alternative PCS
     let mut LZ_list: Vec<RistrettoPoint> = Vec::new();
+    */
     let mut Zc_list = Vec::new();
     let mut L_list: Vec<Vec<Scalar>> = Vec::new();
     let mut R_list: Vec<Vec<Scalar>> = Vec::new();
@@ -788,8 +854,13 @@ impl PolyEvalProof {
     let c_base = transcript.challenge_scalar(b"challenge_c");
     let mut c = Scalar::one();
     let zero = Scalar::zero();
+    /* TODO: Alternative PCS
     for i in 0..comm_list.len() {
+    */
+    for i in 0..r_list.len() {
+      /* TODO: Alternative PCS
       let C_decompressed: Vec<RistrettoPoint> = comm_list[i].C.iter().map(|pt| pt.decompress().unwrap()).collect();
+      */
       let num_vars = num_vars_list[i];
 
       // compute L and R
@@ -809,21 +880,31 @@ impl PolyEvalProof {
 
       if let Some(index) = index_map.get(&(num_vars, R.clone())) {
         c *= c_base;
+        /* TODO: Alternative PCS
         let LZ = GroupElement::vartime_multiscalar_mul(L, &C_decompressed);
         LZ_list[*index] += c * LZ;
+        */
         Zc_list[*index] += c * Zr_list[i];
       } else {
+        /* TODO: Alternative PCS
         index_map.insert((num_vars, R.clone()), LZ_list.len());
+        */
         Zc_list.push(Zr_list[i]);
         // compute a weighted sum of commitments and L
+        /* TODO: Alternative PCS
         let LZ = GroupElement::vartime_multiscalar_mul(&L, &C_decompressed);
+        LZ_list.push(LZ);
+        */
         L_list.push(L);
         R_list.push(R);
-        LZ_list.push(LZ);
+        
       }
     }
+    /* TODO: Alternative PCS
     assert_eq!(LZ_list.len(), proof_list.len());
+    */
 
+    /* TODO: Alternative PCS
     // Verify proofs
     for i in 0..LZ_list.len() {
       let R = &R_list[i];
@@ -833,6 +914,7 @@ impl PolyEvalProof {
         .proof
         .verify(R.len(), &gens.gens, transcript, R, &C_LZ, &C_Zc)?;
     }
+    */
     Ok(())
   }
 
@@ -847,7 +929,9 @@ impl PolyEvalProof {
     ry: &[Scalar],
     Zr_list: &Vec<Scalar>,
     blind_Zr_opt: Option<&Scalar>,
+    /* TODO: Alternative PCS
     gens: &PolyCommitmentGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
   ) -> Vec<PolyEvalProof> {
@@ -922,8 +1006,13 @@ impl PolyEvalProof {
       let LZ_blind: Scalar = (0..L.len()).map(|i| blinds.blinds[i] * L[i]).sum();
 
       // a dot product proof of size R_size
+      /* TODO: Alternative PCS
       let (proof, _C_LR, _C_Zr_prime) = DotProductProofLog::prove(
+      */
+      let proof = DotProductProofLog::prove(
+        /* TODO: Alternative PCS
         &gens.gens,
+        */
         transcript,
         random_tape,
         &LZ_list[i],
@@ -941,19 +1030,25 @@ impl PolyEvalProof {
     proof_list: &Vec<PolyEvalProof>,
     num_proofs_list: &Vec<usize>,
     num_inputs_list: &Vec<usize>,
+    /* TODO: Alternative PCS
     gens: &PolyCommitmentGens,
+    */
     transcript: &mut Transcript,
     rq: &[Scalar],
     ry: &[Scalar],
     Zr_list: &Vec<RistrettoPoint>,
+    /* TODO: Alternative PCS
     comm_list: &Vec<&PolyCommitment>,
+    */
   ) -> Result<(), ProofVerifyError> {
     transcript.append_protocol_name(PolyEvalProof::protocol_name());
 
     // We need one proof per poly size
     let mut index_map: HashMap<(usize, usize), usize> = HashMap::new();
+    /* TODO: Alternative PCS
     let mut LZ_list: Vec<RistrettoPoint> = Vec::new();
     let mut Zc_list = Vec::new();
+    */
     let mut L_list = Vec::new();
     let mut R_list = Vec::new();
 
@@ -961,19 +1056,28 @@ impl PolyEvalProof {
     let c_base = transcript.challenge_scalar(b"challenge_c");
     let mut c = Scalar::one();
     let zero = Scalar::zero();
+    /* TODO: Alternative PCS
     for i in 0..comm_list.len() {
+    */
+    for i in 0..num_proofs_list.len() {
+      /* TODO: Alternative PCS
       let C_decompressed: Vec<RistrettoPoint> = comm_list[i].C.iter().map(|pt| pt.decompress().unwrap()).collect();
+      */
       let num_proofs = num_proofs_list[i];
       let num_inputs = num_inputs_list[i];
       if let Some(index) = index_map.get(&(num_proofs, num_inputs)) {
         c *= c_base;
         let L = &L_list[*index];
+        /* TODO: Alternative PCS
         let LZ = GroupElement::vartime_multiscalar_mul(L, &C_decompressed);
         LZ_list[*index] += c * LZ;
         Zc_list[*index] += c * Zr_list[i];
+        */
       } else {
+        /* TODO: Alternative PCS
         index_map.insert((num_proofs, num_inputs), LZ_list.len());
         Zc_list.push(Zr_list[i]);
+        */
         let num_vars_q = num_proofs.log_2();
         let num_vars_y = num_inputs.log_2();
         // pad or trim rq and ry to correct length
@@ -995,14 +1099,21 @@ impl PolyEvalProof {
           eq.compute_factored_evals()
         };
         // compute a weighted sum of commitments and L
+        /* TODO: Alternative PCS
         let LZ = GroupElement::vartime_multiscalar_mul(&L, &C_decompressed);
+        */
         L_list.push(L);
         R_list.push(R);
+        /* TODO: Alternative PCS
         LZ_list.push(LZ);
+        */
       }
     }
+    /* TODO: Alternative PCS
     assert_eq!(LZ_list.len(), proof_list.len());
+    */
 
+    /* TODO: Alternative PCS
     // Verify proofs
     for i in 0..LZ_list.len() {
       let R = &R_list[i];
@@ -1012,6 +1123,7 @@ impl PolyEvalProof {
         .proof
         .verify(R.len(), &gens.gens, transcript, R, &C_LZ, &C_Zc)?;
     }
+    */
 
     Ok(())
   }
@@ -1021,10 +1133,15 @@ impl PolyEvalProof {
     poly_list: &Vec<&DensePolynomial>,
     r: &Scalar,                    // point at which the polynomial is evaluated
     Zr: &Vec<Scalar>,              // evaluation of \widetilde{Z}(r)
+    /* TODO: Alternative PCS
     gens: &PolyCommitmentGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
+  /* TODO: Alternative PCS
   ) -> (PolyEvalProof, CompressedGroup) {
+  */
+  ) -> PolyEvalProof {
     transcript.append_protocol_name(PolyEvalProof::protocol_name());
 
     let max_num_vars = poly_list.iter().fold(0, |m, p| if p.get_num_vars() > m { p.get_num_vars() } else { m });
@@ -1079,8 +1196,13 @@ impl PolyEvalProof {
     }
 
     // a dot product proof of size R_size
+    /* TODO: Alternative PCS
     let (proof, _C_LR, C_Zr_prime) = DotProductProofLog::prove(
+    */
+    let proof = DotProductProofLog::prove(
+      /* TODO: Alternative PCS
       &gens.gens,
+      */
       transcript,
       random_tape,
       &LZ_comb,
@@ -1090,16 +1212,23 @@ impl PolyEvalProof {
       &zero,
     );
 
+    /* TODO: Alternative PCS
     (PolyEvalProof { proof }, C_Zr_prime)
+    */
+    PolyEvalProof { proof }
   }
 
   pub fn verify_uni_batched_instances(
     &self,
+    /* TODO: Alternative PCS
     gens: &PolyCommitmentGens,
+    */
     transcript: &mut Transcript,
     r: &Scalar,              // point at which the polynomial is evaluated
+    /* TODO: Alternative PCS
     C_Zr: &Vec<RistrettoPoint>, // commitment to \widetilde{Z}(r)
     comm_list: &Vec<&PolyCommitment>,
+    */
     poly_size: Vec<usize>,
   ) -> Result<(), ProofVerifyError> {
     transcript.append_protocol_name(PolyEvalProof::protocol_name());
@@ -1124,11 +1253,18 @@ impl PolyEvalProof {
     // compute a weighted sum of commitments and L
     let c_base = transcript.challenge_scalar(b"challenge_c");
     let mut c = Scalar::one();
+    /* TODO: Alternative PCS
     let mut C_LZ_comb = Scalar::zero().commit(&Scalar::zero(), &gens.gens.gens_1);
     let mut C_Zr_comb = Scalar::zero().commit(&Scalar::zero(), &gens.gens.gens_1);
+    */
 
+    /* TODO: Alternative PCS
     for i in 0..comm_list.len() {
+    */
+    for i in 0..poly_size.len() {
+      /* TODO: Alternative PCS
       let comm = comm_list[i];
+      */
       let num_vars = poly_size[i].next_power_of_two().log_2();
       let L = if let Some(L) = L_map.get(&num_vars) { L } else {
         let (left_num_vars, right_num_vars) = EqPolynomial::compute_factored_lens(num_vars);
@@ -1146,18 +1282,30 @@ impl PolyEvalProof {
         L_map.get(&num_vars).unwrap()
       };
 
+      /* TODO: Alternative PCS
       let C_decompressed = comm.C.iter().map(|pt| pt.decompress().unwrap());
       let C_LZ = GroupElement::vartime_multiscalar_mul(L, C_decompressed);
       C_LZ_comb += c * C_LZ;
       C_Zr_comb += c * C_Zr[i];
+      */
       c *= c_base;
     }
 
     self
       .proof
-      .verify(R.len(), &gens.gens, transcript, &R, &C_LZ_comb.compress(), &C_Zr_comb.compress())
+      .verify(
+        R.len(), 
+        /* TODO: Alternative PCS
+        &gens.gens, 
+        */
+        transcript, 
+        &R, 
+        /* TODO: Alternative PCS
+        &C_LZ_comb.compress(), 
+        &C_Zr_comb.compress()
+        */
+      )
   }
-
 }
 
 #[cfg(test)]
@@ -1321,6 +1469,7 @@ mod tests {
     assert_eq!(R, R2);
   }
 
+  /* TODO: Alternative PCS
   #[test]
   fn check_polynomial_commit() {
     let Z = vec![
@@ -1357,4 +1506,5 @@ mod tests {
       .verify(&gens, &mut verifier_transcript, &r, &C_Zr, &poly_commitment)
       .is_ok());
   }
+  */
 }

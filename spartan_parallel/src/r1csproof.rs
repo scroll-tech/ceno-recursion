@@ -1,15 +1,19 @@
 #![allow(clippy::too_many_arguments)]
 use crate::{ProverWitnessSecInfo, VerifierWitnessSecInfo};
-
-use super::commitments::{Commitments, MultiCommitGens};
 use super::dense_mlpoly::{
-  DensePolynomial, EqPolynomial, PolyCommitmentGens, PolyEvalProof,
+  DensePolynomial, EqPolynomial, PolyEvalProof,
+  /* TODO: Alternative PCS
+  PolyCommitmentGens, 
+  */
 };
 use super::custom_dense_mlpoly::DensePolynomialPqx;
 use super::errors::ProofVerifyError;
+/* TODO: Alternative PCS
+use super::commitments::{Commitments, MultiCommitGens};
 use super::group::{CompressedGroup, GroupElement, VartimeMultiscalarMul};
-use super::math::Math;
 use super::nizk::{EqualityProof, KnowledgeProof, ProductProof};
+*/
+use super::math::Math;
 use super::r1csinstance::R1CSInstance;
 use super::random::RandomTape;
 use super::scalar::Scalar;
@@ -27,6 +31,9 @@ const ONE: Scalar = Scalar::one();
 #[derive(Serialize, Deserialize, Debug)]
 pub struct R1CSProof {
   sc_proof_phase1: ZKSumcheckInstanceProof,
+  sc_proof_phase2: ZKSumcheckInstanceProof,
+  /* TODO: Alternative PCS
+  sc_proof_phase1: ZKSumcheckInstanceProof,
   claims_phase2: (
     CompressedGroup,
     CompressedGroup,
@@ -42,8 +49,10 @@ pub struct R1CSProof {
   comm_vars_at_ry: CompressedGroup,
   proof_eval_vars_at_ry_list: Vec<PolyEvalProof>,
   proof_eq_sc_phase2: EqualityProof,
+  */
 }
 
+/* TODO: Alternative PCS
 #[derive(Clone, Serialize)]
 pub struct R1CSSumcheckGens {
   gens_1: MultiCommitGens,
@@ -80,6 +89,7 @@ impl R1CSGens {
     R1CSGens { gens_sc, gens_pc }
   }
 }
+*/
 
 impl R1CSProof {
   fn prove_phase_one(
@@ -95,7 +105,9 @@ impl R1CSProof {
     evals_Az: &mut DensePolynomialPqx,
     evals_Bz: &mut DensePolynomialPqx,
     evals_Cz: &mut DensePolynomialPqx,
+    /* TODO: Alternative PCS
     gens: &R1CSSumcheckGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
   ) -> (ZKSumcheckInstanceProof, Vec<Scalar>, Vec<Scalar>, Scalar) {
@@ -122,8 +134,10 @@ impl R1CSProof {
         evals_Bz,
         evals_Cz,
         comb_func,
+        /* TODO: Alternative PCS
         &gens.gens_1,
         &gens.gens_4,
+        */
         transcript,
         random_tape,
       );
@@ -144,7 +158,9 @@ impl R1CSProof {
     evals_eq: &mut DensePolynomial,
     evals_ABC: &mut DensePolynomialPqx,
     evals_z: &mut DensePolynomialPqx,
+    /* TODO: Alternative PCS
     gens: &R1CSSumcheckGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
   ) -> (ZKSumcheckInstanceProof, Vec<Scalar>, Vec<Scalar>, Scalar) {
@@ -164,8 +180,10 @@ impl R1CSProof {
       evals_ABC,
       evals_z,
       comb_func,
+      /* TODO: Alternative PCS
       &gens.gens_1,
       &gens.gens_4,
+      */
       transcript,
       random_tape,
     );
@@ -228,7 +246,9 @@ impl R1CSProof {
     witness_secs: Vec<&ProverWitnessSecInfo>,
     // INSTANCES
     inst: &R1CSInstance,
+    /* TODO: Alternative PCS
     gens: &R1CSGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
   ) -> (R1CSProof, [Vec<Scalar>; 4]) {
@@ -330,7 +350,9 @@ impl R1CSProof {
       &mut poly_Az,
       &mut poly_Bz,
       &mut poly_Cz,
+      /* TODO: Alternative PCS
       &gens.gens_sc,
+      */
       transcript,
       random_tape,
     );
@@ -353,6 +375,7 @@ impl R1CSProof {
       random_tape.random_scalar(b"prod_Az_Bz_blind"),
     );
 
+    /* TODO: Alternative PCS
     let (pok_Cz_claim, comm_Cz_claim) = {
       KnowledgeProof::prove(
         &gens.gens_sc.gens_1,
@@ -377,17 +400,19 @@ impl R1CSProof {
         &prod_Az_Bz_blind,
       )
     };
-
+    
     comm_Az_claim.append_to_transcript(b"comm_Az_claim", transcript);
     comm_Bz_claim.append_to_transcript(b"comm_Bz_claim", transcript);
     comm_Cz_claim.append_to_transcript(b"comm_Cz_claim", transcript);
     comm_prod_Az_Bz_claims.append_to_transcript(b"comm_prod_Az_Bz_claims", transcript);
+    */
 
     // prove the final step of sum-check #1
     let taus_bound_rx = tau_claim;
 
     let blind_expected_claim_postsc1 = taus_bound_rx * (prod_Az_Bz_blind - Cz_blind);
     let claim_post_phase1 = (Az_claim * Bz_claim - Cz_claim) * taus_bound_rx;
+    /* TODO: Alternative PCS
     let (proof_eq_sc_phase1, _C1, _C2) = EqualityProof::prove(
       &gens.gens_sc.gens_1,
       transcript,
@@ -397,6 +422,7 @@ impl R1CSProof {
       &claim_post_phase1,
       &blind_claim_postsc1,
     );
+    */
 
     // Separate the result rx into rp, rq, and rx
     let (rx_rev, rq_rev) = rx.split_at(num_rounds_x);
@@ -472,7 +498,9 @@ impl R1CSProof {
       &mut eq_p_rp_poly,
       &mut ABC_poly,
       &mut Z_poly,
+      /* TODO: Alternative PCS
       &gens.gens_sc,
+      */
       transcript,
       random_tape,
     );
@@ -507,12 +535,16 @@ impl R1CSProof {
     let mut Zr_list = Vec::new();
     // List of evaluations separated by witness_secs
     let mut eval_vars_at_ry_list = vec![Vec::new(); num_witness_secs];
+    /* TODO: Alternative PCS
     let mut comm_vars_at_ry_list = vec![Vec::new(); num_witness_secs];
+    */
     for i in 0..num_witness_secs {
       let w = witness_secs[i];
       let wit_sec_num_instance = w.w_mat.len();
       eval_vars_at_ry_list.push(Vec::new());
+      /* TODO: Alternative PCS
       comm_vars_at_ry_list.push(Vec::new());
+      */
       for p in 0..wit_sec_num_instance {
         poly_list.push(&w.poly_w[p]);
         num_proofs_list.push(w.w_mat[p].len());
@@ -539,7 +571,9 @@ impl R1CSProof {
         } else {
           eval_vars_at_ry_list[i].push(eval_vars_at_ry * ry_factors[num_rounds_y - w.num_inputs[p].log_2()]);
         }
+        /* TODO: Alternative PCS
         comm_vars_at_ry_list[i].push(eval_vars_at_ry.commit(&Scalar::zero(), &gens.gens_pc.gens.gens_1).compress());
+        */
       }
     }
     let proof_eval_vars_at_ry_list = PolyEvalProof::prove_batched_instances_disjoint_rounds(
@@ -551,7 +585,9 @@ impl R1CSProof {
       &ry,
       &Zr_list,
       None,
+      /* TODO: Alternative PCS
       &gens.gens_pc,
+      */
       transcript,
       random_tape,
     );
@@ -590,12 +626,15 @@ impl R1CSProof {
 
     let poly_vars = DensePolynomial::new(eval_vars_comb_list);
     let eval_vars_at_ry = poly_vars.evaluate(&rp);
+    /* TODO: Alternative PCS
     let comm_vars_at_ry = eval_vars_at_ry.commit(&ZERO, &gens.gens_pc.gens.gens_1).compress();
+    */
 
     // prove the final step of sum-check #2
     let blind_expected_claim_postsc2 = ZERO;
     let claim_post_phase2 = claims_phase2[0] * claims_phase2[1] * claims_phase2[2];
 
+    /* TODO: Alternative PCS
     let (proof_eq_sc_phase2, _C1, _C2) = EqualityProof::prove(
       &gens.gens_pc.gens.gens_1,
       transcript,
@@ -605,9 +644,11 @@ impl R1CSProof {
       &claim_post_phase2,
       &blind_claim_postsc2,
     );
+    */
 
     timer_prove.stop();
 
+    /* TODO: Alternative PCS
     let claims_phase2 = (
       comm_Az_claim,
       comm_Bz_claim,
@@ -617,8 +658,10 @@ impl R1CSProof {
     let pok_claims_phase2 = (
       pok_Cz_claim, proof_prod
     );
+    */
 
     (
+      /* TODO: Alternative PCS
       R1CSProof {
         sc_proof_phase1,
         claims_phase2,
@@ -629,6 +672,11 @@ impl R1CSProof {
         comm_vars_at_ry,
         proof_eval_vars_at_ry_list,
         proof_eq_sc_phase2
+      },
+      */
+      R1CSProof {
+        sc_proof_phase1,
+        sc_proof_phase2,
       },
       [rp, rq_rev, rx, [rw, ry].concat()]
     )
@@ -654,7 +702,9 @@ impl R1CSProof {
     witness_secs: Vec<&VerifierWitnessSecInfo>,
 
     num_cons: usize,
+    /* TODO: Alternative PCS
     gens: &R1CSGens,
+    */
     evals: &[Scalar; 3],
     transcript: &mut Transcript,
   ) -> Result<[Vec<Scalar>; 4], ProofVerifyError> {
@@ -673,19 +723,30 @@ impl R1CSProof {
     let tau_q = transcript.challenge_vector(b"challenge_tau_q", num_rounds_q);
     let tau_x = transcript.challenge_vector(b"challenge_tau_x", num_rounds_x);
 
+    /* TODO: Alternative PCS
     // verify the first sum-check instance
     let claim_phase1 = ZERO
       .commit(&ZERO, &gens.gens_sc.gens_1)
       .compress();
+    */
+
+    /* TODO: Alternative PCS
     let (comm_claim_post_phase1, rx) = self.sc_proof_phase1.verify(
+    */
+    let rx = self.sc_proof_phase1.verify(
+      /* TODO: Alternative PCS
       &claim_phase1,
+      */
       num_rounds_x + num_rounds_q + num_rounds_p,
       3,
+      /* TODO: Alternative PCS
       &gens.gens_sc.gens_1,
       &gens.gens_sc.gens_4,
+      */
       transcript,
     )?;
 
+    /* TODO: Alternative PCS
     // perform the intermediate sum-check test with claimed Az, Bz, and Cz
     let (comm_Az_claim, comm_Bz_claim, comm_Cz_claim, comm_prod_Az_Bz_claims) = &self.claims_phase2;
     let (pok_Cz_claim, proof_prod) = &self.pok_claims_phase2;
@@ -703,6 +764,7 @@ impl R1CSProof {
     comm_Bz_claim.append_to_transcript(b"comm_Bz_claim", transcript);
     comm_Cz_claim.append_to_transcript(b"comm_Cz_claim", transcript);
     comm_prod_Az_Bz_claims.append_to_transcript(b"comm_prod_Az_Bz_claims", transcript);
+    */
 
     // Separate the result rx into rp_round1, rq, and rx
     let (rx_rev, rq_rev) = rx.split_at(num_rounds_x);
@@ -712,6 +774,7 @@ impl R1CSProof {
     let rq: Vec<Scalar> = rq_rev.iter().copied().rev().collect();
     let rp_round1 = rp_round1.to_vec();
 
+    /* TODO: Alternative PCS
     // taus_bound_rx is really taus_bound_rx_rq_rp
     let taus_bound_rp: Scalar = (0..rp_round1.len())
       .map(|i| rp_round1[i] * tau_p[i] + (ONE - rp_round1[i]) * (ONE - tau_p[i]))
@@ -735,12 +798,14 @@ impl R1CSProof {
       &expected_claim_post_phase1,
       &comm_claim_post_phase1,
     )?;
+    */
 
     // derive three public challenges and then derive a joint claim
     let r_A = transcript.challenge_scalar(b"challenge_Az");
     let r_B = transcript.challenge_scalar(b"challenge_Bz");
     let r_C = transcript.challenge_scalar(b"challenge_Cz");
 
+    /* TODO: Alternative PCS
     // r_A * comm_Az_claim + r_B * comm_Bz_claim + r_C * comm_Cz_claim;
     let comm_claim_phase2 = GroupElement::vartime_multiscalar_mul(
       iter::once(&r_A)
@@ -753,14 +818,22 @@ impl R1CSProof {
         .collect::<Vec<GroupElement>>(),
     )
     .compress();
+    */
 
     // verify the joint claim with a sum-check protocol
+    /* TODO: Alternative PCS
     let (comm_claim_post_phase2, ry) = self.sc_proof_phase2.verify(
+    */
+    let ry = self.sc_proof_phase2.verify(
+      /* TODO: Alternative PCS
       &comm_claim_phase2,
+      */
       num_rounds_y + num_rounds_w + num_rounds_p,
       3,
+      /* TODO: Alternative PCS
       &gens.gens_sc.gens_1,
       &gens.gens_sc.gens_4,
+      */
       transcript,
     )?;
 
@@ -787,20 +860,29 @@ impl R1CSProof {
 
     // POLY COMMIT
     let timer_commit_opening = Timer::new("verify_sc_commitment_opening");
+    /* TODO: Alternative PCS
     let mut comm_list = Vec::new();
+    */
     let mut num_proofs_list = Vec::new();
     let mut num_inputs_list = Vec::new();
+    /* TODO: Alternative PCS
     let mut comm_Zr_list = Vec::new();
+    */
     for i in 0..num_witness_secs {
       let w = witness_secs[i];
       let wit_sec_num_instance = w.num_proofs.len();
       for p in 0..wit_sec_num_instance {
+        /* TODO: Alternative PCS
         comm_list.push(&w.comm_w[p]);
+        */
         num_proofs_list.push(w.num_proofs[p]);
         num_inputs_list.push(w.num_inputs[p]);
+        /* TODO: Alternative PCS
         comm_Zr_list.push(self.comm_vars_at_ry_list[i][p].decompress().unwrap());
+        */
       }
     }
+    /* TODO: Alternative PCS
     PolyEvalProof::verify_batched_instances_disjoint_rounds(
       &self.proof_eval_vars_at_ry_list,
       &num_proofs_list,
@@ -812,16 +894,23 @@ impl R1CSProof {
       &comm_Zr_list,
       &comm_list,
     )?;
+    */
 
     // Then on rp
+    /* TODO: Alternative PCS
     let mut expected_comm_vars_list = Vec::new();
+    */
     for p in 0..num_instances {
       let wit_sec_p = |i: usize| if witness_secs[i].num_proofs.len() == 1 { 0 } else { p };
       let c = |i: usize| 
         if witness_secs[i].num_inputs[wit_sec_p(i)] >= max_num_inputs {
+          /* TODO: Alternative PCS
           self.comm_vars_at_ry_list[i][wit_sec_p(i)].decompress().unwrap()
+          */
         } else {
+          /* TODO: Alternative PCS
           self.comm_vars_at_ry_list[i][wit_sec_p(i)].decompress().unwrap() * ry_factors[num_rounds_y - witness_secs[i].num_inputs[wit_sec_p(i)].log_2()]
+          */
         };
       let prefix_list = match num_witness_secs.next_power_of_two() {
         1 => { vec![ONE] }
@@ -839,26 +928,35 @@ impl R1CSProof {
         ] }
         _ => { panic!("Unsupported num_witness_secs: {}", num_witness_secs); }
       };
+      /* TODO: Alternative PCS
       let mut comm_vars_comb = (1..num_witness_secs).fold(prefix_list[0] * c(0), |s, i| s + prefix_list[i] * c(i));
       for q in 0..(num_rounds_q - num_proofs[p].log_2()) {
         comm_vars_comb *= ONE - rq[q];
       }
       expected_comm_vars_list.push(comm_vars_comb);
+      */
     }
 
     let EQ_p = &EqPolynomial::new(rp.clone()).evals()[..num_instances];
+    /* TODO: Alternative PCS
     let expected_comm_vars_at_ry = GroupElement::vartime_multiscalar_mul(EQ_p, expected_comm_vars_list).compress();
     assert_eq!(expected_comm_vars_at_ry, self.comm_vars_at_ry);
+    */
     timer_commit_opening.stop();
 
+    /* TODO: Alternative PCS
     // compute commitment to eval_Z_at_ry = (ONE - ry[0]) * self.eval_vars_at_ry + ry[0] * poly_input_eval
     let comm_eval_Z_at_ry = &self.comm_vars_at_ry.decompress().unwrap();
+    */
 
     // perform the final check in the second sum-check protocol
     let [eval_A_r, eval_B_r, eval_C_r] = evals;
+    /* TODO: Alternative PCS
     let expected_claim_post_phase2 =
       ((r_A * eval_A_r + r_B * eval_B_r + r_C * eval_C_r) * comm_eval_Z_at_ry * p_rp_poly_bound_ry).compress();
+    */
 
+    /* TODO: Alternative PCS
     // verify proof that expected_claim_post_phase2 == claim_post_phase2
     self.proof_eq_sc_phase2.verify(
       &gens.gens_sc.gens_1,
@@ -866,6 +964,7 @@ impl R1CSProof {
       &expected_claim_post_phase2,
       &comm_claim_post_phase2,
     )?;
+    */
 
     Ok([rp, rq_rev, rx, [rw, ry].concat()])
   }

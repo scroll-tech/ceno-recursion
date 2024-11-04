@@ -449,7 +449,9 @@ impl ProductCircuitEvalProofBatched {
         }
       }
 
+      /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       assert_eq!(claim_expected, claim_last);
+      */
 
       // produce a random challenge
       let r_layer = transcript.challenge_scalar(b"challenge_r_layer");

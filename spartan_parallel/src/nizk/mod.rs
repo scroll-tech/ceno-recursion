@@ -1,7 +1,5 @@
 #![allow(clippy::too_many_arguments)]
-use super::commitments::{Commitments, MultiCommitGens};
 use super::errors::ProofVerifyError;
-use super::group::{CompressedGroup, CompressedGroupExt};
 use super::math::Math;
 use super::random::RandomTape;
 use super::scalar::Scalar;
@@ -9,9 +7,14 @@ use super::transcript::{AppendToTranscript, ProofTranscript};
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
+/* TODO: Alternative PCS
+use super::commitments::{Commitments, MultiCommitGens};
+use super::group::{CompressedGroup, CompressedGroupExt};
+*/
 mod bullet;
 use bullet::BulletReductionProof;
 
+/* TODO: Alternative PCS
 #[derive(Serialize, Deserialize, Debug)]
 pub struct KnowledgeProof {
   alpha: CompressedGroup,
@@ -73,7 +76,9 @@ impl KnowledgeProof {
     }
   }
 }
+*/
 
+/* TODO: Alternative PCS
 #[derive(Serialize, Deserialize, Debug)]
 pub struct EqualityProof {
   alpha: CompressedGroup,
@@ -142,7 +147,9 @@ impl EqualityProof {
     }
   }
 }
+*/
 
+/* TODO: Alternative PCS
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ProductProof {
   alpha: CompressedGroup,
@@ -288,11 +295,15 @@ impl ProductProof {
     }
   }
 }
+*/
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DotProductProof {
+  /* TODO: Alternative PCS
   delta: CompressedGroup,
   beta: CompressedGroup,
+  */
   z: Vec<Scalar>,
   z_delta: Scalar,
   z_beta: Scalar,
@@ -309,8 +320,10 @@ impl DotProductProof {
   }
 
   pub fn prove(
+    /* TODO: Alternative PCS
     gens_1: &MultiCommitGens,
     gens_n: &MultiCommitGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
     x_vec: &[Scalar],
@@ -318,19 +331,25 @@ impl DotProductProof {
     a_vec: &[Scalar],
     y: &Scalar,
     blind_y: &Scalar,
+  /* TODO: Alternative PCS
   ) -> (DotProductProof, CompressedGroup, CompressedGroup) {
+  */
+  ) -> DotProductProof {
     transcript.append_protocol_name(DotProductProof::protocol_name());
 
     let n = x_vec.len();
     assert_eq!(x_vec.len(), a_vec.len());
+    /* TODO: Alternative PCS
     assert_eq!(gens_n.n, a_vec.len());
     assert_eq!(gens_1.n, 1);
+    */
 
     // produce randomness for the proofs
     let d_vec = random_tape.random_vector(b"d_vec", n);
     let r_delta = random_tape.random_scalar(b"r_delta");
     let r_beta = random_tape.random_scalar(b"r_beta");
 
+    /* TODO: Alternative PCS
     let Cx = x_vec.commit(blind_x, gens_n).compress();
     Cx.append_to_transcript(b"Cx", transcript);
 
@@ -341,11 +360,14 @@ impl DotProductProof {
 
     let delta = d_vec.commit(&r_delta, gens_n).compress();
     delta.append_to_transcript(b"delta", transcript);
+    */
 
     let dotproduct_a_d = DotProductProof::compute_dotproduct(a_vec, &d_vec);
 
+    /* TODO: Alternative PCS
     let beta = dotproduct_a_d.commit(&r_beta, gens_1).compress();
     beta.append_to_transcript(b"beta", transcript);
+    */
 
     let c = transcript.challenge_scalar(b"c");
 
@@ -356,6 +378,7 @@ impl DotProductProof {
     let z_delta = c * blind_x + r_delta;
     let z_beta = c * blind_y + r_beta;
 
+    /* TODO: Alternative PCS
     (
       DotProductProof {
         delta,
@@ -367,8 +390,16 @@ impl DotProductProof {
       Cx,
       Cy,
     )
+    */
+    
+    DotProductProof {
+      z,
+      z_delta,
+      z_beta,
+    }
   }
 
+  /* TODO: Alternative PCS
   pub fn verify(
     &self,
     gens_1: &MultiCommitGens,
@@ -402,8 +433,10 @@ impl DotProductProof {
       Err(ProofVerifyError::InternalError)
     }
   }
+  */
 }
 
+/* TODO: Alternative PCS
 #[derive(Clone, Serialize)]
 pub struct DotProductProofGens {
   n: usize,
@@ -417,12 +450,16 @@ impl DotProductProofGens {
     DotProductProofGens { n, gens_n, gens_1 }
   }
 }
+*/
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DotProductProofLog {
+  /* TODO: Alternative PCS
   bullet_reduction_proof: BulletReductionProof,
   delta: CompressedGroup,
   beta: CompressedGroup,
+  */
   z1: Scalar,
   z2: Scalar,
 }
@@ -437,8 +474,11 @@ impl DotProductProofLog {
     (0..a.len()).map(|i| a[i] * b[i]).sum()
   }
 
+
   pub fn prove(
+    /* TODO: Alternative PCS
     gens: &DotProductProofGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
     x_vec: &[Scalar],
@@ -446,12 +486,17 @@ impl DotProductProofLog {
     a_vec: &[Scalar],
     y: &Scalar,
     blind_y: &Scalar,
+  /* TODO: Alternative PCS
   ) -> (DotProductProofLog, CompressedGroup, CompressedGroup) {
+  */
+  ) -> DotProductProofLog {
     transcript.append_protocol_name(DotProductProofLog::protocol_name());
 
     let n = x_vec.len();
     assert_eq!(x_vec.len(), a_vec.len());
+    /* TODO: Alternative PCS
     assert!(gens.n >= n);
+    */
 
     // produce randomness for generating a proof
     let d = random_tape.random_scalar(b"d");
@@ -465,32 +510,43 @@ impl DotProductProofLog {
         .collect::<Vec<(Scalar, Scalar)>>()
     };
 
+    /* TODO: Alternative PCS
     let Cx = x_vec.commit(blind_x, &gens.gens_n).compress();
     Cx.append_to_transcript(b"Cx", transcript);
     let Cy = y.commit(blind_y, &gens.gens_1).compress();
     Cy.append_to_transcript(b"Cy", transcript);
     a_vec.append_to_transcript(b"a", transcript);
+    */
 
     // sample a random base and scale the generator used for
     // the output of the inner product
     let r = transcript.challenge_scalar(b"r");
+    /* TODO: Alternative PCS
     let gens_1_scaled = gens.gens_1.scale(&r);
+    */
 
     let blind_Gamma = blind_x + r * blind_y;
+    /* TODO: Alternative PCS
     let (bullet_reduction_proof, _Gamma_hat, x_hat, a_hat, g_hat, rhat_Gamma) =
+    */
+    let (x_hat, a_hat, rhat_Gamma) =
       BulletReductionProof::prove(
         transcript,
+        /* TODO: Alternative PCS
         &gens_1_scaled.G[0],
         &gens.gens_n.G[..n],
         &gens.gens_n.h,
+        */
         x_vec,
         a_vec,
         &blind_Gamma,
         &blinds_vec,
       );
+    
 
     let y_hat = x_hat * a_hat;
 
+    /* TODO: Alternative PCS
     let delta = {
       let gens_hat = MultiCommitGens {
         n: 1,
@@ -503,12 +559,14 @@ impl DotProductProofLog {
 
     let beta = d.commit(&r_beta, &gens_1_scaled).compress();
     beta.append_to_transcript(b"beta", transcript);
+    */
 
     let c = transcript.challenge_scalar(b"c");
 
     let z1 = d + c * y_hat;
     let z2 = a_hat * (c * rhat_Gamma + r_beta) + r_delta;
 
+    /* TODO: Alternative PCS
     (
       DotProductProofLog {
         bullet_reduction_proof,
@@ -520,17 +578,27 @@ impl DotProductProofLog {
       Cx,
       Cy,
     )
+    */
+    DotProductProofLog {
+      z1,
+      z2,
+    }
   }
 
   pub fn verify(
     &self,
     n: usize,
+    /* TODO: Alternative PCS
     gens: &DotProductProofGens,
+    */
     transcript: &mut Transcript,
     a: &[Scalar],
+    /* TODO: Alternative PCS
     Cx: &CompressedGroup,
     Cy: &CompressedGroup,
+    */
   ) -> Result<(), ProofVerifyError> {
+    /* TODO: Alternative PCS
     assert!(gens.n >= n);
     assert_eq!(a.len(), n);
 
@@ -573,9 +641,13 @@ impl DotProductProofLog {
     } else {
       Err(ProofVerifyError::InternalError)
     }
+    */
+    Ok(())
   }
 }
 
+
+/* TODO: Alternative PCS
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -733,3 +805,4 @@ mod tests {
       .is_ok());
   }
 }
+*/

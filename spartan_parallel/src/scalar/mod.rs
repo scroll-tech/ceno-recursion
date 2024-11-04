@@ -1,6 +1,10 @@
 mod ristretto255;
+mod goldilocks;
 
+/* TODO: Alternative PCS
 pub type Scalar = ristretto255::Scalar;
+*/
+pub type Scalar = goldilocks::Scalar;
 pub type ScalarBytes = curve25519_dalek::scalar::Scalar;
 
 pub trait ScalarFromPrimitives {

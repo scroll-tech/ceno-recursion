@@ -3,10 +3,12 @@
 use crate::custom_dense_mlpoly::DensePolynomialPqx;
 use crate::math::Math;
 
-use super::commitments::{Commitments, MultiCommitGens};
 use super::dense_mlpoly::DensePolynomial;
 use super::errors::ProofVerifyError;
+/* TODO: Alternative PCS
+use super::commitments::{Commitments, MultiCommitGens};
 use super::group::{CompressedGroup, GroupElement, VartimeMultiscalarMul};
+*/
 use super::nizk::DotProductProof;
 use super::random::RandomTape;
 use super::scalar::Scalar;
@@ -73,51 +75,72 @@ impl SumcheckInstanceProof {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ZKSumcheckInstanceProof {
+  /* TODO: Alternative PCS
   comm_polys: Vec<CompressedGroup>,
   comm_evals: Vec<CompressedGroup>,
+  */
   proofs: Vec<DotProductProof>,
 }
 
 impl ZKSumcheckInstanceProof {
   pub fn new(
+    /* TODO: Alternative PCS
     comm_polys: Vec<CompressedGroup>,
     comm_evals: Vec<CompressedGroup>,
+    */
     proofs: Vec<DotProductProof>,
   ) -> Self {
     ZKSumcheckInstanceProof {
+      /* TODO: Alternative PCS
       comm_polys,
       comm_evals,
+      */
       proofs,
     }
   }
 
   pub fn verify(
     &self,
+    /* TODO: Alternative PCS
     comm_claim: &CompressedGroup,
+    */
     num_rounds: usize,
     degree_bound: usize,
+    /* TODO: Alternative PCS
     gens_1: &MultiCommitGens,
     gens_n: &MultiCommitGens,
+    */
     transcript: &mut Transcript,
+    /* TODO: Alternative PCS
   ) -> Result<(CompressedGroup, Vec<Scalar>), ProofVerifyError> {
+    */
+  ) -> Result<Vec<Scalar>, ProofVerifyError> {
+    /* TODO: Alternative PCS
     // verify degree bound
     assert_eq!(gens_n.n, degree_bound + 1);
 
     // verify that there is a univariate polynomial for each round
     assert_eq!(self.comm_polys.len(), num_rounds);
     assert_eq!(self.comm_evals.len(), num_rounds);
+    */
 
     let mut r: Vec<Scalar> = Vec::new();
 
+    /* TODO: Alternative PCS
     for i in 0..self.comm_polys.len() {
+    */
+    for i in 0..num_rounds {
+      /* TODO: Alternative PCS
       let comm_poly = &self.comm_polys[i];
 
       // append the prover's polynomial to the transcript
       comm_poly.append_to_transcript(b"comm_poly", transcript);
+      */
 
       // derive the verifier's challenge for the next round
       let r_i = transcript.challenge_scalar(b"challenge_nextround");
 
+      /* TODO: Alternative PCS
       // verify the proof of sum-check and evals
       let res = {
         let comm_claim_per_round = if i == 0 {
@@ -182,11 +205,15 @@ impl ZKSumcheckInstanceProof {
       if !res {
         return Err(ProofVerifyError::InternalError);
       }
+      */
 
       r.push(r_i);
     }
 
+    /* TODO: Alternative PCS
     Ok((self.comm_evals[self.comm_evals.len() - 1], r))
+    */
+    Ok(r)
   }
 }
 
@@ -820,8 +847,10 @@ impl ZKSumcheckInstanceProof {
     poly_B: &mut DensePolynomialPqx,
     poly_C: &mut DensePolynomialPqx,
     comb_func: F,
+    /* TODO: Alternative PCS
     gens_1: &MultiCommitGens,
     gens_n: &MultiCommitGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
   ) -> (Self, Vec<Scalar>, Vec<Scalar>, Scalar)
@@ -840,11 +869,15 @@ impl ZKSumcheckInstanceProof {
     );
 
     let mut claim_per_round = *claim;
+    /* TODO: Alternative PCS
     let mut comm_claim_per_round = claim_per_round.commit(blind_claim, gens_1).compress();
+    */
 
     let mut r: Vec<Scalar> = Vec::new();
+    /* TODO: Alternative PCS
     let mut comm_polys: Vec<CompressedGroup> = Vec::new();
     let mut comm_evals: Vec<CompressedGroup> = Vec::new();
+    */
     let mut proofs: Vec<DotProductProof> = Vec::new();
 
     let mut inputs_len = num_rounds_y_max.pow2();
@@ -882,7 +915,10 @@ impl ZKSumcheckInstanceProof {
       else if witness_secs_len > 1 { witness_secs_len /= 2 }
       else { instance_len /= 2 };
 
+      /* TODO: Alternative PCS
       let (poly, comm_poly) = {
+      */
+      let poly = {
         let mut eval_point_0 = ZERO;
         let mut eval_point_2 = ZERO;
         let mut eval_point_3 = ZERO;
@@ -938,13 +974,19 @@ impl ZKSumcheckInstanceProof {
           eval_point_3,
         ];
         let poly = UniPoly::from_evals(&evals);
+
+        /* TODO: Alternative PCS
         let comm_poly = poly.commit(gens_n, &blinds_poly[j]).compress();
         (poly, comm_poly)
+        */
+        poly
       };
 
+      /* TODO: Alternative PCS
       // append the prover's message to the transcript
       comm_poly.append_to_transcript(b"comm_poly", transcript);
       comm_polys.push(comm_poly);
+      */
 
       //derive the verifier's challenge for the next round
       let r_j = transcript.challenge_scalar(b"challenge_nextround");
@@ -959,9 +1001,15 @@ impl ZKSumcheckInstanceProof {
       poly_C.bound_poly(&r_j, mode);
 
       // produce a proof of sum-check and of evaluation
+      /* TODO: Alternative PCS
       let (proof, claim_next_round, comm_claim_next_round) = {
+      */
+      let (proof, claim_next_round) = {
         let eval = poly.evaluate(&r_j);
+
+        /* TODO: Alternative PCS
         let comm_eval = eval.commit(&blinds_evals[j], gens_1).compress();
+        */
 
         // we need to prove the following under homomorphic commitments:
         // (1) poly(0) + poly(1) = claim_per_round
@@ -972,15 +1020,18 @@ impl ZKSumcheckInstanceProof {
         // (2) we can prove: <poly_in_coeffs_form, (1, r_j, r^2_j, ..) = eval
         // for efficiency we batch them using random weights
 
+        /* TODO: Alternative PCS
         // add two claims to transcript
         comm_claim_per_round.append_to_transcript(b"comm_claim_per_round", transcript);
         comm_eval.append_to_transcript(b"comm_eval", transcript);
+        */
 
         // produce two weights
         let w = transcript.challenge_vector(b"combine_two_claims_to_one", 2);
 
         // compute a weighted sum of the RHS
         let target = w[0] * claim_per_round + w[1] * eval;
+        /* TODO: Alternative PCS
         let comm_target = GroupElement::vartime_multiscalar_mul(
           w.iter(),
           iter::once(&comm_claim_per_round)
@@ -989,6 +1040,7 @@ impl ZKSumcheckInstanceProof {
             .collect::<Vec<GroupElement>>(),
         )
         .compress();
+        */
 
         let blind = {
           let blind_sc = if j == 0 {
@@ -1001,7 +1053,9 @@ impl ZKSumcheckInstanceProof {
 
           w[0] * blind_sc + w[1] * blind_eval
         };
+        /* TODO: Alternative PCS
         assert_eq!(target.commit(&blind, gens_1).compress(), comm_target);
+        */
 
         let a = {
           // the vector to use to decommit for sum-check test
@@ -1027,9 +1081,14 @@ impl ZKSumcheckInstanceProof {
             .collect::<Vec<Scalar>>()
         };
 
+        /* TODO: Alternative PCS
         let (proof, _comm_poly, _comm_sc_eval) = DotProductProof::prove(
+        */
+        let proof = DotProductProof::prove(
+          /* TODO: Alternative PCS
           gens_1,
           gens_n,
+          */
           transcript,
           random_tape,
           &poly.as_vec(),
@@ -1039,18 +1098,27 @@ impl ZKSumcheckInstanceProof {
           &blind,
         );
 
+        /* TODO: Alternative PCS
         (proof, eval, comm_eval)
+        */
+        (proof, eval)
       };
 
       proofs.push(proof);
       claim_per_round = claim_next_round;
-      comm_claim_per_round = comm_claim_next_round;
       r.push(r_j);
+
+      /* TODO: Alternative PCS
+      comm_claim_per_round = comm_claim_next_round;
       comm_evals.push(comm_claim_per_round);
+      */
     }
 
     (
+      /* TODO: Alternative PCS
       ZKSumcheckInstanceProof::new(comm_polys, comm_evals, proofs),
+      */
+      ZKSumcheckInstanceProof::new(proofs),
       r,
       vec![poly_A[0], poly_B.index(0, 0, 0, 0), poly_C.index(0, 0, 0, 0)],
       blinds_evals[num_rounds - 1],
@@ -1073,8 +1141,10 @@ impl ZKSumcheckInstanceProof {
     poly_C: &mut DensePolynomialPqx,
     poly_D: &mut DensePolynomialPqx,
     comb_func: F,
+    /* TODO: Alternative PCS
     gens_1: &MultiCommitGens,
     gens_n: &MultiCommitGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
   ) -> (Self, Vec<Scalar>, Vec<Scalar>, Scalar)
@@ -1097,11 +1167,15 @@ impl ZKSumcheckInstanceProof {
     );
 
     let mut claim_per_round = *claim;
+    /* TODO: Alternative PCS
     let mut comm_claim_per_round = claim_per_round.commit(blind_claim, gens_1).compress();
+    */
 
     let mut r: Vec<Scalar> = Vec::new();
+    /* TODO: Alternative PCS
     let mut comm_polys: Vec<CompressedGroup> = Vec::new();
     let mut comm_evals: Vec<CompressedGroup> = Vec::new();
+    */
     let mut proofs: Vec<DotProductProof> = Vec::new();
 
     let mut cons_len = num_rounds_x_max.pow2();
@@ -1143,7 +1217,10 @@ impl ZKSumcheckInstanceProof {
       else if proof_len > 1 { proof_len /= 2 }
       else { instance_len /= 2 };
 
+      /* TODO: Alternative PCS
       let (poly, comm_poly) = {
+      */
+      let poly = {
         let mut eval_point_0 = ZERO;
         let mut eval_point_2 = ZERO;
         let mut eval_point_3 = ZERO;
@@ -1206,13 +1283,18 @@ impl ZKSumcheckInstanceProof {
           eval_point_3,
         ];
         let poly = UniPoly::from_evals(&evals);
+        /* TODO: Alternative PCS
         let comm_poly = poly.commit(gens_n, &blinds_poly[j]).compress();
         (poly, comm_poly)
+        */
+        poly
       };
 
+      /* TODO: Alternative PCS
       // append the prover's message to the transcript
       comm_poly.append_to_transcript(b"comm_poly", transcript);
       comm_polys.push(comm_poly);
+      */
 
       //derive the verifier's challenge for the next round
       let r_j = transcript.challenge_scalar(b"challenge_nextround");
@@ -1226,9 +1308,14 @@ impl ZKSumcheckInstanceProof {
       poly_D.bound_poly(&r_j, mode);
 
       // produce a proof of sum-check and of evaluation
+      /* TODO: Alternative PCS
       let (proof, claim_next_round, comm_claim_next_round) = {
+      */
+      let (proof, claim_next_round) = {
         let eval = poly.evaluate(&r_j);
+        /* TODO: Alternative PCS
         let comm_eval = eval.commit(&blinds_evals[j], gens_1).compress();
+        */
 
         // we need to prove the following under homomorphic commitments:
         // (1) poly(0) + poly(1) = claim_per_round
@@ -1239,15 +1326,18 @@ impl ZKSumcheckInstanceProof {
         // (2) we can prove: <poly_in_coeffs_form, (1, r_j, r^2_j, ..) = eval
         // for efficiency we batch them using random weights
 
+        /* TODO: Alternative PCS
         // add two claims to transcript
         comm_claim_per_round.append_to_transcript(b"comm_claim_per_round", transcript);
         comm_eval.append_to_transcript(b"comm_eval", transcript);
+        */
 
         // produce two weights
         let w = transcript.challenge_vector(b"combine_two_claims_to_one", 2);
 
         // compute a weighted sum of the RHS
         let target = w[0] * claim_per_round + w[1] * eval;
+        /* TODO: Alternative PCS
         let comm_target = GroupElement::vartime_multiscalar_mul(
           w.iter(),
           iter::once(&comm_claim_per_round)
@@ -1256,6 +1346,7 @@ impl ZKSumcheckInstanceProof {
             .collect::<Vec<GroupElement>>(),
         )
         .compress();
+        */
 
         let blind = {
           let blind_sc = if j == 0 {
@@ -1269,7 +1360,9 @@ impl ZKSumcheckInstanceProof {
           w[0] * blind_sc + w[1] * blind_eval
         };
 
+        /* TODO: Alternative PCS
         assert_eq!(target.commit(&blind, gens_1).compress(), comm_target);
+        */
 
         let a = {
           // the vector to use to decommit for sum-check test
@@ -1295,9 +1388,14 @@ impl ZKSumcheckInstanceProof {
             .collect::<Vec<Scalar>>()
         };
 
+        /* TODO: Alternative PCS
         let (proof, _comm_poly, _comm_sc_eval) = DotProductProof::prove(
+        */
+        let proof = DotProductProof::prove(
+          /* TODO: Alternative PCS
           gens_1,
           gens_n,
+          */
           transcript,
           random_tape,
           &poly.as_vec(),
@@ -1306,23 +1404,30 @@ impl ZKSumcheckInstanceProof {
           &target,
           &blind,
         );
-
+      
+        /* TODO: Alternative PCS
         (proof, eval, comm_eval)
+        */
+        (proof, eval)
       };
 
       proofs.push(proof);
       claim_per_round = claim_next_round;
-      comm_claim_per_round = comm_claim_next_round;
       r.push(r_j);
+      /* TODO: Alternative PCS
+      comm_claim_per_round = comm_claim_next_round;
       comm_evals.push(comm_claim_per_round);
+      */
     }
 
     (
+      /* TODO: Alternative PCS
       ZKSumcheckInstanceProof::new(comm_polys, comm_evals, proofs),
+      */
+      ZKSumcheckInstanceProof::new(proofs),
       r,
       vec![poly_Ap[0] * poly_Aq[0] * poly_Ax[0], poly_B.index(0, 0, 0, 0), poly_C.index(0, 0, 0, 0), poly_D.index(0, 0, 0, 0)],
       blinds_evals[num_rounds - 1],
     )
   }
-
 }

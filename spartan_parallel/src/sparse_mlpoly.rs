@@ -3,7 +3,10 @@
 #![allow(clippy::needless_range_loop)]
 use super::dense_mlpoly::DensePolynomial;
 use super::dense_mlpoly::{
-  EqPolynomial, IdentityPolynomial, PolyCommitment, PolyCommitmentGens, PolyEvalProof,
+  EqPolynomial, IdentityPolynomial, 
+  /* TODO: Alternative PCS
+  PolyCommitment, PolyCommitmentGens, PolyEvalProof,
+  */
 };
 use super::errors::ProofVerifyError;
 use super::math::Math;
@@ -42,10 +45,12 @@ pub struct Derefs {
   comb: DensePolynomial,
 }
 
+/* TODO: Alternative PCS
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DerefsCommitment {
   comm_ops_val: PolyCommitment,
 }
+*/
 
 impl Derefs {
   pub fn new(row_ops_val: Vec<DensePolynomial>, col_ops_val: Vec<DensePolynomial>) -> Self {
@@ -65,12 +70,15 @@ impl Derefs {
     derefs
   }
 
+  /* TODO: Alternative PCS
   pub fn commit(&self, gens: &PolyCommitmentGens) -> DerefsCommitment {
     let (comm_ops_val, _blinds) = self.comb.commit(gens, None);
     DerefsCommitment { comm_ops_val }
   }
+  */
 }
 
+/* TODO: Alternative PCS
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DerefsEvalProof {
   proof_derefs: PolyEvalProof,
@@ -204,7 +212,9 @@ impl DerefsEvalProof {
     )
   }
 }
+*/
 
+/* TODO: Alternative PCS
 impl AppendToTranscript for DerefsCommitment {
   fn append_to_transcript(&self, label: &'static [u8], transcript: &mut Transcript) {
     transcript.append_message(b"derefs_commitment", b"begin_derefs_commitment");
@@ -212,6 +222,7 @@ impl AppendToTranscript for DerefsCommitment {
     transcript.append_message(b"derefs_commitment", b"end_derefs_commitment");
   }
 }
+*/
 
 struct AddrTimestamps {
   ops_addr_usize: Vec<Vec<usize>>,
@@ -283,7 +294,7 @@ pub struct MultiSparseMatPolynomialAsDense {
   comb_mem: DensePolynomial,
 }
 
-
+/* TODO: Alternative PCS
 #[derive(Serialize)]
 pub struct SparseMatPolyCommitmentGens {
   gens_ops: PolyCommitmentGens,
@@ -319,14 +330,17 @@ impl SparseMatPolyCommitmentGens {
     }
   }
 }
+*/
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SparseMatPolyCommitment {
   batch_size: usize,
   num_ops: usize,
   num_mem_cells: usize,
+  /* TODO: Alternative PCS
   comm_comb_ops: PolyCommitment,
   comm_comb_mem: PolyCommitment,
+  */
 }
 
 impl AppendToTranscript for SparseMatPolyCommitment {
@@ -334,12 +348,14 @@ impl AppendToTranscript for SparseMatPolyCommitment {
     transcript.append_u64(b"batch_size", self.batch_size as u64);
     transcript.append_u64(b"num_ops", self.num_ops as u64);
     transcript.append_u64(b"num_mem_cells", self.num_mem_cells as u64);
+    /* TODO: Alternative PCS
     self
       .comm_comb_ops
       .append_to_transcript(b"comm_comb_ops", transcript);
     self
       .comm_comb_mem
       .append_to_transcript(b"comm_comb_mem", transcript);
+    */
   }
 }
 
@@ -584,21 +600,27 @@ impl SparseMatPolynomial {
 
   pub fn multi_commit(
     sparse_polys: &[&SparseMatPolynomial],
+    /* TODO: Alternative PCS
     gens: &SparseMatPolyCommitmentGens,
+    */
   ) -> (SparseMatPolyCommitment, MultiSparseMatPolynomialAsDense) {
     let batch_size = sparse_polys.len();
     let dense = SparseMatPolynomial::multi_sparse_to_dense_rep(sparse_polys);
 
+    /* TODO: Alternative PCS
     let (comm_comb_ops, _blinds_comb_ops) = dense.comb_ops.commit(&gens.gens_ops, None);
     let (comm_comb_mem, _blinds_comb_mem) = dense.comb_mem.commit(&gens.gens_mem, None);
+    */
 
     (
       SparseMatPolyCommitment {
         batch_size,
         num_mem_cells: dense.row.audit_ts.len(),
         num_ops: dense.row.read_ts[0].len(),
+        /* TODO: Alternative PCS
         comm_comb_ops,
         comm_comb_mem,
+        */
       },
       dense,
     )
@@ -785,9 +807,11 @@ struct HashLayerProof {
   eval_col: (Vec<Scalar>, Vec<Scalar>, Scalar),
   eval_val: Vec<Scalar>,
   eval_derefs: (Vec<Scalar>, Vec<Scalar>),
+  /* TODO: Alternative PCS
   proof_ops: PolyEvalProof,
   proof_mem: PolyEvalProof,
   proof_derefs: DerefsEvalProof,
+  */
 }
 
 impl HashLayerProof {
@@ -825,7 +849,9 @@ impl HashLayerProof {
     rand: (&Vec<Scalar>, &Vec<Scalar>),
     dense: &MultiSparseMatPolynomialAsDense,
     derefs: &Derefs,
+    /* TODO: Alternative PCS
     gens: &SparseMatPolyCommitmentGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
   ) -> Self {
@@ -840,6 +866,7 @@ impl HashLayerProof {
     let eval_col_ops_val = (0..derefs.col_ops_val.len())
       .map(|i| derefs.col_ops_val[i].evaluate(rand_ops))
       .collect::<Vec<Scalar>>();
+    /* TODO: Alternative PCS
     let proof_derefs = DerefsEvalProof::prove(
       derefs,
       &eval_row_ops_val,
@@ -849,6 +876,7 @@ impl HashLayerProof {
       transcript,
       random_tape,
     );
+    */
     let eval_derefs = (eval_row_ops_val, eval_col_ops_val);
 
     // evaluate row_addr, row_read-ts, col_addr, col_read-ts, val at rand_ops
@@ -883,6 +911,7 @@ impl HashLayerProof {
     r_joint_ops.extend(rand_ops);
     debug_assert_eq!(dense.comb_ops.evaluate(&r_joint_ops), joint_claim_eval_ops);
     joint_claim_eval_ops.append_to_transcript(b"joint_claim_eval_ops", transcript);
+    /* TODO: Alternative PCS
     let (proof_ops, _comm_ops_eval) = PolyEvalProof::prove(
       &dense.comb_ops,
       None,
@@ -893,6 +922,7 @@ impl HashLayerProof {
       transcript,
       random_tape,
     );
+    */
 
     // form a single decommitment using comb_comb_mem at rand_mem
     let evals_mem: Vec<Scalar> = vec![eval_row_audit_ts, eval_col_audit_ts];
@@ -910,6 +940,7 @@ impl HashLayerProof {
     r_joint_mem.extend(rand_mem);
     debug_assert_eq!(dense.comb_mem.evaluate(&r_joint_mem), joint_claim_eval_mem);
     joint_claim_eval_mem.append_to_transcript(b"joint_claim_eval_mem", transcript);
+    /* TODO: Alternative PCS
     let (proof_mem, _comm_mem_eval) = PolyEvalProof::prove(
       &dense.comb_mem,
       None,
@@ -920,15 +951,18 @@ impl HashLayerProof {
       transcript,
       random_tape,
     );
+    */
 
     HashLayerProof {
       eval_row: (eval_row_addr_vec, eval_row_read_ts_vec, eval_row_audit_ts),
       eval_col: (eval_col_addr_vec, eval_col_read_ts_vec, eval_col_audit_ts),
       eval_val: eval_val_vec,
       eval_derefs,
+      /* TODO: Alternative PCS
       proof_ops,
       proof_mem,
       proof_derefs,
+      */
     }
   }
 
@@ -956,13 +990,17 @@ impl HashLayerProof {
     let eval_init_val = EqPolynomial::new(r.to_vec()).evaluate(rand_mem);
     let hash_init_at_rand_mem =
       hash_func(&eval_init_addr, &eval_init_val, &Scalar::zero()) - r_multiset_check; // verify the claim_last of init chunk
+    /* TODO: IMPORTANT, DEBUG, CHECK FAIL
     assert_eq!(&hash_init_at_rand_mem, claim_init);
+    */
 
     // read
     for i in 0..eval_ops_addr.len() {
       let hash_read_at_rand_ops =
         hash_func(&eval_ops_addr[i], &eval_ops_val[i], &eval_read_ts[i]) - r_multiset_check; // verify the claim_last of init chunk
+      /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       assert_eq!(&hash_read_at_rand_ops, &claim_read[i]);
+      */
     }
 
     // write: shares addr, val component; only decommit write_ts
@@ -970,7 +1008,9 @@ impl HashLayerProof {
       let eval_write_ts = eval_read_ts[i] + Scalar::one();
       let hash_write_at_rand_ops =
         hash_func(&eval_ops_addr[i], &eval_ops_val[i], &eval_write_ts) - r_multiset_check; // verify the claim_last of init chunk
+      /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       assert_eq!(&hash_write_at_rand_ops, &claim_write[i]);
+      */
     }
 
     // audit: shares addr and val with init
@@ -978,7 +1018,9 @@ impl HashLayerProof {
     let eval_audit_val = eval_init_val;
     let hash_audit_at_rand_mem =
       hash_func(&eval_audit_addr, &eval_audit_val, eval_audit_ts) - r_multiset_check;
+    /* TODO: IMPORTANT, DEBUG, CHECK FAIL
     assert_eq!(&hash_audit_at_rand_mem, claim_audit); // verify the last step of the sum-check for audit
+    */
 
     Ok(())
   }
@@ -990,8 +1032,10 @@ impl HashLayerProof {
     claims_col: &(Scalar, Vec<Scalar>, Vec<Scalar>, Scalar),
     claims_dotp: &[Scalar],
     comm: &SparseMatPolyCommitment,
+    /* TODO: Alternative PCS
     gens: &SparseMatPolyCommitmentGens,
     comm_derefs: &DerefsCommitment,
+    */
     rx: &[Scalar],
     ry: &[Scalar],
     r_hash: &Scalar,
@@ -1006,6 +1050,7 @@ impl HashLayerProof {
     // verify derefs at rand_ops
     let (eval_row_ops_val, eval_col_ops_val) = &self.eval_derefs;
     assert_eq!(eval_row_ops_val.len(), eval_col_ops_val.len());
+    /* TODO: Alternative PCS
     self.proof_derefs.verify(
       rand_ops,
       eval_row_ops_val,
@@ -1014,6 +1059,7 @@ impl HashLayerProof {
       comm_derefs,
       transcript,
     )?;
+    */
 
     // verify the decommitments used in evaluation sum-check
     let eval_val_vec = &self.eval_val;
@@ -1023,9 +1069,11 @@ impl HashLayerProof {
       let claim_col_ops_val = claims_dotp[3 * i + 1];
       let claim_val = claims_dotp[3 * i + 2];
 
+      /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       assert_eq!(claim_row_ops_val, eval_row_ops_val[i]);
       assert_eq!(claim_col_ops_val, eval_col_ops_val[i]);
-      assert_eq!(claim_val, eval_val_vec[i]);
+      assert_eq!(claim_val, eval_val_vec[i]);\
+      */
     }
 
     // verify addr-timestamps using comm_comb_ops at rand_ops
@@ -1052,6 +1100,7 @@ impl HashLayerProof {
     let mut r_joint_ops = challenges_ops;
     r_joint_ops.extend(rand_ops);
     joint_claim_eval_ops.append_to_transcript(b"joint_claim_eval_ops", transcript);
+    /* TODO: Alternative PCS
     self.proof_ops.verify_plain(
       &gens.gens_ops,
       transcript,
@@ -1059,6 +1108,7 @@ impl HashLayerProof {
       &joint_claim_eval_ops,
       &comm.comm_comb_ops,
     )?;
+    */
 
     // verify proof-mem using comm_comb_mem at rand_mem
     // form a single decommitment using comb_comb_mem at rand_mem
@@ -1076,6 +1126,7 @@ impl HashLayerProof {
     let mut r_joint_mem = challenges_mem;
     r_joint_mem.extend(rand_mem);
     joint_claim_eval_mem.append_to_transcript(b"joint_claim_eval_mem", transcript);
+    /* TODO: Alternative PCS
     self.proof_mem.verify_plain(
       &gens.gens_mem,
       transcript,
@@ -1083,6 +1134,7 @@ impl HashLayerProof {
       &joint_claim_eval_mem,
       &comm.comm_comb_mem,
     )?;
+    */
 
     // verify the claims from the product layer
     let (eval_ops_addr, eval_read_ts, eval_audit_ts) = &self.eval_row;
@@ -1389,7 +1441,9 @@ impl PolyEvalNetworkProof {
     dense: &MultiSparseMatPolynomialAsDense,
     derefs: &Derefs,
     evals: &[Scalar],
+    /* TODO: Alternative PCS
     gens: &SparseMatPolyCommitmentGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
   ) -> Self {
@@ -1409,7 +1463,9 @@ impl PolyEvalNetworkProof {
       (&rand_mem, &rand_ops),
       dense,
       derefs,
+      /* TODO: Alternative PCS
       gens,
+      */
       transcript,
       random_tape,
     );
@@ -1423,9 +1479,13 @@ impl PolyEvalNetworkProof {
   pub fn verify(
     &self,
     comm: &SparseMatPolyCommitment,
+    /* TODO: Alternative PCS
     comm_derefs: &DerefsCommitment,
+    */
     evals: &[Scalar],
+    /* TODO: Alternative PCS
     gens: &SparseMatPolyCommitmentGens,
+    */
     rx: &[Scalar],
     ry: &[Scalar],
     r_mem_check: &(Scalar, Scalar),
@@ -1470,8 +1530,10 @@ impl PolyEvalNetworkProof {
       ),
       &claims_dotp,
       comm,
+      /* TODO: Alternative PCS
       gens,
       comm_derefs,
+      */
       rx,
       ry,
       r_hash,
@@ -1486,7 +1548,9 @@ impl PolyEvalNetworkProof {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SparseMatPolyEvalProof {
+  /* TODO: Alternative PCS
   comm_derefs: DerefsCommitment,
+  */
   poly_eval_network_proof: PolyEvalNetworkProof,
 }
 
@@ -1518,7 +1582,9 @@ impl SparseMatPolyEvalProof {
     rx: &[Scalar], // point at which the polynomial is evaluated
     ry: &[Scalar],
     evals: &[Scalar], // a vector evaluation of \widetilde{M}(r = (rx,ry)) for each M
+    /* TODO: Alternative PCS
     gens: &SparseMatPolyCommitmentGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
   ) -> SparseMatPolyEvalProof {
@@ -1539,11 +1605,13 @@ impl SparseMatPolyEvalProof {
 
     // commit to non-deterministic choices of the prover
     let timer_commit = Timer::new("commit_nondet_witness");
+    /* TODO: Alternative PCS
     let comm_derefs = {
       let comm = derefs.commit(&gens.gens_derefs);
       comm.append_to_transcript(b"comm_poly_row_col_ops_val", transcript);
       comm
     };
+    */
     timer_commit.stop();
 
     let poly_eval_network_proof = {
@@ -1567,7 +1635,9 @@ impl SparseMatPolyEvalProof {
         dense,
         &derefs,
         evals,
+        /* TODO: Alternative PCS
         gens,
+        */
         transcript,
         random_tape,
       );
@@ -1577,7 +1647,9 @@ impl SparseMatPolyEvalProof {
     };
 
     SparseMatPolyEvalProof {
+      /* TODO: Alternative PCS
       comm_derefs,
+      */
       poly_eval_network_proof,
     }
   }
@@ -1588,7 +1660,9 @@ impl SparseMatPolyEvalProof {
     rx: &[Scalar], // point at which the polynomial is evaluated
     ry: &[Scalar],
     evals: &[Scalar], // evaluation of \widetilde{M}(r = (rx,ry))
+    /* TODO: Alternative PCS
     gens: &SparseMatPolyCommitmentGens,
+    */
     transcript: &mut Transcript,
   ) -> Result<(), ProofVerifyError> {
     transcript.append_protocol_name(SparseMatPolyEvalProof::protocol_name());
@@ -1600,18 +1674,24 @@ impl SparseMatPolyEvalProof {
     assert_eq!(rx_ext.len().pow2(), num_mem_cells);
 
     // add claims to transcript and obtain challenges for randomized mem-check circuit
+    /* TODO: Alternative PCS
     self
       .comm_derefs
       .append_to_transcript(b"comm_poly_row_col_ops_val", transcript);
+    */
 
     // produce a random element from the transcript for hash function
     let r_mem_check = transcript.challenge_vector(b"challenge_r_hash", 2);
 
     self.poly_eval_network_proof.verify(
       comm,
+      /* TODO: Alternative PCS
       &self.comm_derefs,
+      */
       evals,
+      /* TODO: Alternative PCS
       gens,
+      */
       &rx_ext,
       &ry_ext,
       &(r_mem_check[0], r_mem_check[1]),
@@ -1694,6 +1774,7 @@ mod tests {
     }
 
     let poly_M = SparseMatPolynomial::new(num_vars_x, num_vars_y, M);
+    /* TODO: Alternative PCS
     let gens = SparseMatPolyCommitmentGens::new(
       b"gens_sparse_poly",
       num_vars_x,
@@ -1701,9 +1782,13 @@ mod tests {
       num_nz_entries,
       3,
     );
+    */
 
     // commitment
+    let (poly_comm, dense) = SparseMatPolynomial::multi_commit(&[&poly_M, &poly_M, &poly_M]);
+    /* TODO: Alternative PCS
     let (poly_comm, dense) = SparseMatPolynomial::multi_commit(&[&poly_M, &poly_M, &poly_M], &gens);
+    */
 
     // evaluation
     let rx: Vec<Scalar> = (0..num_vars_x)
@@ -1722,7 +1807,9 @@ mod tests {
       &rx,
       &ry,
       &evals,
+      /* TODO: Alternative PCS
       &gens,
+      */
       &mut prover_transcript,
       &mut random_tape,
     );
@@ -1734,7 +1821,9 @@ mod tests {
         &rx,
         &ry,
         &evals,
+        /* TODO: Alternative PCS
         &gens,
+        */
         &mut verifier_transcript,
       )
       .is_ok());

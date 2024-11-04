@@ -1,3 +1,4 @@
+/* TODO: Alternative PCS
 use super::group::{GroupElement, VartimeMultiscalarMul, GROUP_BASEPOINT_COMPRESSED};
 use super::scalar::Scalar;
 use digest::XofReader;
@@ -91,3 +92,4 @@ impl Commitments for [Scalar] {
     GroupElement::vartime_multiscalar_mul(self, &gens_n.G[..self.len()]) + blind * gens_n.h
   }
 }
+*/

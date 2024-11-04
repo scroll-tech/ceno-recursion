@@ -14,10 +14,12 @@ use super::group::{CompressedGroup, CompressedGroupExt};
 mod bullet;
 use bullet::BulletReductionProof;
 
-/* TODO: Alternative PCS
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct KnowledgeProof {
+  /* TODO: Alternative PCS
   alpha: CompressedGroup,
+  */
   z1: Scalar,
   z2: Scalar,
 }
@@ -28,38 +30,53 @@ impl KnowledgeProof {
   }
 
   pub fn prove(
+    /* TODO: Alternative PCS
     gens_n: &MultiCommitGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
     x: &Scalar,
     r: &Scalar,
+  /* TODO: Alternative PCS
   ) -> (KnowledgeProof, CompressedGroup) {
+  */
+  ) -> KnowledgeProof {
     transcript.append_protocol_name(KnowledgeProof::protocol_name());
 
     // produce two random Scalars
     let t1 = random_tape.random_scalar(b"t1");
     let t2 = random_tape.random_scalar(b"t2");
 
+    /* TODO: Alternative PCS
     let C = x.commit(r, gens_n).compress();
     C.append_to_transcript(b"C", transcript);
 
     let alpha = t1.commit(&t2, gens_n).compress();
     alpha.append_to_transcript(b"alpha", transcript);
+    */
 
     let c = transcript.challenge_scalar(b"c");
 
     let z1 = x * c + t1;
     let z2 = r * c + t2;
 
+    /* TODO: Alternative PCS
     (KnowledgeProof { alpha, z1, z2 }, C)
+    */
+    KnowledgeProof { z1, z2 }
   }
 
   pub fn verify(
     &self,
+    /* TODO: Alternative PCS
     gens_n: &MultiCommitGens,
+    */
     transcript: &mut Transcript,
+    /* TODO: Alternative PCS
     C: &CompressedGroup,
+    */
   ) -> Result<(), ProofVerifyError> {
+    /* TODO: Alternative PCS
     transcript.append_protocol_name(KnowledgeProof::protocol_name());
     C.append_to_transcript(b"C", transcript);
     self.alpha.append_to_transcript(b"alpha", transcript);
@@ -74,14 +91,16 @@ impl KnowledgeProof {
     } else {
       Err(ProofVerifyError::InternalError)
     }
+    */
+    Ok(())
   }
 }
-*/
 
-/* TODO: Alternative PCS
 #[derive(Serialize, Deserialize, Debug)]
 pub struct EqualityProof {
+  /* TODO: Alternative PCS
   alpha: CompressedGroup,
+  */
   z: Scalar,
 }
 
@@ -91,19 +110,25 @@ impl EqualityProof {
   }
 
   pub fn prove(
+    /* TODO: Alternative PCS
     gens_n: &MultiCommitGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
     v1: &Scalar,
     s1: &Scalar,
     v2: &Scalar,
     s2: &Scalar,
+  /* TODO: Alternative PCS
   ) -> (EqualityProof, CompressedGroup, CompressedGroup) {
+  */
+  ) -> EqualityProof {
     transcript.append_protocol_name(EqualityProof::protocol_name());
 
     // produce a random Scalar
     let r = random_tape.random_scalar(b"r");
 
+    /* TODO: Alternative PCS
     let C1 = v1.commit(s1, gens_n).compress();
     C1.append_to_transcript(b"C1", transcript);
     let C2 = v2.commit(s2, gens_n).compress();
@@ -111,21 +136,30 @@ impl EqualityProof {
 
     let alpha = (r * gens_n.h).compress();
     alpha.append_to_transcript(b"alpha", transcript);
+    */
 
     let c = transcript.challenge_scalar(b"c");
 
     let z = c * (s1 - s2) + r;
 
+    /* TODO: Alternative PCS
     (EqualityProof { alpha, z }, C1, C2)
+    */
+    EqualityProof { z }
   }
 
   pub fn verify(
     &self,
+    /* TODO: Alternative PCS
     gens_n: &MultiCommitGens,
+    */
     transcript: &mut Transcript,
+    /* TODO: Alternative PCS
     C1: &CompressedGroup,
     C2: &CompressedGroup,
+    */
   ) -> Result<(), ProofVerifyError> {
+    /* TODO: Alternative PCS
     transcript.append_protocol_name(EqualityProof::protocol_name());
     C1.append_to_transcript(b"C1", transcript);
     C2.append_to_transcript(b"C2", transcript);
@@ -145,16 +179,18 @@ impl EqualityProof {
     } else {
       Err(ProofVerifyError::InternalError)
     }
+    */
+    Ok(())
   }
 }
-*/
 
-/* TODO: Alternative PCS
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ProductProof {
+  /* TODO: Alternative PCS
   alpha: CompressedGroup,
   beta: CompressedGroup,
   delta: CompressedGroup,
+  */
   z: [Scalar; 5],
 }
 
@@ -164,7 +200,9 @@ impl ProductProof {
   }
 
   pub fn prove(
+    /* TODO: Alternative PCS
     gens_n: &MultiCommitGens,
+    */
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
     x: &Scalar,
@@ -173,12 +211,15 @@ impl ProductProof {
     rY: &Scalar,
     z: &Scalar,
     rZ: &Scalar,
+  /* TODO: Alternative PCS
   ) -> (
     ProductProof,
     CompressedGroup,
     CompressedGroup,
     CompressedGroup,
   ) {
+  */
+  ) -> ProductProof {
     transcript.append_protocol_name(ProductProof::protocol_name());
 
     // produce five random Scalar
@@ -188,6 +229,7 @@ impl ProductProof {
     let b4 = random_tape.random_scalar(b"b4");
     let b5 = random_tape.random_scalar(b"b5");
 
+    /* TODO: Alternative PCS
     let X = x.commit(rX, gens_n).compress();
     X.append_to_transcript(b"X", transcript);
 
@@ -212,6 +254,7 @@ impl ProductProof {
       b3.commit(&b5, gens_X).compress()
     };
     delta.append_to_transcript(b"delta", transcript);
+    */
 
     let c = transcript.challenge_scalar(b"c");
 
@@ -222,6 +265,7 @@ impl ProductProof {
     let z5 = b5 + c * (rZ - rX * y);
     let z = [z1, z2, z3, z4, z5];
 
+    /* TODO: Alternative PCS
     (
       ProductProof {
         alpha,
@@ -233,30 +277,44 @@ impl ProductProof {
       Y,
       Z,
     )
+    */
+    ProductProof { z }
   }
 
   fn check_equality(
+    /* TODO: Alternative PCS
     P: &CompressedGroup,
     X: &CompressedGroup,
+    */
     c: &Scalar,
+    /* TODO: Alternative PCS
     gens_n: &MultiCommitGens,
+    */
     z1: &Scalar,
     z2: &Scalar,
   ) -> bool {
+    /* TODO: Alternative PCS
     let lhs = (P.decompress().unwrap() + c * X.decompress().unwrap()).compress();
     let rhs = z1.commit(z2, gens_n).compress();
 
     lhs == rhs
+    */
+    true
   }
 
   pub fn verify(
     &self,
+    /* TODO: Alternative PCS
     gens_n: &MultiCommitGens,
+    */
     transcript: &mut Transcript,
+    /* TODO: Alternative PCS
     X: &CompressedGroup,
     Y: &CompressedGroup,
     Z: &CompressedGroup,
+    */
   ) -> Result<(), ProofVerifyError> {
+    /* TODO: Alternative PCS
     transcript.append_protocol_name(ProductProof::protocol_name());
 
     X.append_to_transcript(b"X", transcript);
@@ -293,10 +351,10 @@ impl ProductProof {
     } else {
       Err(ProofVerifyError::InternalError)
     }
+    */
+    Ok(())
   }
 }
-*/
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DotProductProof {
@@ -451,7 +509,6 @@ impl DotProductProofGens {
   }
 }
 */
-
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DotProductProofLog {

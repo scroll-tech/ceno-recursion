@@ -11,8 +11,8 @@ use super::errors::ProofVerifyError;
 /* TODO: Alternative PCS
 use super::commitments::{Commitments, MultiCommitGens};
 use super::group::{CompressedGroup, GroupElement, VartimeMultiscalarMul};
-use super::nizk::{EqualityProof, KnowledgeProof, ProductProof};
 */
+use super::nizk::{EqualityProof, KnowledgeProof, ProductProof};
 use super::math::Math;
 use super::r1csinstance::R1CSInstance;
 use super::random::RandomTape;
@@ -32,6 +32,9 @@ const ONE: Scalar = Scalar::one();
 pub struct R1CSProof {
   sc_proof_phase1: ZKSumcheckInstanceProof,
   sc_proof_phase2: ZKSumcheckInstanceProof,
+  pok_claims_phase2: (KnowledgeProof, ProductProof),
+  proof_eq_sc_phase1: EqualityProof,
+  proof_eq_sc_phase2: EqualityProof,
   /* TODO: Alternative PCS
   sc_proof_phase1: ZKSumcheckInstanceProof,
   claims_phase2: (
@@ -377,8 +380,12 @@ impl R1CSProof {
 
     /* TODO: Alternative PCS
     let (pok_Cz_claim, comm_Cz_claim) = {
+    */
+    let pok_Cz_claim = {
       KnowledgeProof::prove(
+        /* TODO: Alternative PCS
         &gens.gens_sc.gens_1,
+        */
         transcript,
         random_tape,
         Cz_claim,
@@ -386,10 +393,15 @@ impl R1CSProof {
       )
     };
 
+    /* TODO: Alternative PCS
     let (proof_prod, comm_Az_claim, comm_Bz_claim, comm_prod_Az_Bz_claims) = {
+    */
+    let proof_prod = {
       let prod = Az_claim * Bz_claim;
       ProductProof::prove(
+        /* TODO: Alternative PCS
         &gens.gens_sc.gens_1,
+        */
         transcript,
         random_tape,
         Az_claim,
@@ -401,6 +413,7 @@ impl R1CSProof {
       )
     };
     
+    /* TODO: Alternative PCS
     comm_Az_claim.append_to_transcript(b"comm_Az_claim", transcript);
     comm_Bz_claim.append_to_transcript(b"comm_Bz_claim", transcript);
     comm_Cz_claim.append_to_transcript(b"comm_Cz_claim", transcript);
@@ -414,7 +427,11 @@ impl R1CSProof {
     let claim_post_phase1 = (Az_claim * Bz_claim - Cz_claim) * taus_bound_rx;
     /* TODO: Alternative PCS
     let (proof_eq_sc_phase1, _C1, _C2) = EqualityProof::prove(
+    */
+    let proof_eq_sc_phase1 = EqualityProof::prove(
+      /* TODO: Alternative PCS
       &gens.gens_sc.gens_1,
+      */
       transcript,
       random_tape,
       &claim_post_phase1,
@@ -422,7 +439,6 @@ impl R1CSProof {
       &claim_post_phase1,
       &blind_claim_postsc1,
     );
-    */
 
     // Separate the result rx into rp, rq, and rx
     let (rx_rev, rq_rev) = rx.split_at(num_rounds_x);
@@ -636,7 +652,11 @@ impl R1CSProof {
 
     /* TODO: Alternative PCS
     let (proof_eq_sc_phase2, _C1, _C2) = EqualityProof::prove(
+    */
+    let proof_eq_sc_phase2 = EqualityProof::prove(
+      /* TODO: Alternative PCS
       &gens.gens_pc.gens.gens_1,
+      */
       transcript,
       random_tape,
       &claim_post_phase2,
@@ -644,7 +664,6 @@ impl R1CSProof {
       &claim_post_phase2,
       &blind_claim_postsc2,
     );
-    */
 
     timer_prove.stop();
 
@@ -655,10 +674,10 @@ impl R1CSProof {
       comm_Cz_claim,
       comm_prod_Az_Bz_claims,
     );
+    */
     let pok_claims_phase2 = (
       pok_Cz_claim, proof_prod
     );
-    */
 
     (
       /* TODO: Alternative PCS
@@ -677,6 +696,9 @@ impl R1CSProof {
       R1CSProof {
         sc_proof_phase1,
         sc_proof_phase2,
+        pok_claims_phase2,
+        proof_eq_sc_phase1,
+        proof_eq_sc_phase2,
       },
       [rp, rq_rev, rx, [rw, ry].concat()]
     )

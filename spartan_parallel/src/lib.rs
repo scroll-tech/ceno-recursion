@@ -22,7 +22,6 @@ mod commitments;
 mod dense_mlpoly;
 mod custom_dense_mlpoly;
 mod errors;
-mod group;
 /// R1CS instance used by libspartan
 pub mod instance;
 mod math;
@@ -3618,7 +3617,7 @@ impl SNARK {
         c0 * self.pairwise_check_inst_evals_bound_rp[0] + c1 * self.pairwise_check_inst_evals_bound_rp[1] + c2 * self.pairwise_check_inst_evals_bound_rp[2]
       );
       */
-      
+
       // Correctness of the shift will be handled in SHIFT_PROOFS
       timer_eval_proof.stop();
     };

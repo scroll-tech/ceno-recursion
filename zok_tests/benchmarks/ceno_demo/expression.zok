@@ -1,0 +1,23 @@
+from "ext_field" import ExtField
+
+// Use struct to simulate an enum
+struct Expression {
+    // 0 - WitIn(WitnessId)
+    // 1 - Fixed(Fixed)
+    // 2 - Constant(E::BaseField)
+    // 3 - Sum(Box<Expression<E>>, Box<Expression<E>>)
+    // 4 - Product(Box<Expression<E>>, Box<Expression<E>>)
+    // 5 - ScaledSum(Box<Expression<E>>, Box<Expression<E>>, Box<Expression<E>>)
+    // 6 - Challenge(ChallengeId, usize, E, E) -> (challenge_id, power, scalar, offset)
+    u8 expr_ty
+    u16 id // wit_id or challenge_id
+    u32 fixed // fixed or power
+    ExtField constant // constant or scalar
+    ExtField offset
+    Expression[0] limbs
+}
+
+struct LogupTableExpression {
+    Expression multiplicity
+    Expression values
+}

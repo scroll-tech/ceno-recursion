@@ -13,9 +13,9 @@ struct TowerProofs {
 
 struct TowerVerifierOutput {
     ExtField[0] rt_tower
-    ExtField[0] record_evals
-    ExtField[0] logup_p_evals
-    ExtField[0] logup_q_evals
+    PointAndEval[0] record_evals
+    PointAndEval[0] logup_p_evals
+    PointAndEval[0] logup_q_evals
 }
 
 struct PointAndEval {

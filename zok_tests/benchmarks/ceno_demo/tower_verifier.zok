@@ -59,9 +59,9 @@ def tower_verify(
     endfor
 
     // evaluation in the tower input layer
-    array_decl ExtField[tower_proofs.prod_spec_size] prod_spec_input_layer_eval
-    array_decl ExtField[tower_proofs.logup_spec_size] logup_spec_p_input_layer_eval
-    array_decl ExtField[tower_proofs.logup_spec_size] logup_spec_q_input_layer_eval
+    array_decl PointAndEval[tower_proofs.prod_spec_size] prod_spec_input_layer_eval
+    array_decl PointAndEval[tower_proofs.logup_spec_size] logup_spec_p_input_layer_eval
+    array_decl PointAndEval[tower_proofs.logup_spec_size] logup_spec_q_input_layer_eval
 
     u32 expected_max_round = 0
     for u32 i in 0..num_prod_spec + num_logup_spec do
@@ -156,12 +156,18 @@ def tower_verify(
                 for u32 i in 0..num_fanin do
                     evals = ext_add(evals, ext_mul(tower_proofs.prod_specs_eval[spec_index][round][i], coeffs[i]))
                 endfor
-                prod_spec_input_layer_eval[spec_index] = evals
+                prod_spec_input_layer_eval[spec_index] = PointAndEval {
+                    point: rt_prime,
+                    eval: evals
+                }
                 if next_round < max_round - 1 then
                     next_prod_spec_evals = ext_add(next_prod_spec_evals, ext_mul(alpha, evals))
                 endif
             else
-                prod_spec_input_layer_eval[spec_index] = to_ext(0) 
+                prod_spec_input_layer_eval[spec_index] = PointAndEval {
+                    point: rt_prime,
+                    eval: to_ext(0)
+                }
             endif
         endfor
         ExtField next_logup_spec_evals = to_ext(0)
@@ -174,15 +180,27 @@ def tower_verify(
                 ExtField p_evals = ext_add(ext_mul(tower_proofs.logup_specs_eval[spec_index][round][0], coeffs[0]), ext_mul(tower_proofs.logup_specs_eval[spec_index][round][1], coeffs[1]))
                 // ExtField q_evals = tower_proofs.logup_specs_eval[spec_index][round][2] * coeffs[0] + tower_proofs.logup_specs_eval[spec_index][round][3] * coeffs[1]
                 ExtField q_evals = ext_add(ext_mul(tower_proofs.logup_specs_eval[spec_index][round][2], coeffs[0]), ext_mul(tower_proofs.logup_specs_eval[spec_index][round][3], coeffs[1]))
-                logup_spec_p_input_layer_eval[spec_index] = p_evals
-                logup_spec_q_input_layer_eval[spec_index] = q_evals
+                logup_spec_p_input_layer_eval[spec_index] = PointAndEval {
+                    point: rt_prime,
+                    eval: p_evals
+                }
+                logup_spec_q_input_layer_eval[spec_index] = PointAndEval {
+                    point: rt_prime,
+                    eval: q_evals
+                }
                 // next_logup_spec_evals = next_logup_spec_evals + alpha_numerator * p_evals + alpha_denominator * q_evals
                 if next_round < max_round - 1 then
                     next_logup_spec_evals = ext_add(next_logup_spec_evals, ext_add(ext_mul(alpha_numerator, p_evals), ext_mul(alpha_denominator, q_evals)))
                 endif
             else 
-                logup_spec_p_input_layer_eval[spec_index] = to_ext(0) 
-                logup_spec_q_input_layer_eval[spec_index] = to_ext(0)
+                logup_spec_p_input_layer_eval[spec_index] = PointAndEval {
+                    point: rt_prime,
+                    eval: to_ext(0)
+                }
+                logup_spec_q_input_layer_eval[spec_index] = PointAndEval {
+                    point: rt_prime,
+                    eval: to_ext(0)
+                }
             endif
         endfor
 

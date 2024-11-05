@@ -1,4 +1,5 @@
 from "ext_field" import ExtField, from_bases, to_ext, ext_eq, ext_neq, ext_add, ext_sub, ext_neg, ext_mul, ext_invert, Challenge
+from "util" import max, ceil_log2
 
 from "poseidon" import Digest, poseidon
 from "poseidon_permutation" import PoseidonPermutation, new_poseidon_permutation, set_from_slice, permute, squeeze
@@ -10,7 +11,10 @@ from "sumcheck_verifier" import verify_round_and_update_state, interpolate_uni_p
 from "mle" import mle_eval, eq_eval, build_eq_x_r_vec_sequential
 from "tower_struct" import TowerProofs, TowerVerifierOutput, PointAndEval
 from "tower_verifier" import tower_verify
+from "expression" import Expression, LogupTableExpression
+from "ceno_struct" import NameSpace, ConstraintSystem, VerifyingKey, ZKVMVerifyingKey, ZKVMVerifier, ZKVMProof, ZKVMOpcodeProof, ZKVMTableProof
 
+/*
 def verify_proof(
     ZKVMVerifier self,
     ZKVMProof vm_proof,
@@ -22,7 +26,6 @@ def verify_proof(
     ExtField logup_sum = to_ext(1)
 
     // Skip PCS for now
-    /*
     // write fixed commitment to transcript
     for (_, vk) in self.vk.circuit_vks.iter() {
         if let Some(fixed_commit) = vk.fixed_commit.as_ref() {
@@ -39,7 +42,6 @@ def verify_proof(
         PCS::write_commitment(&proof.wits_commit, &mut transcript)
             .map_err(ZKVMError::PCSError)?;
     }
-    */
 
     // alpha, beta
     Challenge c1 = read_challenge(transcript)
@@ -55,6 +57,15 @@ def verify_proof(
     u32 num_circuits = vm_proof.num_opcode_proofs + vm_proof.num_table_proofs
     Transcript[num_circuits] = fork_transcript(transcript, num_circuits)
 
+    for u32 it in 0..vm_proof.num_opcode_proofs do
+        field[0] name = vm_proofs.opcode_proofs_name[it]
+        u32 i = vm_proofs.opcode_proofs_index[it]
+        ZKVMOpcodeProof opcode_proof = vm_proofs.opcode_proofs_proof[it]
+        Transcript transcript = transcripts[i]
+
+        // TODO: assert string equality: name == self.vk.circuit_vks_name[it]
+        VerifyingKey circuit_vk = self.vk.circuit_vks_key[it]       
+    endfor
 
 
     for (name, (i, opcode_proof)) in vm_proof.opcode_proofs {
@@ -137,109 +148,115 @@ def verify_proof(
 
     Ok(true)
 }
+*/
+
+const u32 MAINCONSTRAIN_SUMCHECK_BATCH_SIZE = 3
+const u32 SEL_DEGREE = 2
 
 /// verify proof and return input opening point
-#[allow(clippy::too_many_arguments)]
-pub fn verify_opcode_proof(
-    &self,
-    name: &str,
-    vp: &PCS::VerifierParam,
-    circuit_vk: &VerifyingKey<E, PCS>,
-    proof: &ZKVMOpcodeProof<E, PCS>,
-    transcript: &mut Transcript<E>,
-    num_product_fanin: usize,
-    _out_evals: &PointAndEval<E>,
-    challenges: &[E; 2], // derive challenge from PCS
-) -> Result<Point<E>, ZKVMError> {
-    let cs = circuit_vk.get_cs();
-    let (r_counts_per_instance, w_counts_per_instance, lk_counts_per_instance) = (
-        cs.r_expressions.len(),
-        cs.w_expressions.len(),
-        cs.lk_expressions.len(),
-    );
-    let (log2_r_count, log2_w_count, log2_lk_count) = (
-        ceil_log2(r_counts_per_instance),
-        ceil_log2(w_counts_per_instance),
-        ceil_log2(lk_counts_per_instance),
-    );
-    let (chip_record_alpha, _) = (challenges[0], challenges[1]);
+def verify_opcode_proof(
+    ZKVMVerifier self,
+    field[0] name,
+    // vp: &PCS::VerifierParam,
+    VerifyingKey circuit_vk,
+    ZKVMOpcodeProof proof,
+    Transcript t,
+    u32 num_product_fanin,
+    PointAndEval out_evals,
+    ExtField[2] challenges // derive challenge from PCS
+) -> ExtField[0]:
+    ConstraintSystem cs = circuit_vk.cs
+    u32 r_counts_per_instance = cs.r_expressions_len
+    u32 w_counts_per_instance = cs.w_expressions_len
+    u32 lk_counts_per_instance = cs.lk_expressions_len
 
-    let num_instances = proof.num_instances;
-    let next_pow2_instance = next_pow2_instance_padding(num_instances);
-    let log2_num_instances = ceil_log2(next_pow2_instance);
+    u32 log2_r_count = ceil_log2(r_counts_per_instance)
+    u32 log2_w_count = ceil_log2(w_counts_per_instance)
+    u32 log2_lk_count = ceil_log2(lk_counts_per_instance)
+    ExtField chip_record_alpha = challenges[0]
+
+    u32 num_instances = proof.num_instances
+    u32 log2_num_instances = ceil_log2(num_instances)
 
     // verify and reduce product tower sumcheck
-    let tower_proofs = &proof.tower_proof;
+    TowerProofs tower_proofs = proof.tower_proof
 
-    let (rt_tower, record_evals, logup_p_evals, logup_q_evals) = TowerVerify::verify(
-        vec![
-            proof.record_r_out_evals.clone(),
-            proof.record_w_out_evals.clone(),
-        ],
-        vec![vec![
-            proof.lk_p1_out_eval,
-            proof.lk_p2_out_eval,
-            proof.lk_q1_out_eval,
-            proof.lk_q2_out_eval,
+    TowerVerifierOutput output = tower_verify(
+        [proof.record_r_out_evals, proof.record_w_out_evals],
+        [[
+            proof.lk_p1_out_eval, 
+            proof.lk_p2_out_eval, 
+            proof.lk_q1_out_eval, 
+            proof.lk_q2_out_eval
         ]],
         tower_proofs,
-        vec![
+        [
             log2_num_instances + log2_r_count,
             log2_num_instances + log2_w_count,
-            log2_num_instances + log2_lk_count,
+            log2_num_instances + log2_lk_count
         ],
-        num_product_fanin,
-        transcript,
-    )?;
+        t
+    )
+    /*
     assert!(record_evals.len() == 2, "[r_record, w_record]");
     assert!(logup_q_evals.len() == 1, "[lk_q_record]");
     assert!(logup_p_evals.len() == 1, "[lk_p_record]");
+    */
 
     // verify LogUp witness nominator p(x) ?= constant vector 1
     // index 0 is LogUp witness for Fixed Lookup table
-    if logup_p_evals[0].eval != E::ONE {
-        return Err(ZKVMError::VerifyError(
-            "Lookup table witness p(x) != constant 1".into(),
-        ));
-    }
+    ExtField[0] rt_tower = output.rt_tower
+    PointAndEval[0] record_evals = output.record_evals
+    PointAndEval[0] logup_p_evals = output.logup_p_evals
+    PointAndEval[0] logup_q_evals = output.logup_q_evals
+    assert(ext_eq(logup_p_evals[0].eval, to_ext(1)) == 1)
 
     // verify zero statement (degree > 1) + sel sumcheck
-    let (rt_r, rt_w, rt_lk): (Vec<E>, Vec<E>, Vec<E>) = (
-        record_evals[0].point.clone(),
-        record_evals[1].point.clone(),
-        logup_q_evals[0].point.clone(),
-    );
+    ExtField[0] rt_r = record_evals[0].point
+    ExtField[0] rt_w = record_evals[1].point
+    ExtField[0] rt_lk = logup_q_evals[0].point
 
-    let alpha_pow = get_challenge_pows(
-        MAINCONSTRAIN_SUMCHECK_BATCH_SIZE + cs.assert_zero_sumcheck_expressions.len(),
-        transcript,
-    );
-    let mut alpha_pow_iter = alpha_pow.iter();
-    let (alpha_read, alpha_write, alpha_lk) = (
-        alpha_pow_iter.next().unwrap(),
-        alpha_pow_iter.next().unwrap(),
-        alpha_pow_iter.next().unwrap(),
-    );
+    TranscriptAndChallengePows t_cp = get_challenge_pows(
+        MAINCONSTRAIN_SUMCHECK_BATCH_SIZE + cs.assert_zero_sumcheck_expressions_len,
+        t
+    )
+    t = t_cp.transcript
+    ExtField[0] alpha_pows = t_cp.challenge_pows
+    u32 next_alpha_pows_counter = 0
+    ExtField alpha_read = alpha_pows[next_alpha_pows_counter]
+    next_alpha_pows_counter = next_alpha_pows_counter + 1
+    ExtField alpha_write = alpha_pows[next_alpha_pows_counter]
+    next_alpha_pows_counter = next_alpha_pows_counter + 1
+    ExtField alpha_lk = alpha_pows[next_alpha_pows_counter]
+    next_alpha_pows_counter = next_alpha_pows_counter + 1
+
     // alpha_read * (out_r[rt] - 1) + alpha_write * (out_w[rt] - 1) + alpha_lk * (out_lk_q - chip_record_alpha)
     // + 0 // 0 come from zero check
-    let claim_sum = *alpha_read * (record_evals[0].eval - E::ONE)
-        + *alpha_write * (record_evals[1].eval - E::ONE)
-        + *alpha_lk * (logup_q_evals[0].eval - chip_record_alpha);
-
-    let main_sel_subclaim = IOPVerifierState::verify(
-        claim_sum,
-        &IOPProof {
-            point: vec![], // final claimed point will be derive from sumcheck protocol
-            proofs: proof.main_sel_sumcheck_proofs.clone(),
+    ExtField claim_sum = ext_add(
+        ext_mul(alpha_read, ext_sub(record_evals[0].eval, to_ext(1))),
+        ext_add(
+            ext_mul(alpha_write, ext_sub(record_evals[1].eval, to_ext(1))),
+            ext_mul(alpha_lk, ext_sub(logup_q_evals[0].eval, chip_record_alpha))
+        )
+    )
+    SumCheckSubClaimAndTranscript sc_t = verify_sumcheck(
+        claim_sum, 
+        SumcheckProof {
+            points: [], // final claimed point will be derive from sumcheck protocol
+            proofs: proof.main_sel_sumcheck_proofs
         },
-        &VPAuxInfo {
+        VPAuxInfo {
             // + 1 from sel_non_lc_zero_sumcheck
-            max_degree: SEL_DEGREE.max(cs.max_non_lc_degree + 1),
-            num_variables: log2_num_instances,
-            phantom: PhantomData,
+            max_degree: max(SEL_DEGREE, cs.max_non_lc_degree + 1),
+            num_variables: log2_num_instances
         },
-        transcript,
-    );
+        t
+    )
+    t = sc_t.t
+    SumCheckSubClaim main_sel_subclaim = sc_t.sc
+
+    return [to_ext(1)]
+    /*
     let (input_opening_point, expected_evaluation) = (
         main_sel_subclaim
             .point
@@ -380,7 +397,6 @@ pub fn verify_opcode_proof(
     .map_err(ZKVMError::PCSError)?;
 
     Ok(input_opening_point)
-}
 
 #[allow(clippy::too_many_arguments)]
 pub fn verify_table_proof(
@@ -544,3 +560,26 @@ pub fn verify_table_proof(
 
     Ok(input_opening_point)
 }
+*/
+
+def main(
+    ZKVMVerifier self,
+    field[0] name,
+    VerifyingKey circuit_vk,
+    ZKVMOpcodeProof proof,
+    Transcript t,
+    u32 num_product_fanin,
+    PointAndEval out_evals,
+    ExtField[2] challenges // derive challenge from PCS
+) -> field:
+    ExtField[0] result = verify_opcode_proof(
+        self,
+        name,
+        circuit_vk,
+        proof,
+        t,
+        num_product_fanin,
+        out_evals,
+        challenges // derive challenge from PCS
+    )
+    return result[0].b0

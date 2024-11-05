@@ -1,19 +1,74 @@
 from "ext_field" import ExtField
 from "sumcheck_structs" import IOPProverMessage
 from "tower_struct" import TowerProofs
+from "expression" import Expression, LogupTableExpression
+
+struct NameSpace {
+    field[0][0] namespace
+}
+
+struct ConstraintSystem {
+    NameSpace ns
+
+    u16 num_witin
+    field[0][0] witin_namespace_map // Vec<String>
+    u32 num_fixed
+    field[0][0] fixed_namespace_map // Vec<String>
+
+    u32 r_expressions_len
+    Expression[0] r_expressions
+    field[0][0] r_expressions_namespace_map // Vec<String>
+
+    u32 w_expressions_len
+    Expression[0] w_expressions
+    field[0][0] w_expressions_namespace_map // Vec<String>
+
+    /// lookup expression
+    u32 lk_expressions_len
+    Expression[0] lk_expressions
+    field[0][0] lk_expressions_namespace_map // Vec<String>
+    LogupTableExpression[0] lk_table_expressions
+    field[0][0] lk_table_expressions_namespace_map // Vec<String>
+
+    /// main constraints zero expression
+    u32 assert_zero_expressions_len
+    Expression[0] assert_zero_expressions
+    field[0][0] assert_zero_expressions_namespace_map // Vec<String>
+
+    /// main constraints zero expression for expression degree > 1, which require sumcheck to prove
+    u32 assert_zero_sumcheck_expressions_len
+    Expression[0] assert_zero_sumcheck_expressions
+    field[0][0] assert_zero_sumcheck_expressions_namespace_map
+
+    /// max zero sumcheck degree
+    u32 max_non_lc_degree
+
+    // alpha, beta challenge for chip record
+    Expression chip_record_alpha
+    Expression chip_record_beta
+}
+
+struct VerifyingKey {
+    ConstraintSystem cs
+    // pub fixed_commit: Option<PCS::Commitment>,
+}
 
 struct ZKVMVerifyingKey {
     // Skip PCS for now
     // pub vp: PCS::VerifierParam,
     // pk for opcode and table circuits
+    // TODO: Need to prove uniqueness of BTreeMap. The prover can have to entries of same name but different proof
+    // circuit_vks: BTreeMap<String, VerifyingKey<E, PCS>>
+    field[0][0] circuit_vks_name
+    VerifyingKey[0] circuit_vks_key
 }
 
 struct ZKVMVerifier {
     ZKVMVerifyingKey vk
 }
 
-// TODO: Need to prove uniqueness of BTreeMap. The prover can have to entries of same name but different proof
 struct ZKVMProof {
+    // TODO: Need to prove uniqueness of BTreeMap. The prover can have to entries of same name but different proof
     // opcode_proofs: BTreeMap<String, (usize, ZKVMOpcodeProof<E, PCS>)>
     // table_proofs: BTreeMap<String, (usize, ZKVMTableProof<E, PCS>)>
     u32 num_opcode_proofs

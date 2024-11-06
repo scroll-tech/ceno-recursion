@@ -411,7 +411,7 @@ impl ProductCircuitEvalProofBatched {
         .map(|i| claims_to_verify[i] * coeff_vec[i])
         .sum();
 
-      let (claim_last, rand_prod) = self.proof[i].verify(claim, num_rounds, 3, transcript);
+      let (_claim_last, rand_prod) = self.proof[i].verify(claim, num_rounds, 3, transcript);
 
       let claims_prod_left = &self.proof[i].claims_prod_left;
       let claims_prod_right = &self.proof[i].claims_prod_right;

@@ -49,7 +49,6 @@ impl SumcheckInstanceProof {
       // verify degree bound
       assert_eq!(poly.degree(), degree_bound);
 
-
       /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       // check if G_k(0) + G_k(1) = e
       assert_eq!(poly.eval_at_zero() + poly.eval_at_one(), e);

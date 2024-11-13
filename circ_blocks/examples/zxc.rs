@@ -42,9 +42,6 @@ use std::time::*;
 use serde::{Serialize, Deserialize};
 use libspartan::{
     instance::Instance, 
-    /* TODO: Alternative PCS
-    SNARKGens, 
-    */
     Assignment, VarsAssignment, SNARK, InputsAssignment, MemsAssignment};
 use merlin::Transcript;
 
@@ -1155,28 +1152,6 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
   // --
   // COMMITMENT PREPROCESSING
   // --
-  /* TODO: Alternative PCS
-  println!("Producing Public Parameters...");
-  // produce public parameters
-  let block_gens = SNARKGens::new(block_num_cons, block_num_vars, block_num_instances_bound, block_num_non_zero_entries);
-  let pairwise_check_gens = SNARKGens::new(pairwise_check_num_cons, 4 * pairwise_check_num_vars, 3, pairwise_check_num_non_zero_entries);
-  let perm_root_gens = SNARKGens::new(perm_root_num_cons, 8 * num_ios, 1, perm_root_num_non_zero_entries);
-  // Only use one version of gens_r1cs_sat
-  let vars_gens = SNARKGens::new(block_num_cons, TOTAL_NUM_VARS_BOUND, block_num_instances_bound.next_power_of_two(), block_num_non_zero_entries).gens_r1cs_sat;
-  */
-
-  /* TODO: Alternative PCS
-  // create a commitment to the R1CS instance
-  println!("Comitting Circuits...");
-  // block_comm_map records the sparse_polys committed in each commitment
-  // Note that A, B, C are committed separately, so sparse_poly[3*i+2] corresponds to poly C of instance i
-  let (block_comm_map, block_comm_list, block_decomm_list) = SNARK::multi_encode(&block_inst, &block_gens);
-  println!("Finished Block");
-  let (pairwise_check_comm, pairwise_check_decomm) = SNARK::encode(&pairwise_check_inst, &pairwise_check_gens);
-  println!("Finished Pairwise");
-  let (perm_root_comm, perm_root_decomm) = SNARK::encode(&perm_root_inst, &perm_root_gens);
-  println!("Finished Perm");
-  */
   println!("Comitting Circuits...");
   // block_comm_map records the sparse_polys committed in each commitment
   // Note that A, B, C are committed separately, so sparse_poly[3*i+2] corresponds to poly C of instance i
@@ -1229,9 +1204,6 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
     &block_comm_map,
     &block_comm_list,
     &block_decomm_list,
-    /* TODO: Alternative PCS
-    &block_gens,
-    */
     
     rtk.consis_num_proofs,
     rtk.total_num_init_phy_mem_accesses,
@@ -1241,9 +1213,6 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
     &mut pairwise_check_inst,
     &pairwise_check_comm,
     &pairwise_check_decomm,
-    /* TODO: Alternative PCS
-    &pairwise_check_gens,
-    */
 
     block_vars_matrix,
     rtk.exec_inputs,
@@ -1256,13 +1225,7 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
     &perm_root_inst,
     &perm_root_comm,
     &perm_root_decomm,
-    /* TODO: Alternative PCS
-    &perm_root_gens,
-    */
 
-    /* TODO: Alternative PCS
-    &vars_gens,
-    */
     &mut prover_transcript,
   );
 
@@ -1298,9 +1261,6 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
     block_num_cons,
     &block_comm_map,
     &block_comm_list,
-    /* TODO: Alternative PCS
-    &block_gens,
-    */
 
     rtk.consis_num_proofs, 
     rtk.total_num_init_phy_mem_accesses,
@@ -1309,19 +1269,10 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
     rtk.total_num_vir_mem_accesses,
     pairwise_check_num_cons,
     &pairwise_check_comm,
-    /* TODO: Alternative PCS
-    &pairwise_check_gens,
-    */
 
     perm_root_num_cons,
     &perm_root_comm,
-    /* TODO: Alternative PCS
-    &perm_root_gens,
-    */
 
-    /* TODO: Alternative PCS
-    &vars_gens,
-    */
     &mut verifier_transcript
   ).is_ok());
   println!("proof verification successful!");

@@ -1,7 +1,3 @@
-/* TODO: Alternative PCS
-use super::commitments::{Commitments, MultiCommitGens};
-use super::group::GroupElement;
-*/
 use super::scalar::{Scalar, ScalarFromPrimitives};
 use super::transcript::{AppendToTranscript, ProofTranscript};
 use merlin::Transcript;
@@ -88,12 +84,6 @@ impl UniPoly {
       coeffs_except_linear_term,
     }
   }
-
-  /* TODO: Alternative PCS
-  pub fn commit(&self, gens: &MultiCommitGens, blind: &Scalar) -> GroupElement {
-    self.coeffs.commit(blind, gens)
-  }
-  */
 }
 
 impl CompressedUniPoly {

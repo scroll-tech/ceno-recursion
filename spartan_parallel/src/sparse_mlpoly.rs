@@ -1128,7 +1128,6 @@ impl ProductLayerProof {
       eval_dotp_left.append_to_transcript(b"claim_eval_dotp_left", transcript);
       eval_dotp_right.append_to_transcript(b"claim_eval_dotp_right", transcript);
 
-      // TODO: IMPORTANT, DEBUG, CHECK FAIL, debug_scalar
       assert_eq!(eval_dotp_left + eval_dotp_right, eval[i]);
 
       eval_dotp_left_vec.push(eval_dotp_left);
@@ -1259,9 +1258,7 @@ impl ProductLayerProof {
     assert_eq!(eval_dotp_left.len(), num_instances);
     let mut claims_dotp_circuit: Vec<Scalar> = Vec::new();
     for i in 0..num_instances {
-      /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       assert_eq!(eval_dotp_left[i] + eval_dotp_right[i], eval[i]);
-      */
       eval_dotp_left[i].append_to_transcript(b"claim_eval_dotp_left", transcript);
       eval_dotp_right[i].append_to_transcript(b"claim_eval_dotp_right", transcript);
 

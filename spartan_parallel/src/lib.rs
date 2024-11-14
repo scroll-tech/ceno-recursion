@@ -2716,17 +2716,12 @@ impl SNARK {
       }
       timer_eval_opening.stop();
 
-
-      /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       // Correctness of Permutation
       assert_eq!(perm_block_poly_bound_tau, perm_exec_poly_bound_tau);
-      */
 
-      /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       // Correctness of Memory
       assert_eq!(phy_mem_block_poly_bound_tau, phy_mem_addr_poly_bound_tau);
       assert_eq!(vir_mem_block_poly_bound_tau, vir_mem_addr_poly_bound_tau);
-      */
     };
 
     // --

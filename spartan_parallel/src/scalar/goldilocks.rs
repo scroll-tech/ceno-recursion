@@ -1,10 +1,5 @@
-// //! This module provides an implementation of the Goldilocks scalar field
-// //! where `q = 2^64 - 2^32 + 1 = 0x0000000000000000 0000000000000000 0000000000000000 FFFFFFFF00000001`
-// //! 
-// //! We modify various constants (MODULUS, R, R2, etc.) to appropriate values
-// //! *** We borrow the `invert` method from the curve25519-dalek crate.
-// //! See NOTICE.md for more details
-// #![allow(clippy::all)]
+//! This module provides an implementation of the Goldilocks scalar field
+//! where `q = 2^64 - 2^32 + 1 = 0xFFFFFFFF00000001`
 use core::borrow::Borrow;
 use core::convert::TryFrom;
 use core::fmt;
@@ -170,9 +165,7 @@ macro_rules! impl_binops_multiplicative {
 }
 
 /// Represents an element of the Goldilocks field
-// The internal representation of this type is four 64-bit unsigned
-// integers in little-endian order. `Scalar` values are always in
-// Montgomery form; i.e., Scalar(a) = aR mod q, with R = 2^64.
+// The internal representation of this type is a singular u64.
 #[derive(Clone, Copy, Eq, Serialize, Deserialize, Hash, Debug)]
 pub struct Scalar(pub u64);
 

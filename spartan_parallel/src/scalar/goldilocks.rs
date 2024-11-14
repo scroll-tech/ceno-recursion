@@ -522,7 +522,7 @@ impl Scalar {
   /// Subtracts `rhs` from `self`, returning the result.
   #[inline]
   pub const fn sub(&self, rhs: &Self) -> Self {
-    Scalar((((self.0 as u128) + (u64::MAX as u128) - (rhs.0 as u128)) % (P as u128)) as u64)
+    Scalar((((self.0 as u128) + (P as u128) - (rhs.0 as u128)) % (P as u128)) as u64)
   }
 
   /// Doubles this field element.

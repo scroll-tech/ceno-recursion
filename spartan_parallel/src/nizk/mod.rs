@@ -127,7 +127,6 @@ impl EqualityProof {
     self.alpha.append_to_transcript(b"alpha", transcript);
 
     let c = transcript.challenge_scalar(b"c");
-
     let rhs = {
       let C = C1.unpack()? - C2.unpack()?;
       (c * C + self.alpha.unpack()?).compress()
@@ -266,7 +265,7 @@ impl ProductProof {
     let z5 = self.z[4];
 
     let c = transcript.challenge_scalar(b"c");
-    
+
     if ProductProof::check_equality(&self.alpha, X, &c, gens_n, &z1, &z2)
       && ProductProof::check_equality(&self.beta, Y, &c, gens_n, &z3, &z4)
       && ProductProof::check_equality(
@@ -467,8 +466,10 @@ impl DotProductProofLog {
 
     let Cx = x_vec.commit(blind_x, &gens.gens_n).compress();
     Cx.append_to_transcript(b"Cx", transcript);
+
     let Cy = y.commit(blind_y, &gens.gens_1).compress();
     Cy.append_to_transcript(b"Cy", transcript);
+
     a_vec.append_to_transcript(b"a", transcript);
 
     // sample a random base and scale the generator used for
@@ -488,7 +489,6 @@ impl DotProductProofLog {
         &blind_Gamma,
         &blinds_vec,
       );
-
     let y_hat = x_hat * a_hat;
 
     let delta = {
@@ -550,7 +550,6 @@ impl DotProductProofLog {
       self
         .bullet_reduction_proof
         .verify(n, a, transcript, &Gamma, &gens.gens_n.G[..n])?;
-
     self.delta.append_to_transcript(b"delta", transcript);
     self.beta.append_to_transcript(b"beta", transcript);
 

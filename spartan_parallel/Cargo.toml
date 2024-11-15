@@ -40,15 +40,15 @@ curve25519-dalek = { git = "https://github.com/Jiangkm3/curve25519-dalek.git", b
 name = "libspartan"
 path = "src/lib.rs"
 
-[[bin]]
-name = "snark"
-path = "profiler/snark.rs"
-required-features = ["std"]
+# [[bin]]
+# name = "snark"
+# path = "profiler/snark.rs"
+# required-features = ["std"]
 
-[[bin]]
-name = "nizk"
-path = "profiler/nizk.rs"
-required-features = ["std"]
+# [[bin]]
+# name = "nizk"
+# path = "profiler/nizk.rs"
+# required-features = ["std"]
 
 [features]
 default = ["std", "simd_backend"]

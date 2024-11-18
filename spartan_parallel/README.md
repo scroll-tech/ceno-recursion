@@ -294,8 +294,6 @@ To build `libspartan`:
 RUSTFLAGS="-C target_cpu=native" cargo build --release
 ```
 
-> NOTE: We enable SIMD instructions in `curve25519-dalek` by default, so if it fails to build remove the "simd_backend" feature argument in `Cargo.toml`.
-
 ### Supported features
 
 - `std`: enables std features (enabled by default)

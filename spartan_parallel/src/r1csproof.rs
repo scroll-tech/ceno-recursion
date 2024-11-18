@@ -2,10 +2,8 @@
 use crate::{ProverWitnessSecInfo, VerifierWitnessSecInfo};
 
 use super::commitments::{Commitments, MultiCommitGens};
-use super::dense_mlpoly::{
-  DensePolynomial, EqPolynomial, PolyCommitmentGens, PolyEvalProof,
-};
 use super::custom_dense_mlpoly::DensePolynomialPqx;
+use super::dense_mlpoly::{DensePolynomial, EqPolynomial, PolyCommitmentGens, PolyEvalProof};
 use super::errors::ProofVerifyError;
 use super::group::{CompressedGroup, GroupElement, VartimeMultiscalarMul};
 use super::math::Math;
@@ -17,9 +15,9 @@ use super::sumcheck::ZKSumcheckInstanceProof;
 use super::timer::Timer;
 use super::transcript::{AppendToTranscript, ProofTranscript};
 use core::iter;
-use std::cmp::min;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
+use std::cmp::min;
 
 const ZERO: Scalar = Scalar::zero();
 const ONE: Scalar = Scalar::one();
@@ -148,27 +146,29 @@ impl R1CSProof {
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
   ) -> (ZKSumcheckInstanceProof, Vec<Scalar>, Vec<Scalar>, Scalar) {
-    let comb_func =
-      |poly_A_comp: &Scalar, poly_B_comp: &Scalar, poly_C_comp: &Scalar| -> Scalar { poly_A_comp * poly_B_comp * poly_C_comp };
-    let (sc_proof_phase_two, r, claims, blind_claim_postsc) = ZKSumcheckInstanceProof::prove_cubic_disjoint_rounds(
-      claim,
-      blind_claim,
-      num_rounds,
-      num_rounds_y_max,
-      num_rounds_w,
-      num_rounds_p,
-      single_inst,
-      num_witness_secs,
-      num_inputs,
-      evals_eq,
-      evals_ABC,
-      evals_z,
-      comb_func,
-      &gens.gens_1,
-      &gens.gens_4,
-      transcript,
-      random_tape,
-    );
+    let comb_func = |poly_A_comp: &Scalar, poly_B_comp: &Scalar, poly_C_comp: &Scalar| -> Scalar {
+      poly_A_comp * poly_B_comp * poly_C_comp
+    };
+    let (sc_proof_phase_two, r, claims, blind_claim_postsc) =
+      ZKSumcheckInstanceProof::prove_cubic_disjoint_rounds(
+        claim,
+        blind_claim,
+        num_rounds,
+        num_rounds_y_max,
+        num_rounds_w,
+        num_rounds_p,
+        single_inst,
+        num_witness_secs,
+        num_inputs,
+        evals_eq,
+        evals_ABC,
+        evals_z,
+        comb_func,
+        &gens.gens_1,
+        &gens.gens_4,
+        transcript,
+        random_tape,
+      );
 
     (sc_proof_phase_two, r, claims, blind_claim_postsc)
   }
@@ -267,7 +267,11 @@ impl R1CSProof {
     // PHASE 1
     // --
     let num_cons = inst.get_num_cons();
-    let block_num_cons = if inst.get_num_instances() == 1 { vec![inst.get_inst_num_cons()[0]; num_instances] } else { inst.get_inst_num_cons().clone() };
+    let block_num_cons = if inst.get_num_instances() == 1 {
+      vec![inst.get_inst_num_cons()[0]; num_instances]
+    } else {
+      inst.get_inst_num_cons().clone()
+    };
     let timer_sc_proof_phase1 = Timer::new("prove_sc_phase_one");
 
     // append input to variables to create a single vector z
@@ -292,8 +296,13 @@ impl R1CSProof {
 
     // derive the verifier's challenge \tau
     let timer_tmp = Timer::new("prove_vec_mult");
-    let (num_rounds_p, num_rounds_q, num_rounds_x, num_rounds_w, num_rounds_y) =
-      (num_instances.next_power_of_two().log_2(), max_num_proofs.log_2(), num_cons.log_2(), num_witness_secs.log_2(), max_num_inputs.log_2());
+    let (num_rounds_p, num_rounds_q, num_rounds_x, num_rounds_w, num_rounds_y) = (
+      num_instances.next_power_of_two().log_2(),
+      max_num_proofs.log_2(),
+      num_cons.log_2(),
+      num_witness_secs.log_2(),
+      max_num_inputs.log_2(),
+    );
     let tau_p = transcript.challenge_vector(b"challenge_tau_p", num_rounds_p);
     let tau_q = transcript.challenge_vector(b"challenge_tau_q", num_rounds_q);
     let tau_x = transcript.challenge_vector(b"challenge_tau_x", num_rounds_x);
@@ -302,17 +311,16 @@ impl R1CSProof {
     let mut poly_tau_p = DensePolynomial::new(EqPolynomial::new(tau_p).evals());
     let mut poly_tau_q = DensePolynomial::new(EqPolynomial::new(tau_q).evals());
     let mut poly_tau_x = DensePolynomial::new(EqPolynomial::new(tau_x).evals());
-    let (mut poly_Az, mut poly_Bz, mut poly_Cz) =
-      inst.multiply_vec_block(
-        num_instances,
-        num_proofs.clone(),
-        max_num_proofs,
-        num_inputs.clone(),
-        max_num_inputs,
-        num_cons,
-        block_num_cons.clone(),
-        &z_mat
-      );
+    let (mut poly_Az, mut poly_Bz, mut poly_Cz) = inst.multiply_vec_block(
+      num_instances,
+      num_proofs.clone(),
+      max_num_proofs,
+      num_inputs.clone(),
+      max_num_inputs,
+      num_cons,
+      block_num_cons.clone(),
+      &z_mat,
+    );
     timer_tmp.stop();
 
     // Sumcheck 1: (Az * Bz - Cz) * eq(x, q, p) = 0
@@ -343,8 +351,12 @@ impl R1CSProof {
     timer_tmp.stop();
     timer_sc_proof_phase1.stop();
 
-    let (tau_claim, Az_claim, Bz_claim, Cz_claim) =
-      (&(poly_tau_p[0] * poly_tau_q[0] * poly_tau_x[0]), &poly_Az.index(0, 0, 0, 0), &poly_Bz.index(0, 0, 0, 0), &poly_Cz.index(0, 0, 0, 0));
+    let (tau_claim, Az_claim, Bz_claim, Cz_claim) = (
+      &(poly_tau_p[0] * poly_tau_q[0] * poly_tau_x[0]),
+      &poly_Az.index(0, 0, 0, 0),
+      &poly_Bz.index(0, 0, 0, 0),
+      &poly_Cz.index(0, 0, 0, 0),
+    );
 
     let (Az_blind, Bz_blind, Cz_blind, prod_Az_Bz_blind) = (
       random_tape.random_scalar(b"Az_blind"),
@@ -422,14 +434,13 @@ impl R1CSProof {
     let evals_ABC = {
       // compute the initial evaluation table for R(\tau, x)
       let evals_rx = EqPolynomial::new(rx.clone()).evals();
-      let (evals_A, evals_B, evals_C) =
-      inst.compute_eval_table_sparse_disjoint_rounds(
+      let (evals_A, evals_B, evals_C) = inst.compute_eval_table_sparse_disjoint_rounds(
         num_instances,
         inst.get_inst_num_cons(),
         num_witness_secs,
         max_num_inputs,
         &num_inputs,
-        &evals_rx
+        &evals_rx,
       );
 
       let mut evals_ABC = Vec::new();
@@ -438,18 +449,32 @@ impl R1CSProof {
         for w in 0..num_witness_secs {
           evals_ABC[p][0].push(Vec::new());
           for i in 0..num_inputs[p] {
-            evals_ABC[p][0][w].push(r_A * evals_A[p][0][w][i] + r_B * evals_B[p][0][w][i] + r_C * evals_C[p][0][w][i]);
+            evals_ABC[p][0][w].push(
+              r_A * evals_A[p][0][w][i] + r_B * evals_B[p][0][w][i] + r_C * evals_C[p][0][w][i],
+            );
           }
         }
       }
       evals_ABC
     };
-    let mut ABC_poly = DensePolynomialPqx::new_rev(&evals_ABC, vec![1; num_instances], 1, num_inputs.clone(), max_num_inputs);
+    let mut ABC_poly = DensePolynomialPqx::new_rev(
+      &evals_ABC,
+      vec![1; num_instances],
+      1,
+      num_inputs.clone(),
+      max_num_inputs,
+    );
     timer_tmp.stop();
 
     let timer_tmp = Timer::new("prove_z_gen");
     // Construct a p * q * len(z) matrix Z and bound it to r_q
-    let mut Z_poly = DensePolynomialPqx::new_rev(&z_mat, num_proofs.clone(), max_num_proofs, num_inputs.clone(), max_num_inputs);
+    let mut Z_poly = DensePolynomialPqx::new_rev(
+      &z_mat,
+      num_proofs.clone(),
+      max_num_proofs,
+      num_inputs.clone(),
+      max_num_inputs,
+    );
     timer_tmp.stop();
     let timer_tmp = Timer::new("prove_z_bind");
     Z_poly.bound_poly_vars_rq(&rq_rev.to_vec());
@@ -530,16 +555,22 @@ impl R1CSProof {
             ry[num_rounds_y - w.num_inputs[p].log_2()..].to_vec()
           }
         };
-        let rq_short = rq[num_rounds_q - num_proofs_list[num_proofs_list.len() - 1].log_2()..].to_vec();
+        let rq_short =
+          rq[num_rounds_q - num_proofs_list[num_proofs_list.len() - 1].log_2()..].to_vec();
         let r = &[rq_short, ry_short.clone()].concat();
         let eval_vars_at_ry = poly_list[poly_list.len() - 1].evaluate(r);
         Zr_list.push(eval_vars_at_ry);
         if w.num_inputs[p] >= max_num_inputs {
           eval_vars_at_ry_list[i].push(eval_vars_at_ry);
         } else {
-          eval_vars_at_ry_list[i].push(eval_vars_at_ry * ry_factors[num_rounds_y - w.num_inputs[p].log_2()]);
+          eval_vars_at_ry_list[i]
+            .push(eval_vars_at_ry * ry_factors[num_rounds_y - w.num_inputs[p].log_2()]);
         }
-        comm_vars_at_ry_list[i].push(eval_vars_at_ry.commit(&Scalar::zero(), &gens.gens_pc.gens.gens_1).compress());
+        comm_vars_at_ry_list[i].push(
+          eval_vars_at_ry
+            .commit(&Scalar::zero(), &gens.gens_pc.gens.gens_1)
+            .compress(),
+        );
       }
     }
     let proof_eval_vars_at_ry_list = PolyEvalProof::prove_batched_instances_disjoint_rounds(
@@ -562,23 +593,44 @@ impl R1CSProof {
     // So we need to multiply each entry by (1 - rq0)(1 - rq1)
     let mut eval_vars_comb_list = Vec::new();
     for p in 0..num_instances {
-      let wit_sec_p = |i: usize| if witness_secs[i].w_mat.len() == 1 { 0 } else { p };
+      let wit_sec_p = |i: usize| {
+        if witness_secs[i].w_mat.len() == 1 {
+          0
+        } else {
+          p
+        }
+      };
       let e = |i: usize| eval_vars_at_ry_list[i][wit_sec_p(i)];
       let prefix_list = match num_witness_secs.next_power_of_two() {
-        1 => { vec![ONE] }
-        2 => { vec![(ONE - rw[0]), rw[0]] }
-        4 => { vec![(ONE - rw[0]) * (ONE - rw[1]), (ONE - rw[0]) * rw[1], rw[0] * (ONE - rw[1]), rw[0] * rw[1]] }
-        8 => { vec![
-          (ONE - rw[0]) * (ONE - rw[1]) * (ONE - rw[2]),
-          (ONE - rw[0]) * (ONE - rw[1]) * rw[2],
-          (ONE - rw[0]) * rw[1] * (ONE - rw[2]),
-          (ONE - rw[0]) * rw[1] * rw[2],
-          rw[0] * (ONE - rw[1]) * (ONE - rw[2]),
-          rw[0] * (ONE - rw[1]) * rw[2],
-          rw[0] * rw[1] * (ONE - rw[2]),
-          rw[0] * rw[1] * rw[2],
-        ] }
-        _ => { panic!("Unsupported num_witness_secs: {}", num_witness_secs); }
+        1 => {
+          vec![ONE]
+        }
+        2 => {
+          vec![(ONE - rw[0]), rw[0]]
+        }
+        4 => {
+          vec![
+            (ONE - rw[0]) * (ONE - rw[1]),
+            (ONE - rw[0]) * rw[1],
+            rw[0] * (ONE - rw[1]),
+            rw[0] * rw[1],
+          ]
+        }
+        8 => {
+          vec![
+            (ONE - rw[0]) * (ONE - rw[1]) * (ONE - rw[2]),
+            (ONE - rw[0]) * (ONE - rw[1]) * rw[2],
+            (ONE - rw[0]) * rw[1] * (ONE - rw[2]),
+            (ONE - rw[0]) * rw[1] * rw[2],
+            rw[0] * (ONE - rw[1]) * (ONE - rw[2]),
+            rw[0] * (ONE - rw[1]) * rw[2],
+            rw[0] * rw[1] * (ONE - rw[2]),
+            rw[0] * rw[1] * rw[2],
+          ]
+        }
+        _ => {
+          panic!("Unsupported num_witness_secs: {}", num_witness_secs);
+        }
       };
       let mut eval_vars_comb = (0..num_witness_secs).fold(ZERO, |s, i| s + prefix_list[i] * e(i));
       for q in 0..(num_rounds_q - num_proofs[p].log_2()) {
@@ -590,7 +642,9 @@ impl R1CSProof {
 
     let poly_vars = DensePolynomial::new(eval_vars_comb_list);
     let eval_vars_at_ry = poly_vars.evaluate(&rp);
-    let comm_vars_at_ry = eval_vars_at_ry.commit(&ZERO, &gens.gens_pc.gens.gens_1).compress();
+    let comm_vars_at_ry = eval_vars_at_ry
+      .commit(&ZERO, &gens.gens_pc.gens.gens_1)
+      .compress();
 
     // prove the final step of sum-check #2
     let blind_expected_claim_postsc2 = ZERO;
@@ -614,9 +668,7 @@ impl R1CSProof {
       comm_Cz_claim,
       comm_prod_Az_Bz_claims,
     );
-    let pok_claims_phase2 = (
-      pok_Cz_claim, proof_prod
-    );
+    let pok_claims_phase2 = (pok_Cz_claim, proof_prod);
 
     (
       R1CSProof {
@@ -628,9 +680,9 @@ impl R1CSProof {
         comm_vars_at_ry_list,
         comm_vars_at_ry,
         proof_eval_vars_at_ry_list,
-        proof_eq_sc_phase2
+        proof_eq_sc_phase2,
       },
-      [rp, rq_rev, rx, [rw, ry].concat()]
+      [rp, rq_rev, rx, [rw, ry].concat()],
     )
   }
 
@@ -665,8 +717,13 @@ impl R1CSProof {
     // Assert num_witness_secs is valid
     assert!(num_witness_secs >= 1 && num_witness_secs <= 16);
 
-    let (num_rounds_p, num_rounds_q, num_rounds_x, num_rounds_w, num_rounds_y) =
-      (num_instances.next_power_of_two().log_2(), max_num_proofs.log_2(), num_cons.log_2(), num_witness_secs.log_2(), max_num_inputs.log_2());
+    let (num_rounds_p, num_rounds_q, num_rounds_x, num_rounds_w, num_rounds_y) = (
+      num_instances.next_power_of_two().log_2(),
+      max_num_proofs.log_2(),
+      num_cons.log_2(),
+      num_witness_secs.log_2(),
+      max_num_inputs.log_2(),
+    );
 
     // derive the verifier's challenge tau
     let tau_p = transcript.challenge_vector(b"challenge_tau_p", num_rounds_p);
@@ -674,9 +731,7 @@ impl R1CSProof {
     let tau_x = transcript.challenge_vector(b"challenge_tau_x", num_rounds_x);
 
     // verify the first sum-check instance
-    let claim_phase1 = ZERO
-      .commit(&ZERO, &gens.gens_sc.gens_1)
-      .compress();
+    let claim_phase1 = ZERO.commit(&ZERO, &gens.gens_sc.gens_1).compress();
     let (comm_claim_post_phase1, rx) = self.sc_proof_phase1.verify(
       &claim_phase1,
       num_rounds_x + num_rounds_q + num_rounds_p,
@@ -816,30 +871,58 @@ impl R1CSProof {
     // Then on rp
     let mut expected_comm_vars_list = Vec::new();
     for p in 0..num_instances {
-      let wit_sec_p = |i: usize| if witness_secs[i].num_proofs.len() == 1 { 0 } else { p };
-      let c = |i: usize|
-        if witness_secs[i].num_inputs[wit_sec_p(i)] >= max_num_inputs {
-          self.comm_vars_at_ry_list[i][wit_sec_p(i)].decompress().unwrap()
+      let wit_sec_p = |i: usize| {
+        if witness_secs[i].num_proofs.len() == 1 {
+          0
         } else {
-          self.comm_vars_at_ry_list[i][wit_sec_p(i)].decompress().unwrap() * ry_factors[num_rounds_y - witness_secs[i].num_inputs[wit_sec_p(i)].log_2()]
-        };
-      let prefix_list = match num_witness_secs.next_power_of_two() {
-        1 => { vec![ONE] }
-        2 => { vec![(ONE - rw[0]), rw[0]] }
-        4 => { vec![(ONE - rw[0]) * (ONE - rw[1]), (ONE - rw[0]) * rw[1], rw[0] * (ONE - rw[1]), rw[0] * rw[1]] }
-        8 => { vec![
-          (ONE - rw[0]) * (ONE - rw[1]) * (ONE - rw[2]),
-          (ONE - rw[0]) * (ONE - rw[1]) * rw[2],
-          (ONE - rw[0]) * rw[1] * (ONE - rw[2]),
-          (ONE - rw[0]) * rw[1] * rw[2],
-          rw[0] * (ONE - rw[1]) * (ONE - rw[2]),
-          rw[0] * (ONE - rw[1]) * rw[2],
-          rw[0] * rw[1] * (ONE - rw[2]),
-          rw[0] * rw[1] * rw[2],
-        ] }
-        _ => { panic!("Unsupported num_witness_secs: {}", num_witness_secs); }
+          p
+        }
       };
-      let mut comm_vars_comb = (1..num_witness_secs).fold(prefix_list[0] * c(0), |s, i| s + prefix_list[i] * c(i));
+      let c = |i: usize| {
+        if witness_secs[i].num_inputs[wit_sec_p(i)] >= max_num_inputs {
+          self.comm_vars_at_ry_list[i][wit_sec_p(i)]
+            .decompress()
+            .unwrap()
+        } else {
+          self.comm_vars_at_ry_list[i][wit_sec_p(i)]
+            .decompress()
+            .unwrap()
+            * ry_factors[num_rounds_y - witness_secs[i].num_inputs[wit_sec_p(i)].log_2()]
+        }
+      };
+      let prefix_list = match num_witness_secs.next_power_of_two() {
+        1 => {
+          vec![ONE]
+        }
+        2 => {
+          vec![(ONE - rw[0]), rw[0]]
+        }
+        4 => {
+          vec![
+            (ONE - rw[0]) * (ONE - rw[1]),
+            (ONE - rw[0]) * rw[1],
+            rw[0] * (ONE - rw[1]),
+            rw[0] * rw[1],
+          ]
+        }
+        8 => {
+          vec![
+            (ONE - rw[0]) * (ONE - rw[1]) * (ONE - rw[2]),
+            (ONE - rw[0]) * (ONE - rw[1]) * rw[2],
+            (ONE - rw[0]) * rw[1] * (ONE - rw[2]),
+            (ONE - rw[0]) * rw[1] * rw[2],
+            rw[0] * (ONE - rw[1]) * (ONE - rw[2]),
+            rw[0] * (ONE - rw[1]) * rw[2],
+            rw[0] * rw[1] * (ONE - rw[2]),
+            rw[0] * rw[1] * rw[2],
+          ]
+        }
+        _ => {
+          panic!("Unsupported num_witness_secs: {}", num_witness_secs);
+        }
+      };
+      let mut comm_vars_comb =
+        (1..num_witness_secs).fold(prefix_list[0] * c(0), |s, i| s + prefix_list[i] * c(i));
       for q in 0..(num_rounds_q - num_proofs[p].log_2()) {
         comm_vars_comb *= ONE - rq[q];
       }
@@ -847,7 +930,8 @@ impl R1CSProof {
     }
 
     let EQ_p = &EqPolynomial::new(rp.clone()).evals()[..num_instances];
-    let expected_comm_vars_at_ry = GroupElement::vartime_multiscalar_mul(EQ_p, expected_comm_vars_list).compress();
+    let expected_comm_vars_at_ry =
+      GroupElement::vartime_multiscalar_mul(EQ_p, expected_comm_vars_list).compress();
     assert_eq!(expected_comm_vars_at_ry, self.comm_vars_at_ry);
     timer_commit_opening.stop();
 
@@ -857,7 +941,8 @@ impl R1CSProof {
     // perform the final check in the second sum-check protocol
     let [eval_A_r, eval_B_r, eval_C_r] = evals;
     let expected_claim_post_phase2 =
-      ((r_A * eval_A_r + r_B * eval_B_r + r_C * eval_C_r) * comm_eval_Z_at_ry * p_rp_poly_bound_ry).compress();
+      ((r_A * eval_A_r + r_B * eval_B_r + r_C * eval_C_r) * comm_eval_Z_at_ry * p_rp_poly_bound_ry)
+        .compress();
 
     // verify proof that expected_claim_post_phase2 == claim_post_phase2
     self.proof_eq_sc_phase2.verify(

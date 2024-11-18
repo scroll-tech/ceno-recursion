@@ -1,0 +1,20 @@
+#!/bin/bash
+# You can use this script to locally check some aspects of your PR before merging it.
+# We will later build the CI/CD around something like it.
+
+set -euxo pipefail
+
+for cargo_toml in $(git ls-files '**/Cargo.toml'); do
+    (
+        cd "$(dirname ${cargo_toml})"
+        cargo fmt --check
+        cargo check --all-targets
+        cargo test
+    )
+done
+
+./setup.sh
+./encode_ceno.sh
+
+# This one is expected to fail at the moment, but it's still useful to run:
+# ./verify_ceno.sh

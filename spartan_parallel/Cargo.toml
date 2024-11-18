@@ -12,20 +12,20 @@ keywords = ["zkSNARKs", "cryptography", "proofs"]
 
 [dependencies]
 curve25519-dalek = { version = "4", features = [
-    "serde",
-    "alloc",
+  "serde",
+  "alloc",
 ], default-features = false }
 merlin = { version = "3", default-features = false }
-rand = { version = "0", features = ["getrandom"], default-features = false }
-digest = { version = "0", default-features = false }
-sha3 = { version = "0", default-features = false }
+rand = { version = "0.8", features = ["getrandom"], default-features = false }
+digest = { version = "0.10", default-features = false }
+sha3 = { version = "0.10", default-features = false }
 byteorder = { version = "1", default-features = false }
 rayon = { version = "1", optional = true }
 serde = { version = "1", features = ["derive"], default-features = false }
 bincode = { version = "1", default-features = false }
 subtle = { version = "2", features = ["i128"], default-features = false }
-zeroize = { version = "1", default-features = false, features=["alloc"] }
-itertools = { version = "0", default-features = false }
+zeroize = { version = "1", default-features = false, features = ["alloc"] }
+itertools = { version = "0.13", default-features = false }
 colored = { version = "2", default-features = false, optional = true }
 flate2 = { version = "1" }
 

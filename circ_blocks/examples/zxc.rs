@@ -7,11 +7,10 @@ const TOTAL_NUM_VARS_BOUND: usize = 100000000;
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
 use circ::ir::opt::{opt, Opt};
-use circ::target::r1cs::opt::reduce_linearities;
 use circ::target::r1cs::trans::to_r1cs;
 use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
 use circ::target::r1cs::ProverData;
-use circ::target::r1cs::{Lc, R1cs, VarType};
+use circ::target::r1cs::{Lc, VarType};
 use core::cmp::min;
 use rug::Integer;
 

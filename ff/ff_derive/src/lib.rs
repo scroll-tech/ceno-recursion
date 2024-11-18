@@ -257,8 +257,8 @@ fn validate_struct(ast: &syn::DeriveInput, limbs: usize) -> Option<proc_macro2::
         syn::Expr::Group(expr_group) => match &*expr_group.expr {
             syn::Expr::Lit(expr_lit) => Some(&expr_lit.lit),
             _ => None,
-        }
-        _ => None
+        },
+        _ => None,
     };
     let lit_int = match match expr_lit {
         Some(syn::Lit::Int(lit_int)) => Some(lit_int),
@@ -576,7 +576,9 @@ fn prime_field_constants_and_sqrt(
             );
             let field_name = name;
             // sqrt(-1)
-            let sqrt_minus_1 = (modulus - BigUint::from_str("1").unwrap()).sqrt().to_string();
+            let sqrt_minus_1 = (modulus - BigUint::from_str("1").unwrap())
+                .sqrt()
+                .to_string();
             quote! {
                 use ::ff::derive::subtle::{ConditionallySelectable, ConstantTimeEq};
                 let c1 = #field_name::from_str_vartime(#sqrt_minus_1).unwrap();

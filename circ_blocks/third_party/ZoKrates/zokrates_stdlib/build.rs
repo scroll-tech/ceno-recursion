@@ -5,7 +5,6 @@ use std::env;
 fn main() {
     // export stdlib folder to OUT_DIR
     export_stdlib();
-
 }
 
 fn export_stdlib() {

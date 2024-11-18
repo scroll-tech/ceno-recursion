@@ -9,22 +9,23 @@ extern crate lazy_static;
 
 pub use ast::{
     Access, AnyString, Arguments, ArrayAccess, ArrayCommitted, ArrayDeclStatement,
-    ArrayInitializerExpression, ArrayParamMetadata, ArrayTranscript, ArrayType,
-    AssertionStatement, Assignee, AssigneeAccess, BasicOrStructType, BasicType, BinaryExpression,
-    BinaryOperator, BooleanLiteralExpression, BooleanType, CallAccess, ConditionalStatement,
-    CondStoreStatement, ConstantDefinition, ConstantGenericValue, Curve, DecimalLiteralExpression,
-    DecimalNumber, DecimalSuffix, DefinitionStatement, DimRO, ExplicitGenerics, Expression, FieldSuffix,
-    FieldType, File, FromExpression, FromImportDirective, FuncInline, FunctionDefinition, HexLiteralExpression,
-    HexNumberExpression, IdentifierExpression, ImportDirective, ImportSymbol,
+    ArrayInitializerExpression, ArrayParamMetadata, ArrayTranscript, ArrayType, AssertionStatement,
+    Assignee, AssigneeAccess, BasicOrStructType, BasicType, BinaryExpression, BinaryOperator,
+    BooleanLiteralExpression, BooleanType, CallAccess, CondStoreStatement, ConditionalStatement,
+    ConstantDefinition, ConstantGenericValue, Curve, DecimalLiteralExpression, DecimalNumber,
+    DecimalSuffix, DefinitionStatement, DimRO, ExplicitGenerics, Expression, FieldSuffix,
+    FieldType, File, FromExpression, FromImportDirective, FuncInline, FunctionDefinition,
+    HexLiteralExpression, HexNumberExpression, IdentifierExpression, ImportDirective, ImportSymbol,
     InlineArrayExpression, InlineStructExpression, InlineStructMember, IterationStatement,
     LiteralExpression, MainImportDirective, MemberAccess, NegOperator, NotOperator, Parameter,
     PosOperator, PostfixExpression, Pragma, PrivateNumber, PrivateVisibility, PublicVisibility,
     Range, RangeOrExpression, ReturnStatement, Span, Spread, SpreadOrExpression, Statement,
     StrOperator, StructDefinition, StructField, StructType, SymbolDeclaration, TernaryExpression,
-    ToExpression, ToFieldOperator, Type, TypeDefinition, TypedIdentifier, TypedIdentifierOrAssignee,
-    U16NumberExpression, U16Suffix, U16Type, U32NumberExpression, U32Suffix, U32Type,
-    U64NumberExpression, U64Suffix, U64Type, U8NumberExpression, U8Suffix, U8Type, UnaryExpression,
-    UnaryOperator, Underscore, Visibility, WhileLoopStatement, WitnessStatement, EOI,
+    ToExpression, ToFieldOperator, Type, TypeDefinition, TypedIdentifier,
+    TypedIdentifierOrAssignee, U16NumberExpression, U16Suffix, U16Type, U32NumberExpression,
+    U32Suffix, U32Type, U64NumberExpression, U64Suffix, U64Type, U8NumberExpression, U8Suffix,
+    U8Type, UnaryExpression, UnaryOperator, Underscore, Visibility, WhileLoopStatement,
+    WitnessStatement, EOI,
 };
 
 mod ast {
@@ -428,7 +429,7 @@ mod ast {
         Iteration(IterationStatement<'ast>),
         WhileLoop(WhileLoopStatement<'ast>),
         Conditional(ConditionalStatement<'ast>),
-        ArrayDecl(ArrayDeclStatement<'ast>)
+        ArrayDecl(ArrayDeclStatement<'ast>),
     }
 
     impl<'ast> Statement<'ast> {

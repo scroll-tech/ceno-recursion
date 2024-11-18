@@ -30,7 +30,7 @@ colored = { version = "2", default-features = false, optional = true }
 flate2 = { version = "1" }
 
 [dev-dependencies]
-criterion = "0"
+criterion = "0.5"
 
 [lib]
 name = "libspartan"

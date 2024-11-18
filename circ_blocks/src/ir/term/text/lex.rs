@@ -33,10 +33,10 @@ mod test {
     #[test]
     fn all_tokens() {
         let l = Token::lexer(b"(let ((a true)(b true)) (add (sub #b01 #xFf) (div 15 -16)))");
-        let tokens: Vec<_> = l.into_iter().collect();
+        let tokens: Result<Vec<_>, _> = l.into_iter().collect();
         assert_eq!(
             &tokens,
-            &[
+            &Ok(vec![
                 Token::Open,
                 Token::Ident,
                 Token::Open,
@@ -63,7 +63,7 @@ mod test {
                 Token::Close,
                 Token::Close,
                 Token::Close,
-            ]
+            ])
         )
     }
 }

@@ -130,7 +130,10 @@ fn parse_tok_tree(bytes: &[u8]) -> TokTree {
     for (t, s) in lex {
         match t {
             Err(e) => {
-                panic!("Could not tokenize ({e:?}): {}", from_utf8(&bytes[s]).unwrap())
+                panic!(
+                    "Could not tokenize ({e:?}): {}",
+                    from_utf8(&bytes[s]).unwrap()
+                )
             }
             Ok(Token::Open) => {
                 stack.push(vec![]);

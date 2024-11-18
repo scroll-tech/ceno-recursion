@@ -125,30 +125,6 @@ pub fn cterm(data: CTermData) -> CTerm {
     }
 }
 
-// pub fn int_resize(from_s: bool, from_w: usize, to_s: bool, to_w: usize, t: Term) -> Term {
-//     if from_w < to_w {
-//         if from_s {
-//             println!("int resize 1");
-//             return term![Op::BvShl, vec![to_w, from_w, t]];
-//         } else {
-//             println!("int resize 2");
-//             CTermData::CInt(false, to_w, t)
-//         }
-//     } else if from_w == to_w {
-//         println!("int resize 3");
-//         CTermData::CInt(from_s, from_w, t)
-//     } else {
-//         println!("int resize 4");
-//         CTermData::CInt(from_s, from_w, term![Op::BvExtract(0, to_w); t])
-//     }
-
-//     // let from_w = if from_s { 1 } else { 0 };
-//     // let from_w = bv_lit(from_w, 1);
-//     // let to_w = bv_lit(to_w, 1);
-//     // let to_w = term(Op::BvShl, vec![to_w, from_w, t]);
-//     // term(Op::BvSrl, vec![to_w, from_w, t])
-// }
-
 pub fn cast(to_ty: Option<Ty>, t: CTerm) -> CTerm {
     let ty = t.term.type_();
     match t.term {

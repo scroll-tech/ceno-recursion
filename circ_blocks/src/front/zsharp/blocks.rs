@@ -4018,28 +4018,6 @@ impl<'ast> ZGen<'ast> {
                         .outputs
                         .push(t);
                 }
-                /*
-                Mode::ProofOfHighValue(v) => {
-                    let ret_term = r.unwrap_term();
-                    let ret_terms = ret_term.terms();
-                    assert!(
-                        ret_terms.len() == 1,
-                        "When compiling to optimize, there can only be one output"
-                    );
-                    let t = ret_terms.into_iter().next().unwrap();
-                    let cmp = match check(&t) {
-                        Sort::BitVector(w) => term![BV_UGE; t, bv_lit(v, w)],
-                        s => panic!("Cannot maximize output of type {}", s),
-                    };
-                    self.circ
-                        .borrow()
-                        .cir_ctx()
-                        .cs
-                        .borrow_mut()
-                        .outputs
-                        .push(cmp);
-                }
-                */
                 _ => {
                     panic!("Supported Mode!")
                 }

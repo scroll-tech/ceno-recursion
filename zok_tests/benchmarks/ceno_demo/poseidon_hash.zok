@@ -21,7 +21,7 @@ def hash_n_to_m_no_pad(u32 num_inputs, field[0] inputs, u32 num_outputs) -> fiel
     PoseidonPermutation perm = PoseidonPermutation {
         state: [0; 12]
     }
-    
+
     // Absorb all input chunks.
     u32 j = 0
     for u32 i in 0..num_inputs do

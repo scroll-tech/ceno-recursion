@@ -152,16 +152,16 @@ impl Instance {
 
   // Generates a constraints based on supplied (variable, constant) pairs
   fn gen_constr(
-    mut A: Vec<(usize, usize, [u8; 32])>, 
-    mut B: Vec<(usize, usize, [u8; 32])>, 
+    mut A: Vec<(usize, usize, [u8; 32])>,
+    mut B: Vec<(usize, usize, [u8; 32])>,
     mut C: Vec<(usize, usize, [u8; 32])>,
-    i: usize, 
-    args_A: Vec<(usize, isize)>, 
-    args_B: Vec<(usize, isize)>, 
+    i: usize,
+    args_A: Vec<(usize, isize)>,
+    args_B: Vec<(usize, isize)>,
     args_C: Vec<(usize, isize)>
   ) -> (
-      Vec<(usize, usize, [u8; 32])>, 
-      Vec<(usize, usize, [u8; 32])>, 
+      Vec<(usize, usize, [u8; 32])>,
+      Vec<(usize, usize, [u8; 32])>,
       Vec<(usize, usize, [u8; 32])>
   ) {
     let int_to_scalar = |i: isize| {
@@ -189,16 +189,16 @@ impl Instance {
 
   // gen_constr from byte lists
   fn gen_constr_bytes(
-    mut A: Vec<(usize, usize, [u8; 32])>, 
-    mut B: Vec<(usize, usize, [u8; 32])>, 
+    mut A: Vec<(usize, usize, [u8; 32])>,
+    mut B: Vec<(usize, usize, [u8; 32])>,
     mut C: Vec<(usize, usize, [u8; 32])>,
-    i: usize, 
-    args_A: Vec<(usize, [u8; 32])>, 
-    args_B: Vec<(usize, [u8; 32])>, 
+    i: usize,
+    args_A: Vec<(usize, [u8; 32])>,
+    args_B: Vec<(usize, [u8; 32])>,
     args_C: Vec<(usize, [u8; 32])>
   ) -> (
-      Vec<(usize, usize, [u8; 32])>, 
-      Vec<(usize, usize, [u8; 32])>, 
+      Vec<(usize, usize, [u8; 32])>,
+      Vec<(usize, usize, [u8; 32])>,
       Vec<(usize, usize, [u8; 32])>
   ) {
     for vars in &args_A {
@@ -212,22 +212,22 @@ impl Instance {
     }
     (A, B, C)
   }
-  
+
   /// Generates BLOCK_CORRECTNESS and MEM_EXTRACT
   /// Verify the correctness of each block execution, as well as extracting all memory operations
-  /// 
+  ///
   /// Input composition: (if every segment exists)
   ///             INPUT + VAR                   Challenges                           BLOCK_W2                                              BLOCK_W3                      BLOCK_W3_SHIFTED
   ///  0   1   2  IOW  +1  +2  +3  +4  +5  |  0   1   2   3   |  0   1   2   3   4  NIU  1   2   3  2NP  +1  +2  +3  +4      |  0   1   2   3   4   5   6   7   |  0   1   2   3   4   5   6   7
   ///  v  i0  ... PA0 PD0 ... VA0 VD0 ...  |  tau r  r^2 ...  |  _   _  ZO r*i1 ...  MR  MC  MR ... MR1 MR2 MR3  MC MR1 ...  |  v   x  pi   D  pi   D  pi   D   |  v   x  pi   D  pi   D  pi   D
   ///                                                                INPUT                PHY                VIR                    INPUT        PHY     VIR           INPUT        PHY     VIR
-  /// 
+  ///
   /// VAR:
   /// We assume that the witnesses are of the following format:
   ///         0: W, valid bit
   /// next 2*NP: (PA, PD) pair for all physical memory ops
   /// next 4*NV: (VA, VD, VL, VT) 4-tuples for all virtual memory ops
-  /// 
+  ///
   /// BLOCK_W2: INPUT_W2 | PHY_W2 | VIR_W2
   /// PHY_W2 processes all physical memory accesses in the witness list to a single polynomial root, given by the formula
   ///                           PI(tau - PA - r * PD)
@@ -244,10 +244,10 @@ impl Instance {
   /// - VMC = (1 or VMC[i-1]) * (tau - VA - VMR1 - VMR2 - VMR3)
   /// The final product is stored in X = MC[NV - 1]
   pub fn gen_block_inst<const PRINT_SIZE: bool>(
-    num_instances: usize, 
-    num_vars: usize, 
+    num_instances: usize,
+    num_vars: usize,
     args: &Vec<Vec<(Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>)>>,
-    num_inputs_unpadded: usize, 
+    num_inputs_unpadded: usize,
     // Number of physical & memory accesses per block
     num_phy_ops: &Vec<usize>,
     num_vir_ops: &Vec<usize>,
@@ -327,7 +327,7 @@ impl Instance {
         let mut A: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut B: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut C: Vec<(usize, usize, [u8; 32])> = Vec::new();
-  
+
         // constraints for correctness
         for i in 0..arg.len() {
           tmp_nnz_A += arg[i].0.len();
@@ -353,20 +353,20 @@ impl Instance {
             counter += 1;
           }
           // v[k]
-          (A, B, C) = Instance::gen_constr(A, B, C, 
+          (A, B, C) = Instance::gen_constr(A, B, C,
             counter, vec![], vec![], vec![(V_valid, 1), (V_v, -1)]);
           counter += 1;
           // x[k]
           (A, B, C) = Instance::gen_constr(A, B, C, counter,
-              [vec![(V_tau, 1)], (0..2 * num_inputs_unpadded - 2).map(|i| (V_input_dot_prod(i), -1)).collect()].concat(), 
-              vec![(V_cnst, 1)], 
+              [vec![(V_tau, 1)], (0..2 * num_inputs_unpadded - 2).map(|i| (V_input_dot_prod(i), -1)).collect()].concat(),
+              vec![(V_cnst, 1)],
               vec![(V_x, 1)]);
           counter += 1;
           // D[k] = x[k] * (pi[k + 1] + (1 - v[k + 1]))
           (A, B, C) = Instance::gen_constr(A, B, C,
-            counter, 
-            vec![(V_x, 1)], 
-            vec![(V_spi, 1), (V_cnst, 1), (V_sv, -1)], 
+            counter,
+            vec![(V_x, 1)],
+            vec![(V_spi, 1), (V_cnst, 1), (V_sv, -1)],
             vec![(V_d, 1)]);
           counter += 1;
           // pi[k] = v[k] * D[k]
@@ -400,10 +400,10 @@ impl Instance {
         counter += 1;
         // Pd
         (A, B, C) = Instance::gen_constr(A, B, C,
-          counter, 
+          counter,
           // Incorporate Px directly into Pd
           vec![if num_phy_ops[b] == 0 { (V_cnst, 1) } else { (V_PMC(num_phy_ops[b] - 1), 1) }],
-          vec![(V_Psp, 1), (V_cnst, 1), (V_sv, -1)], 
+          vec![(V_Psp, 1), (V_cnst, 1), (V_sv, -1)],
           vec![(V_Pd, 1)]);
         counter += 1;
         // Pp
@@ -442,10 +442,10 @@ impl Instance {
         counter += 1;
         // Vd
         (A, B, C) = Instance::gen_constr(A, B, C,
-          counter, 
+          counter,
           // Incorporate Vx directly into Vd
-          vec![if num_vir_ops[b] == 0 { (V_cnst, 1) } else { (V_VMC(b, num_vir_ops[b] - 1), 1) }], 
-          vec![(V_Vsp, 1), (V_cnst, 1), (V_sv, -1)], 
+          vec![if num_vir_ops[b] == 0 { (V_cnst, 1) } else { (V_VMC(b, num_vir_ops[b] - 1), 1) }],
+          vec![(V_Vsp, 1), (V_cnst, 1), (V_sv, -1)],
           vec![(V_Vd, 1)]);
         counter += 1;
         // Vp
@@ -474,11 +474,11 @@ impl Instance {
         let max_nnz = max(tmp_nnz_A, max(tmp_nnz_B, tmp_nnz_C));
         let total_var = num_vars_per_block[b] + 2 * num_inputs_unpadded.next_power_of_two() + (2 * num_phy_ops[b] + 4 * num_vir_ops[b]).next_power_of_two() + 2 * 8;
         let num_exec = block_num_proofs[b];
-        println!("{:10} {:4} x {:4} {:4} {:4}", 
-          format!("Block {}", b), 
-          counter, 
-          total_var, 
-          max_nnz, 
+        println!("{:10} {:4} x {:4} {:4} {:4}",
+          format!("Block {}", b),
+          counter,
+          total_var,
+          max_nnz,
           num_exec
         );
         total_inst_commit_size += max_nnz;
@@ -486,7 +486,7 @@ impl Instance {
         total_cons_exec_size += counter * num_exec;
       }
     }
-    
+
     if PRINT_SIZE {
       println!("Total Num of Blocks: {}", num_instances);
       println!("Total Inst Commit Size: {}", total_inst_commit_size);
@@ -504,30 +504,30 @@ impl Instance {
   /// CONSIS_CHECK
   /// takes in consis_w3 = <_, _, _, _, i, o, _, _>
   /// and verifies (o[k] - i[k + 1]) * i[k + 1] = 0 for all k
-  /// 
+  ///
   /// Input composition:
   ///           Op[k]                        Op[k + 1]
   ///   0   1   2   3   4   5 ...  |   0   1   2   3   4   5
   ///   _   _   _   _   i   o      |   _   _   _   _   i   o
   ///
   /// --
-  /// 
-  /// PHY_MEM_COHERE 
+  ///
+  /// PHY_MEM_COHERE
   /// takes in addr_mem = <v, D, addr, val>
   /// and verifies that
   /// 1. (v[k] - 1) * v[k + 1] = 0: if the current entry is invalid, the next entry is also invalid
   /// 2. v[k + 1] * (1 - (addr[k + 1] - addr[k])) * (addr[k + 1] - addr[k]) = 0: address difference is 0 or 1, unless the next entry is invalid
   /// 3. v[k + 1] * (1 - (addr[k + 1] - addr[k])) * (val[k + 1] - val[k]) = 0: either address difference is 1, or value are the same, unless the next entry is invalid
   /// So we set D = v[k + 1] * (1 - addr[k + 1] + addr[k])
-  /// 
+  ///
   /// Input composition:
   ///     Op[k]           Op[k + 1]
   /// 0   1   2   3  |  4   5   6   7
   /// v   D addr val |  v   D addr val
-  /// 
+  ///
   /// --
-  /// 
-  /// VIR_MEM_COHERE 
+  ///
+  /// VIR_MEM_COHERE
   /// takes in addr_mem = <v, D1, addr, data, ls, ts, _, _> (need to keep the last entry 0 for permutation)
   /// and verifies that
   /// 1. (v[k] - 1) * v[k + 1] = 0: if the current entry is invalid, the next entry is also invalid
@@ -543,7 +543,7 @@ impl Instance {
   /// 0   1   2   3   4   5   6   7  |  0   1   2   3   4   5   6   7  |  0   1   2   3   4
   /// v  D1   a   d  ls  ts   _   _  |  v  D1   a   d  ls  ts   _   _  | D2  EQ  B0  B1  ...
   pub fn gen_pairwise_check_inst<const PRINT_SIZE: bool>(
-    max_ts_width: usize, 
+    max_ts_width: usize,
     mem_addr_ts_bits_size: usize,
     // Remaining parameters used only by printing
     consis_num_proofs: usize,
@@ -563,23 +563,23 @@ impl Instance {
     let pairwise_check_max_num_cons = 8 + max_ts_width;
     let pairwise_check_num_cons = vec![2, 4, 8 + max_ts_width];
     let pairwise_check_num_non_zero_entries: usize = max(13 + max_ts_width, 5 + 2 * max_ts_width);
-  
+
     let pairwise_check_inst = {
       let mut A_list = Vec::new();
       let mut B_list = Vec::new();
       let mut C_list = Vec::new();
-      
+
       // CONSIS_CHECK
       let (A, B, C) = {
         let width = pairwise_check_num_vars;
-        
+
         let V_i = 4;
         let V_o = 5;
 
         let mut A: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut B: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut C: Vec<(usize, usize, [u8; 32])> = Vec::new();
-  
+
         // R1CS:
         // Output matches input
         (A, B, C) = Instance::gen_constr(A, B, C,
@@ -603,7 +603,7 @@ impl Instance {
       // PHY_MEM_COHERE
       let (A, B, C) = {
         let width = pairwise_check_num_vars;
-        
+
         let V_valid = 0;
         let V_cnst = V_valid;
         let V_D = 1;
@@ -613,7 +613,7 @@ impl Instance {
         let mut A: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut B: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut C: Vec<(usize, usize, [u8; 32])> = Vec::new();
-  
+
         let mut num_cons = 0;
         // (v[k] - 1) * v[k + 1] = 0
         (A, B, C) = Instance::gen_constr(A, B, C,
@@ -631,7 +631,7 @@ impl Instance {
         (A, B, C) = Instance::gen_constr(A, B, C,
           num_cons, vec![(V_D, 1)], vec![(width + V_val, 1), (V_val, -1)], vec![]);
         num_cons += 1;
-        
+
         if PRINT_SIZE {
           let max_nnz = 8;
           let total_var = 16;
@@ -646,11 +646,11 @@ impl Instance {
       A_list.push(A);
       B_list.push(B);
       C_list.push(C);
-  
+
       // VIR_MEM_COHERE
       let (A, B, C) = {
         let width = pairwise_check_num_vars;
-        
+
         let V_valid = 0;
         let V_cnst = V_valid;
         let V_D1 = 1;
@@ -661,11 +661,11 @@ impl Instance {
         let V_D2 = 2 * width;
         let V_EQ = 2 * width + 1;
         let V_B = |i| 2 * width + 2 + i;
-        
+
         let mut A: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut B: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut C: Vec<(usize, usize, [u8; 32])> = Vec::new();
-  
+
         let mut num_cons = 0;
         // Sortedness
         // (v[k] - 1) * v[k + 1] = 0
@@ -710,7 +710,7 @@ impl Instance {
         (A, B, C) = Instance::gen_constr(A, B, C,
           num_cons, vec![(V_cnst, 1), (V_D1, -1)], vec![(width + V_ls, 1)], vec![]);
         num_cons += 1;
-        
+
         if PRINT_SIZE {
           let max_nnz = pairwise_check_num_non_zero_entries;
           let total_var = 2 * pairwise_check_num_vars;
@@ -736,7 +736,7 @@ impl Instance {
         println!("Total Cons Exec Size: {}", total_cons_exec_size);
       }
 
-      let pairwise_check_inst = Instance::new(3, pairwise_check_max_num_cons, pairwise_check_num_cons, 4 * pairwise_check_num_vars, &A_list, &B_list, &C_list).unwrap();      
+      let pairwise_check_inst = Instance::new(3, pairwise_check_max_num_cons, pairwise_check_num_cons, 4 * pairwise_check_num_vars, &A_list, &B_list, &C_list).unwrap();
       pairwise_check_inst
     };
     (pairwise_check_num_vars, pairwise_check_max_num_cons, pairwise_check_num_non_zero_entries, pairwise_check_inst)
@@ -759,7 +759,7 @@ impl Instance {
   /// D[k] <- x[k] * (pi[k + 1] + (1 - v[k + 1]))
   /// Note: Only process the first num_inputs_unpadded inputs since the rest are unused
   pub fn gen_perm_root_inst<const PRINT_SIZE: bool>(
-    num_inputs_unpadded: usize, 
+    num_inputs_unpadded: usize,
     num_vars: usize,
     // Remaining parameters used only by printing
     consis_num_proofs: usize,
@@ -782,27 +782,27 @@ impl Instance {
         let mut A: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut B: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut C: Vec<(usize, usize, [u8; 32])> = Vec::new();
-  
+
         let V_tau = 0;
         // V_r(0) == tau and should be skipped!
         let V_r = |i: usize| i;
-        
+
         let V_valid = num_vars;
         let V_cnst = V_valid;
         let V_input = |i: usize| num_vars + 2 + i;
         let V_output = |i: usize| num_vars + 2 + (num_inputs_unpadded - 1) + i;
-        
+
         let V_ZO = 2 * num_vars + 2;
         let V_input_dot_prod = |i: usize| if i == 0 { V_input(0) } else { 2 * num_vars + 2 + i };
         let V_output_dot_prod = |i: usize| 2 * num_vars + 2 + (num_inputs_unpadded - 1) + i;
-        
+
         let V_v = 3 * num_vars;
         let V_x = 3 * num_vars + 1;
         let V_pi = 3 * num_vars + 2;
         let V_d = 3 * num_vars + 3;
         let V_I = 3 * num_vars + 4;
         let V_O = 3 * num_vars + 5;
-        
+
         let V_sv = 4 * num_vars;
         let V_spi = 4 * num_vars + 2;
 
@@ -823,58 +823,58 @@ impl Instance {
         }
         // ZO * r^n = r^n * o0 + r^(n + 1) * o1, ...
         (A, B, C) = Instance::gen_constr(A, B, C,
-          constraint_count, 
-          vec![(V_ZO, 1)], 
+          constraint_count,
+          vec![(V_ZO, 1)],
           vec![(V_r(num_inputs_unpadded - 1), 1)],
           (0..num_inputs_unpadded - 1).map(|i| (V_output_dot_prod(i), 1)).collect()
         );
         constraint_count += 1;
         // I = v * (v + i0 + r * i1 + r^2 * i2 + ...)
         (A, B, C) = Instance::gen_constr(A, B, C,
-          constraint_count, 
-          vec![(V_valid, 1)], 
+          constraint_count,
+          vec![(V_valid, 1)],
           [vec![(V_cnst, 1)], (0..num_inputs_unpadded - 1).map(|i| (V_input_dot_prod(i), 1)).collect()].concat(),
           vec![(V_I, 1)]
         );
         constraint_count += 1;
         // O = v * (v + ZO)
         (A, B, C) = Instance::gen_constr(A, B, C,
-          constraint_count, 
-          vec![(V_valid, 1)], 
+          constraint_count,
+          vec![(V_valid, 1)],
           vec![(V_valid, 1), (V_ZO, 1)],
           vec![(V_O, 1)]
         );
         constraint_count += 1;
         // v[k]
-        (A, B, C) = Instance::gen_constr(A, B, C, 
+        (A, B, C) = Instance::gen_constr(A, B, C,
           constraint_count, vec![], vec![], vec![(V_valid, 1), (V_v, -1)]);
         constraint_count += 1;
         // x[k]
         (A, B, C) = Instance::gen_constr(A, B, C, constraint_count,
-            [vec![(V_tau, 1)], (0..2 * num_inputs_unpadded - 2).map(|i| (V_input_dot_prod(i), -1)).collect()].concat(), 
-            vec![(num_vars, 1)], 
+            [vec![(V_tau, 1)], (0..2 * num_inputs_unpadded - 2).map(|i| (V_input_dot_prod(i), -1)).collect()].concat(),
+            vec![(num_vars, 1)],
             vec![(V_x, 1)]);
         constraint_count += 1;
         // D[k] = x[k] * (pi[k + 1] + (1 - v[k + 1]))
         (A, B, C) = Instance::gen_constr(A, B, C,
-          constraint_count, 
-          vec![(V_x, 1)], 
-          vec![(V_spi, 1), (V_cnst, 1), (V_sv, -1)], 
+          constraint_count,
+          vec![(V_x, 1)],
+          vec![(V_spi, 1), (V_cnst, 1), (V_sv, -1)],
           vec![(V_d, 1)]);
         constraint_count += 1;
         // pi[k] = v[k] * D[k]
         (A, B, C) = Instance::gen_constr(A, B, C,
           constraint_count, vec![(V_v, 1)], vec![(V_d, 1)], vec![(V_pi, 1)]);
         constraint_count += 1;
-  
+
         if PRINT_SIZE {
           let max_nnz = perm_root_num_non_zero_entries;
           let total_var = 3 * num_vars + 16;
           let num_exec = total_num_phy_mem_accesses;
-          println!("{:10} {:4} x {:4} {:4} {:4}", 
+          println!("{:10} {:4} x {:4} {:4} {:4}",
             "Perm Root",
-            constraint_count, 
-            total_var, 
+            constraint_count,
+            total_var,
             max_nnz,
             consis_num_proofs + total_num_phy_mem_accesses + total_num_vir_mem_accesses
           );
@@ -882,13 +882,13 @@ impl Instance {
           total_var_commit_size += total_var * num_exec;
           total_cons_exec_size += constraint_count * num_exec;
         }
-        (A, B, C)   
+        (A, B, C)
       };
-  
+
       let A_list = vec![A.clone()];
       let B_list = vec![B.clone()];
       let C_list = vec![C.clone()];
-  
+
       if PRINT_SIZE {
         let mut num_instances = 1;
         if total_num_phy_mem_accesses > 0 { num_instances += 1; }
@@ -918,7 +918,7 @@ impl Instance {
   pub fn gen_perm_poly_inst() -> (usize, usize, Instance) {
     let perm_poly_num_cons = 2;
     let perm_poly_num_non_zero_entries = 4;
-    
+
     let perm_poly_inst = {
       let (A, B, C) = {
         let mut A: Vec<(usize, usize, [u8; 32])> = Vec::new();
@@ -935,15 +935,15 @@ impl Instance {
         let mut constraint_count = 0;
         // D[k] = x[k] * (pi[k + 1] + (1 - v[k + 1]))
         (A, B, C) = Instance::gen_constr(A, B, C,
-          constraint_count, 
-          vec![(V_x, 1)], 
-          vec![(width + V_pi, 1), (V_cnst, 1), (width + V_valid, -1)], 
+          constraint_count,
+          vec![(V_x, 1)],
+          vec![(width + V_pi, 1), (V_cnst, 1), (width + V_valid, -1)],
           vec![(V_d, 1)]);
         constraint_count += 1;
         // pi[k] = v[k] * D[k]
         (A, B, C) = Instance::gen_constr(A, B, C,
           constraint_count, vec![(V_valid, 1)], vec![(V_d, 1)], vec![(V_pi, 1)]);
-        (A, B, C)   
+        (A, B, C)
       };
 
       let A_list = vec![A.clone()];
@@ -951,7 +951,7 @@ impl Instance {
       let C_list = vec![C.clone()];
 
       let perm_poly_inst = Instance::new(1, perm_poly_num_cons, 2 * 4, &A_list, &B_list, &C_list).unwrap();
-      
+
       perm_poly_inst
     };
     (perm_poly_num_cons, perm_poly_num_non_zero_entries, perm_poly_inst)
@@ -980,7 +980,7 @@ impl Instance {
     let width = vir_mem_cohere_num_vars;
     let vir_mem_cohere_num_cons = max_ts_width + 10;
     let vir_mem_cohere_num_non_zero_entries = max(15 + max_ts_width, 5 + 2 * max_ts_width);
-  
+
     let vir_mem_cohere_inst = {
       let V_valid = 0;
       let V_cnst = V_valid;
@@ -994,16 +994,16 @@ impl Instance {
       let V_D3 = 2 * width + 1;
       let V_EQ = 2 * width + 2;
       let V_B = |i| 2 * width + 3 + i;
-  
+
       let mut A_list = Vec::new();
       let mut B_list = Vec::new();
       let mut C_list = Vec::new();
-      
+
       let (A, B, C) = {
         let mut A: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut B: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut C: Vec<(usize, usize, [u8; 32])> = Vec::new();
-  
+
         let mut num_cons = 0;
         // (v[k] - 1) * v[k + 1] = 0
         (A, B, C) = Instance::gen_constr(A, B, C,
@@ -1052,15 +1052,15 @@ impl Instance {
         (A, B, C) = Instance::gen_constr(A, B, C,
           num_cons, vec![(V_D1, 1)], vec![(width + V_ts, 1), (V_ts, -1)], [vec![(V_EQ, 1)], (0..max_ts_width).map(|i| (V_B(i), i.pow2() as isize)).collect()].concat()
         );
-        
+
         (A, B, C)
       };
       A_list.push(A);
       B_list.push(B);
       C_list.push(C);
-  
+
       let vir_mem_cohere_inst = Instance::new(1, vir_mem_cohere_num_cons, 4 * vir_mem_cohere_num_vars, &A_list, &B_list, &C_list).unwrap();
-      
+
       vir_mem_cohere_inst
     };
     (vir_mem_cohere_num_vars, vir_mem_cohere_num_cons, vir_mem_cohere_num_non_zero_entries, vir_mem_cohere_inst)

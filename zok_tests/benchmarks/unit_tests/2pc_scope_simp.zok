@@ -4,7 +4,7 @@ def main() -> field:
     for field i in 0..2 do
         field a = 10
         for field j in 0..2 do
-            field a = 20 
+            field a = 20
         endfor
         field a = 20
         b = a

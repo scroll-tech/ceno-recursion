@@ -11,9 +11,16 @@ license-file = "LICENSE"
 keywords = ["zkSNARKs", "cryptography", "proofs"]
 
 [dependencies]
+<<<<<<< HEAD
 curve25519-dalek = { version = "4", features = [
     "serde",
     "alloc",
+=======
+curve25519-dalek = { version = "3.2.1", features = [
+  "serde",
+  "u64_backend",
+  "alloc",
+>>>>>>> origin/main
 ], default-features = false }
 merlin = { version = "3", default-features = false }
 rand = { version = "0", features = ["getrandom"], default-features = false }
@@ -36,39 +43,23 @@ criterion = "0"
 name = "libspartan"
 path = "src/lib.rs"
 
-[[bin]]
-name = "snark"
-path = "profiler/snark.rs"
-required-features = ["std"]
-
-[[bin]]
-name = "nizk"
-path = "profiler/nizk.rs"
-required-features = ["std"]
-
-[[bench]]
-name = "snark"
-harness = false
-required-features = ["std"]
-
-[[bench]]
-name = "nizk"
-harness = false
-required-features = ["std"]
-
 [features]
 default = ["std"]
 std = [
-    "digest/std",
-    "merlin/std",
-    "rand/std",
-    "sha3/std",
-    "byteorder/std",
-    "serde/std",
-    "subtle/std",
-    "zeroize/std",
-    "itertools/use_std",
-    "flate2/rust_backend",
+  "digest/std",
+  "merlin/std",
+  "rand/std",
+  "sha3/std",
+  "byteorder/std",
+  "serde/std",
+  "subtle/std",
+  "zeroize/std",
+  "itertools/use_std",
+  "flate2/rust_backend",
 ]
 multicore = ["rayon"]
 profile = ["colored"]
+
+[[example]]
+name = "interface"
+required-features = ["multicore", "profile"]

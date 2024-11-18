@@ -5,7 +5,7 @@ def foo(field a, field b, field c) -> field:
   for field i in 0..4 do
     c = i
     if c < b then
-      if a < 5 then      
+      if a < 5 then
         return add(5, i)
       endif
     else

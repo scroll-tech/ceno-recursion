@@ -25,7 +25,7 @@ def temp1(u32 e, u32 f, u32 g, u32 h, u32 k, u32 w) -> u32:
 
     // S1 := (e rightrotate 6) xor (e rightrotate 11) xor (e rightrotate 25)
     u32 S1 = rotr32::<6>(e) ^ rotr32::<11>(e) ^ rotr32::<25>(e)
-    
+
     // temp1 := h + S1 + ch + k + w
     return h + S1 + ch + k + w
 
@@ -90,4 +90,4 @@ def main(u32[16] input, u32[8] current) -> u32[8]:
     h7 = h7 + h
 
     return [h0, h1, h2, h3, h4, h5, h6, h7]
-    
+

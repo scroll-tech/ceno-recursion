@@ -2,8 +2,8 @@
 name = "ff_derive"
 version = "0.12.2"
 authors = [
-    "Sean Bowe <ewillbefull@gmail.com>",
-    "Jack Grigg <thestr4d@gmail.com>",
+  "Sean Bowe <ewillbefull@gmail.com>",
+  "Jack Grigg <thestr4d@gmail.com>",
 ]
 description = "Procedural macro library used to build custom prime field implementations"
 documentation = "https://docs.rs/ff-derive/"

@@ -111,7 +111,7 @@ impl Manager {
             // TODO: hash w/o clone.
             let raw = NodeData {
                 cs: children.into(),
-                op: op.clone(),
+                op: *op,
             };
             let id = self.next_id.get();
             let ptr = {
@@ -154,10 +154,10 @@ impl Manager {
         debug_assert_eq!(unsafe { (*ptr.0).ref_cnt.get() }, 0);
         let table_size = self.table.borrow().len();
         self.zombies.borrow_mut().insert(ptr);
-        if !self.in_gc.get() {
-            if self.zombies.borrow().len() as f64 > GC_IN_DROP_THRESH * table_size as f64 {
-                self.force_gc();
-            }
+        if !self.in_gc.get()
+            && self.zombies.borrow().len() as f64 > GC_IN_DROP_THRESH * table_size as f64
+        {
+            self.force_gc();
         }
     }
 

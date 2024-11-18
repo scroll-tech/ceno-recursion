@@ -107,14 +107,14 @@ impl Config {
         );
         let lower_subnet = Config::for_sorting(l_inputs);
         let upper_subnet = Config::for_sorting(u_inputs);
-        let ret = Config::Recursive {
+
+        Config::Recursive {
             n_wires: n,
             input_configs,
             output_configs,
             lower_subnet: Box::new(lower_subnet),
             upper_subnet: Box::new(upper_subnet),
-        };
-        ret
+        }
     }
 
     /// How many flows does this configuration route?
@@ -169,7 +169,7 @@ impl Config {
                 }
                 assert!(upper_outputs.len() <= 1);
                 assert!(lower_outputs.len() <= 1);
-                assert!(!(upper_outputs.len() == 1 && lower_outputs.len() == 0));
+                assert!(!(upper_outputs.len() == 1 && lower_outputs.is_empty()));
                 outputs.extend(upper_outputs);
                 outputs.extend(lower_outputs);
                 if check {

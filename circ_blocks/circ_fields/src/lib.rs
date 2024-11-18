@@ -499,15 +499,15 @@ impl FullFieldV {
     #[inline]
     fn pow(&self, u: u64) -> Self {
         match self {
-            FullFieldV::FBls12381(f) => FullFieldV::FBls12381(f.pow_vartime(&[u])),
-            FullFieldV::FBn254(f) => FullFieldV::FBn254(f.pow_vartime(&[u])),
-            FullFieldV::FCurve25519(f) => FullFieldV::FCurve25519(f.pow_vartime(&[u])),
+            FullFieldV::FBls12381(f) => FullFieldV::FBls12381(f.pow_vartime([u])),
+            FullFieldV::FBn254(f) => FullFieldV::FBn254(f.pow_vartime([u])),
+            FullFieldV::FCurve25519(f) => FullFieldV::FCurve25519(f.pow_vartime([u])),
             FullFieldV::IntField(i) => FullFieldV::IntField(IntField::new(
                 i.i.clone().pow_mod(&Integer::from(u), i.modulus()).unwrap(),
                 i.modulus_arc(),
             )),
-            FullFieldV::FGoldilocks(f) => FullFieldV::FGoldilocks(f.pow_vartime(&[u])),
-            FullFieldV::FGoldilocksExt2(f) => FullFieldV::FGoldilocksExt2(f.pow_vartime(&[u])),
+            FullFieldV::FGoldilocks(f) => FullFieldV::FGoldilocks(f.pow_vartime([u])),
+            FullFieldV::FGoldilocksExt2(f) => FullFieldV::FGoldilocksExt2(f.pow_vartime([u])),
         }
     }
 
@@ -634,11 +634,11 @@ impl FieldV {
         use num_traits::One;
         match self.either_ref() {
             Ok(InlineFieldV(i, _)) => i == 1,
-            Err(FullFieldV::FBls12381(pf)) => bool::from(pf.is_one()),
-            Err(FullFieldV::FBn254(pf)) => bool::from(pf.is_one()),
-            Err(FullFieldV::FCurve25519(pf)) => bool::from(pf.is_one()),
+            Err(FullFieldV::FBls12381(pf)) => pf.is_one(),
+            Err(FullFieldV::FBn254(pf)) => pf.is_one(),
+            Err(FullFieldV::FCurve25519(pf)) => pf.is_one(),
             Err(FullFieldV::IntField(i)) => i.i == 1,
-            Err(FullFieldV::FGoldilocks(pf)) => bool::from(pf.is_one()),
+            Err(FullFieldV::FGoldilocks(pf)) => pf.is_one(),
             Err(FullFieldV::FGoldilocksExt2(pf)) => pf == &FGoldilocksExt2::one(),
         }
     }
@@ -922,16 +922,12 @@ impl Neg for FieldV {
     fn neg(mut self) -> Self {
         if self.is_full() {
             match self.full_mut() {
-                FullFieldV::FBls12381(pf) => Self::from(FullFieldV::FBls12381(pf.clone().neg())),
-                FullFieldV::FBn254(pf) => Self::from(FullFieldV::FBn254(pf.clone().neg())),
-                FullFieldV::FCurve25519(pf) => {
-                    Self::from(FullFieldV::FCurve25519(pf.clone().neg()))
-                }
-                FullFieldV::FGoldilocks(pf) => {
-                    Self::from(FullFieldV::FGoldilocks(pf.clone().neg()))
-                }
+                FullFieldV::FBls12381(pf) => Self::from(FullFieldV::FBls12381((*pf).neg())),
+                FullFieldV::FBn254(pf) => Self::from(FullFieldV::FBn254((*pf).neg())),
+                FullFieldV::FCurve25519(pf) => Self::from(FullFieldV::FCurve25519((*pf).neg())),
+                FullFieldV::FGoldilocks(pf) => Self::from(FullFieldV::FGoldilocks((*pf).neg())),
                 FullFieldV::FGoldilocksExt2(pf) => {
-                    Self::from(FullFieldV::FGoldilocksExt2(pf.clone().neg()))
+                    Self::from(FullFieldV::FGoldilocksExt2((*pf).neg()))
                 }
                 FullFieldV::IntField(i) => Self::from(FullFieldV::IntField(i.clone().neg())),
             }

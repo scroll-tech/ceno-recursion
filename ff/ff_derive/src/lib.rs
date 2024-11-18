@@ -232,11 +232,7 @@ fn validate_struct(ast: &syn::DeriveInput, limbs: usize) -> Option<proc_macro2::
 
     // The array's element type should be `u64`.
     if match arr.elem.as_ref() {
-        syn::Type::Path(path) => path
-            .path
-            .get_ident()
-            .map(|x| x.to_string() != "u64")
-            .unwrap_or(true),
+        syn::Type::Path(path) => path.path.get_ident().map(|x| *x != "u64").unwrap_or(true),
         _ => true,
     } {
         return Some(
@@ -490,8 +486,8 @@ fn prime_field_constants_and_sqrt(
 
     // Compute 2^s root of unity given the generator
     let root_of_unity =
-        biguint_to_u64_vec((exp(generator.clone(), &t, &modulus) * &r) % modulus, limbs);
-    let generator = biguint_to_u64_vec((generator.clone() * &r) % modulus, limbs);
+        biguint_to_u64_vec((exp(generator.clone(), &t, modulus) * &r) % modulus, limbs);
+    let generator = biguint_to_u64_vec((generator * &r) % modulus, limbs);
 
     let sqrt_impl =
         if (modulus % BigUint::from_str("4").unwrap()) == BigUint::from_str("3").unwrap() {
@@ -596,7 +592,7 @@ fn prime_field_constants_and_sqrt(
             }
         } else {
             syn::Error::new_spanned(
-                &name,
+                name,
                 "ff_derive can't generate a square root function for this field.",
             )
             .to_compile_error()

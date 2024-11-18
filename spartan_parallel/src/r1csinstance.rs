@@ -254,19 +254,19 @@ impl R1CSInstance {
         let z = &z_list[q];
 
         Az[p].push(vec![self.A_list[p_inst].multiply_vec_disjoint_rounds(
-          num_cons[p_inst].clone(),
+          num_cons[p_inst],
           max_num_inputs,
           num_inputs[p],
           z,
         )]);
         Bz[p].push(vec![self.B_list[p_inst].multiply_vec_disjoint_rounds(
-          num_cons[p_inst].clone(),
+          num_cons[p_inst],
           max_num_inputs,
           num_inputs[p],
           z,
         )]);
         Cz[p].push(vec![self.C_list[p_inst].multiply_vec_disjoint_rounds(
-          num_cons[p_inst].clone(),
+          num_cons[p_inst],
           max_num_inputs,
           num_inputs[p],
           z,
@@ -464,7 +464,7 @@ impl R1CSInstance {
     while base < val {
       base *= 8;
     }
-    return base;
+    base
   }
 
   pub fn multi_commit(

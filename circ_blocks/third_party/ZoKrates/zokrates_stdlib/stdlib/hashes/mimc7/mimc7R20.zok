@@ -1,4 +1,0 @@
-import "hashes/mimc7/mimc7"
-
-def main(field x_in, field k) -> field:
-    return mimc7::<20>(x_in, k)

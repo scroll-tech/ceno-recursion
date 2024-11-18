@@ -1031,21 +1031,20 @@ impl SNARK {
     }
     let io_width = 2 * num_inputs_unpadded;
 
-    fn extract_assignment(assigned: Vec<Assignment>) -> Vec<Vec<Scalar>> {
-      assigned.into_iter().map(|v| v.assignment).collect()
-    }
-
     // --
     // PREPROCESSING
     // --
     // unwrap the assignments
-    let mut block_vars_mat: Vec<_> = block_vars_mat.into_iter().map(extract_assignment).collect();
-    let mut exec_inputs_list: Vec<_> = extract_assignment(exec_inputs_list);
-    let mut init_phy_mems_list = extract_assignment(init_phy_mems_list);
-    let mut init_vir_mems_list = extract_assignment(init_vir_mems_list);
-    let mut addr_phy_mems_list = extract_assignment(addr_phy_mems_list);
-    let mut addr_vir_mems_list = extract_assignment(addr_vir_mems_list);
-    let mut addr_ts_bits_list = extract_assignment(addr_ts_bits_list);
+    fn unwrap_assignment(assigned: Vec<Assignment>) -> Vec<Vec<Scalar>> {
+      assigned.into_iter().map(|v| v.assignment).collect()
+    }
+    let mut block_vars_mat: Vec<_> = block_vars_mat.into_iter().map(unwrap_assignment).collect();
+    let mut exec_inputs_list: Vec<_> = unwrap_assignment(exec_inputs_list);
+    let mut init_phy_mems_list = unwrap_assignment(init_phy_mems_list);
+    let mut init_vir_mems_list = unwrap_assignment(init_vir_mems_list);
+    let mut addr_phy_mems_list = unwrap_assignment(addr_phy_mems_list);
+    let mut addr_vir_mems_list = unwrap_assignment(addr_vir_mems_list);
+    let mut addr_ts_bits_list = unwrap_assignment(addr_ts_bits_list);
 
     // --
     // INSTANCE COMMITMENTS

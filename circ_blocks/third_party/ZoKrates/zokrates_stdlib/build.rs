@@ -1,14 +1,11 @@
 use fs_extra::copy_items;
 use fs_extra::dir::CopyOptions;
 use std::env;
-use zokrates_test_derive::write_tests;
 
 fn main() {
     // export stdlib folder to OUT_DIR
     export_stdlib();
 
-    // generate tests
-    write_tests("./tests/tests/");
 }
 
 fn export_stdlib() {

@@ -78,3 +78,7 @@ std = [
 simd_backend = ["curve25519-dalek/simd_backend"]
 multicore = ["rayon"]
 profile = ["colored"]
+
+[[example]]
+name = "interface"
+required-features = ["multicore", "profile"]

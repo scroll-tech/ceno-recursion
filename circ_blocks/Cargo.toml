@@ -118,7 +118,7 @@ required-features = ["smt", "zok"]
 
 [[example]]
 name = "zxc"
-required-features = ["smt", "zok"]
+required-features = ["r1cs", "smt", "zok"]
 
 [[example]]
 name = "opa_bench"

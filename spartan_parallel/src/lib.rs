@@ -483,15 +483,6 @@ impl ShiftProofs {
       .iter()
       .map(|i| i.decompress().unwrap())
       .collect();
-    // shifted(C) = orig(C) * C^(shift_size) + rc * openings
-    /*
-    for p in 0..num_instances {
-      let orig = C_evals_orig_decompressed[p];
-      let shifted = C_evals_shifted_decompressed[p];
-      let reverse_shifted = (0..header_len_list[p]).fold(shifted * rc[shift_size_list[p]], |s, i| s + rc[i] * self.openings[p][i].decompress().unwrap());
-      assert_eq!(orig, reverse_shifted);
-    }
-    */
     // Proof of opening
     self.proof.verify_uni_batched_instances(
       &vars_gens.gens_pc,

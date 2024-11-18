@@ -173,36 +173,6 @@ impl R1CSProof {
     (sc_proof_phase_two, r, claims, blind_claim_postsc)
   }
 
-  /*
-  fn prove_phase_two_single(
-    num_rounds: usize,
-    claim: &Scalar,
-    blind_claim: &Scalar,
-    evals_z: &mut DensePolynomial,
-    evals_ABC: &mut DensePolynomial,
-    gens: &R1CSSumcheckGens,
-    transcript: &mut Transcript,
-    random_tape: &mut RandomTape,
-  ) -> (ZKSumcheckInstanceProof, Vec<Scalar>, Vec<Scalar>, Scalar) {
-    let comb_func =
-      |poly_A_comp: &Scalar, poly_B_comp: &Scalar| -> Scalar { poly_A_comp * poly_B_comp };
-    let (sc_proof_phase_two, r, claims, blind_claim_postsc) = ZKSumcheckInstanceProof::prove_quad(
-      claim,
-      blind_claim,
-      num_rounds,
-      evals_z,
-      evals_ABC,
-      comb_func,
-      &gens.gens_1,
-      &gens.gens_3,
-      transcript,
-      random_tape,
-    );
-
-    (sc_proof_phase_two, r, claims, blind_claim_postsc)
-  }
-  */
-
   fn protocol_name() -> &'static [u8] {
     b"R1CS proof"
   }

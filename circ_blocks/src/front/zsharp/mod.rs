@@ -505,15 +505,6 @@ impl<'ast> ZGen<'ast> {
             isolate_asserts,
             in_witness_gen: Cell::new(false),
         };
-        /*
-        this.circ
-            .borrow()
-            .cir_ctx()
-            .cs
-            .borrow_mut()
-            .metadata
-            .add_prover_and_verifier();
-        */
         this
     }
 
@@ -1049,176 +1040,6 @@ impl<'ast> ZGen<'ast> {
         }
     }
 
-    /*
-    fn const_entry_fn(&self, n: &str) -> T {
-        debug!("Const entry: {}", n);
-        let (f_file, f_name) = self.deref_import(n);
-        if let Some(f) = self.functions.get(&f_file).and_then(|m| m.get(&f_name)) {
-            if !f.generics.is_empty() {
-                panic!("const_entry_fn cannot be called on a generic function")
-            }
-
-            let mut args = Vec::new();
-            for p in &f.parameters {
-                let name = &p.id.value;
-                let ty = self.type_(&p.ty);
-                let value = interp::extract(name, &ty, &mut input_scalar_values)
-                    .unwrap_or_else(|e| self.err(format!("Error: {e}"), &p.span));
-                args.push(value);
-            }
-
-            if !input_scalar_values.is_empty() {
-                let unused_input_list = input_scalar_values
-                    .keys()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .as_slice()
-                    .join(", ");
-                self.err(format!("Ununused inputs {unused_input_list}"), &f.span);
-            }
-
-            self.function_call_impl_::<true>(args, &[][..], None, f_file, f_name)
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))
-        } else {
-            panic!(
-                "No function '{:?}//{}' attempting const_entry_fn",
-                &f_file, &f_name
-            )
-        }
-    }
-
-    fn entry_fn(&self, n: &str) {
-        debug!("Entry: {}", n);
-        // find the entry function
-        let (f_file, f_name) = self.deref_import(n);
-        let f = self
-            .functions
-            .get(&f_file)
-            .unwrap_or_else(|| panic!("No file '{:?}'", &f_file))
-            .get(&f_name)
-            .unwrap_or_else(|| panic!("No function '{}'", &f_name))
-            .clone();
-        // XXX(unimpl) tuple returns not supported
-        assert!(f.returns.len() <= 1);
-        if !f.generics.is_empty() {
-            self.err("Entry function cannot be generic. Try adding a wrapper function that supplies an explicit generic argument.", &f.span);
-        }
-        // get return type
-        let ret_ty = f.returns.first().map(|r| self.type_(r));
-        // set up stack frame for entry function
-        self.circ_enter_fn(n.to_owned(), ret_ty.clone());
-        let mut persistent_arrays: Vec<String> = Vec::new();
-        for p in f.parameters.iter() {
-            let ty = self.type_(&p.ty);
-            debug!("Entry param: {}: {}", p.id.value, ty);
-            let md = self.interpret_array_md(&p.array_metadata);
-            let vis = self.interpret_visibility(&p.visibility);
-            let r = self.circ_declare_input(p.id.value.clone(), &ty, vis, None, false, &md);
-            let unwrapped = self.unwrap(r, &p.span);
-            if let Some(md_some) = md {
-                match md_some {
-                    ArrayParamMetadata::Committed => {
-                        info!(
-                            "Input committed array of type {} in {:?}",
-                            ty,
-                            self.file_stack.borrow().last().unwrap()
-                        );
-                        persistent_arrays.push(p.id.value.clone());
-                    }
-                    ArrayParamMetadata::Transcript => {
-                        self.mark_array_as_transcript(&p.id.value, unwrapped);
-                    }
-                }
-            }
-        }
-        for s in &f.statements {
-            self.unwrap(self.stmt_impl_::<false>(s), s.span());
-        }
-        for a in persistent_arrays {
-            let term = self
-                .circ_get_value(Loc::local(a.clone()))
-                .unwrap()
-                .unwrap_term()
-                .term;
-            trace!("End persistent_array {a}, {}", term);
-            self.circ.borrow_mut().end_persistent_array(n, &a, term);
-        }
-        if let Some(r) = self.circ_exit_fn() {
-            match self.mode {
-                Mode::Mpc(_) => {
-                    let ret_term = r.unwrap_term();
-                    let ret_terms = ret_term.terms();
-                    self.circ
-                        .borrow()
-                        .cir_ctx()
-                        .cs
-                        .borrow_mut()
-                        .outputs
-                        .extend(ret_terms);
-                }
-                Mode::Proof => {
-                    let ty = ret_ty.as_ref().unwrap();
-                    let name = "return".to_owned();
-                    let ret_val = r.unwrap_term();
-                    let ret_var_val = self
-                        .circ_declare_input(
-                            name,
-                            ty,
-                            ZVis::Public,
-                            Some(ret_val.clone()),
-                            false,
-                            &None,
-                        )
-                        .expect("circ_declare return");
-                    let ret_eq = eq(ret_val, ret_var_val).unwrap().term;
-                    let mut assertions = std::mem::take(&mut *self.assertions.borrow_mut());
-                    let to_assert = if assertions.is_empty() {
-                        ret_eq
-                    } else {
-                        assertions.push(ret_eq);
-                        term(AND, assertions)
-                    };
-                    debug!("Assertion: {}", to_assert);
-                    self.circ.borrow_mut().assert(to_assert);
-                }
-                Mode::Opt => {
-                    let ret_term = r.unwrap_term();
-                    let ret_terms = ret_term.terms();
-                    assert!(
-                        ret_terms.len() == 1,
-                        "When compiling to optimize, there can only be one output"
-                    );
-                    let t = ret_terms.into_iter().next().unwrap();
-                    let t_sort = check(&t);
-                    if !matches!(t_sort, Sort::BitVector(_)) {
-                        panic!("Cannot maximize output of type {}", t_sort);
-                    }
-                    self.circ.borrow().cir_ctx().cs.borrow_mut().outputs.push(t);
-                }
-                Mode::ProofOfHighValue(v) => {
-                    let ret_term = r.unwrap_term();
-                    let ret_terms = ret_term.terms();
-                    assert!(
-                        ret_terms.len() == 1,
-                        "When compiling to optimize, there can only be one output"
-                    );
-                    let t = ret_terms.into_iter().next().unwrap();
-                    let cmp = match check(&t) {
-                        Sort::BitVector(w) => term![BV_UGE; t, bv_lit(v, w)],
-                        s => panic!("Cannot maximize output of type {}", s),
-                    };
-                    self.circ
-                        .borrow()
-                        .cir_ctx()
-                        .cs
-                        .borrow_mut()
-                        .outputs
-                        .push(cmp);
-                }
-            }
-        }
-    }
-    */
     fn interpret_array_md(
         &self,
         md: &Option<ast::ArrayParamMetadata<'ast>>,
@@ -1722,16 +1543,6 @@ impl<'ast> ZGen<'ast> {
                                 decl_ty,
                                 e,
                             )?;
-                            /*
-                            let md = self.interpret_array_md(&l.array_metadata);
-                            if let Some(ArrayParamMetadata::Transcript) = md {
-                                let value = self
-                                    .circ_get_value(Loc::local(l.identifier.value.clone()))
-                                    .map_err(|e| format!("{e}"))?
-                                    .unwrap_term();
-                                self.mark_array_as_transcript(&l.identifier.value, value);
-                            }
-                            */
                             Ok(())
                         }
                     }
@@ -1977,15 +1788,6 @@ impl<'ast> ZGen<'ast> {
                 &c.span,
             );
         }
-
-        /*
-        if let Some(ast::ArrayParamMetadata::Transcript(_)) = &c.array_metadata {
-            if !value.type_().is_array() {
-                self.err(format!("Non-array transcript {}", &c.id.value), &c.span);
-            }
-            self.mark_array_as_transcript(&c.id.value, value.clone());
-        }
-        */
 
         // insert into constant map
         if self
@@ -2381,24 +2183,6 @@ impl<'ast> ZGen<'ast> {
         }
         Ok(())
     }
-
-    /*
-    fn mark_array_as_transcript(&self, name: &str, array: T) {
-        info!(
-            "Transcript array {} of type {} in {:?}",
-            name,
-            array.ty,
-            self.file_stack.borrow().last().unwrap()
-        );
-        self.circ
-            .borrow()
-            .cir_ctx()
-            .cs
-            .borrow_mut()
-            .ram_arrays
-            .insert(array.term);
-    }
-    */
 
     /*** circify wrapper functions (hides RefCell) ***/
 

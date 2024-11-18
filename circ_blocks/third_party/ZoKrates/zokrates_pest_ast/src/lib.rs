@@ -73,8 +73,8 @@ mod ast {
         rhs: Box<Expression<'ast>>,
     ) -> Box<Expression<'ast>> {
         // a + b spans from the start of a to the end of b
-        let (start, _) = lhs.span().clone().split();
-        let (_, end) = rhs.span().clone().split();
+        let (start, _) = (*lhs.span()).split();
+        let (_, end) = (*rhs.span()).split();
         let span = start.span(&end);
 
         Box::new(match pair.as_rule() {
@@ -952,7 +952,7 @@ mod ast {
             match self {
                 Expression::Binary(b) => &b.span,
                 Expression::Identifier(i) => &i.span,
-                Expression::Literal(c) => &c.span(),
+                Expression::Literal(c) => c.span(),
                 Expression::Ternary(t) => &t.span,
                 Expression::Postfix(p) => &p.span,
                 Expression::InlineArray(a) => &a.span,
@@ -1255,8 +1255,8 @@ mod tests {
         assert(a.member == 1)
         return a
 "#;
-        let res = generate_ast(&source);
-        println!("{:#?}", generate_ast(&source));
+        let res = generate_ast(source);
+        println!("{:#?}", generate_ast(source));
         assert!(res.is_ok());
     }
 }

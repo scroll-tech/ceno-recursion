@@ -118,9 +118,9 @@ impl Assignment {
   }
 
   /// Write the assignment into a file
-  pub fn write(&self, mut f: &File) -> std::io::Result<()> {
+  pub fn write(&self, f: &File) -> std::io::Result<()> {
     for assg in &self.assignment {
-      write_bytes(&mut f, &assg.to_bytes())?;
+      write_bytes(f, &assg.to_bytes())?;
     }
     Ok(())
   }
@@ -135,7 +135,7 @@ fn write_bytes(mut f: &File, bytes: &[u8; 32]) -> std::io::Result<()> {
   for i in 0..size {
     write!(&mut f, "{} ", bytes[i])?;
   }
-  writeln!(&mut f, "")?;
+  writeln!(&mut f)?;
   Ok(())
 }
 
@@ -241,7 +241,7 @@ impl IOProofs {
     let mut live_input = Vec::new();
     for i in 0..input_liveness.len() {
       if input_liveness[i] {
-        live_input.push(input[i].clone());
+        live_input.push(input[i]);
       }
     }
     input_indices = input_indices[..live_input.len()].to_vec();
@@ -264,7 +264,7 @@ impl IOProofs {
       .iter()
       .map(|i| to_bin_array(*i))
       .collect(),
-      vec![
+      [
         vec![ONE, ONE, input_block_num, output_block_num, output],
         live_input,
       ]
@@ -321,13 +321,13 @@ impl IOProofs {
     let mut live_input = Vec::new();
     for i in 0..input_liveness.len() {
       if input_liveness[i] {
-        live_input.push(input[i].clone());
+        live_input.push(input[i]);
       }
     }
     input_indices = input_indices[..live_input.len()].to_vec();
 
     // batch verify all proofs
-    let _ = PolyEvalProof::verify_plain_batched_points(
+    PolyEvalProof::verify_plain_batched_points(
       &self.proofs,
       &vars_gens.gens_pc,
       transcript,
@@ -345,7 +345,7 @@ impl IOProofs {
       .iter()
       .map(|i| to_bin_array(*i))
       .collect(),
-      vec![
+      [
         vec![ONE, ONE, input_block_num, output_block_num, output],
         live_input,
       ]
@@ -489,7 +489,7 @@ impl ShiftProofs {
       transcript,
       &c,
       &[C_evals_orig_decompressed, C_evals_shifted_decompressed].concat(),
-      &vec![orig_comms, shifted_comms].concat(),
+      &[orig_comms, shifted_comms].concat(),
       [poly_size_list.clone(), poly_size_list].concat(),
     )?;
     Ok(())
@@ -574,7 +574,7 @@ impl ProverWitnessSecInfo {
       merged_num_inputs.push(components[next_component].num_inputs[pointers[next_component]]);
       merged_w_mat.push(components[next_component].w_mat[pointers[next_component]].clone());
       merged_poly_w.push(components[next_component].poly_w[pointers[next_component]].clone());
-      pointers[next_component] = pointers[next_component] + 1;
+      pointers[next_component] += 1;
     }
 
     (
@@ -607,12 +607,12 @@ impl VerifierWitnessSecInfo {
     comm_w: Vec<PolyCommitment>,
   ) -> VerifierWitnessSecInfo {
     assert!(
-      comm_w.len() == 0 || (num_inputs.len() == comm_w.len() && num_proofs.len() >= comm_w.len())
+      comm_w.is_empty() || (num_inputs.len() == comm_w.len() && num_proofs.len() >= comm_w.len())
     );
     VerifierWitnessSecInfo {
       num_inputs,
       num_proofs: num_proofs[..comm_w.len()].to_vec(),
-      comm_w: comm_w,
+      comm_w,
     }
   }
 
@@ -674,7 +674,7 @@ impl VerifierWitnessSecInfo {
       merged_num_inputs.push(components[next_component].num_inputs[pointers[next_component]]);
       merged_num_proofs.push(components[next_component].num_proofs[pointers[next_component]]);
       merged_comm_w.push(components[next_component].comm_w[pointers[next_component]].clone());
-      pointers[next_component] = pointers[next_component] + 1;
+      pointers[next_component] += 1;
     }
 
     (
@@ -1723,7 +1723,7 @@ impl SNARK {
       &init_phy_mems_list,
       &comb_r,
       &comb_tau,
-      &vars_gens,
+      vars_gens,
       transcript,
     );
     timer_sec_gen.stop();
@@ -1742,7 +1742,7 @@ impl SNARK {
       &init_vir_mems_list,
       &comb_r,
       &comb_tau,
-      &vars_gens,
+      vars_gens,
       transcript,
     );
     timer_sec_gen.stop();
@@ -1761,7 +1761,7 @@ impl SNARK {
       &addr_phy_mems_list,
       &comb_r,
       &comb_tau,
-      &vars_gens,
+      vars_gens,
       transcript,
     );
     timer_sec_gen.stop();
@@ -2211,7 +2211,7 @@ impl SNARK {
           &block_num_vars,
           block_wit_secs,
           &block_inst.inst,
-          &vars_gens,
+          vars_gens,
           transcript,
           &mut random_tape,
         )
@@ -2282,15 +2282,14 @@ impl SNARK {
     // PAIRWISE_CHECK
     // --
     let timer_proof = Timer::new("Pairwise Check");
-    let pairwise_size = [
+    let pairwise_size = *[
       consis_num_proofs,
       total_num_phy_mem_accesses,
       total_num_vir_mem_accesses,
     ]
     .iter()
     .max()
-    .unwrap()
-    .clone();
+    .unwrap();
     let (pairwise_prover, inst_map) = ProverWitnessSecInfo::merge(vec![
       &perm_exec_w3_prover,
       &addr_phy_mems_prover,
@@ -2326,7 +2325,7 @@ impl SNARK {
             &addr_ts_bits_prover,
           ],
           &pairwise_check_inst.inst,
-          &vars_gens,
+          vars_gens,
           transcript,
           &mut random_tape,
         )
@@ -2397,7 +2396,7 @@ impl SNARK {
     // PERM_EXEC_ROOT, MEM_ADDR_ROOT
     // --
     let timer_proof = Timer::new("Perm Root");
-    let perm_size = [
+    let perm_size = *[
       consis_num_proofs,
       total_num_init_phy_mem_accesses,
       total_num_init_vir_mem_accesses,
@@ -2406,8 +2405,7 @@ impl SNARK {
     ]
     .iter()
     .max()
-    .unwrap()
-    .clone();
+    .unwrap();
     let (perm_root_w1_prover, _) = ProverWitnessSecInfo::merge(vec![
       &exec_inputs_prover,
       &init_phy_mems_prover,
@@ -2455,7 +2453,7 @@ impl SNARK {
             &perm_root_w3_shifted_prover,
           ],
           &perm_root_inst.inst,
-          &vars_gens,
+          vars_gens,
           transcript,
           &mut random_tape,
         )
@@ -2623,15 +2621,15 @@ impl SNARK {
         shifted_polys.push(&vir_mem_addr_w3_shifted_prover.poly_w[0]);
         header_len_list.push(6);
       }
-      let shift_proof = ShiftProofs::prove(
+
+      ShiftProofs::prove(
         orig_polys,
         shifted_polys,
         header_len_list,
         vars_gens,
         transcript,
         &mut random_tape,
-      );
-      shift_proof
+      )
     };
     timer_proof.stop();
 
@@ -3032,7 +3030,7 @@ impl SNARK {
         }
         VerifierWitnessSecInfo::new(
           block_w2_size_list,
-          &block_num_proofs,
+          block_num_proofs,
           self.block_comm_w2_list.clone(),
         )
       };
@@ -3229,7 +3227,7 @@ impl SNARK {
       (
         VerifierWitnessSecInfo::new(
           block_num_vars,
-          &block_num_proofs,
+          block_num_proofs,
           self.block_comm_vars_list.clone(),
         ),
         VerifierWitnessSecInfo::new(
@@ -3241,7 +3239,7 @@ impl SNARK {
     };
 
     let init_phy_mems_verifier = {
-      if input_stack.len() > 0 {
+      if !input_stack.is_empty() {
         assert_eq!(
           total_num_init_phy_mem_accesses,
           input_stack.len().next_power_of_two()
@@ -3249,7 +3247,7 @@ impl SNARK {
         // Let the verifier generate init_mems itself
         let init_stacks = [
           (0..input_stack.len())
-            .map(|i| vec![ONE, ZERO, Scalar::from(i as u64), input_stack[i].clone()])
+            .map(|i| vec![ONE, ZERO, Scalar::from(i as u64), input_stack[i]])
             .concat(),
           vec![ZERO; INIT_PHY_MEM_WIDTH * (total_num_init_phy_mem_accesses - input_stack.len())],
         ]
@@ -3271,7 +3269,7 @@ impl SNARK {
       }
     };
     let init_vir_mems_verifier = {
-      if input_mem.len() > 0 {
+      if !input_mem.is_empty() {
         assert_eq!(
           total_num_init_vir_mem_accesses,
           input_mem.len().next_power_of_two()
@@ -3279,7 +3277,7 @@ impl SNARK {
         // Let the verifier generate init_mems itself
         let init_mems = [
           (0..input_mem.len())
-            .map(|i| vec![ONE, ZERO, Scalar::from(i as u64), input_mem[i].clone()])
+            .map(|i| vec![ONE, ZERO, Scalar::from(i as u64), input_mem[i]])
             .concat(),
           vec![ZERO; INIT_VIR_MEM_WIDTH * (total_num_init_vir_mem_accesses - input_mem.len())],
         ]
@@ -3386,7 +3384,7 @@ impl SNARK {
         num_vars,
         block_wit_secs,
         block_num_cons,
-        &vars_gens,
+        vars_gens,
         &self.block_inst_evals_bound_rp,
         transcript,
       )?;
@@ -3445,15 +3443,14 @@ impl SNARK {
     {
       let timer_sat_proof = Timer::new("Pairwise Check Sat");
 
-      let pairwise_size = [
+      let pairwise_size = *[
         consis_num_proofs,
         total_num_phy_mem_accesses,
         total_num_vir_mem_accesses,
       ]
       .iter()
       .max()
-      .unwrap()
-      .clone();
+      .unwrap();
       let (pairwise_verifier, inst_map) = VerifierWitnessSecInfo::merge(vec![
         &perm_exec_w3_verifier,
         &addr_phy_mems_verifier,
@@ -3487,7 +3484,7 @@ impl SNARK {
           &addr_ts_bits_verifier,
         ],
         pairwise_check_num_cons,
-        &vars_gens,
+        vars_gens,
         &self.pairwise_check_inst_evals_bound_rp,
         transcript,
       )?;
@@ -3540,7 +3537,7 @@ impl SNARK {
     // PERM_EXEC_ROOT, MEM_ADDR_ROOT
     // --
     {
-      let perm_size = [
+      let perm_size = *[
         consis_num_proofs,
         total_num_init_phy_mem_accesses,
         total_num_init_vir_mem_accesses,
@@ -3549,8 +3546,7 @@ impl SNARK {
       ]
       .iter()
       .max()
-      .unwrap()
-      .clone();
+      .unwrap();
       let timer_sat_proof = Timer::new("Perm Root Sat");
       let (perm_root_w1_verifier, _) = VerifierWitnessSecInfo::merge(vec![
         &exec_inputs_verifier,
@@ -3595,7 +3591,7 @@ impl SNARK {
           &perm_root_w3_shifted_verifier,
         ],
         perm_root_num_cons,
-        &vars_gens,
+        vars_gens,
         &self.perm_root_inst_evals,
         transcript,
       )?;

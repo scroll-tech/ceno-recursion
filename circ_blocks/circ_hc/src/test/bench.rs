@@ -140,7 +140,7 @@ pub fn bench_test<T: Table<u8>>(num_steps: usize) {
     let times = gc_at_end::<T>(&steps);
     T::gc();
     assert_eq!(T::table_size(), 0);
-    println!("");
+    println!();
     println!("workload,name,steps,time,gc_time");
     println!(
         "gc_at_end,{},{},{:?},{:?}",
@@ -152,7 +152,7 @@ pub fn bench_test<T: Table<u8>>(num_steps: usize) {
     let times = gc_every_step::<T>(&steps);
     T::gc();
     assert_eq!(T::table_size(), 0);
-    println!("");
+    println!();
     println!("workload,name,steps,time,gc_time");
     println!(
         "gc_every_step,{},{},{:?},{:?}",

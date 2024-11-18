@@ -863,7 +863,7 @@ pub fn walk_conditional_statement<'ast, Z: ZVisitorMut<'ast>>(
 }
 
 pub fn walk_array_decl_statement<'ast, Z: ZVisitorMut<'ast>>(
-    visitor:&mut Z,
+    visitor: &mut Z,
     arr_decl: &mut ast::ArrayDeclStatement<'ast>,
 ) -> ZVisitorResult {
     visitor.visit_type(&mut arr_decl.ty)?;

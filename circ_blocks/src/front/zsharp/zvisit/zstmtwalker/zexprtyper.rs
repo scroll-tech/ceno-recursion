@@ -181,9 +181,13 @@ impl<'ast, 'ret, 'wlk> ZVisitorMut<'ast> for ZExpressionTyper<'ast, 'ret, 'wlk> 
             Strict(_) => (),
             ToField(_) => {
                 if let Some(ty) = &self.ty {
-                    if !matches!(ty, Basic(_)) || matches!(ty, Basic(Field(_))) || matches!(ty, Basic(Boolean(_))) {
+                    if !matches!(ty, Basic(_))
+                        || matches!(ty, Basic(Field(_)))
+                        || matches!(ty, Basic(Boolean(_)))
+                    {
                         return Err(ZVisitorError(
-                            "ZExpressionTyper: got Bool, Field, or non-Basic for unary (F)".to_string(),
+                            "ZExpressionTyper: got Bool, Field, or non-Basic for unary (F)"
+                                .to_string(),
                         ));
                     }
                 }
@@ -244,7 +248,12 @@ impl<'ast, 'ret, 'wlk> ZVisitorMut<'ast> for ZExpressionTyper<'ast, 'ret, 'wlk> 
 
         self.visit_expression(&mut aie.value)?;
         if let Some(ty) = self.take()? {
-            let ty = self.arrayize(ty, aie.dim_ro.clone(), aie.count.as_ref().clone(), &aie.span);
+            let ty = self.arrayize(
+                ty,
+                aie.dim_ro.clone(),
+                aie.count.as_ref().clone(),
+                &aie.span,
+            );
             self.ty.replace(Array(ty));
         }
         Ok(())

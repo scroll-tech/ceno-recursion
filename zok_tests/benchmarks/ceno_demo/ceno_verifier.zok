@@ -233,6 +233,10 @@ def verify_opcode_proof(
     // alpha_read * (out_r[rt] - 1) + alpha_write * (out_w[rt] - 1) + alpha_lk * (out_lk_q - chip_record_alpha)
     // + 0 // 0 come from zero check
     ExtField claim_sum = ext_add(
+        ext_mul(alpha_write, ext_sub(record_evals[1].eval, to_ext(1))),
+        ext_mul(alpha_lk, ext_sub(logup_q_evals[0].eval, chip_record_alpha))
+    )
+    ExtField claim_sum = ext_add(
         ext_mul(alpha_read, ext_sub(record_evals[0].eval, to_ext(1))),
         ext_add(
             ext_mul(alpha_write, ext_sub(record_evals[1].eval, to_ext(1))),

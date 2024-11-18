@@ -1,7 +1,8 @@
 from "ext_field" import ExtField
 
 // Use struct to simulate an enum
-struct Expression {
+// Note: since recursive struct is not allowed, we represent every Expression as an array
+struct ExpressionEntry {
     // 0 - WitIn(WitnessId)
     // 1 - Fixed(Fixed)
     // 2 - Constant(E::BaseField)
@@ -14,7 +15,11 @@ struct Expression {
     u32 fixed // fixed or power
     ExtField constant // constant or scalar
     ExtField offset
-    Expression[0] limbs
+    field[0] limbs // limbs point to the indices of subexpressions
+}
+
+struct Expression {
+    ExpressionEntry[0] entries
 }
 
 struct LogupTableExpression {

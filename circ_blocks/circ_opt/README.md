@@ -30,21 +30,21 @@ Usage: parser [OPTIONS]
 Options:
       --r1cs-verified <VERIFIED>
           Use the verified field-blaster
-          
+
           [env: R1CS_VERIFIED=]
           [default: false]
           [possible values: true, false]
 
       --r1cs-profile <PROFILE>
           Profile the R1CS lowering pass: attributing cosntraints and vars to terms
-          
+
           [env: R1CS_PROFILE=]
           [default: false]
           [possible values: true, false]
 
       --r1cs-div-by-zero <DIV_BY_ZERO>
           Which field division-by-zero semantics to encode in R1cs
-          
+
           [env: R1CS_DIV_BY_ZERO=]
           [default: incomplete]
 
@@ -55,13 +55,13 @@ Options:
 
       --r1cs-lc-elim-thresh <LC_ELIM_THRESH>
           linear combination constraints up to this size will be eliminated
-          
+
           [env: R1CS_LC_ELIM_THRESH=]
           [default: 50]
 
       --field-builtin <BUILTIN>
           Which field to use
-          
+
           [env: FIELD_BUILTIN=]
           [default: bls12381]
 
@@ -71,13 +71,13 @@ Options:
 
       --field-custom-modulus <CUSTOM_MODULUS>
           Which modulus to use (overrides [FieldOpt::builtin])
-          
+
           [env: FIELD_CUSTOM_MODULUS=]
           [default: ]
 
       --ir-field-to-bv <FIELD_TO_BV>
           Which field to use
-          
+
           [env: IR_FIELD_TO_BV=]
           [default: wrap]
 
@@ -87,21 +87,21 @@ Options:
 
       --ir-frequent-gc <FREQUENT_GC>
           Garbage collection after each optimization pass
-          
+
           [env: IR_FREQUENT_GC=]
           [default: false]
           [possible values: true, false]
 
       --ram <ENABLED>
           Whether to use advanced RAM techniques
-          
+
           [env: RAM=]
           [default: false]
           [possible values: true, false]
 
       --ram-range <RANGE>
           How to argue that values are in a range
-          
+
           [env: RAM_RANGE=]
           [default: sort]
 
@@ -111,7 +111,7 @@ Options:
 
       --ram-index <INDEX>
           How to argue that indices are only repeated in blocks
-          
+
           [env: RAM_INDEX=]
           [default: uniqueness]
 
@@ -121,7 +121,7 @@ Options:
 
       --ram-permutation <PERMUTATION>
           How to argue that indices are only repeated in blocks
-          
+
           [env: RAM_PERMUTATION=]
           [default: msh]
 
@@ -131,7 +131,7 @@ Options:
 
       --ram-rom <ROM>
           ROM approach
-          
+
           [env: RAM_ROM=]
           [default: haboeck]
 
@@ -141,48 +141,48 @@ Options:
 
       --fmt-use-default-field <USE_DEFAULT_FIELD>
           Which field to use
-          
+
           [env: FMT_USE_DEFAULT_FIELD=]
           [default: true]
           [possible values: true, false]
 
       --fmt-hide-field <HIDE_FIELD>
           Always hide the field
-          
+
           [env: FMT_HIDE_FIELD=]
           [default: false]
           [possible values: true, false]
 
       --zsharp-isolate-asserts <ISOLATE_ASSERTS>
           In Z#, "isolate" assertions. That is, assertions in if/then/else expressions only take effect if that branch is active.
-          
+
           See `--branch-isolation` in [ZoKrates](https://zokrates.github.io/language/control_flow.html).
-          
+
           [env: ZSHARP_ISOLATE_ASSERTS=]
           [default: false]
           [possible values: true, false]
 
       --datalog-rec-limit <N>
           How many recursions to allow
-          
+
           [env: DATALOG_REC_LIMIT=]
           [default: 5]
 
       --datalog-lint-prim-rec <LINT_PRIM_REC>
           Lint recursions that are allegedly primitive recursive
-          
+
           [env: DATALOG_LINT_PRIM_REC=]
           [default: false]
           [possible values: true, false]
 
       --c-sv-functions
           Enable SV competition builtin functions
-          
+
           [env: C_SV_FUNCTIONS=]
 
       --c-assert-no-ub
           Assert no undefined behavior
-          
+
           [env: C_ASSERT_NO_UB=]
 
   -h, --help

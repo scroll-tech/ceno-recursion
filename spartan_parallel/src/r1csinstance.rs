@@ -286,7 +286,7 @@ impl R1CSInstance {
       B_list.push(B);
       C_list.push(C);
 
-      
+
     }
 
     Timer::print(&format!("number_non-zero_entries_A {}", A.len()));
@@ -392,7 +392,7 @@ impl R1CSInstance {
         Cz[p].push(vec![self.C_list[p_inst].multiply_vec_disjoint_rounds(num_cons[p_inst].clone(), max_num_inputs, num_inputs[p], z)]);
       }
     }
-    
+
     (
       DensePolynomialPqx::new_rev(&Az, num_proofs.clone(), max_num_proofs, num_cons.clone(), max_num_cons),
       DensePolynomialPqx::new_rev(&Bz, num_proofs.clone(), max_num_proofs, num_cons.clone(), max_num_cons),
@@ -421,7 +421,7 @@ impl R1CSInstance {
     let mut Az = Vec::new();
     let mut Bz = Vec::new();
     let mut Cz = Vec::new();
-    
+
     // Non-zero instances
     for p in 0..num_instances {
       let z = &z_list[p];
@@ -576,7 +576,7 @@ impl R1CSInstance {
     eval_list
   }
 
-  pub fn multi_evaluate_bound_rp(&self, rp: &[Scalar], rx: &[Scalar], ry: &[Scalar]) -> 
+  pub fn multi_evaluate_bound_rp(&self, rp: &[Scalar], rx: &[Scalar], ry: &[Scalar]) ->
   (
     Vec<Scalar>,                // Concatenation of each individual block
     (Scalar, Scalar, Scalar)    // Combined, bound to rp
@@ -670,7 +670,7 @@ impl R1CSInstance {
         num_cons: self.num_instances * self.max_num_cons,
         num_vars: self.num_vars,
         comm,
-      };    
+      };
       let r1cs_decomm = R1CSDecommitment { dense };
 
       r1cs_comm_list.push(r1cs_comm);

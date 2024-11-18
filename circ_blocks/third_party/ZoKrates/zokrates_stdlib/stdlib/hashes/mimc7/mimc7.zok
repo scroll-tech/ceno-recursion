@@ -100,7 +100,7 @@ def main<R>(field x_in, field k) -> field:
 	field[R] t7 = [0; R] // we define t7 length +1 to avoid conditional branching
 
 	for u32 i in 0..R do
-		u32 i2 = if i == 0 then 0 else i - 1 fi 
+		u32 i2 = if i == 0 then 0 else i - 1 fi
 		t = if i == 0 then k + x_in else k + t7[i2] + C[i] fi
         t2[i] = t * t
         t4[i] = t2[i] * t2[i]

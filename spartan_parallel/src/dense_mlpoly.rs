@@ -276,12 +276,12 @@ impl DensePolynomial {
   }
 
   // Bound_var_top but the polynomial is in (x, q, p) form and certain (p, q) pair is invalid
-  pub fn bound_poly_var_top_disjoint_rounds(&mut self, 
+  pub fn bound_poly_var_top_disjoint_rounds(&mut self,
     r: &Scalar,
-    proof_space: usize, 
+    proof_space: usize,
     instance_space: usize,
-    cons_len: usize, 
-    proof_len: usize, 
+    cons_len: usize,
+    proof_len: usize,
     instance_len: usize,
     num_proofs: &Vec<usize>
   ) {
@@ -305,9 +305,9 @@ impl DensePolynomial {
   // The polynomial is in (q, p, x) form and certain (p, q) pair is invalid
   // Binding the entire "q" section and q is in reverse order
   // Use "num_proofs" to record how many "q"s need to process for each "p"
-  pub fn bound_poly_var_front_rq(&mut self, 
+  pub fn bound_poly_var_front_rq(&mut self,
     r_q: &Vec<Scalar>,
-    mut max_proof_space: usize, 
+    mut max_proof_space: usize,
     instance_space: usize,
     cons_space: usize,
     mut num_proofs: Vec<usize>
@@ -675,7 +675,7 @@ impl PolyEvalProof {
   // Evaluation on multiple instances, each at different point
   // Size of each instance might be different, but all are larger than the evaluation point
   pub fn prove_batched_instances(
-    poly_list: &Vec<DensePolynomial>,        // list of instances 
+    poly_list: &Vec<DensePolynomial>,        // list of instances
     blinds_opt: Option<&PolyCommitmentBlinds>,
     r_list: Vec<&Vec<Scalar>>,                       // point at which the polynomial is evaluated
     Zr_list: &Vec<Scalar>,              // evaluation of \widetilde{Z}(r) on each instance
@@ -915,9 +915,9 @@ impl PolyEvalProof {
         blinds: vec![Scalar::zero(); L_size],
       };
       let blinds = blinds_opt.map_or(&default_blinds, |p| p);
-  
+
       assert_eq!(blinds.blinds.len(), L_size);
-  
+
       let blind_Zr = blind_Zr_opt.map_or(&zero, |p| p);
       let LZ_blind: Scalar = (0..L.len()).map(|i| blinds.blinds[i] * L[i]).sum();
 

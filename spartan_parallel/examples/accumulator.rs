@@ -31,7 +31,7 @@
 //!   b_out = b1                      b_out = b1
 //!   i_out = i0                      i_out = i1
 //!   s_out = s0                      s_out = s1
-//! 
+//!
 //! Finally, consistency check:
 //!   Permutation on (b_in, i_in, s_in, b_out, i_out, s_out)
 //!   Consistency check on (b_in, i_in, s_in, b_out, i_out, s_out)
@@ -150,7 +150,7 @@ fn produce_r1cs() -> (
   // --
   // COMPILE TIME KNOWLEDGE
   // --
-  
+
   // num_vars should be consistent accross the instances
   // everything else is instance-specific
   // Divide inputs into (1, input, 1, output)
@@ -180,7 +180,7 @@ fn produce_r1cs() -> (
   let block_num_instances = 2;
 
   //                    0    1    2    3    4    5    6    7    8
-  // variable orders:  b0   i0   s0   b1   i1   s1   Z0   Z1   B0 
+  // variable orders:  b0   i0   s0   b1   i1   s1   Z0   Z1   B0
   // input orders:  valid  b_i  i_i  s_i    1  b_o  i_o  s_o
   let V_b0 = 0;
   let V_i0 = 1;
@@ -261,7 +261,7 @@ fn produce_r1cs() -> (
     A_list.push(A);
     B_list.push(B);
     C_list.push(C);
-    
+
     // Instance 1: block 0
     let (A, B, C) = {
       let mut A: Vec<(usize, usize, [u8; 32])> = Vec::new();
@@ -319,7 +319,7 @@ fn produce_r1cs() -> (
     C_list.push(C);
 
     let block_inst = Instance::new(block_num_instances, block_num_cons, 2 * num_vars, &A_list, &B_list, &C_list).unwrap();
-    
+
     block_inst
   };
 
@@ -349,7 +349,7 @@ fn produce_r1cs() -> (
     let mut A_list = Vec::new();
     let mut B_list = Vec::new();
     let mut C_list = Vec::new();
-    
+
     let (A, B, C) = {
       let mut A: Vec<(usize, usize, [u8; 32])> = Vec::new();
       let mut B: Vec<(usize, usize, [u8; 32])> = Vec::new();
@@ -374,15 +374,15 @@ fn produce_r1cs() -> (
         constraint_count, vec![(V_valid, 1)], vec![], vec![(3 * num_vars, 1)]);
       constraint_count += 1;
       (A, B, C) = gen_constr(A, B, C, V_cnst, // w3[1]
-        constraint_count, 
-        vec![(V_valid, 1)], 
+        constraint_count,
+        vec![(V_valid, 1)],
         [vec![(V_cnst, 1)], (1..input_output_cutoff).map(|i| (2 * num_vars + i, 1)).collect()].concat(),
         vec![(3 * num_vars + 1, 1)]
       );
       constraint_count += 1;
       (A, B, C) = gen_constr(A, B, C, V_cnst, // w3[2]
-        constraint_count, 
-        vec![(V_valid, 1)], 
+        constraint_count,
+        vec![(V_valid, 1)],
         [vec![(V_cnst, 1)], (1..input_output_cutoff).map(|i| (2 * num_vars + input_output_cutoff + i, 1)).collect()].concat(),
         vec![(3 * num_vars + 2, 1)]
       );
@@ -394,7 +394,7 @@ fn produce_r1cs() -> (
     C_list.push(C);
 
     let consis_comb_inst = Instance::new(1, consis_comb_num_cons, 4 * num_vars, &A_list, &B_list, &C_list).unwrap();
-    
+
     consis_comb_inst
   };
 
@@ -412,7 +412,7 @@ fn produce_r1cs() -> (
     let mut A_list = Vec::new();
     let mut B_list = Vec::new();
     let mut C_list = Vec::new();
-    
+
     // Check output of the last block is the input of the next block
     let (A, B, C) = {
       let mut A: Vec<(usize, usize, [u8; 32])> = Vec::new();
@@ -432,7 +432,7 @@ fn produce_r1cs() -> (
     C_list.push(C);
 
     let consis_check_inst = Instance::new(1, consis_check_num_cons, total_num_proofs_bound * num_vars, &A_list, &B_list, &C_list).unwrap();
-    
+
     consis_check_inst
   };
 
@@ -446,7 +446,7 @@ fn produce_r1cs() -> (
   // Finally, the verifier checks that the two products are the same
   // The product is defined by PROD = \prod(\tau - (\sum_i a_i * r^{i-1}))
   // There is only one proof
-  
+
   // PERM_PRELIM
   let perm_prelim_num_cons = num_vars - 2;
   let perm_prelim_num_non_zero_entries = num_vars - 2;
@@ -508,16 +508,16 @@ fn produce_r1cs() -> (
         constraint_count += 1;
       }
       // correctness of w3[0]
-      (A, B, C) = gen_constr(A, B, C, V_cnst, 
+      (A, B, C) = gen_constr(A, B, C, V_cnst,
         constraint_count, vec![(num_vars, 1)], vec![], vec![(3 * num_vars, 1)]);
       constraint_count += 1;
       // correctness of w3[1]
       (A, B, C) = gen_constr(A, B, C, V_cnst, constraint_count,
-          [vec![(V_tau, 1)], (0..num_vars).map(|i| (2 * num_vars + i, -1)).collect()].concat(), 
-          vec![(num_vars, 1)], 
+          [vec![(V_tau, 1)], (0..num_vars).map(|i| (2 * num_vars + i, -1)).collect()].concat(),
+          vec![(num_vars, 1)],
           vec![(3 * num_vars + 1, 1)]);
 
-      (A, B, C)   
+      (A, B, C)
     };
 
     let A_list = vec![A.clone()];
@@ -525,7 +525,7 @@ fn produce_r1cs() -> (
     let C_list = vec![C.clone()];
 
     let perm_root_inst = Instance::new(1, perm_root_num_cons, 4 * num_vars, &A_list, &B_list, &C_list).unwrap();
-    
+
     perm_root_inst
   };
 
@@ -542,7 +542,7 @@ fn produce_r1cs() -> (
   let perm_poly_num_cons_base = 2;
   let perm_block_poly_num_non_zero_entries = 4 * block_max_num_proofs_bound;
   let perm_exec_poly_num_non_zero_entries = 4 * total_num_proofs_bound;
-  
+
   let perm_poly_inst = [block_max_num_proofs_bound, total_num_proofs_bound].map(|entry_size| {
     let perm_poly_num_cons = perm_poly_num_cons_base * entry_size;
     let perm_poly_inst = {
@@ -550,23 +550,23 @@ fn produce_r1cs() -> (
         let mut A: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut B: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut C: Vec<(usize, usize, [u8; 32])> = Vec::new();
-  
+
         let V_valid = 0;
         let V_cnst = V_valid;
         let V_x = 1;
         let V_pi = 2;
         let V_d = 3;
-  
+
         let mut constraint_count = 0;
-  
+
         // Need to order the constraints so that they solve the inputs in the front first
         // This way Az, Bz, Cz will have all non-zero entries concentrated in the front
         for i in 0..entry_size - 1 {
           // D
           (A, B, C) = gen_constr(A, B, C, i * num_vars + V_cnst,
-            constraint_count, 
-            vec![(i * num_vars + V_x, 1)], 
-            vec![((i + 1) * num_vars + V_pi, 1), (i * num_vars + V_cnst, 1), ((i + 1) * num_vars + V_valid, -1)], 
+            constraint_count,
+            vec![(i * num_vars + V_x, 1)],
+            vec![((i + 1) * num_vars + V_pi, 1), (i * num_vars + V_cnst, 1), ((i + 1) * num_vars + V_valid, -1)],
             vec![(i * num_vars + V_d, 1)]);
           constraint_count += 1;
           // pi
@@ -584,16 +584,16 @@ fn produce_r1cs() -> (
         // last pi is just usual
         (A, B, C) = gen_constr(A, B, C, i * num_vars + V_cnst,
           constraint_count, vec![(i * num_vars + V_valid, 1)], vec![(i * num_vars + V_d, 1)], vec![(i * num_vars + V_pi, 1)]);
-  
-        (A, B, C)   
+
+        (A, B, C)
       };
-  
+
       let A_list = vec![A.clone()];
       let B_list = vec![B.clone()];
       let C_list = vec![C.clone()];
-  
+
       let perm_poly_inst = Instance::new(1, perm_poly_num_cons, entry_size * num_vars, &A_list, &B_list, &C_list).unwrap();
-      
+
       perm_poly_inst
     };
     perm_poly_inst
@@ -630,7 +630,7 @@ fn produce_r1cs() -> (
       let mut assignment_vars = Vec::new();
       let mut assignment_inputs = Vec::new();
       //                    0    1    2    3    4    5    6    7    8
-      // variable orders:  b0   i0   s0   b1   i1   s1   Z0   Z1   B0 
+      // variable orders:  b0   i0   s0   b1   i1   s1   Z0   Z1   B0
       // input orders:  valid  b_i  i_i  s_i    1  b_o  i_o  s_o
       // Iteration i = 1
       let mut vars = vec![one, zero, zero, one, one, zero, Scalar::from(3u32).neg().invert().to_bytes(), one, one];
@@ -672,7 +672,7 @@ fn produce_r1cs() -> (
       assignment_vars.push(next_block_assignment_vars);
       assignment_inputs.push(next_block_assignment_inputs.clone());
       exec_inputs.push(next_block_assignment_inputs);
-      
+
       (assignment_vars, assignment_inputs)
     };
     block_vars_matrix.push(assignment_vars);
@@ -683,7 +683,7 @@ fn produce_r1cs() -> (
       let mut assignment_vars = Vec::new();
       let mut assignment_inputs = Vec::new();
       //                    0    1    2    3    4    5    6    7    8
-      // variable orders:  b0   i0   s0   b1   i1   s1   Z0   Z1   B0 
+      // variable orders:  b0   i0   s0   b1   i1   s1   Z0   Z1   B0
       // input orders:  valid  b_i  i_i  s_i    1  b_o  i_o  s_o
       let mut vars = vec![zero, zero, zero, one, zero, zero, Scalar::from(4u32).neg().invert().to_bytes(), one, one];
       let mut inputs = vec![one, zero, zero, zero, one, one, zero, zero];
@@ -728,7 +728,7 @@ fn produce_r1cs() -> (
     input_output_cutoff,
     total_num_proofs_bound,
     block_max_num_proofs_bound,
-    
+
     block_num_cons,
     block_num_non_zero_entries,
     block_num_instances,
@@ -744,15 +744,15 @@ fn produce_r1cs() -> (
     consis_check_num_cons_base,
     consis_check_num_non_zero_entries,
     consis_check_inst,
-    
+
     perm_prelim_num_cons,
     perm_prelim_num_non_zero_entries,
     perm_prelim_inst,
-    
+
     perm_root_num_cons,
     perm_root_num_non_zero_entries,
     perm_root_inst,
-    
+
     perm_poly_num_cons_base,
     perm_block_poly_num_non_zero_entries,
     perm_exec_poly_num_non_zero_entries,
@@ -793,20 +793,20 @@ fn main() {
     consis_check_num_cons_base,
     consis_check_num_non_zero_entries,
     consis_check_inst,
-    
+
     perm_prelim_num_cons,
     perm_prelim_num_non_zero_entries,
     perm_prelim_inst,
-    
+
     perm_root_num_cons,
     perm_root_num_non_zero_entries,
     perm_root_inst,
-    
+
     perm_poly_num_cons_base,
     perm_block_poly_num_non_zero_entries,
     perm_exec_poly_num_non_zero_entries,
     perm_poly_inst,
-    
+
     block_vars_matrix,
     block_inputs_matrix,
     exec_inputs
@@ -856,7 +856,7 @@ fn main() {
     &input,
     &output,
     output_block_index,
-    
+
     num_vars,
     input_output_cutoff,
     total_num_proofs_bound,
@@ -917,18 +917,18 @@ fn main() {
       num_vars,
       input_output_cutoff,
       total_num_proofs_bound,
-      block_num_instances, 
+      block_num_instances,
       block_max_num_proofs_bound,
-      block_max_num_proofs, 
-      &block_num_proofs, 
-      block_num_cons, 
+      block_max_num_proofs,
+      &block_num_proofs,
+      block_num_cons,
       &block_comm,
       &block_gens,
-      consis_num_proofs, 
-      consis_comb_num_cons, 
+      consis_num_proofs,
+      consis_comb_num_cons,
       &consis_comb_comm,
       &consis_comb_gens,
-      consis_check_num_cons_base, 
+      consis_check_num_cons_base,
       &consis_check_comm,
       &consis_check_gens,
       perm_prelim_num_cons,

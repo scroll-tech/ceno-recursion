@@ -13,7 +13,7 @@ TL;DR:
 
 --
 Introduction: Stack Frame in x86_32
-    
+
     foo (a, b, c);
           |
           V
@@ -64,7 +64,7 @@ Strategy 1 - Call Stack
         u32 N = 3      // Pass in parameters as registers
         @RP = 1        // Since `a` is still `a`, no work is needed there
     Block Transition: -> 3 (function call)
-    
+
     Block 1:
         LOAD_P(0, a)
         LOAD_P(1, x)
@@ -89,11 +89,11 @@ Strategy 1 - Call Stack
         field i = @RET
         @RET = i       // Both lines can be eliminated when applying optimizations
     Block Coda: -> 6
-    
+
     // Function Sum
     Block 3:
         field res = 0
-        u32 i = 0       
+        u32 i = 0
     Block Transition: if i < N then -> 4 else -> 5
 
     Block 4:
@@ -126,7 +126,7 @@ Strategy 2 - Continuation Passing
         u32 N = 3    // No STOREs unless parameter name overlaps with current variable
         @RP = 1      // Return Pointer
     Block Transition: -> 3 (function call)
-    
+
     Block 1:
         field i = @RET  // No LOADs, return value is a register
         u32 c = @SS + 3
@@ -146,7 +146,7 @@ Strategy 2 - Continuation Passing
         field i = @RET
         @RET = i       // Both lines can be eliminated when applying optimizations
     Block Coda: -> 6
-    
+
     // Function Sum
     Block 3:
         field res = 0    // Nothing to LOAD, correspond to continuation passing style
@@ -193,7 +193,7 @@ Example 2: Recursion + Multiple Returns (Won't work for a recursive main() funct
         else:
             return fib(n - 1) + fib(n - 2)
         return b
-    
+
     def main() -> u32:
         u32 b = 7
         b = fib(b)
@@ -212,7 +212,7 @@ We need to first separate fib() into blocks
     Block k + 1:
         @RET = 0
     Block Transition: -> k + 7 (end branching)
-    
+
     Block k + 2:
         b = 1
     Block Transition: -> k + 6 (end branching)
@@ -225,12 +225,12 @@ We need to first separate fib() into blocks
         // Handle result of fib(n - 1)
         // function call fib(n - 2)
     Block Transition: -> k (function call)
-    
+
     Block k + 5:
         // Handle result of fib(n - 2)
         // Handle return
     Block Transition: -> k + 7 (end branching)
-    
+
     Block k + 6:
         @RET = b  // We can incorporate this into Block 3 through optimization
     Block Transition: -> k + 7 (end branching)
@@ -277,7 +277,7 @@ Strategy 1 - Call Stack
     Block 4:
         @RET = 0
     Block Transition: -> @RP (end function call)
-    
+
     Block 5:
         b = 1
     Block Transition: -> 9 (end branching)
@@ -308,7 +308,7 @@ Strategy 1 - Call Stack
         n = n - 2
         @RP = 8
     Block Transition: -> 3 (function call)
-    
+
     Block 8:
         @SP -= 5
         LOAD_V(@SP, n)
@@ -319,7 +319,7 @@ Strategy 1 - Call Stack
         @TMP2 = @RET
         @RET = @TMP1 + @TMP2
     Block Transition: -> @RP (end function call)
-    
+
     Block 9:
         @RET = b  // We can incorporate this into Block 3 through optimization
     Block Transition: -> @RP (end function call)
@@ -353,7 +353,7 @@ Strategy 2 - Continuation Passing
 
     // Function Fib
     Block 3:
-        STORE_V(@SP, b)  
+        STORE_V(@SP, b)
         STORE_V(@SP + 1, k)  // k is undefined, but we still need to store it due to recursion (HOW???)
         @SP += 2
         u32 b = 0
@@ -363,7 +363,7 @@ Strategy 2 - Continuation Passing
     Block 4:
         @RET = 0
     Block Transition: -> 10 (end function call)
-    
+
     Block 5:
         b = 1
     Block Transition: -> 9 (end branching)
@@ -388,7 +388,7 @@ Strategy 2 - Continuation Passing
         n = n - 2
         @RP = 8
     Block Transition: -> 3 (function call)
-    
+
     Block 8:
         @SP -= 3
         LOAD_V(@SP, n)
@@ -397,7 +397,7 @@ Strategy 2 - Continuation Passing
         @TMP2 = @RET
         @RET = @TMP1 + @TMP2
     Block Transition: -> 9 (end branching)
-    
+
     Block 9:
         @RET = b  // We can incorporate this into Block 3 through optimization
     Block Transition: -> 9 (end branching)

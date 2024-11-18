@@ -7,7 +7,7 @@
 //     return a + b
 // ```
 //
-// 2. Compile it to bls12_377 
+// 2. Compile it to bls12_377
 // ```sh
 // zokrates compile -i program.zok --curve bls12_377
 // ```
@@ -24,7 +24,7 @@
 // ```
 //
 // 5. Generate the test case
-// 
+//
 // ```sh
 // cat > gm17.json << EOT
 // {

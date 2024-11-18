@@ -9,7 +9,7 @@ disable -r time
 BIN=./target/release/examples/circ
 export CARGO_MANIFEST_DIR=$(pwd)
 
-case "$OSTYPE" in 
+case "$OSTYPE" in
     darwin*)
         alias measure_time="gtime --format='%e seconds %M kB'"
     ;;

@@ -569,7 +569,7 @@ fn prime_field_constants_and_sqrt(
                 )
             }
         } else if (modulus % BigUint::from_str("8").unwrap()) == BigUint::from_str("5").unwrap() {
-            // Additional chain for (q + 3) // 8  
+            // Additional chain for (q + 3) // 8
             let mod_plus_3_over_8 = pow_fixed::generate(
                 &quote! {self},
                 (modulus + BigUint::from_str("3").unwrap()) >> 3,

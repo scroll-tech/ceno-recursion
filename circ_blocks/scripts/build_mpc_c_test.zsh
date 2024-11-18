@@ -4,12 +4,12 @@ set -ex
 
 disable -r time
 
-# cargo build --release --features c --example circ 
+# cargo build --release --features c --example circ
 
 BIN=./target/release/examples/circ
 export CARGO_MANIFEST_DIR=$(pwd)
 
-case "$OSTYPE" in 
+case "$OSTYPE" in
     darwin*)
         alias measure_time="gtime --format='%e seconds %M kB'"
     ;;
@@ -95,7 +95,7 @@ mpc_test 2 ./examples/C/mpc/unit_tests/function_tests/2pc_function_add.c
 mpc_test 2 ./examples/C/mpc/unit_tests/function_tests/function_arg_order.c
 
 
-# build struct tests 
+# build struct tests
 mpc_test 2 ./examples/C/mpc/unit_tests/struct_tests/2pc_struct_add.c
 # mpc_test 2 ./examples/C/mpc/unit_tests/struct_tests/2pc_struct_array_add.c
 

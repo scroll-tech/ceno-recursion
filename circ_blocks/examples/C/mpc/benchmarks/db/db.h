@@ -4,7 +4,7 @@
 
 #define LEN (LEN_A + LEN_B)
 #define ATT (ATT_A + ATT_B - 1) // Number of joined attributes
- 
+
 typedef int DT;
 
 typedef struct

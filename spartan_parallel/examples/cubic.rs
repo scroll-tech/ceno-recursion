@@ -2,7 +2,7 @@
 //! The example is described in detail [here].
 //!
 //! The R1CS for this problem is:
-//! Instance 1: 
+//! Instance 1:
 //! `Z0 * Z0 - Z1 = 0`
 //! `Z1 * Z0 - Z2 = 0`
 //! `(Z2 + Z0) * 1 - Z3 = 0`
@@ -142,7 +142,7 @@ fn produce_r1cs() -> (
 
   assignment_vars_matrix.push(assignment_vars);
   assignment_inputs_matrix.push(assignment_inputs);
-  
+
   // --
   // Instance 1
   // --

@@ -266,7 +266,7 @@ impl ProductProof {
     let z5 = self.z[4];
 
     let c = transcript.challenge_scalar(b"c");
-    
+
     if ProductProof::check_equality(&self.alpha, X, &c, gens_n, &z1, &z2)
       && ProductProof::check_equality(&self.beta, Y, &c, gens_n, &z3, &z4)
       && ProductProof::check_equality(

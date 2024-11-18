@@ -116,7 +116,7 @@ struct SparseMatEntry {
 
 // When adding the validity check, what does the sparse format look like?
 fn get_sparse_cons_with_v_check(
-    c: &(Lc, Lc, Lc), 
+    c: &(Lc, Lc, Lc),
     v_cnst: usize,
     io_relabel: impl FnOnce(usize) -> Option<usize> + std::marker::Copy,
     witness_relabel: impl FnOnce(usize) -> usize + std::marker::Copy,
@@ -224,9 +224,9 @@ struct CompileTimeKnowledge {
     block_num_phy_ops: Vec<usize>,
     block_num_vir_ops: Vec<usize>,
     max_ts_width: usize,
-  
+
     args: Vec<Vec<(Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>)>>,
-  
+
     input_liveness: Vec<bool>,
     func_input_width: usize,
     input_offset: usize,
@@ -343,7 +343,7 @@ struct RunTimeKnowledge {
     total_num_init_vir_mem_accesses: usize,
     total_num_phy_mem_accesses: usize,
     total_num_vir_mem_accesses: usize,
-  
+
     block_vars_matrix: Vec<Vec<VarsAssignment>>,
     exec_inputs: Vec<InputsAssignment>,
     // Initial memory state, in (addr, val, ls = STORE, ts = 0) pair, sorted by appearance in program input (the same as address order)
@@ -352,7 +352,7 @@ struct RunTimeKnowledge {
     addr_phy_mems_list: Vec<MemsAssignment>,
     addr_vir_mems_list: Vec<MemsAssignment>,
     addr_ts_bits_list: Vec<MemsAssignment>,
-  
+
     input: Vec<[u8; 32]>,
     input_stack: Vec<[u8; 32]>,
     input_mem: Vec<[u8; 32]>,
@@ -514,7 +514,7 @@ impl Ord for InstanceSortHelper {
     }
   }
   impl Eq for InstanceSortHelper {}
-  
+
 
 // --
 // Generate constraints and others
@@ -526,11 +526,11 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     println!("Generating Compiler Time Data...");
 
     let (
-        cs, 
-        func_input_width, 
-        num_inputs_unpadded, 
-        live_io_list, 
-        block_num_mem_accesses, 
+        cs,
+        func_input_width,
+        num_inputs_unpadded,
+        live_io_list,
+        block_num_mem_accesses,
         live_vm_list,
         input_liveness,
     ) = {
@@ -575,7 +575,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
             println!("VariableMetadata:");
             for v in &c.metadata.ordered_input_names() {
                 let m = &c.metadata.lookup(v);
-                println!("{}: vis: {}, round: {}, random: {}, committed: {}", 
+                println!("{}: vis: {}, round: {}, random: {}, committed: {}",
                     v, if m.vis == None {"PUBLIC"} else {if m.vis == Some(0) {"PROVER"} else {"VERIFIER"}}, m.round.to_string(), m.random.to_string(), m.committed.to_string());
             }
             println!("Output:");
@@ -621,7 +621,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
             r1cs
         };
         */
-        let num_witnesses = 
+        let num_witnesses =
             io_width // input + output
             + r1cs.num_vars()
             + VARS_PER_VM_ACCESS * block_num_mem_accesses[block_num].1 - live_vm_list[block_num].len() // remove live vm vars, add all vm vars
@@ -635,7 +635,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         block_num += 1;
         block_name = format!("Block_{}", block_num);
     }
-    
+
     let max_num_witnesses = max_num_witnesses.next_power_of_two();
     let max_num_cons = max_num_cons.next_power_of_two();
 
@@ -720,10 +720,10 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     // Collect all necessary info
     let block_num_instances = r1cs_list.len();
     let num_vars = max_num_witnesses;
-    let args: Vec<Vec<(Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>)>> = 
+    let args: Vec<Vec<(Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>)>> =
         sparse_mat_entry.iter().map(|v| v.iter().map(|i| (
-            i.args_a.clone(), 
-            i.args_b.clone(), 
+            i.args_a.clone(),
+            i.args_b.clone(),
             i.args_c.clone()
         )).collect()).collect();
     let input_block_num = 0;
@@ -731,7 +731,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 
     let live_io_size = live_io_list.iter().map(|i| i.0.len() + i.1.len()).collect();
     let live_mem_size = (0..live_vm_list.len()).map(|i| VARS_PER_ST_ACCESS * block_num_mem_accesses[i].0 + live_vm_list[i].len()).collect();
-    
+
     (CompileTimeKnowledge {
         block_num_instances,
         num_vars,
@@ -741,7 +741,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         block_num_vir_ops: block_num_mem_accesses.iter().map(|i| i.1).collect(),
         max_ts_width: MAX_TS_WIDTH,
         args,
-        
+
         input_liveness,
         func_input_width,
         input_offset: NUM_RESERVED_VARS,
@@ -780,14 +780,14 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     // bl_outputs are used to fill in io part of vars
     // bl_io_map is used to compute witness part of vars
     let (
-        _, 
-        block_id_list, 
-        bl_outputs_list, 
-        bl_mems_list, 
+        _,
+        block_id_list,
+        bl_outputs_list,
+        bl_mems_list,
         bl_io_map_list,
         init_phy_mem_list,
         init_vir_mem_list,
-        phy_mem_list, 
+        phy_mem_list,
         vir_mem_list,
     ) = {
         let inputs = zsharp::Inputs {
@@ -937,12 +937,12 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     let mut init_phy_mems_list = Vec::new();
     for i in 0..init_phy_mem_list.len() {
         let m = &init_phy_mem_list[i];
-        
+
         let mut mem: Vec<Integer> = vec![zero.clone(); 4];
         mem[0] = one.clone();
         mem[2] = m[0].as_integer().unwrap();
         mem[3] = m[1].as_integer().unwrap();
-        
+
         init_phy_mems_list.push(Assignment::new(&mem.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap())
     }
     let mut init_vir_mems_list = Vec::new();
@@ -950,12 +950,12 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     // Also no need for D since this is not a coherence check
     for i in 0..init_vir_mem_list.len() {
         let m = &init_vir_mem_list[i];
-        
+
         let mut mem: Vec<Integer> = vec![zero.clone(); 4];
         mem[0] = one.clone();
         mem[2] = m[0].as_integer().unwrap();
         mem[3] = m[1].as_integer().unwrap();
-        
+
         init_vir_mems_list.push(Assignment::new(&mem.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap())
     }
 
@@ -988,14 +988,14 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     let mut ts_bits_last: Vec<Integer> = Vec::new();
     for i in 0..vir_mem_list.len() {
         let m = &vir_mem_list[i];
-        
+
         let mut mem: Vec<Integer> = vec![zero.clone(); 8];
         mem[0] = one.clone();
         mem[2] = m[0].as_integer().unwrap();
         mem[3] = m[1].as_integer().unwrap();
         mem[4] = m[2].as_integer().unwrap();
         mem[5] = m[3].as_integer().unwrap();
-        
+
         let ts_bits: Vec<Integer> = vec![zero.clone(); (MAX_TS_WIDTH + 2).next_power_of_two()];
         // D1, D2, D3, D4
         if i != 0 {
@@ -1068,7 +1068,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         total_num_init_vir_mem_accesses,
         total_num_phy_mem_accesses,
         total_num_vir_mem_accesses,
-      
+
         block_vars_matrix,
         exec_inputs,
         init_phy_mems_list,
@@ -1076,7 +1076,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
         addr_phy_mems_list,
         addr_vir_mems_list,
         addr_ts_bits_list,
-      
+
         input: func_inputs,
         input_stack,
         input_mem,
@@ -1114,8 +1114,8 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
   // --
   // BLOCK INSTANCES
   let (block_num_vars, block_num_cons, block_num_non_zero_entries, mut block_inst) = Instance::gen_block_inst::<true>(
-    block_num_instances_bound, 
-    num_vars, 
+    block_num_instances_bound,
+    num_vars,
     &ctk.args,
     num_inputs_unpadded,
     &block_num_phy_ops,
@@ -1128,7 +1128,7 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
   // Pairwise INSTANCES
   // CONSIS_CHECK & PHY_MEM_COHERE
   let (pairwise_check_num_vars, pairwise_check_num_cons, pairwise_check_num_non_zero_entries, mut pairwise_check_inst) = Instance::gen_pairwise_check_inst::<true>(
-    ctk.max_ts_width, 
+    ctk.max_ts_width,
     mem_addr_ts_bits_size,
     rtk.consis_num_proofs,
     rtk.total_num_phy_mem_accesses,
@@ -1139,7 +1139,7 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
   // PERM INSTANCES
   // PERM_ROOT
   let (perm_root_num_cons, perm_root_num_non_zero_entries, perm_root_inst) = Instance::gen_perm_root_inst::<true>(
-    num_inputs_unpadded, 
+    num_inputs_unpadded,
     num_ios,
     rtk.consis_num_proofs,
     rtk.total_num_phy_mem_accesses,
@@ -1157,7 +1157,7 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
   let perm_root_gens = SNARKGens::new(perm_root_num_cons, 8 * num_ios, 1, perm_root_num_non_zero_entries);
   // Only use one version of gens_r1cs_sat
   let vars_gens = SNARKGens::new(block_num_cons, TOTAL_NUM_VARS_BOUND, block_num_instances_bound.next_power_of_two(), block_num_non_zero_entries).gens_r1cs_sat;
-  
+
   // create a commitment to the R1CS instance
   println!("Comitting Circuits...");
   // block_comm_map records the sparse_polys committed in each commitment
@@ -1193,7 +1193,7 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
     &rtk.input,
     &rtk.output,
     rtk.output_exec_num,
-    
+
     num_vars,
     num_ios,
     max_block_num_phy_ops,
@@ -1212,7 +1212,7 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
     &block_comm_list,
     &block_decomm_list,
     &block_gens,
-    
+
     rtk.consis_num_proofs,
     rtk.total_num_init_phy_mem_accesses,
     rtk.total_num_init_vir_mem_accesses,
@@ -1265,16 +1265,16 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
     mem_addr_ts_bits_size,
     num_inputs_unpadded,
     &ctk.num_vars_per_block,
-    
-    block_num_instances_bound, 
-    rtk.block_max_num_proofs, 
-    &block_num_proofs, 
+
+    block_num_instances_bound,
+    rtk.block_max_num_proofs,
+    &block_num_proofs,
     block_num_cons,
     &block_comm_map,
     &block_comm_list,
     &block_gens,
 
-    rtk.consis_num_proofs, 
+    rtk.consis_num_proofs,
     rtk.total_num_init_phy_mem_accesses,
     rtk.total_num_init_vir_mem_accesses,
     rtk.total_num_phy_mem_accesses,
@@ -1291,7 +1291,7 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
     &mut verifier_transcript
   ).is_ok());
   println!("proof verification successful!");
-}  
+}
 
 fn main() {
     env_logger::Builder::from_default_env()
@@ -1308,7 +1308,7 @@ fn main() {
     let compiler_start = Instant::now();
     let benchmark_name = options.path.as_os_str().to_str().unwrap();
     let path = PathBuf::from(format!("../zok_tests/benchmarks/{}.zok", benchmark_name));
-    let (ctk, live_io_size, live_mem_size, prover_data_list) = 
+    let (ctk, live_io_size, live_mem_size, prover_data_list) =
         get_compile_time_knowledge::<false>(path.clone(), &options);
     let compiler_time = compiler_start.elapsed();
 
@@ -1334,7 +1334,7 @@ fn main() {
         let _ = buffer.trim();
         while buffer != "END".to_string() {
         let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
-        // split is either of form [VAR, VAL] or [VAR, "[", ENTRY_0, ENTRY_1, ..., "]"] 
+        // split is either of form [VAR, VAL] or [VAR, "[", ENTRY_0, ENTRY_1, ..., "]"]
         if let Ok(val) = Integer::from_str_radix(&split[1], 10) {
             entry_regs.push(val);
             entry_stacks.push(vec![]);
@@ -1386,15 +1386,15 @@ fn main() {
     // Generate Witnesses
     // --
     let rtk = get_run_time_knowledge::<false>(
-        path.clone(), 
-        &options, 
-        entry_regs, 
-        entry_stacks, 
-        entry_arrays, 
+        path.clone(),
+        &options,
+        entry_regs,
+        entry_stacks,
+        entry_arrays,
         entry_witnesses,
-        &ctk, 
-        live_io_size, 
-        live_mem_size, 
+        &ctk,
+        live_io_size,
+        live_mem_size,
         prover_data_list,
         stack_alloc_counter,
         mem_alloc_counter

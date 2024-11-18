@@ -125,7 +125,7 @@ impl<'ast> ZGen<'ast> {
                 all_vars.insert(key, value);
             }
         }
-        
+
         for (key, value) in all_vars {
             print!("{} = ", pretty_name(key));
             value.pretty(&mut std::io::stdout().lock()).unwrap_or({
@@ -222,7 +222,7 @@ impl<'ast> ZGen<'ast> {
             return Err(format!("Invalid entry_bl: entry_bl exceeds block size."));
         }
 
-        // We assume that all errors has been handled in bl_gen functions        
+        // We assume that all errors has been handled in bl_gen functions
         debug!("Block Eval Const entry: {}", entry_bl);
 
         // How many total blocks have we executed?
@@ -239,7 +239,7 @@ impl<'ast> ZGen<'ast> {
         let mut terminated = false;
         let mut init_phy_mem_list: Vec<MemOp> = Vec::new();
         let mut init_vir_mem_list: Vec<MemOp> = Vec::new();
-        
+
         // Process input variables & arrays
         // Add %BN, %SP, and %AS to the front of inputs
         // Note: %SP and %AS are handled by the input parser and is already present in entry_regs
@@ -325,7 +325,7 @@ impl<'ast> ZGen<'ast> {
             }
             i += 1;
         }
-        
+
         // The next witness to use
         let mut witness_count = 0;
         // Execute program
@@ -416,7 +416,7 @@ impl<'ast> ZGen<'ast> {
                 self.print_all_vars_in_scope();
                 print!("%PHY: [");
                 for c in &phy_mem {
-                    if let Some(c) = c { 
+                    if let Some(c) = c {
                         c.pretty(&mut std::io::stdout().lock())
                         .expect("error pretty-printing value");
                     } else {
@@ -427,7 +427,7 @@ impl<'ast> ZGen<'ast> {
                 println!("]");
                 print!("%VIR: [");
                 for c in &vir_mem {
-                    if let Some(c) = c { 
+                    if let Some(c) = c {
                         c.pretty(&mut std::io::stdout().lock())
                         .expect("error pretty-printing value");
                     } else {
@@ -452,7 +452,7 @@ impl<'ast> ZGen<'ast> {
             bl_exec_state[tr_size].wit_op = wit_op;
             tr_size += 1;
         }
-        
+
         // Record the final transition state
         for i in 1..io_size {
             bl_exec_state[tr_size - 1].reg_out[i] = self.cvar_lookup(&format!("%o{:06}", i));
@@ -493,7 +493,7 @@ impl<'ast> ZGen<'ast> {
     // ret[4]: Pairs of [addr, data] for all physical (scoping) memory operations in the block
     // ret[5]: Quadruples of [addr, data, ls, ts] for all virtual memory operations in the block
     fn bl_eval_impl_(
-        &self, 
+        &self,
         bl: &Block<'ast>,
         mut phy_mem: Vec<Option<T>>,
         mut vir_mem: Vec<Option<T>>,
@@ -515,7 +515,7 @@ impl<'ast> ZGen<'ast> {
         match &bl.terminator {
             BlockTerminator::Transition(e) => {
                 match self.t_to_usize(self.expr_impl_::<true>(&e)?) {
-                    Ok(nb) => { return Ok((nb, phy_mem, vir_mem, false, phy_mem_op, vir_mem_op, wit_op, witness_count)); }, 
+                    Ok(nb) => { return Ok((nb, phy_mem, vir_mem, false, phy_mem_op, vir_mem_op, wit_op, witness_count)); },
                     _ => { return Err("Evaluation failed: block transition evaluated to an invalid block label".to_string()); }
                 }
             }
@@ -532,7 +532,7 @@ impl<'ast> ZGen<'ast> {
         mut phy_mem_op: Vec<MemOp>,
         mut ro_mem_op: Vec<MemOp>,
         mut vir_mem_op: Vec<MemOp>,
-        mut wit_op: Vec<T>, 
+        mut wit_op: Vec<T>,
         entry_witnesses: &Vec<Integer>,
         mut witness_count: usize,
     ) -> Result<(Vec<Option<T>>, Vec<Option<T>>, Vec<MemOp>, Vec<MemOp>, Vec<MemOp>, Vec<T>, usize), String> {
@@ -582,7 +582,7 @@ impl<'ast> ZGen<'ast> {
                     if val_t.type_() != &Ty::Field {
                         val_t = uint_to_field(val_t).unwrap();
                     }
-                    phy_mem_op.push(MemOp::new_phy(bp + offset, self.usize_to_field(bp + offset)?, val_t));         
+                    phy_mem_op.push(MemOp::new_phy(bp + offset, self.usize_to_field(bp + offset)?, val_t));
                 }
                 BlockContent::ArrayInit((arr, _, len_expr, read_only)) => {
                     // Declare the array as a pointer (field), set to %SP or %AS
@@ -617,8 +617,8 @@ impl<'ast> ZGen<'ast> {
                     let addr = self.t_to_usize(addr_t.clone())?;
                     // update vir_mem, pad if necessary
                     if *read_only {
-                        if addr >= phy_mem.len() { 
-                            phy_mem.extend(vec![None; addr + 1 - phy_mem.len()]); 
+                        if addr >= phy_mem.len() {
+                            phy_mem.extend(vec![None; addr + 1 - phy_mem.len()]);
                         }
                         phy_mem[addr] = Some(val_t.clone());
 
@@ -633,8 +633,8 @@ impl<'ast> ZGen<'ast> {
                             val_t,
                         ));
                     } else {
-                        if addr >= vir_mem.len() { 
-                            vir_mem.extend(vec![None; addr + 1 - vir_mem.len()]); 
+                        if addr >= vir_mem.len() {
+                            vir_mem.extend(vec![None; addr + 1 - vir_mem.len()]);
                         }
                         vir_mem[addr] = Some(val_t.clone());
 
@@ -721,7 +721,7 @@ impl<'ast> ZGen<'ast> {
                         }))).unwrap();
                         let ts_t = self.cvar_lookup(W_TS).ok_or(format!("STORE failed: %TS is uninitialized."))?;
                         let ts = self.t_to_usize(ts_t.clone())?;
-    
+
                         vir_mem_op.push(MemOp::new_vir(
                             addr,
                             addr_t,
@@ -777,7 +777,7 @@ impl<'ast> ZGen<'ast> {
                         }))).unwrap();
                         let ts_t = self.cvar_lookup(W_TS).ok_or(format!("STORE failed: %TS is uninitialized."))?;
                         let ts = self.t_to_usize(ts_t.clone())?;
-    
+
                         vir_mem_op.push(MemOp::new_vir(
                             addr,
                             addr_t,

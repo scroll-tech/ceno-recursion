@@ -292,7 +292,7 @@ impl R1CSProof {
 
     // derive the verifier's challenge \tau
     let timer_tmp = Timer::new("prove_vec_mult");
-    let (num_rounds_p, num_rounds_q, num_rounds_x, num_rounds_w, num_rounds_y) = 
+    let (num_rounds_p, num_rounds_q, num_rounds_x, num_rounds_w, num_rounds_y) =
       (num_instances.next_power_of_two().log_2(), max_num_proofs.log_2(), num_cons.log_2(), num_witness_secs.log_2(), max_num_inputs.log_2());
     let tau_p = transcript.challenge_vector(b"challenge_tau_p", num_rounds_p);
     let tau_q = transcript.challenge_vector(b"challenge_tau_q", num_rounds_q);
@@ -304,13 +304,13 @@ impl R1CSProof {
     let mut poly_tau_x = DensePolynomial::new(EqPolynomial::new(tau_x).evals());
     let (mut poly_Az, mut poly_Bz, mut poly_Cz) =
       inst.multiply_vec_block(
-        num_instances, 
-        num_proofs.clone(), 
-        max_num_proofs, 
-        num_inputs.clone(), 
-        max_num_inputs, 
-        num_cons, 
-        block_num_cons.clone(), 
+        num_instances,
+        num_proofs.clone(),
+        max_num_proofs,
+        num_inputs.clone(),
+        max_num_inputs,
+        num_cons,
+        block_num_cons.clone(),
         &z_mat
       );
     timer_tmp.stop();
@@ -424,11 +424,11 @@ impl R1CSProof {
       let evals_rx = EqPolynomial::new(rx.clone()).evals();
       let (evals_A, evals_B, evals_C) =
       inst.compute_eval_table_sparse_disjoint_rounds(
-        num_instances, 
-        inst.get_inst_num_cons(), 
-        num_witness_secs, 
-        max_num_inputs, 
-        &num_inputs, 
+        num_instances,
+        inst.get_inst_num_cons(),
+        num_witness_secs,
+        max_num_inputs,
+        &num_inputs,
         &evals_rx
       );
 
@@ -665,7 +665,7 @@ impl R1CSProof {
     // Assert num_witness_secs is valid
     assert!(num_witness_secs >= 1 && num_witness_secs <= 16);
 
-    let (num_rounds_p, num_rounds_q, num_rounds_x, num_rounds_w, num_rounds_y) = 
+    let (num_rounds_p, num_rounds_q, num_rounds_x, num_rounds_w, num_rounds_y) =
       (num_instances.next_power_of_two().log_2(), max_num_proofs.log_2(), num_cons.log_2(), num_witness_secs.log_2(), max_num_inputs.log_2());
 
     // derive the verifier's challenge tau
@@ -817,7 +817,7 @@ impl R1CSProof {
     let mut expected_comm_vars_list = Vec::new();
     for p in 0..num_instances {
       let wit_sec_p = |i: usize| if witness_secs[i].num_proofs.len() == 1 { 0 } else { p };
-      let c = |i: usize| 
+      let c = |i: usize|
         if witness_secs[i].num_inputs[wit_sec_p(i)] >= max_num_inputs {
           self.comm_vars_at_ry_list[i][wit_sec_p(i)].decompress().unwrap()
         } else {
@@ -945,9 +945,9 @@ impl R1CSProof {
     let z_len = max_input_rows * base_input_size;
 
     // derive the verifier's challenge tau
-    let (num_rounds_p, num_rounds_q, num_rounds_xb, num_rounds_yb) = 
+    let (num_rounds_p, num_rounds_q, num_rounds_xb, num_rounds_yb) =
       (num_proofs.next_power_of_two().log_2(), max_input_rows.log_2(), base_constraint_size.log_2(), base_input_size.log_2());
-      
+
     let tau_p = transcript.challenge_vector(b"challenge_tau_p", num_rounds_p);
     let tau_q = transcript.challenge_vector(b"challenge_tau_q", num_rounds_q);
     let tau_xb = transcript.challenge_vector(b"challenge_tau_x", num_rounds_xb);
@@ -1065,10 +1065,10 @@ impl R1CSProof {
       let evals_rx = EqPolynomial::new(rx.clone()).evals();
       let (evals_A, evals_B, evals_C) =
         inst.compute_eval_table_sparse_single(
-          1, 
-          max_input_rows, 
-          max_input_rows_bound, 
-          inst.get_num_cons(), 
+          1,
+          max_input_rows,
+          max_input_rows_bound,
+          inst.get_num_cons(),
           z_len,
           &evals_rx
         );
@@ -1085,7 +1085,7 @@ impl R1CSProof {
     // Here we have p length-q*y Z, want to bind to rp
     let mut n = num_proofs.next_power_of_two() / 2;
     let mut z_list = z_list.clone();
-  
+
     for r in &rp {
       for p in 0..n {
         for x in 0..z_list[p].len() {
@@ -1158,7 +1158,7 @@ impl R1CSProof {
       transcript,
       random_tape,
     );
-    
+
     // Bind the resulting witness list to rp
     // poly_vars stores the result of each witness matrix bounded to (rq_short ++ ry)
     // but we want to bound them to (rq ++ ry)
@@ -1240,7 +1240,7 @@ impl R1CSProof {
     transcript.append_protocol_name(R1CSProof::protocol_name());
 
     // derive the verifier's challenge tau
-    let (num_rounds_p, num_rounds_q, num_rounds_xb, num_rounds_yb) = 
+    let (num_rounds_p, num_rounds_q, num_rounds_xb, num_rounds_yb) =
       (num_proofs.next_power_of_two().log_2(), max_input_rows.log_2(), base_constraint_size.log_2(), base_input_size.log_2());
     let tau_p = transcript.challenge_vector(b"challenge_tau_p", num_rounds_p);
     let tau_q = transcript.challenge_vector(b"challenge_tau_q", num_rounds_q);

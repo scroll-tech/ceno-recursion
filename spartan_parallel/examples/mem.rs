@@ -23,10 +23,10 @@
 //!     if i != 3:                      else:
 //!       b = 1                           b = 2
 //!     else:                           }
-//!       b = 2                           
+//!       b = 2
 //!   }
 //! Note: take caution when translating STORE(0, 1) into constraints. If an execution of the block is invalid, this could cause a problem!
-//! 
+//!
 //! Converting each block to constraints:
 //!    Block 0:                        Block 1:
 //!  0   v = v * v                       v = v * v
@@ -41,11 +41,11 @@
 //!  9   0 = V1 - 2                      0 = B0 * (b1 - 1)
 //! 10   0 = B0 * (Z1 - 1)               0 = (1 - B0) * (i1 - 3)
 //! 11   0 = B0 * (b1 - 1)               0 = (1 - B0) * (b1 - 2)
-//! 12   0 = (1 - B0) * (i0 - 3)                         
-//! 13   0 = (1 - B0) * (b1 - 2)               
+//! 12   0 = (1 - B0) * (i0 - 3)
+//! 13   0 = (1 - B0) * (b1 - 2)
 //! 14   i1 = i0
 //! 15   s1 = s0
-//! 
+//!
 //! Program States
 //! The first entry of the witness is a copy of the valid bit, followed by a list of addresses and then a list of values
 //! Put all memory states at the front of the witnesses
@@ -129,7 +129,7 @@ fn produce_r1cs() -> (
   // --
   // COMPILE TIME KNOWLEDGE
   // --
-  
+
   // num_vars should be consistent accross the instances
   // everything else is instance-specific
   // Divide inputs into (1, input, 1, output)
@@ -274,8 +274,8 @@ fn produce_r1cs() -> (
   // --
 
   let (
-    block_vars_matrix, 
-    block_inputs_matrix, 
+    block_vars_matrix,
+    block_inputs_matrix,
     exec_inputs,
     addr_mems_list
   ) = {
@@ -327,7 +327,7 @@ fn produce_r1cs() -> (
       assignment_vars.push(next_block_assignment_vars);
       assignment_inputs.push(next_block_assignment_inputs.clone());
       exec_inputs.push(next_block_assignment_inputs);
-      
+
       (assignment_vars, assignment_inputs)
     };
     block_vars_matrix.push(assignment_vars);
@@ -384,7 +384,7 @@ fn produce_r1cs() -> (
       total_num_mem_accesses_bound,
 
       args,
-      
+
       func_input_width: 2,
       input_offset: 2,
       input_block_num,
@@ -513,7 +513,7 @@ fn main() {
   let (mem_addr_comb_comm, mem_addr_comb_decomm) = SNARK::encode(&mem_addr_comb_inst, &mem_addr_comb_gens);
 
   // Mask vector for mem_extract
-  let (mem_block_mask, mem_block_poly_mask_list, mem_block_comm_mask_list) = 
+  let (mem_block_mask, mem_block_poly_mask_list, mem_block_comm_mask_list) =
     Instance::gen_mem_extract_mask(block_num_instances, max_block_num_mem_accesses.next_power_of_two(), &block_num_mem_accesses, &vars_gens);
 
   // produce a proof of satisfiability
@@ -527,7 +527,7 @@ fn main() {
     &rtk.input,
     &rtk.output,
     rtk.output_exec_num,
-    
+
     num_vars,
     num_ios,
     num_inputs_unpadded,
@@ -539,7 +539,7 @@ fn main() {
     &block_comm,
     &block_decomm,
     &block_gens,
-    
+
     rtk.consis_num_proofs,
     &consis_comb_inst,
     &consis_comb_comm,
@@ -620,18 +620,18 @@ fn main() {
     num_ios,
     num_inputs_unpadded,
     total_num_proofs_bound,
-    block_num_instances, 
-    rtk.block_max_num_proofs, 
-    &rtk.block_num_proofs, 
-    block_num_cons, 
+    block_num_instances,
+    rtk.block_max_num_proofs,
+    &rtk.block_num_proofs,
+    block_num_cons,
     &block_comm,
     &block_gens,
 
-    rtk.consis_num_proofs, 
-    consis_comb_num_cons, 
+    rtk.consis_num_proofs,
+    consis_comb_num_cons,
     &consis_comb_comm,
     &consis_comb_gens,
-    consis_check_num_cons_base, 
+    consis_check_num_cons_base,
     &consis_check_comm,
     &consis_check_gens,
 

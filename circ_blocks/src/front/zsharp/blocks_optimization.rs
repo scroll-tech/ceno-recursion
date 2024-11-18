@@ -85,11 +85,11 @@ fn print_cfg(
 }
 
 fn print_bls(bls: &Vec<Block>, entry_bl: &usize) {
-    println!("Entry block: {entry_bl}");  
+    println!("Entry block: {entry_bl}");
     for b in bls {
         b.pretty();
         println!("");
-    }    
+    }
 }
 
 // --
@@ -748,9 +748,9 @@ fn term_to_instr<'ast>(
     // Any reference to rp@ should result in the termination of the conversion
     match term {
         Expression::Ternary(t) => {
-            let (mut left_instr, left_cons_count, left_ro_count, left_vm_count, left_repeat) = 
+            let (mut left_instr, left_cons_count, left_ro_count, left_vm_count, left_repeat) =
                 term_to_instr(bls, &t.second, instr_list, cons_count_list, ro_count_list, vm_count_list, cur_bl);
-            let (mut right_instr, right_cons_count, right_ro_count, right_vm_count, right_repeat) = 
+            let (mut right_instr, right_cons_count, right_ro_count, right_vm_count, right_repeat) =
                 term_to_instr(bls, &t.third, instr_list, cons_count_list, ro_count_list, vm_count_list, cur_bl);
 
             // Assert that no witness statements are within branches as that would be confusing
@@ -790,10 +790,10 @@ fn term_to_instr<'ast>(
             ));
 
             (
-                vec![branch_inst; left_repeat], 
-                max(left_cons_count, right_cons_count) * left_repeat, 
-                max(left_ro_count, right_ro_count) * left_repeat, 
-                max(left_vm_count, right_vm_count) * left_repeat, 
+                vec![branch_inst; left_repeat],
+                max(left_cons_count, right_cons_count) * left_repeat,
+                max(left_ro_count, right_ro_count) * left_repeat,
+                max(left_vm_count, right_vm_count) * left_repeat,
                 1
             )
         }
@@ -853,8 +853,8 @@ fn new_witness_map() -> BTreeMap<String, usize> {
 // otherwise, update X to %<reg_size> and add X to reg_map
 // Returns the new statement and new reg_map
 fn var_to_reg_stmt<'ast>(
-    s: &Statement<'ast>, 
-    mut reg_map: BTreeMap<String, usize>, 
+    s: &Statement<'ast>,
+    mut reg_map: BTreeMap<String, usize>,
 ) -> (Statement<'ast>, BTreeMap<String, usize>) {
     match s {
         Statement::Return(_) => {
@@ -961,8 +961,8 @@ fn var_to_reg_stmt<'ast>(
 // otherwise, update X to %<reg_size> and add X to reg_map
 // Returns the new expression and new reg_map
 fn var_to_reg_expr<'ast>(
-    e: &Expression<'ast>, 
-    mut reg_map: BTreeMap<String, usize>, 
+    e: &Expression<'ast>,
+    mut reg_map: BTreeMap<String, usize>,
 ) -> (Expression<'ast>, BTreeMap<String, usize>) {
     match e {
         Expression::Ternary(t) => {
@@ -1041,7 +1041,7 @@ fn var_to_reg_expr<'ast>(
 }
 
 fn var_to_reg_id_expr<'ast>(
-    ie: &IdentifierExpression<'ast>, 
+    ie: &IdentifierExpression<'ast>,
     mut reg_map: BTreeMap<String, usize>,
 ) -> (IdentifierExpression<'ast>, BTreeMap<String, usize>) {
     let var_name: String;
@@ -1058,7 +1058,7 @@ fn var_name_to_reg_id_expr<const MODE: usize>(
     mut reg_map: BTreeMap<String, usize>,
 ) -> (String, BTreeMap<String, usize>, usize) {
     let reg_size = reg_map.len();
-    
+
     if !reg_map.contains_key(&var_name) {
         reg_map.insert(var_name.clone(), reg_size);
     }
@@ -1076,7 +1076,7 @@ fn var_name_to_reg_id_expr<const MODE: usize>(
 // If in a branch, convert every TyDef into Assg and record declared variables in gen_map_branch
 fn tydef_to_assignee_stmt<'ast, const IN_BRANCH: bool>(
     s: &Statement<'ast>,
-    mut gen_set: BTreeSet<String>, 
+    mut gen_set: BTreeSet<String>,
 ) -> (Statement<'ast>, BTreeSet<String>, BTreeMap<String, Ty>) {
     let mut gen_map_branch = BTreeMap::new();
     match s {
@@ -1104,7 +1104,7 @@ fn tydef_to_assignee_stmt<'ast, const IN_BRANCH: bool>(
                                 accesses: Vec::new(),
                                 span: Span::new("", 0, 0).unwrap()
                             }));
-                        } 
+                        }
                         // Variable has not been declared, in a branch
                         else if IN_BRANCH {
                             new_lhs.push(TypedIdentifierOrAssignee::Assignee(Assignee {
@@ -1267,9 +1267,9 @@ fn la_inst<'ast>(
             }
             BlockContent::Branch((cond, if_inst, else_inst)) => {
                 // Liveness of branches
-                let (mut new_if_state, mut new_if_state_per_call_trace, new_if_inst) = 
+                let (mut new_if_state, mut new_if_state_per_call_trace, new_if_inst) =
                     la_inst(state.clone(), state_per_call_trace.clone(), if_inst);
-                let (new_else_state, new_else_state_per_call_trace, new_else_inst) = 
+                let (new_else_state, new_else_state_per_call_trace, new_else_inst) =
                     la_inst(state.clone(), state_per_call_trace.clone(), else_inst);
                 new_if_state.extend(new_else_state);
                 assert_eq!(new_if_state_per_call_trace.len(), new_else_state_per_call_trace.len());
@@ -1623,7 +1623,7 @@ impl VarSpillInfo {
         let fn_name = var_segs[1].to_string();
         let scope: usize = if var_segs.len() < 3 { 0 } else { var_segs[2].to_string().parse().unwrap() };
         let version: usize = if var_segs.len() < 4 { 0 } else { var_segs[3].to_string().parse().unwrap() };
-    
+
         VarSpillInfo {
             var_name,
             fn_name,
@@ -1661,12 +1661,12 @@ impl<'ast> ZGen<'ast> {
         if !no_opt {
             // Construct CFG
             let (
-                successor, 
-                predecessor, 
-                exit_bls, 
-                entry_bls_fn, 
-                successor_fn, 
-                predecessor_fn, 
+                successor,
+                predecessor,
+                exit_bls,
+                entry_bls_fn,
+                successor_fn,
+                predecessor_fn,
                 exit_bls_fn,
                 _,
                 _
@@ -1683,12 +1683,12 @@ impl<'ast> ZGen<'ast> {
 
             // Reconstruct CFG
             let (
-                successor, 
-                predecessor, 
-                exit_bls, 
-                _, 
-                _, 
-                predecessor_fn, 
+                successor,
+                predecessor,
+                exit_bls,
+                _,
+                _,
+                predecessor_fn,
                 _,
                 _,
                 _
@@ -1704,12 +1704,12 @@ impl<'ast> ZGen<'ast> {
 
             // Reconstruct CFG
             let (
-                successor, 
-                predecessor, 
-                exit_bls, 
-                entry_bls_fn, 
-                successor_fn, 
-                predecessor_fn, 
+                successor,
+                predecessor,
+                exit_bls,
+                entry_bls_fn,
+                successor_fn,
+                predecessor_fn,
                 exit_bls_fn,
                 _,
                 call_exit_entry_map
@@ -1729,12 +1729,12 @@ impl<'ast> ZGen<'ast> {
             bls = self.resolve_block_merge(bls, &successor, &successor_fn, &predecessor_fn, &exit_bls_fn);
             // Reconstruct CFG
             let (
-                successor, 
-                predecessor, 
-                exit_bls, 
-                entry_bls_fn, 
-                successor_fn, 
-                predecessor_fn, 
+                successor,
+                predecessor,
+                exit_bls,
+                entry_bls_fn,
+                successor_fn,
+                predecessor_fn,
                 exit_bls_fn,
                 _,
                 _
@@ -1751,12 +1751,12 @@ impl<'ast> ZGen<'ast> {
 
             // Reconstruct CFG
             let (
-                successor, 
-                predecessor, 
-                exit_bls, 
-                entry_bls_fn, 
-                successor_fn, 
-                predecessor_fn, 
+                successor,
+                predecessor,
+                exit_bls,
+                entry_bls_fn,
+                successor_fn,
+                predecessor_fn,
                 exit_bls_fn,
                 _,
                 _
@@ -1779,12 +1779,12 @@ impl<'ast> ZGen<'ast> {
 
         // Construct CFG
         let (
-            successor, 
-            mut predecessor, 
-            exit_bls, 
-            entry_bls_fn, 
-            successor_fn, 
-            predecessor_fn, 
+            successor,
+            mut predecessor,
+            exit_bls,
+            entry_bls_fn,
+            successor_fn,
+            predecessor_fn,
             exit_bls_fn,
             _,
             _
@@ -1806,12 +1806,12 @@ impl<'ast> ZGen<'ast> {
 
         // Construct CFG again after DBE
         let (
-            successor, 
-            predecessor, 
-            exit_bls, 
-            entry_bls_fn, 
-            successor_fn, 
-            predecessor_fn, 
+            successor,
+            predecessor,
+            exit_bls,
+            entry_bls_fn,
+            successor_fn,
+            predecessor_fn,
             exit_bls_fn,
             _,
             call_exit_entry_map
@@ -1849,12 +1849,12 @@ impl<'ast> ZGen<'ast> {
                 if rp_slot == 0 || IS_RP {
                     successor_fn[cur_bl].insert(*tmp_bl);
                 }
-                
+
                 // Add next_bl to successor of cur_bl if not RP
                 if !IS_RP {
                     successor[cur_bl].insert(*tmp_bl);
                 }
-                
+
                 let old_rp_successor = rp_successor[*tmp_bl].clone();
                 // If rp_slot is not 0, append rp_slot to rp_successor of tmp_bl
                 // unless we are dealing with the RP block.
@@ -1867,7 +1867,7 @@ impl<'ast> ZGen<'ast> {
                     // No function call
                     for i in rp_successor[cur_bl].clone().iter() {
                         rp_successor[*tmp_bl].insert(i.clone());
-                    }     
+                    }
                 }
 
                 // If next_bl is not visited or if rp_successor of tmp_bl changes,
@@ -1899,7 +1899,7 @@ impl<'ast> ZGen<'ast> {
         entry_bl: usize
     ) -> (Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, BTreeSet<usize>, BTreeSet<usize>, Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, BTreeSet<usize>, BTreeMap<usize, usize>, BTreeMap<usize, usize>) {
         let bl_size = bls.len();
-        
+
         // list of all blocks that ends with ProgTerm
         let mut exit_bls: BTreeSet<usize> = BTreeSet::new();
 
@@ -1908,7 +1908,7 @@ impl<'ast> ZGen<'ast> {
         entry_bl_fn.insert(entry_bl);
         // list of all blocks that ends with ProgTerm or Rp
         let mut exit_bls_fn: BTreeSet<usize> = BTreeSet::new();
-        
+
         // Start from entry_bl, do a BFS, add all blocks in its terminator to its successor
         // When we reach a function call (i.e., rp@ is set), add rp@ to the callee's rp_successor
         // Propagate rp_successor until we reach an rp() terminator, at that point, append rp_successor to successor
@@ -1938,7 +1938,7 @@ impl<'ast> ZGen<'ast> {
             // By definition, rp@ cannot be 0
             // There shouldn't be multiple rp@'s, but if there is, we only care about the last one
             let mut rp_slot = 0;
-            
+
             for i in 0..bls[cur_bl].instructions.len() {
                 if let Some(tmp_bl) = rp_find_val(&bls[cur_bl].instructions[i]) {
                     rp_slot = tmp_bl;
@@ -1947,7 +1947,7 @@ impl<'ast> ZGen<'ast> {
 
             // Process RP block
             if rp_slot != 0 {
-                (successor, rp_successor, successor_fn, visited, next_bls) = 
+                (successor, rp_successor, successor_fn, visited, next_bls) =
                     self.flow_graph_transition::<true>(cur_bl, &NextBlock::Label(rp_slot), rp_slot, successor, rp_successor, successor_fn, visited, next_bls);
                 call_entry_exit_map.insert(cur_bl, rp_slot);
                 call_exit_entry_map.insert(rp_slot, cur_bl);
@@ -1959,7 +1959,7 @@ impl<'ast> ZGen<'ast> {
                 BlockTerminator::Transition(e) => {
                     let branches = bl_trans_find_val(&e);
                     for b in &branches {
-                        (successor, rp_successor, successor_fn, visited, next_bls) = 
+                        (successor, rp_successor, successor_fn, visited, next_bls) =
                             self.flow_graph_transition::<false>(cur_bl, b, rp_slot, successor, rp_successor, successor_fn, visited, next_bls);
                     }
                     // if rp@ is set, the next block must be a function entrance
@@ -1981,7 +1981,7 @@ impl<'ast> ZGen<'ast> {
                     }
                 }
                 BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-                BlockTerminator::ProgTerm => { 
+                BlockTerminator::ProgTerm => {
                     exit_bls.insert(cur_bl);
                     exit_bls_fn.insert(cur_bl);
                 }
@@ -2026,12 +2026,12 @@ impl<'ast> ZGen<'ast> {
         // MEET is union, so IN and OUT are Empty Set
         let mut bl_in: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
         let mut bl_out: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
-        
+
         // Can this ever happen?
-        if exit_bls.is_empty() { 
+        if exit_bls.is_empty() {
             panic!("The program has no exit block!");
         }
-        
+
         // Start from exit block
         let mut next_bls: VecDeque<usize> = VecDeque::new();
         for eb in exit_bls {
@@ -2053,7 +2053,7 @@ impl<'ast> ZGen<'ast> {
 
             // Only analyze if never visited before or OUT changes
             if !visited[cur_bl] || state != bl_out[cur_bl] {
-                
+
                 bl_out[cur_bl] = state.clone();
                 visited[cur_bl] = true;
 
@@ -2061,7 +2061,7 @@ impl<'ast> ZGen<'ast> {
                 match &bls[cur_bl].terminator {
                     BlockTerminator::Transition(e) => { state.extend(expr_find_val(&e)); }
                     BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-                    BlockTerminator::ProgTerm => {}            
+                    BlockTerminator::ProgTerm => {}
                 }
 
                 // KILL and GEN within the block
@@ -2106,7 +2106,7 @@ impl<'ast> ZGen<'ast> {
                 match &bls[cur_bl].terminator {
                     BlockTerminator::Transition(e) => { state.extend(expr_find_val(&e)); }
                     BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-                    BlockTerminator::ProgTerm => {}            
+                    BlockTerminator::ProgTerm => {}
                 }
 
                 (_, _, new_instructions) = la_inst(state, BTreeMap::new(), &bls[cur_bl].instructions);
@@ -2121,7 +2121,7 @@ impl<'ast> ZGen<'ast> {
                         next_bls.push_back(*tmp_bl);
                     }
                 }
-            }    
+            }
         }
 
         return bls;
@@ -2155,7 +2155,7 @@ impl<'ast> ZGen<'ast> {
                 // Update CFG
                 successor_fn[caller] = BTreeSet::from([callee]);
                 entry_bls_fn.remove(&callee);
-                
+
                 // Merge callee with caller
                 // First on caller (to deal with call parameters)
                 bls[caller].instructions = fm_inst::<true>(&bls[caller].instructions, callee_fn, caller_fn, scope_diff);
@@ -2241,12 +2241,12 @@ impl<'ast> ZGen<'ast> {
         // Program states per function call trace, if exist
         let mut bl_in_per_call_trace: Vec<BTreeMap<Vec<usize>, BTreeSet<String>>> = vec![BTreeMap::new(); bls.len()];
         let mut bl_out_per_call_trace: Vec<BTreeMap<Vec<usize>, BTreeSet<String>>> = vec![BTreeMap::new(); bls.len()];
-        
+
         // Can this ever happen?
-        if exit_bls.is_empty() { 
+        if exit_bls.is_empty() {
             panic!("The program has no exit block!");
         }
-        
+
         // Start from exit block
         let mut next_bls: VecDeque<usize> = VecDeque::new();
         for eb in exit_bls {
@@ -2316,14 +2316,14 @@ impl<'ast> ZGen<'ast> {
 
                 // KILL and GEN within the terminator
                 match &bls[cur_bl].terminator {
-                    BlockTerminator::Transition(e) => { 
-                        state.extend(expr_find_val(&e)); 
+                    BlockTerminator::Transition(e) => {
+                        state.extend(expr_find_val(&e));
                         for (_, s) in state_per_trace.iter_mut() {
-                            s.extend(expr_find_val(&e)); 
+                            s.extend(expr_find_val(&e));
                         }
                     }
                     BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-                    BlockTerminator::ProgTerm => {}            
+                    BlockTerminator::ProgTerm => {}
                 }
 
                 // KILL and GEN within the block
@@ -2356,7 +2356,7 @@ impl<'ast> ZGen<'ast> {
         // MEET is union, so IN and OUT are Empty Set
         let mut bl_in: Vec<BTreeMap<String, Ty>> = vec![BTreeMap::new(); bls.len()];
         let mut bl_out: Vec<BTreeMap<String, Ty>> = vec![BTreeMap::new(); bls.len()];
-        
+
         // Start from entry block
         let mut next_bls: VecDeque<usize> = VecDeque::new();
         next_bls.push_back(*entry_bl);
@@ -2387,7 +2387,7 @@ impl<'ast> ZGen<'ast> {
 
             // Only analyze if never visited before or OUT changes
             if !visited[cur_bl] || state != bl_in[cur_bl] {
-                
+
                 bl_in[cur_bl] = state.clone();
                 visited[cur_bl] = true;
 
@@ -2402,7 +2402,7 @@ impl<'ast> ZGen<'ast> {
                 for tmp_bl in &successor[cur_bl] {
                     next_bls.push_back(*tmp_bl);
                 }
-            }    
+            }
         }
 
         let ty_map_in = bl_in;
@@ -2457,7 +2457,7 @@ impl<'ast> ZGen<'ast> {
 
         if let Some(c) = cs.comps.get(block_name) {
             let mut r1cs = to_r1cs(c, cfg());
-    
+
             // Remove the last constraint because it is about the return value
             r1cs.constraints.pop();
 
@@ -2608,7 +2608,7 @@ impl<'ast> ZGen<'ast> {
                     let comp_tail = scope_list[comp_head][comp_scope];
 
                     // Backward analysis starting from comp_tail
-                    // STATE is 
+                    // STATE is
                     // 1. a list of instructions of all merged blocks of the current scope
                     // 2. number of read-only ops of all merged blocks of the current scope
                     // 3. number of vm ops of all merged blocks of the current scope
@@ -2632,9 +2632,9 @@ impl<'ast> ZGen<'ast> {
                         let mut ro_count_state = bls[cur_bl].num_ro_ops;
                         let mut vm_count_state = bls[cur_bl].num_vm_ops;
                         // Instructions of successors & next block in scope, if not comp_tail
-                        if cur_bl != comp_tail {                  
+                        if cur_bl != comp_tail {
                             if let BlockTerminator::Transition(t) = &bls[cur_bl].terminator {
-                                let (merged_instr, merged_cons_count, merged_ro_count, merged_vm_count, _) = 
+                                let (merged_instr, merged_cons_count, merged_ro_count, merged_vm_count, _) =
                                     term_to_instr(&bls, t, &instr_list, &cons_count_list, &ro_count_list, &vm_count_list, cur_bl);
                                 instr_state.extend(merged_instr);
                                 cons_count_state += merged_cons_count;
@@ -2747,7 +2747,7 @@ impl<'ast> ZGen<'ast> {
         // GEN: Whenever a variable is defined or function is called
         //      If the variable or function shadows a variable in block output, and the variable is not out-of-scope, update STACK and OOS
         // KILL: Whenever a shadower is out of scope, update STACK and OOP
-        
+
         // OOS is a set of all local variables out of scope
         let mut oos_in: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
         let mut oos_out: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
@@ -2760,7 +2760,7 @@ impl<'ast> ZGen<'ast> {
         next_bls.push_back(entry_bl);
         while !next_bls.is_empty() {
             let cur_bl = next_bls.pop_front().unwrap();
-            
+
             // JOIN of OOS
             let mut oos = {
                 let mut oos = BTreeSet::new();
@@ -2898,7 +2898,7 @@ impl<'ast> ZGen<'ast> {
                         }
                     }
                 }
-                
+
                 oos_out[cur_bl] = oos.clone();
                 stack_out[cur_bl] = stack.clone();
                 for succ in &successor[cur_bl] {
@@ -3153,7 +3153,7 @@ impl<'ast> ZGen<'ast> {
                         sp_offset += 1;
                     }
                     // %SP = %SP + ?
-                    new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset, &Ty::Field)));   
+                    new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset, &Ty::Field)));
                 }
 
                 // If there is a function call, push all live & in-scope candidates onto stack
@@ -3165,7 +3165,7 @@ impl<'ast> ZGen<'ast> {
 
                     // the last instruction is rp@ = ?, which should appear after scope change
                     let rp_update_inst = new_instructions.pop().unwrap();
-                    let mut sp_offset = 0;                         
+                    let mut sp_offset = 0;
 
                     let callee = Vec::from_iter(successor[cur_bl].clone())[0];
                     let callee_name = &bls[callee].fn_name;
@@ -3198,7 +3198,7 @@ impl<'ast> ZGen<'ast> {
                     new_instructions.push(rp_update_inst);
                     // %SP = %SP + ?
                     if sp_offset > 0 {
-                        new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset, &Ty::Field)));                        
+                        new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset, &Ty::Field)));
                     }
                 }
 
@@ -3238,12 +3238,12 @@ impl<'ast> ZGen<'ast> {
         for _ in 0..bls.len() {
             visited.push(false);
         }
-        
+
         // Can this ever happen?
         if exit_bls.is_empty() {
             panic!("The program has no exit block!");
         }
-        
+
         // Start from exit block
         let mut next_bls: VecDeque<usize> = VecDeque::new();
         for eb in exit_bls {
@@ -3255,12 +3255,12 @@ impl<'ast> ZGen<'ast> {
             visited[cur_bl] = true;
 
             // If the block only has one successor and the successor only has one predecessor
-            // AND the transition does not involve function calls / returns, 
+            // AND the transition does not involve function calls / returns,
             // AND the merged block size (num cons) does not exceed MAX_BLOCK_SIZE,
             // merge the two blocks
             if !exit_bls_fn.contains(&cur_bl) && successor[cur_bl].len() == 1 {
                 let s = Vec::from_iter(successor[cur_bl].clone())[0];
-                if !entry_bls_fn.contains(&s) && 
+                if !entry_bls_fn.contains(&s) &&
                     predecessor[s].len() == 1// &&
                     // (
                         // bls[cur_bl].num_cons + bls[s].num_cons > MAX_BLOCK_SIZE || // Limit the size of the merged block
@@ -3319,9 +3319,9 @@ impl<'ast> ZGen<'ast> {
         bls: Vec<Block<'ast>>,
         entry_bl: usize,
         predecessor: Vec<BTreeSet<usize>>
-    ) -> (Vec<Block<'ast>>, usize, BTreeMap<usize, usize>) {      
+    ) -> (Vec<Block<'ast>>, usize, BTreeMap<usize, usize>) {
         let old_size = bls.len();
-        
+
         // Initialize map from old label of blocks to new labels
         let mut label_map = BTreeMap::new();
         // Initialize a new list of blocks
@@ -3351,7 +3351,7 @@ impl<'ast> ZGen<'ast> {
                     let _ = std::mem::replace(&mut new_bls[cur_bl].instructions[i], new_bc);
                 }
             }
-            
+
             // Update the terminator of each blocks using label_map
             if let BlockTerminator::Transition(e) = &new_bls[cur_bl].terminator {
                 new_bls[cur_bl].terminator = BlockTerminator::Transition(bl_trans_map(e, &label_map))
@@ -3377,12 +3377,12 @@ impl<'ast> ZGen<'ast> {
         // Construct a new CFG for the program
         // Note that this is the CFG after DBE, and might be different from the previous CFG
         let (
-            successor, 
-            predecessor, 
-            exit_bls, 
-            entry_bls_fn, 
-            successor_fn, 
-            predecessor_fn, 
+            successor,
+            predecessor,
+            exit_bls,
+            entry_bls_fn,
+            successor_fn,
+            predecessor_fn,
             exit_bls_fn,
             _,
             _
@@ -3451,7 +3451,7 @@ impl<'ast> ZGen<'ast> {
     // 3. If an io variable is marked "alive" at the block entrance, and is never referenced or changed,
     //    insert an "output == input" assertion
     //
-    // Finally, write down labels of all live inputs and outputs, 
+    // Finally, write down labels of all live inputs and outputs,
     // No control flow, iterate over blocks directly
     // Returns the new blocks, register map, and # of registers used
     //
@@ -3464,7 +3464,7 @@ impl<'ast> ZGen<'ast> {
         predecessor: &Vec<BTreeSet<usize>>,
         successor: &Vec<BTreeSet<usize>>,
         entry_bl: usize
-    ) -> (Vec<Block<'ast>>, Vec<BTreeMap<String, usize>>, usize, BTreeMap<String, usize>, usize, Vec<(Vec<usize>, Vec<usize>)>) {    
+    ) -> (Vec<Block<'ast>>, Vec<BTreeMap<String, usize>>, usize, BTreeMap<String, usize>, usize, Vec<(Vec<usize>, Vec<usize>)>) {
         // reg_map is consisted of two Var -> Reg Maps: TRANSITION_MAP_LIST & WITNESS_MAP
         // TRANSITION_MAP_LIST is a list of maps corresponding to each transition state
         // Reserve registers 0 - 7 for %V, %BN, %RET, %TS, %AS, %RP, %SP, and %BP
@@ -3549,7 +3549,7 @@ impl<'ast> ZGen<'ast> {
             assert!(bl_in[i] != None);
             assert!(bl_out[i] != None);
         }
-        
+
         // --
         // WITNESS_MAP is one single map to describe all block witnesses
         // Reserve registers 0 - 5 for %RET, %TS, %AS, %RP, %SP, and %BP
@@ -3806,7 +3806,7 @@ impl<'ast> ZGen<'ast> {
     // 1. # of (physical (scoping) memory, virtual memory accesses) accesses for each block
     // 2. Liveness of each virtual memory variable
     //    * We need all variables present for permutation check, but some are not referenced in the constraints and will be killed in R1CS
-    //    * For every _live_ virtual memory variable, record its overall ordering in all virtual memory variables 
+    //    * For every _live_ virtual memory variable, record its overall ordering in all virtual memory variables
     fn get_blocks_memory_info(
         &self,
         bls: &Vec<Block>,
@@ -3884,7 +3884,7 @@ impl<'ast> ZGen<'ast> {
                     let mut max_successor_num_mem_accesses = bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
 
                     // if cur_bl is the exit block of a function, do not reason about successors
-                    if successor_fn[cur_bl].len() == 0 {} 
+                    if successor_fn[cur_bl].len() == 0 {}
                     // if cur_bl is a caller of a function, need to process both the function head block and the return block
                     else if successor_fn[cur_bl] != successor[cur_bl] {
                         assert_eq!(successor[cur_bl].len(), 1);

@@ -68,10 +68,10 @@ def run_test(expected: str, server_cmd: List[str], client_cmd: List[str]) -> boo
 
 def run_tests(lang: str, tests: List[dict]):
     """
-    tests will be a list of all tests to run. each element in the list will be 
+    tests will be a list of all tests to run. each element in the list will be
     1. description of test case: str
     2. test name: str
-    4. test file path: str 
+    4. test file path: str
     """
     print(f"Running ABY tests for {lang} frontend")
     failed_test_descs = []

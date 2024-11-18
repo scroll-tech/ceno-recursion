@@ -72,7 +72,7 @@ $$Az \cdot Bz - Cz = 0$$
 
 One proof system that can efficiently verify the correctness of the equation is called \code{spartan}. Specifically, let $m = \log M$, $n = \log N$, \code{spartan} allows $\P$ to reduce the correctness of the equation down to a single claim
 $$z(r_y) \eqq e$$
-in $O(M\cdot N)$ time, and $\V$ to verify the reduction in $O(m + n)$ time. To verify the claim $z(r_y) \eqq e$. $\P$ commits to a polynomial extension of the program states $z$ at the very beginning, and reveals $z(r_y)$ to $\V$ at the end of the proof. This polynomial commitment and opening takes $O(M\cdot N)$ for $\P$ and $O(\sqrt{M\cdot N})$ for $\V$, making the total $\V$ runtime $O(m + n + \sqrt{M\cdot N})$. 
+in $O(M\cdot N)$ time, and $\V$ to verify the reduction in $O(m + n)$ time. To verify the claim $z(r_y) \eqq e$. $\P$ commits to a polynomial extension of the program states $z$ at the very beginning, and reveals $z(r_y)$ to $\V$ at the end of the proof. This polynomial commitment and opening takes $O(M\cdot N)$ for $\P$ and $O(\sqrt{M\cdot N})$ for $\V$, making the total $\V$ runtime $O(m + n + \sqrt{M\cdot N})$.
 
 In this work, we expand on \code{spartan} to apply to a data-paralleled version of the R1CS problem. Assume that we now have $P$ instances $I_0\dots I_{P-1}$. For each instance $I_i = (A_i, B_i, C_i)$, $\P$ wants to convince $\V$ that it has a list of $Q_i$ vectors $z_{i, 0}\dots z_{i, Q_i-1}$ that satisfies
 $$\forall_{i\in [0, P), j \in [0, Q_i)}, A_iz_{i, j} \cdot B_iz_{i, j} - C_iz_{i, j} = 0$$
@@ -89,7 +89,7 @@ To understand how \code{spartan\_parallel} fits into the overall backend protoco
     \item \emph{Verifying the correctness of block transition}. The next step is to verify that inputs and outputs across the instances are consistent. This can be verified by listing every $z$ in execution order, and checking that the output state of the previous block is the input state of the next block. We also need to check that the prover is executing the right block. The simplest way is to include the block label in each $z$ and add an assertion on that label during the block correctness proof.
     \item \emph{Verifying the correctness of program state permutation}. We note that the previous two steps require $z$'s to be provided in two different orders (by block and by execution order). The next step is to verify that the two orderings of $z$ lists are indeed permutations of each other. To do so, for each ordering of $z$ list, we construct a polynomial, the roots of which are set to the entries of that list. Since the two lists of $z$ are permutation of each other, the roots of the two polynomials are the same, and so the two polynomials should also be the same. To verify this, $\V$ samples a random point and checks whether the two polynomials agree on that random point.
     \item \emph{Verifying the correctness of the physical memory}. As the front end converts the program into blocks, it resolves all scoping change by converting them into LOADs and STOREs of a write-once RAM. The final step is to ensure this write-once RAM is coherent, i.e. LOADs and STOREs on the same address should always yield the same value.
-    
+
     To do so, the frontend provides an extraction instance that extracts all memory operations from each $z$. $\P$ then reorders these (address, value) pairs by address and proves the permutation to $\V$. Finally, a separated instance provided by the frontend proves that there is a bijective relationship between addresses and values.
 \end{enumerate}
 
@@ -110,7 +110,7 @@ To understand how \code{spartan\_parallel} fits into the overall backend protoco
     \item Memory Accesses: $\sum_i Q_i$ for each execution of each block, grouped in two orderings.
     \begin{itemize}
         \item $\memb$: A $P\times \Qmax$ matrix of \emph{lists of} (addr, val). Each list of (addr, val) records all memory accesses that take place within one execution of a block.
-        \item $\mema$: A list of (addr, val) that includes \emph{every} memory accesses occurred within the program, sorted by address. 
+        \item $\mema$: A list of (addr, val) that includes \emph{every} memory accesses occurred within the program, sorted by address.
     \end{itemize}
 \end{itemize}
 
@@ -162,7 +162,7 @@ We now succinctly describe the \code{spartan\_parallel} proof system:
     \item $\P$ computes three polynomials, each extending all $\Qsum$ length-$X$ vectors $Az$, $Bz$, or $Cz$. This step takes $O(\Qsum\cdot Y)$ time since $\P$ can skip all zero-entries.
     \item $\P$ engages $\V$ in the first sumcheck protocol to prove $\sum_{p, q, x} \eq\cdot (Az \cdot Bz - Cz) = 0$. The sumcheck lasts $p + \qmax + x$ rounds but $\P$ only needs to perform $O(\Qsum\cdot Y)$ evaluations and bindings. At the end of the sumcheck, $\V$ samples vectors $r_p, r_q, r_x$ of length $p, \qmax, x$.
     \item $\V$ samples three random values $r_A$, $r_B$, and $r_C$. $\P$ computes a polynomial $\Z_{r_q}$ that extends all $z_{i, j}$ and binds to $r_q$, as well as a polynomial $\ABC = r_A\cdot A + r_B\cdot B + r_C\cdot C$.
-    \item $\P$ engages $\V$ in the second sumcheck protocol to prove $\sum_{p, y} \eq\cdot \ABC \cdot \Z_{r_q} = e$, where $e$ is the claim from the first sumcheck. Note that 
+    \item $\P$ engages $\V$ in the second sumcheck protocol to prove $\sum_{p, y} \eq\cdot \ABC \cdot \Z_{r_q} = e$, where $e$ is the claim from the first sumcheck. Note that
     $r_p$ produced by sumcheck 1 is a parameter for both $\ABC$ and $Z$ and thus is not degree-1, so we need an extra $\eq$ polynomial and $p$ rounds to dilute its degree. At the end of the sumcheck, $\V$ samples vectors $r_p', r_y$ of length $p, y$.
     \item $\P$ opens all $P$ commitments of $io$ and $w$ on $r_q, r_y$ and proves that their linear combination using $r_p'$ is $\Z_{r_q}(r_p', r_y)$. This takes $O(\Qsum\cdot Y)$ time for $\P$ and $O(\sum_i\sqrt{P\cdot Q_i\cdot Y})$ time for $\V$.
     \item Finally, $\P$ opens one commitment on all instances to reveal the evaluation on $r_p', r_x, r_y$.
@@ -194,7 +194,7 @@ We start by examining what needs to be done to check consistency. Let $\Qsum$ be
 Naively, the consistency proof seems easily parallelizable: each constraint of the consistency proof only uses variables from two consecutive states: $io_i$ and $io_{i + 1}$. The frontend can generate one R1CS instance that checks consistency of $io_i$ and $io_{i + 1}$, and the backend can run \code{spartan\_parallel} with $P = 1$ and $Q_0 = \Qsum$, and set $z_{0, i} = (io_i, io_{i + 1})$. Since there is only one instance, we simplify notation so that $Q = Q_0$ and $z_i = z_{0, i}$.
 
 However, this approach turns out to be infeasible. This is because \code{spartan\_parallel} eventually reduces the proof to a claim $z(r_q, r_y) \eqq e$. What commitment should be used to verify this claim? $\P$ cannot use a single commitment on $z$, because $z_{i} = (io_i, io_{i + 1})$, which means that $z_i$ and $z_{i+1}$ share the same $io_{i + 1}$. It would be extremely difficult to capture this relationship across different $z$'s using one single commitment on the entire $z$. It is equally infeasible to commit the two halves of $z$ separately. This is because when joining all $\Qsum$ $(io_i, io_{i + 1})$'s together, the $io_i$'s form a $(\Qsum - 1)\times Y$ matrix consisted of $io_0, \dots, io_{\Qsum - 2}$, while the $io_{i + 1}$'s form a $(\Qsum - 1)\times Y$ matrix consisted of $io_1, \dots, io_{\Qsum - 1}$. Despite how similar the two matrices look, they interpolate to completely different polynomials. As a result, it is still unclear how $\P$ can efficiently convince $\V$ that the two commitments are related.
- 
+
 The alternative approach is to express the entire consistency check as one large instance. In this model, the frontend first provides a compile-time upper bound estimate $\Qbound = \max(\Qsum)$ and generates constraints that check the consistency for all $\Qbound - 1$ consecutive $(io_i, io_{i + 1})$ pairs. If an execution does not produce $\Qbound$ valid program states, the constraints listed in section \ref{consis_composition} forces $\P$ to append invalid $io$'s to the back of the list.
 
 \subsection{Leverage Parallel Properties}
@@ -265,7 +265,7 @@ Finally, we state the shared commitments introduced by the consistency proof. Th
 
 \section{Proofs of Permutation}\label{sec:permutation}
 
-In this section, we use \code{spartan\_parallel} and \code{spartan\_pseudo\_parallel} to verify that values commited by $\psb$ and $\pse$ are indeed permutations of each other. 
+In this section, we use \code{spartan\_parallel} and \code{spartan\_pseudo\_parallel} to verify that values commited by $\psb$ and $\pse$ are indeed permutations of each other.
 
 \subsection{Permutation Basics}
 
@@ -275,7 +275,7 @@ Given two lists $a = (a_0, a_1, ..., a_{n-1})$, $b = (b_0, b_1, ..., b_{n-1})$, 
     \item $\V$ samples a random challenge $\tau$.
     \item $\P$ computes $p_a(\tau) = \prod_i (\tau - a_i)$ and $p_b(\tau) = \prod_i (\tau - b_i)$. It uses a proof system to convince $\V$ that $p_a(\tau)$ and $p_b(\tau)$ are computed correctly.
     \item Finally, $\V$ checks that $p_a(\tau) = p_b(\tau)$.
-\end{enumerate} 
+\end{enumerate}
 
 If $p_a$ and $p_b$ are not the same polynomial, it is extremely unlikely that they match on a random value $\tau$. Thus, $\V$ is convinced $a$ and $b$ are permutations of each other if $p_a(\tau) = p_b(\tau)$.
 
@@ -291,7 +291,7 @@ To verify the permutation, $\P$ computes an RLC on $a_i$ and $b_i$. Then, $\P$ c
     \item For $i\in [0, n)$, $\P$ computes $\RLC(a_i) = \sum_k r^k \cdot a_{i, k}$ and $\RLC(b_i) = \sum_k r^k \cdot b_{i, k}$. It uses a proof system to convince $\V$ that all $\RLC(a_i)$ and $\RLC(b_i)$ are computed correctly.
     \item $\P$ then computes $p_a(\tau) = \prod_i (\tau - \RLC(a_i))$ and $p_b(\tau) = \prod_i (\tau - \RLC(b_i))$. It convinces $\V$ that they are correct using another proof.
     \item Finally, $\V$ checks that $p_a(\tau) = p_b(\tau)$.
-\end{enumerate} 
+\end{enumerate}
 
 \subsection{Permutation Check for $\pse$}
 
@@ -424,7 +424,7 @@ Finally, we revisit the components listed in section \ref{sec:input} and present
     \item $\V$ samples challenges $\tau$ and $r$ for RLC and the permutation polynomial, and sends the challenges to $\P$.
     \item $\P$ computes and commits to
     \begin{itemize}
-        \item $\RLC(\ioc) = (v, \RLC(i), \RLC(o))$ for consistency check, 
+        \item $\RLC(\ioc) = (v, \RLC(i), \RLC(o))$ for consistency check,
         \item $\ROOTE, \ROOTB = (v, x, \pi)$ for permutation check, and
         \item $\memb, \mema = (v, x, \pi)$ for memory coherence check.
     \end{itemize}
@@ -478,7 +478,7 @@ Finally, we revisit the components listed in section \ref{sec:input} and present
         \item Inputs: $\ROOTB$
         \item Proof System: \code{spartan\_pseudo\_parallel} with parameters $(P, Q_i)$
     \end{itemize}
-    \item $\V$ obtains $p_\mathtt{EXEC}(\tau)$ from $\ROOTE$ and all ${p_\mathtt{BLOCK}}_i(\tau)$ from $\ROOTB$ and checks 
+    \item $\V$ obtains $p_\mathtt{EXEC}(\tau)$ from $\ROOTE$ and all ${p_\mathtt{BLOCK}}_i(\tau)$ from $\ROOTB$ and checks
     $$p_\mathtt{EXEC}(\tau) = \prod_i {p_\mathtt{BLOCK}}_i(\tau)$$
     This concludes the permutation check.
     \item For memory coherence check, $\P$ first convinces $\V$ that $\memb$ is computed correctly, with
@@ -505,9 +505,9 @@ Finally, we revisit the components listed in section \ref{sec:input} and present
     \item To conclude the memory check, $\P$ convinces $\V$ that $\mema$ is coherent, with
     \begin{itemize}
         \item Constraints: $(v_i - 1) \cdot v_{i+1} = 0$,
-        
+
         $v_{i + 1} \cdot (\addr_{i + 1} - \addr_i - 1) \cdot (\addr_{i + 1} - \addr_i) = 0$,
-        
+
         $v_{i + 1} \cdot (\addr_{i + 1} - \addr_i - 1) \cdot (\val_{i + 1} - \val_i) = 0$
         \item Instance: $\MEMC$
         \item Inputs: $\mema$

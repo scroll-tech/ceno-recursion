@@ -2,6 +2,7 @@ pub const INPUT_WIDTH: usize = 12;
 pub const HALF_N_FULL_ROUNDS: usize = 4;
 pub const N_PARTIAL_ROUNDS: usize = 22;
 
+#[rustfmt::skip]
 pub(crate) const POSEIDON_C: [u64; 360] = [
   0xb585f766f2144405, 0x7746a55f43921ad7, 0xb2fb0d31cee799b4, 0x0f6760a4803427d7,
   0xe10d666650f4e012, 0x8cae14cb07d09bf1, 0xd438539c95f63e9f, 0xef781c7ce35b4c3d,

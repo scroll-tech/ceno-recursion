@@ -311,8 +311,8 @@ impl<'ast> ZGen<'ast> {
                 Ty::Array(read_only, _, entry_ty) => {
                     let entry_ty = match **entry_ty {
                         Ty::Uint(_) | Ty::Field | Ty::Bool => { &*entry_ty },
-                        Ty::Array(..) => { &Ty::Field }
-                        _ => { panic!("Struct input type not supported!") }
+                        Ty::Array(..) | Ty::Struct(..) => { &Ty::Field }
+                        _ => { panic!("Mut Array input type not supported!") }
                     };
                     if *alive {
                         let (name, _) = &bls[entry_bl].inputs[input_count];

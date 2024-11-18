@@ -215,6 +215,18 @@ pub fn bl_gen_increment_stmt<'ast>(var: &str, offset: usize, ty: &Ty) -> Stateme
     var_update_stmt   
 }
 
+// Flatten out any struct in pre-order
+pub fn flatten_var(var_name: &str, ty: &Ty, var_list: &mut Vec<(String, Ty)>) {
+    if let Ty::Struct(_, members) = ty {
+        for (m, m_ty) in members.clone().into_map() {
+            let member_name = format!("{}^{}", var_name, m);
+            flatten_var(&member_name, &m_ty, var_list);
+        }
+    } else {
+        var_list.push((var_name.to_string(), ty.clone()));
+    }
+}
+
 #[derive(Clone)]
 pub struct Block<'ast> {
     pub name: usize,
@@ -609,6 +621,7 @@ impl<'ast> ZGen<'ast> {
         let inputs: Vec<(String, Ty)>;
         (blks, blks_len, inputs, var_scope_info) = self.bl_gen_function_init_::<true>(blks, blks_len, f_file.clone(), f_name, var_scope_info)
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+
         func_blk_map.insert("main".to_string(), (0, blks_len - 1, false));
         // other functions
         for (func_file, funcs) in &self.functions {
@@ -781,8 +794,13 @@ impl<'ast> ZGen<'ast> {
             for p in f.parameters.clone().into_iter() {
                 let p_id = p.id.value.clone();
                 let p_ty = self.type_impl_::<false>(&p.ty)?;
-                var_scope_info.declare_var(&p_id, &f_name, 0, p_ty);
-                inputs.push(var_scope_info.reference_var(&p_id, &f_name)?.clone());     
+                var_scope_info.declare_var(&p_id, &f_name, 0, p_ty.clone());
+                // Flatten out inputs
+                let mut flattened_p = Vec::new();
+                flatten_var(&p_id, &p_ty, &mut flattened_p);
+                for (p_entry, _) in flattened_p {
+                    inputs.push(var_scope_info.reference_var(&p_entry, &f_name)?.clone());
+                }
             }
             // Declare all constants, if not main
             // Constants of main function are already declared in bl_gen_constants

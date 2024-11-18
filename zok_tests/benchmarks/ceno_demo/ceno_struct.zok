@@ -3,13 +3,7 @@ from "sumcheck_structs" import IOPProverMessage
 from "tower_struct" import TowerProofs
 from "expression" import Expression, LogupTableExpression
 
-struct NameSpace {
-    field[0][0] namespace
-}
-
 struct ConstraintSystem {
-    NameSpace ns
-
     u16 num_witin
     field[0][0] witin_namespace_map // Vec<String>
     u32 num_fixed

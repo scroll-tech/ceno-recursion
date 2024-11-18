@@ -12,7 +12,7 @@ from "mle" import mle_eval, eq_eval, build_eq_x_r_vec_sequential
 from "tower_struct" import TowerProofs, TowerVerifierOutput, PointAndEval
 from "tower_verifier" import tower_verify
 from "expression" import Expression, LogupTableExpression
-from "ceno_struct" import NameSpace, ConstraintSystem, VerifyingKey, ZKVMVerifyingKey, ZKVMVerifier, ZKVMProof, ZKVMOpcodeProof, ZKVMTableProof
+from "ceno_struct" import ConstraintSystem, VerifyingKey, ZKVMVerifyingKey, ZKVMVerifier, ZKVMProof, ZKVMOpcodeProof, ZKVMTableProof
 
 
 /*

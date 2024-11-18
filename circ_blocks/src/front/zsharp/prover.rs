@@ -1021,28 +1021,6 @@ impl<'ast> ZGen<'ast> {
             }
             Statement::Conditional(_c) => {
                 panic!("Blocks should not contain conditional statements.")
-                /*
-                match self.expr_impl_::<true>(&c.condition).and_then(|v| {
-                    const_bool(v)
-                        .ok_or_else(|| "interpreting expr as const bool failed".to_string())
-                }) {
-                    Ok(true) => {
-                        for s in &c.ifbranch {
-                            self.bl_eval_stmt_impl_(s)?;
-                        }
-                    },
-                    Ok(false) => {
-                        for s in &c.elsebranch {
-                            self.bl_eval_stmt_impl_(s)?;
-                        }
-                    },
-                    Err(err) => return Err(format!(
-                        "Const conditional expression eval failed: {} at\n{}",
-                        err,
-                        span_to_string(c.condition.span()),
-                    ))
-                }
-                */
             }
             Statement::Definition(d) => {
                 // XXX(unimpl) multi-assignment unimplemented

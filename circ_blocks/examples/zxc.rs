@@ -1,14 +1,5 @@
 // TODO: Might want to simplify Liveness Analysis & PMR now that scope changes are handled in optimization
 
-/*
-use bellman::gadgets::test::TestConstraintSystem;
-use bellman::groth16::{
-    create_random_proof, generate_parameters, generate_random_parameters, prepare_verifying_key,
-    verify_proof, Parameters, Proof, VerifyingKey,
-};
-use bellman::Circuit;
-use bls12_381::{Bls12, Scalar};
-*/
 const PRINT_PROOF: bool = false;
 const INLINE_SPARTAN_PROOF: bool = false;
 const TOTAL_NUM_VARS_BOUND: usize = 100000000;
@@ -16,16 +7,13 @@ const TOTAL_NUM_VARS_BOUND: usize = 100000000;
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
 use circ::ir::opt::{opt, Opt};
-use core::cmp::min;
-use rug::Integer;
-/*
-use circ::target::r1cs::bellman::parse_instance;
-*/
 use circ::target::r1cs::opt::reduce_linearities;
 use circ::target::r1cs::trans::to_r1cs;
 use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
 use circ::target::r1cs::ProverData;
 use circ::target::r1cs::{Lc, R1cs, VarType};
+use core::cmp::min;
+use rug::Integer;
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
@@ -64,19 +52,6 @@ struct Options {
     #[arg(name = "PATH")]
     path: PathBuf,
 
-    /*
-    #[arg(long, default_value = "P", parse(from_os_str))]
-    prover_key: PathBuf,
-
-    #[arg(long, default_value = "V", parse(from_os_str))]
-    verifier_key: PathBuf,
-
-    #[arg(long, default_value = "pi", parse(from_os_str))]
-    proof: PathBuf,
-
-    #[arg(long, default_value = "x", parse(from_os_str))]
-    instance: PathBuf,
-    */
     #[arg(short = 'L')]
     /// skip linearity reduction entirely
     skip_linred: bool,
@@ -686,17 +661,6 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         let (prover_data, _) = r1cs.clone().finalize(c);
         prover_data_list.push(prover_data);
 
-        /*
-        let r1cs = {
-            let old_size = r1cs.constraints().len();
-            let r1cs = reduce_linearities(r1cs, cfg());
-            let new_size = r1cs.constraints().len();
-            if VERBOSE {
-                println!("{} linear reduction: {} -> {}", block_name, old_size, new_size);
-            }
-            r1cs
-        };
-        */
         let num_witnesses = io_width // input + output
             + r1cs.num_vars()
             + VARS_PER_VM_ACCESS * block_num_mem_accesses[block_num].1 - live_vm_list[block_num].len() // remove live vm vars, add all vm vars

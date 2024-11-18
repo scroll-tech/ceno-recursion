@@ -163,15 +163,7 @@ impl<Ty: Display> LexScope<Ty> {
             entries: HashMap::default(),
         }
     }
-    /*
-    fn declare(&mut self, name: VarName, ty: Ty) -> Result<&SsaName> {
-        let p = &self.prefix;
-        match self.entries.entry(name.clone()) {
-            Entry::Vacant(v) => Ok(&v.insert(LexEntry::new(format!("{p}_{name}"), ty)).ssa_name),
-            Entry::Occupied(o) => Err(CircError::Rebind(name, format!("{}", o.get().ty))),
-        }
-    }
-    */
+
     fn declare(&mut self, name: VarName, ty: Ty) -> Result<&SsaName> {
         let p = &self.prefix;
         let new_le = match self.entries.entry(name.clone()) {
@@ -902,19 +894,6 @@ impl<E: Embeddable> Circify<E> {
             .get(name)
             .unwrap_or_else(|| panic!("No type {}", name))
     }
-
-    /*
-    /// Get the constraints from this manager
-    pub fn consume(mut self, f: &str) -> Rc<RefCell<Computation>> {
-        Rc::new(RefCell::new(std::mem::replace(
-            &mut self.cir_ctx,
-            CirCtx {
-                mem: Rc::new(RefCell::new(mem::MemManager::default())),
-                cs: Rc::new(RefCell::new(FxHashMap::default())),
-            },
-        ).cs.get_mut(f).borrow_mut().unwrap().clone()))
-    }
-    */
 
     /// Load from an AllocId
     pub fn load(&self, id: AllocId, offset: Term) -> Term {

@@ -3,7 +3,7 @@ use std::cmp::max;
 use crate::math::Math;
 use crate::R1CSInstance;
 use crate::errors::R1CSError;
-use crate::scalar::Scalar;
+use crate::scalar::{Scalar, SpartanExtensionField};
 
 /// `Instance` holds the description of R1CS matrices and a hash of the matrices
 #[derive(Clone)]

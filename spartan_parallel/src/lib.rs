@@ -29,7 +29,8 @@ mod product_tree;
 mod r1csinstance;
 mod r1csproof;
 mod random;
-mod scalar;
+/// Scalar field used by libspartan
+pub mod scalar;
 mod sparse_mlpoly;
 mod sumcheck;
 mod timer;
@@ -52,7 +53,7 @@ use r1csinstance::{
 };
 use r1csproof::R1CSProof;
 use random::RandomTape;
-use scalar::Scalar;
+use scalar::{Scalar, SpartanExtensionField};
 use serde::{Deserialize, Serialize};
 use timer::Timer;
 use transcript::{AppendToTranscript, ProofTranscript};

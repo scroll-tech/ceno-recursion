@@ -1,4 +1,4 @@
-use super::scalar::Scalar;
+use super::scalar::{Scalar, SpartanExtensionField};
 use super::transcript::ProofTranscript;
 use merlin::Transcript;
 use rand::rngs::OsRng;

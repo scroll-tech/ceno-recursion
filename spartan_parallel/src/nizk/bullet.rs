@@ -4,7 +4,7 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 use super::super::errors::ProofVerifyError;
-use super::super::scalar::Scalar;
+use super::super::scalar::{Scalar, SpartanExtensionField};
 use super::super::transcript::ProofTranscript;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};

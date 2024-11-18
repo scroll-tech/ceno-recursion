@@ -1,4 +1,4 @@
-use super::scalar::{Scalar, ScalarFromPrimitives};
+use super::scalar::{Scalar, SpartanExtensionField, ScalarFromPrimitives};
 use super::transcript::{AppendToTranscript, ProofTranscript};
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};

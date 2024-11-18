@@ -41,7 +41,7 @@ use core::cmp::Ordering;
 use std::time::*;
 use serde::{Serialize, Deserialize};
 use libspartan::{
-    instance::Instance, 
+    instance::Instance, scalar::SpartanExtensionField,
     Assignment, VarsAssignment, SNARK, InputsAssignment, MemsAssignment};
 use merlin::Transcript;
 

@@ -13,7 +13,7 @@ struct Alloc {
     val_width: usize,
     size: usize,
     cur_term: Term,
-    sp: usize
+    sp: usize,
 }
 
 impl Alloc {
@@ -23,7 +23,7 @@ impl Alloc {
             val_width,
             size,
             cur_term,
-            sp: 0
+            sp: 0,
         }
     }
 
@@ -128,9 +128,9 @@ impl MemManager {
         let offset = term(
             Op::Const(Value::BitVector(BitVector::new(
                 rug::Integer::from(alloc.sp),
-                alloc.addr_width
+                alloc.addr_width,
             ))),
-            Vec::new()
+            Vec::new(),
         );
         // assert_eq!(alloc.val_width, check(&val).as_bv());
         alloc.sp += 1;

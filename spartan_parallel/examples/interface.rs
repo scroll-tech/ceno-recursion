@@ -1,17 +1,14 @@
 //! Reads in constraints and inputs from zok_tests/constraints and zok_tests/inputs
 //! Used as a temporary interface to / from CirC
 #![allow(clippy::assertions_on_result_states)]
-use std::{fs::File, io::BufReader};
 use std::io::{BufRead, Read};
 use std::{default, env};
+use std::{fs::File, io::BufReader};
 
-use libspartan::{
-  instance::Instance,
-  VarsAssignment, SNARK, InputsAssignment, MemsAssignment
-};
+use libspartan::{instance::Instance, InputsAssignment, MemsAssignment, VarsAssignment, SNARK};
 use merlin::Transcript;
+use serde::{Deserialize, Serialize};
 use std::time::*;
-use serde::{Serialize, Deserialize};
 
 const TOTAL_NUM_VARS_BOUND: usize = 10000000;
 
@@ -26,14 +23,20 @@ struct CompileTimeKnowledge {
   block_num_vir_ops: Vec<usize>,
   max_ts_width: usize,
 
-  args: Vec<Vec<(Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>)>>,
+  args: Vec<
+    Vec<(
+      Vec<(usize, [u8; 32])>,
+      Vec<(usize, [u8; 32])>,
+      Vec<(usize, [u8; 32])>,
+    )>,
+  >,
 
   input_liveness: Vec<bool>,
   func_input_width: usize,
   input_offset: usize,
   input_block_num: usize,
   output_offset: usize,
-  output_block_num: usize
+  output_block_num: usize,
 }
 
 impl CompileTimeKnowledge {
@@ -44,7 +47,7 @@ impl CompileTimeKnowledge {
     f.read_to_end(&mut content).unwrap();
     bincode::deserialize(&content).unwrap()
   }
-  
+
   /* Archived & Outdated
   fn read_from_file(benchmark_name: String) -> std::io::Result<CompileTimeKnowledge> {
     let file_name = format!("../zok_tests/constraints/{}.ctk", benchmark_name);
@@ -182,7 +185,7 @@ struct RunTimeKnowledge {
   input_stack: Vec<[u8; 32]>,
   input_mem: Vec<[u8; 32]>,
   output: [u8; 32],
-  output_exec_num: usize
+  output_exec_num: usize,
 }
 
 impl RunTimeKnowledge {
@@ -221,7 +224,7 @@ impl RunTimeKnowledge {
       let total_num_vir_mem_accesses = buffer.trim().parse::<usize>().unwrap();
       (block_max_num_proofs, block_num_proofs, consis_num_proofs, total_num_init_mem_accesses, total_num_phy_mem_accesses, total_num_vir_mem_accesses)
     };
-    
+
     let block_vars_matrix: Vec<Vec<VarsAssignment>> = {
       let mut block_vars_matrix = vec![Vec::new()];
       buffer.clear();
@@ -281,7 +284,7 @@ impl RunTimeKnowledge {
       let mut init_mems_list = vec![Vec::new()];
       buffer.clear();
       reader.read_line(&mut buffer)?;
-      
+
       let mut access_counter = 0;
       while buffer != "ADDR_PHY_MEMS\n".to_string() {
         if buffer == format!("ACCESS {}\n", access_counter + 1) {
@@ -301,7 +304,7 @@ impl RunTimeKnowledge {
       let mut addr_phy_mems_list = vec![Vec::new()];
       buffer.clear();
       reader.read_line(&mut buffer)?;
-      
+
       let mut access_counter = 0;
       while buffer != "ADDR_VIR_MEMS\n".to_string() {
         if buffer == format!("ACCESS {}\n", access_counter + 1) {
@@ -321,7 +324,7 @@ impl RunTimeKnowledge {
       let mut addr_vir_mems_list = vec![Vec::new()];
       buffer.clear();
       reader.read_line(&mut buffer)?;
-      
+
       let mut access_counter = 0;
       while buffer != "ADDR_VM_BITS\n".to_string() {
         if buffer == format!("ACCESS {}\n", access_counter + 1) {
@@ -341,7 +344,7 @@ impl RunTimeKnowledge {
       let mut addr_ts_bits_list = vec![Vec::new()];
       buffer.clear();
       reader.read_line(&mut buffer)?;
-      
+
       let mut access_counter = 0;
       while buffer != "INPUTS\n".to_string() {
         if buffer == format!("ACCESS {}\n", access_counter + 1) {
@@ -404,14 +407,14 @@ impl RunTimeKnowledge {
       total_num_init_mem_accesses,
       total_num_phy_mem_accesses,
       total_num_vir_mem_accesses,
-    
+
       block_vars_matrix,
       exec_inputs,
       init_mems_list,
       addr_phy_mems_list,
       addr_vir_mems_list,
       addr_ts_bits_list,
-    
+
       input: func_inputs,
       input_mem,
       output: func_outputs[0],
@@ -455,22 +458,28 @@ fn main() {
   println!("Generating Circuits...");
   // --
   // BLOCK INSTANCES
-  let (block_num_vars, block_num_cons, block_num_non_zero_entries, mut block_inst) = Instance::gen_block_inst::<true>(
-    block_num_instances_bound, 
-    num_vars, 
-    &ctk.args,
-    num_inputs_unpadded,
-    &block_num_phy_ops,
-    &block_num_vir_ops,
-    &ctk.num_vars_per_block,
-    &rtk.block_num_proofs,
-  );
+  let (block_num_vars, block_num_cons, block_num_non_zero_entries, mut block_inst) =
+    Instance::gen_block_inst::<true>(
+      block_num_instances_bound,
+      num_vars,
+      &ctk.args,
+      num_inputs_unpadded,
+      &block_num_phy_ops,
+      &block_num_vir_ops,
+      &ctk.num_vars_per_block,
+      &rtk.block_num_proofs,
+    );
   println!("Finished Block");
 
   // Pairwise INSTANCES
   // CONSIS_CHECK & PHY_MEM_COHERE
-  let (pairwise_check_num_vars, pairwise_check_num_cons, pairwise_check_num_non_zero_entries, mut pairwise_check_inst) = Instance::gen_pairwise_check_inst::<true>(
-    ctk.max_ts_width, 
+  let (
+    pairwise_check_num_vars,
+    pairwise_check_num_cons,
+    pairwise_check_num_non_zero_entries,
+    mut pairwise_check_inst,
+  ) = Instance::gen_pairwise_check_inst::<true>(
+    ctk.max_ts_width,
     mem_addr_ts_bits_size,
     rtk.consis_num_proofs,
     rtk.total_num_phy_mem_accesses,
@@ -480,32 +489,30 @@ fn main() {
 
   // PERM INSTANCES
   // PERM_ROOT
-  let (perm_root_num_cons, perm_root_num_non_zero_entries, perm_root_inst) = Instance::gen_perm_root_inst::<true>(
-    num_inputs_unpadded, 
-    num_ios,
-    rtk.consis_num_proofs,
-    rtk.total_num_phy_mem_accesses,
-    rtk.total_num_vir_mem_accesses,
-  );
+  let (perm_root_num_cons, perm_root_num_non_zero_entries, perm_root_inst) =
+    Instance::gen_perm_root_inst::<true>(
+      num_inputs_unpadded,
+      num_ios,
+      rtk.consis_num_proofs,
+      rtk.total_num_phy_mem_accesses,
+      rtk.total_num_vir_mem_accesses,
+    );
   println!("Finished Perm");
 
   // --
   // COMMITMENT PREPROCESSING
   // --
   println!("Producing Public Parameters...");
-  
+
   // create a commitment to the R1CS instance
   println!("Comitting Circuits...");
   // block_comm_map records the sparse_polys committed in each commitment
   // Note that A, B, C are committed separately, so sparse_poly[3*i+2] corresponds to poly C of instance i
-  let (block_comm_map, block_comm_list, block_decomm_list) = 
-    SNARK::multi_encode(&block_inst);
+  let (block_comm_map, block_comm_list, block_decomm_list) = SNARK::multi_encode(&block_inst);
   println!("Finished Block");
-  let (pairwise_check_comm, pairwise_check_decomm) = 
-    SNARK::encode(&pairwise_check_inst);
+  let (pairwise_check_comm, pairwise_check_decomm) = SNARK::encode(&pairwise_check_inst);
   println!("Finished Pairwise");
-  let (perm_root_comm, perm_root_decomm) = 
-    SNARK::encode(&perm_root_inst);
+  let (perm_root_comm, perm_root_decomm) = SNARK::encode(&perm_root_inst);
   println!("Finished Perm");
 
   // --
@@ -532,7 +539,6 @@ fn main() {
     &rtk.input,
     &rtk.output,
     rtk.output_exec_num,
-    
     num_vars,
     num_ios,
     max_block_num_phy_ops,
@@ -542,7 +548,6 @@ fn main() {
     mem_addr_ts_bits_size,
     num_inputs_unpadded,
     &ctk.num_vars_per_block,
-
     block_num_instances_bound,
     rtk.block_max_num_proofs,
     &block_num_proofs,
@@ -550,7 +555,6 @@ fn main() {
     &block_comm_map,
     &block_comm_list,
     &block_decomm_list,
-
     rtk.consis_num_proofs,
     rtk.total_num_init_phy_mem_accesses,
     rtk.total_num_init_vir_mem_accesses,
@@ -559,7 +563,6 @@ fn main() {
     &mut pairwise_check_inst,
     &pairwise_check_comm,
     &pairwise_check_decomm,
-
     block_vars_matrix,
     rtk.exec_inputs,
     rtk.init_phy_mems_list,
@@ -567,59 +570,54 @@ fn main() {
     rtk.addr_phy_mems_list,
     rtk.addr_vir_mems_list,
     rtk.addr_ts_bits_list,
-
     &perm_root_inst,
     &perm_root_comm,
     &perm_root_decomm,
-
     &mut prover_transcript,
   );
 
   println!("Verifying the proof...");
   // verify the proof of satisfiability
   let mut verifier_transcript = Transcript::new(b"snark_example");
-  assert!(proof.verify(
-    ctk.input_block_num,
-    ctk.output_block_num,
-    &ctk.input_liveness,
-    ctk.func_input_width,
-    ctk.input_offset,
-    ctk.output_offset,
-    &rtk.input,
-    &rtk.input_stack,
-    &rtk.input_mem,
-    &rtk.output,
-    rtk.output_exec_num,
-
-    num_vars,
-    num_ios,
-    max_block_num_phy_ops,
-    &block_num_phy_ops,
-    max_block_num_vir_ops,
-    &block_num_vir_ops,
-    mem_addr_ts_bits_size,
-    num_inputs_unpadded,
-    &ctk.num_vars_per_block,
-    
-    block_num_instances_bound, 
-    rtk.block_max_num_proofs, 
-    &block_num_proofs, 
-    block_num_cons,
-    &block_comm_map,
-    &block_comm_list,
-
-    rtk.consis_num_proofs, 
-    rtk.total_num_init_phy_mem_accesses,
-    rtk.total_num_init_vir_mem_accesses,
-    rtk.total_num_phy_mem_accesses,
-    rtk.total_num_vir_mem_accesses,
-    pairwise_check_num_cons,
-    &pairwise_check_comm,
-
-    perm_root_num_cons,
-    &perm_root_comm,
-
-    &mut verifier_transcript
-  ).is_ok());
+  assert!(proof
+    .verify(
+      ctk.input_block_num,
+      ctk.output_block_num,
+      &ctk.input_liveness,
+      ctk.func_input_width,
+      ctk.input_offset,
+      ctk.output_offset,
+      &rtk.input,
+      &rtk.input_stack,
+      &rtk.input_mem,
+      &rtk.output,
+      rtk.output_exec_num,
+      num_vars,
+      num_ios,
+      max_block_num_phy_ops,
+      &block_num_phy_ops,
+      max_block_num_vir_ops,
+      &block_num_vir_ops,
+      mem_addr_ts_bits_size,
+      num_inputs_unpadded,
+      &ctk.num_vars_per_block,
+      block_num_instances_bound,
+      rtk.block_max_num_proofs,
+      &block_num_proofs,
+      block_num_cons,
+      &block_comm_map,
+      &block_comm_list,
+      rtk.consis_num_proofs,
+      rtk.total_num_init_phy_mem_accesses,
+      rtk.total_num_init_vir_mem_accesses,
+      rtk.total_num_phy_mem_accesses,
+      rtk.total_num_vir_mem_accesses,
+      pairwise_check_num_cons,
+      &pairwise_check_comm,
+      perm_root_num_cons,
+      &perm_root_comm,
+      &mut verifier_transcript
+    )
+    .is_ok());
   println!("proof verification successful!");
 }

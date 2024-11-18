@@ -29,11 +29,7 @@ impl BulletReductionProof {
     b_vec: &[Scalar],
     blind: &Scalar,
     blinds_vec: &[(Scalar, Scalar)],
-  ) -> (
-    Scalar,
-    Scalar,
-    Scalar,
-  ) {
+  ) -> (Scalar, Scalar, Scalar) {
     // Create slices G, H, a, b backed by their respective
     // vectors.  This lets us reslice as we compress the lengths
     // of the vectors in the main loop below.
@@ -71,11 +67,7 @@ impl BulletReductionProof {
       b = b_L;
     }
 
-    (
-      a[0],
-      b[0],
-      blind_fin,
-    )
+    (a[0], b[0], blind_fin)
   }
 
   /// Computes three vectors of verification scalars \\([u\_{i}^{2}]\\), \\([u\_{i}^{-2}]\\) and \\([s\_{i}]\\) for combined multiscalar multiplication
@@ -91,10 +83,10 @@ impl BulletReductionProof {
 
     let mut value = n;
     while value > 1 {
-        value >>= 1; // Divide value by 2
-        lg_n += 1;
+      value >>= 1; // Divide value by 2
+      lg_n += 1;
     }
-    
+
     // 1. Recompute x_k,...,x_1 based on the proof transcript
     let mut challenges = Vec::with_capacity(lg_n);
     for _i in 0..lg_n {
@@ -137,7 +129,7 @@ impl BulletReductionProof {
     n: usize,
     a: &[Scalar],
     transcript: &mut Transcript,
-) -> Result<Scalar, ProofVerifyError> {
+  ) -> Result<Scalar, ProofVerifyError> {
     let (_u_sq, _u_inv_sq, s) = self.verification_scalars(n, transcript)?;
 
     let a_hat = inner_product(a, &s);

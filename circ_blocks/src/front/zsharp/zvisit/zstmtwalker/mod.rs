@@ -492,11 +492,11 @@ impl<'ast, 'ret> ZStatementWalker<'ast, 'ret> {
                             span_to_string(&ue.span),
                         )))
                     }
-                },
+                }
                 _ => Err(ZVisitorError(
                     "ZStatementWalker: (F) unary operator requires field operand".to_string(),
                 )),
-            }
+            },
         }?;
 
         self.unify_expression(ety, &mut ue.expression)
@@ -832,9 +832,7 @@ impl<'ast, 'ret> ZVisitorMut<'ast> for ZStatementWalker<'ast, 'ret> {
         wl: &mut ast::WhileLoopStatement<'ast>,
     ) -> ZVisitorResult {
         // type check for condition
-        let bool_ty = ast::Type::Basic(ast::BasicType::Boolean(ast::BooleanType {
-            span: wl.span,
-        }));
+        let bool_ty = ast::Type::Basic(ast::BasicType::Boolean(ast::BooleanType { span: wl.span }));
         self.unify(Some(bool_ty), &mut wl.condition)?;
 
         self.push_scope(); // {

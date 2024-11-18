@@ -40,10 +40,7 @@ impl KnowledgeProof {
     KnowledgeProof { z1, z2 }
   }
 
-  pub fn verify(
-    &self,
-    _transcript: &mut Transcript,
-  ) -> Result<(), ProofVerifyError> {
+  pub fn verify(&self, _transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
     // TODO: Alternative PCS Verification
     Ok(())
   }
@@ -77,10 +74,7 @@ impl EqualityProof {
     EqualityProof { z }
   }
 
-  pub fn verify(
-    &self,
-    _transcript: &mut Transcript,
-  ) -> Result<(), ProofVerifyError> {
+  pub fn verify(&self, _transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
     // TODO: Alternative PCS Verification
     Ok(())
   }
@@ -127,19 +121,12 @@ impl ProductProof {
     ProductProof { z }
   }
 
-  fn check_equality(
-    _c: &Scalar,
-    _z1: &Scalar,
-    _z2: &Scalar,
-  ) -> bool {
+  fn check_equality(_c: &Scalar, _z1: &Scalar, _z2: &Scalar) -> bool {
     // TODO: Alternative PCS Verification
     true
   }
 
-  pub fn verify(
-    &self,
-    _transcript: &mut Transcript,
-  ) -> Result<(), ProofVerifyError> {
+  pub fn verify(&self, _transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
     // TODO: Alternative PCS Verification
     Ok(())
   }
@@ -192,18 +179,10 @@ impl DotProductProof {
     let z_delta = c * blind_x + r_delta;
     let z_beta = c * blind_y + r_beta;
 
-    DotProductProof {
-      z,
-      z_delta,
-      z_beta,
-    }
+    DotProductProof { z, z_delta, z_beta }
   }
 
-  pub fn verify(
-    &self,
-    transcript: &mut Transcript,
-    a: &[Scalar],
-  ) -> Result<(), ProofVerifyError> {
+  pub fn verify(&self, transcript: &mut Transcript, a: &[Scalar]) -> Result<(), ProofVerifyError> {
     transcript.append_protocol_name(DotProductProof::protocol_name());
     a.append_to_transcript(b"a", transcript);
     let _c = transcript.challenge_scalar(b"c");
@@ -263,14 +242,7 @@ impl DotProductProofLog {
 
     let blind_Gamma = blind_x + r * blind_y;
     let (x_hat, a_hat, rhat_Gamma) =
-      BulletReductionProof::prove(
-        transcript,
-        x_vec,
-        a_vec,
-        &blind_Gamma,
-        &blinds_vec,
-      );
-    
+      BulletReductionProof::prove(transcript, x_vec, a_vec, &blind_Gamma, &blinds_vec);
 
     let y_hat = x_hat * a_hat;
 
@@ -279,10 +251,7 @@ impl DotProductProofLog {
     let z1 = d + c * y_hat;
     let z2 = a_hat * (c * rhat_Gamma + r_beta) + r_delta;
 
-    DotProductProofLog {
-      z1,
-      z2,
-    }
+    DotProductProofLog { z1, z2 }
   }
 
   pub fn verify(

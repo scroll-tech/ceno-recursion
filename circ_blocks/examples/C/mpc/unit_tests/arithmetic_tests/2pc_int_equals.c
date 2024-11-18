@@ -1,5 +1,5 @@
 #include <stdbool.h>
 
-bool main(__attribute__((private(0))) int a, __attribute__((private(1))) int b) { 
+bool main(__attribute__((private(0))) int a, __attribute__((private(1))) int b) {
    return a == b;
 }

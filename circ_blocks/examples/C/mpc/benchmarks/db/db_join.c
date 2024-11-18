@@ -130,4 +130,4 @@ int main(__attribute__((private(0))) int a[LEN_A*ATT_A], __attribute__((private(
 	res.analysis2 = res.analysis1;
 	//res.analysis2 = variance(db, LEN_A*LEN_B);
 	return res.joined + res.analysis1 + res.analysis2;
-} 
+}

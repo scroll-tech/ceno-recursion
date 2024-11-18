@@ -2,15 +2,15 @@ use std::collections::HashMap;
 
 use crate::transcript::AppendToTranscript;
 
-use super::dense_mlpoly::DensePolynomial;
 use super::custom_dense_mlpoly::DensePolynomialPqx;
+use super::dense_mlpoly::DensePolynomial;
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::random::RandomTape;
 use super::scalar::Scalar;
 use super::sparse_mlpoly::{
-  MultiSparseMatPolynomialAsDense, SparseMatEntry, SparseMatPolyCommitment,
-  SparseMatPolyEvalProof, SparseMatPolynomial,
+  MultiSparseMatPolynomialAsDense, SparseMatEntry, SparseMatPolyCommitment, SparseMatPolyEvalProof,
+  SparseMatPolynomial,
 };
 use super::timer::Timer;
 use flate2::{write::ZlibEncoder, Compression};
@@ -116,9 +116,21 @@ impl R1CSInstance {
       let list_C = (0..C.len())
         .map(|i| SparseMatEntry::new(C[i].0, C[i].1, C[i].2))
         .collect::<Vec<SparseMatEntry>>();
-      poly_A_list.push(SparseMatPolynomial::new(num_poly_vars_x, num_poly_vars_y, list_A));
-      poly_B_list.push(SparseMatPolynomial::new(num_poly_vars_x, num_poly_vars_y, list_B));
-      poly_C_list.push(SparseMatPolynomial::new(num_poly_vars_x, num_poly_vars_y, list_C));
+      poly_A_list.push(SparseMatPolynomial::new(
+        num_poly_vars_x,
+        num_poly_vars_y,
+        list_A,
+      ));
+      poly_B_list.push(SparseMatPolynomial::new(
+        num_poly_vars_x,
+        num_poly_vars_y,
+        list_B,
+      ));
+      poly_C_list.push(SparseMatPolynomial::new(
+        num_poly_vars_x,
+        num_poly_vars_y,
+        list_C,
+      ));
       let mut list_A = (0..A.len())
         .map(|i| SparseMatEntry::new(inst * max_num_cons + A[i].0, A[i].1, A[i].2))
         .collect::<Vec<SparseMatEntry>>();
@@ -148,10 +160,18 @@ impl R1CSInstance {
   // index[i] = j => the original jth entry should now be at the ith position
   pub fn sort(&mut self, num_instances: usize, index: &Vec<usize>) {
     self.num_instances = num_instances;
-    self.num_cons = (0..num_instances).map(|i| self.num_cons[index[i]]).collect();
-    self.A_list = (0..num_instances).map(|i| self.A_list[index[i]].clone()).collect();
-    self.B_list = (0..num_instances).map(|i| self.B_list[index[i]].clone()).collect();
-    self.C_list = (0..num_instances).map(|i| self.C_list[index[i]].clone()).collect();
+    self.num_cons = (0..num_instances)
+      .map(|i| self.num_cons[index[i]])
+      .collect();
+    self.A_list = (0..num_instances)
+      .map(|i| self.A_list[index[i]].clone())
+      .collect();
+    self.B_list = (0..num_instances)
+      .map(|i| self.B_list[index[i]].clone())
+      .collect();
+    self.C_list = (0..num_instances)
+      .map(|i| self.C_list[index[i]].clone())
+      .collect();
   }
 
   pub fn get_num_instances(&self) -> usize {
@@ -265,7 +285,7 @@ impl R1CSInstance {
       B_list.push(B);
       C_list.push(C);
 
-      
+
     }
 
     Timer::print(&format!("number_non-zero_entries_A {}", A.len()));
@@ -346,7 +366,7 @@ impl R1CSInstance {
     max_num_inputs: usize,
     max_num_cons: usize,
     num_cons: Vec<usize>,
-    z_mat: &Vec<Vec<Vec<Vec<Scalar>>>>
+    z_mat: &Vec<Vec<Vec<Vec<Scalar>>>>,
   ) -> (DensePolynomialPqx, DensePolynomialPqx, DensePolynomialPqx) {
     assert!(self.num_instances == 1 || self.num_instances == num_instances);
     assert_eq!(max_num_cons, self.max_num_cons);
@@ -366,16 +386,49 @@ impl R1CSInstance {
       for q in 0..num_proofs[p] {
         let z = &z_list[q];
 
-        Az[p].push(vec![self.A_list[p_inst].multiply_vec_disjoint_rounds(num_cons[p_inst].clone(), max_num_inputs, num_inputs[p], z)]);
-        Bz[p].push(vec![self.B_list[p_inst].multiply_vec_disjoint_rounds(num_cons[p_inst].clone(), max_num_inputs, num_inputs[p], z)]);
-        Cz[p].push(vec![self.C_list[p_inst].multiply_vec_disjoint_rounds(num_cons[p_inst].clone(), max_num_inputs, num_inputs[p], z)]);
+        Az[p].push(vec![self.A_list[p_inst].multiply_vec_disjoint_rounds(
+          num_cons[p_inst].clone(),
+          max_num_inputs,
+          num_inputs[p],
+          z,
+        )]);
+        Bz[p].push(vec![self.B_list[p_inst].multiply_vec_disjoint_rounds(
+          num_cons[p_inst].clone(),
+          max_num_inputs,
+          num_inputs[p],
+          z,
+        )]);
+        Cz[p].push(vec![self.C_list[p_inst].multiply_vec_disjoint_rounds(
+          num_cons[p_inst].clone(),
+          max_num_inputs,
+          num_inputs[p],
+          z,
+        )]);
       }
     }
-    
+
     (
-      DensePolynomialPqx::new_rev(&Az, num_proofs.clone(), max_num_proofs, num_cons.clone(), max_num_cons),
-      DensePolynomialPqx::new_rev(&Bz, num_proofs.clone(), max_num_proofs, num_cons.clone(), max_num_cons),
-      DensePolynomialPqx::new_rev(&Cz, num_proofs, max_num_proofs, num_cons.clone(), max_num_cons)
+      DensePolynomialPqx::new_rev(
+        &Az,
+        num_proofs.clone(),
+        max_num_proofs,
+        num_cons.clone(),
+        max_num_cons,
+      ),
+      DensePolynomialPqx::new_rev(
+        &Bz,
+        num_proofs.clone(),
+        max_num_proofs,
+        num_cons.clone(),
+        max_num_cons,
+      ),
+      DensePolynomialPqx::new_rev(
+        &Cz,
+        num_proofs,
+        max_num_proofs,
+        num_cons.clone(),
+        max_num_cons,
+      ),
     )
   }
 
@@ -400,7 +453,7 @@ impl R1CSInstance {
     let mut Az = Vec::new();
     let mut Bz = Vec::new();
     let mut Cz = Vec::new();
-    
+
     // Non-zero instances
     for p in 0..num_instances {
       let z = &z_list[p];
@@ -473,7 +526,11 @@ impl R1CSInstance {
     num_cols: &Vec<usize>,
     evals: &[Scalar],
     // Output in p, q, w, i format, where q section has length 1
-  ) -> (Vec<Vec<Vec<Vec<Scalar>>>>, Vec<Vec<Vec<Vec<Scalar>>>>, Vec<Vec<Vec<Vec<Scalar>>>>) {
+  ) -> (
+    Vec<Vec<Vec<Vec<Scalar>>>>,
+    Vec<Vec<Vec<Vec<Scalar>>>>,
+    Vec<Vec<Vec<Vec<Scalar>>>>,
+  ) {
     assert!(self.num_instances == 1 || self.num_instances == num_instances);
     assert_eq!(num_rows, &self.num_cons);
     assert_eq!(num_segs.next_power_of_two() * max_num_cols, self.num_vars);
@@ -483,9 +540,27 @@ impl R1CSInstance {
     let mut evals_C_list = Vec::new();
     // Length of output follows self.num_instances NOT num_instances!!!
     for p in 0..self.num_instances {
-      let evals_A = self.A_list[p].compute_eval_table_sparse_disjoint_rounds(evals, num_rows[p], num_segs, max_num_cols, num_cols[p]);
-      let evals_B = self.B_list[p].compute_eval_table_sparse_disjoint_rounds(evals, num_rows[p], num_segs, max_num_cols, num_cols[p]);
-      let evals_C = self.C_list[p].compute_eval_table_sparse_disjoint_rounds(evals, num_rows[p], num_segs, max_num_cols, num_cols[p]);
+      let evals_A = self.A_list[p].compute_eval_table_sparse_disjoint_rounds(
+        evals,
+        num_rows[p],
+        num_segs,
+        max_num_cols,
+        num_cols[p],
+      );
+      let evals_B = self.B_list[p].compute_eval_table_sparse_disjoint_rounds(
+        evals,
+        num_rows[p],
+        num_segs,
+        max_num_cols,
+        num_cols[p],
+      );
+      let evals_C = self.C_list[p].compute_eval_table_sparse_disjoint_rounds(
+        evals,
+        num_rows[p],
+        num_segs,
+        max_num_cols,
+        num_cols[p],
+      );
       evals_A_list.push(vec![evals_A]);
       evals_B_list.push(vec![evals_B]);
       evals_C_list.push(vec![evals_C]);
@@ -493,7 +568,6 @@ impl R1CSInstance {
 
     (evals_A_list, evals_B_list, evals_C_list)
   }
-
 
   /*
   // Only compute the first max_num_proofs / max_num_proofs_bound entries
@@ -549,16 +623,24 @@ impl R1CSInstance {
     let mut eval_list = Vec::new();
     // Evaluate each individual poly on [rx, ry]
     for i in 0..self.num_instances {
-      let evals = SparseMatPolynomial::multi_evaluate(&[&self.A_list[i], &self.B_list[i], &self.C_list[i]], rx, ry);
+      let evals = SparseMatPolynomial::multi_evaluate(
+        &[&self.A_list[i], &self.B_list[i], &self.C_list[i]],
+        rx,
+        ry,
+      );
       eval_list.extend(evals.clone());
     }
     eval_list
   }
 
-  pub fn multi_evaluate_bound_rp(&self, rp: &[Scalar], rx: &[Scalar], ry: &[Scalar]) -> 
-  (
-    Vec<Scalar>,                // Concatenation of each individual block
-    (Scalar, Scalar, Scalar)    // Combined, bound to rp
+  pub fn multi_evaluate_bound_rp(
+    &self,
+    rp: &[Scalar],
+    rx: &[Scalar],
+    ry: &[Scalar],
+  ) -> (
+    Vec<Scalar>,              // Concatenation of each individual block
+    (Scalar, Scalar, Scalar), // Combined, bound to rp
   ) {
     let mut a_evals = Vec::new();
     let mut b_evals = Vec::new();
@@ -566,7 +648,11 @@ impl R1CSInstance {
     let mut eval_list = Vec::new();
     // Evaluate each individual poly on [rx, ry]
     for i in 0..self.num_instances {
-      let evals = SparseMatPolynomial::multi_evaluate(&[&self.A_list[i], &self.B_list[i], &self.C_list[i]], rx, ry);
+      let evals = SparseMatPolynomial::multi_evaluate(
+        &[&self.A_list[i], &self.B_list[i], &self.C_list[i]],
+        rx,
+        ry,
+      );
       eval_list.extend(evals.clone());
       a_evals.push(evals[0]);
       b_evals.push(evals[1]);
@@ -585,7 +671,11 @@ impl R1CSInstance {
   pub fn evaluate(&self, rx: &[Scalar], ry: &[Scalar]) -> (Scalar, Scalar, Scalar) {
     assert_eq!(self.num_instances, 1);
 
-    let evals = SparseMatPolynomial::multi_evaluate(&[&self.A_list[0], &self.B_list[0], &self.C_list[0]], rx, ry);
+    let evals = SparseMatPolynomial::multi_evaluate(
+      &[&self.A_list[0], &self.B_list[0], &self.C_list[0]],
+      rx,
+      ry,
+    );
     (evals[0], evals[1], evals[2])
   }
 
@@ -649,7 +739,7 @@ impl R1CSInstance {
         num_cons: self.num_instances * self.max_num_cons,
         num_vars: self.num_vars,
         comm,
-      };    
+      };
       let r1cs_decomm = R1CSDecommitment { dense };
 
       r1cs_comm_list.push(r1cs_comm);
@@ -696,14 +786,8 @@ impl R1CSEvalProof {
     random_tape: &mut RandomTape,
   ) -> R1CSEvalProof {
     let timer = Timer::new("R1CSEvalProof::prove");
-    let proof = SparseMatPolyEvalProof::prove(
-      &decomm.dense,
-      rx,
-      ry,
-      evals,
-      transcript,
-      random_tape,
-    );
+    let proof =
+      SparseMatPolyEvalProof::prove(&decomm.dense, rx, ry, evals, transcript, random_tape);
     timer.stop();
 
     R1CSEvalProof { proof }
@@ -717,12 +801,6 @@ impl R1CSEvalProof {
     evals: &Vec<Scalar>,
     transcript: &mut Transcript,
   ) -> Result<(), ProofVerifyError> {
-    self.proof.verify(
-      &comm.comm,
-      rx,
-      ry,
-      evals,
-      transcript,
-    )
+    self.proof.verify(&comm.comm, rx, ry, evals, transcript)
   }
 }

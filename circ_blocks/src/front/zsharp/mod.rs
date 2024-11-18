@@ -1,11 +1,11 @@
 //! The ZoKrates/Z# front-end
 
-mod interp;
-mod parser;
-mod term;
 mod blocks;
 mod blocks_optimization;
+mod interp;
+mod parser;
 mod pretty;
+mod term;
 pub mod zvisit;
 
 mod prover;
@@ -14,18 +14,18 @@ use super::{FrontEnd, Mode};
 use crate::cfg::cfg;
 use crate::circify::{CircError, Circify, Loc, Val};
 use crate::front::proof::PROVER_ID;
+use crate::front::zsharp::prover::MemOp;
 use crate::ir::proof::ConstraintMetadata;
 use crate::ir::term::*;
-use crate::front::zsharp::prover::MemOp;
 
-use log::{debug,trace, warn};
+use log::{debug, trace, warn};
 use rug::Integer;
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
+use std::hash::BuildHasherDefault;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::hash::BuildHasherDefault;
 use zokrates_pest_ast as ast;
 
 use term::*;
@@ -51,7 +51,17 @@ pub struct ZSharpFE;
 
 impl FrontEnd for ZSharpFE {
     type Inputs<'ast> = Inputs;
-    fn gen(i: Inputs) -> (Computations, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>, Vec<Vec<usize>>, Vec<bool>) {
+    fn gen(
+        i: Inputs,
+    ) -> (
+        Computations,
+        usize,
+        usize,
+        Vec<(Vec<usize>, Vec<usize>)>,
+        Vec<(usize, usize)>,
+        Vec<Vec<usize>>,
+        Vec<bool>,
+    ) {
         debug!(
             "Starting Z# front-end, field: {}",
             Sort::Field(cfg().field().clone())
@@ -62,15 +72,16 @@ impl FrontEnd for ZSharpFE {
         g.visit_files();
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
-        
+
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
         println!("Entry block: {entry_bl}");
         for b in &blks {
             b.pretty();
             println!("");
         }
-        let (blks, entry_bl, input_liveness) = g.optimize_block::<GEN_VERBOSE>(blks, entry_bl, inputs, i.no_opt);
-        let (blks, _, io_size, _, live_io_list, num_mem_accesses, live_vm_list) = 
+        let (blks, entry_bl, input_liveness) =
+            g.optimize_block::<GEN_VERBOSE>(blks, entry_bl, inputs, i.no_opt);
+        let (blks, _, io_size, _, live_io_list, num_mem_accesses, live_vm_list) =
             g.process_block::<GEN_VERBOSE, 0>(blks, entry_bl);
         // NOTE: The input of block 0 includes %BN, which should be removed when reasoning about function input
         let func_input_width = blks[0].get_num_inputs() - 1;
@@ -81,21 +92,29 @@ impl FrontEnd for ZSharpFE {
         g.file_stack_pop();
         let mut cs = Computations::new();
         cs.comps = g.into_circify().cir_ctx().cs.borrow_mut().clone();
-        (cs, func_input_width, io_size, live_io_list, num_mem_accesses, live_vm_list, input_liveness)
+        (
+            cs,
+            func_input_width,
+            io_size,
+            live_io_list,
+            num_mem_accesses,
+            live_vm_list,
+            input_liveness,
+        )
     }
 }
 
 impl ZSharpFE {
     /// Execute the Z# front-end interpreter on the supplied file with the supplied inputs
     pub fn interpret(
-        i: Inputs, 
-        entry_regs: &Vec<Integer>, 
-        entry_stacks: &Vec<Vec<Integer>>, 
+        i: Inputs,
+        entry_regs: &Vec<Integer>,
+        entry_stacks: &Vec<Vec<Integer>>,
         entry_arrays: &Vec<Vec<Integer>>,
         entry_witnesses: &Vec<Integer>,
     ) -> (
-        T, // Return Value
-        Vec<usize>, // Block IDs
+        T,                                                                 // Return Value
+        Vec<usize>,                                                        // Block IDs
         Vec<Vec<Option<Value>>>, // Prog Input | Block Outputs
         Vec<Vec<Option<Value>>>, // (PM Vars + VM Vars) per block
         Vec<HashMap<String, Value, BuildHasherDefault<fxhash::FxHasher>>>, // Map of IO name -> IO value, for witness generation
@@ -110,32 +129,35 @@ impl ZSharpFE {
         g.visit_files();
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
-        
+
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
-        let (blks, entry_bl, input_liveness) = g.optimize_block::<INTERPRET_VERBOSE>(blks, entry_bl, inputs.clone(), i.no_opt);
-        let (blks, entry_bl, io_size, _, _, _, _) = g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl);
+        let (blks, entry_bl, input_liveness) =
+            g.optimize_block::<INTERPRET_VERBOSE>(blks, entry_bl, inputs.clone(), i.no_opt);
+        let (blks, entry_bl, io_size, _, _, _, _) =
+            g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl);
 
         println!("\n\n--\nInterpretation:");
         let (
-            ret, 
-            _, 
-            prog_reg_in, 
-            bl_exec_state, 
+            ret,
+            _,
+            prog_reg_in,
+            bl_exec_state,
             init_phy_mem_list,
             init_vir_mem_list,
-            phy_mem_list, 
-            vir_mem_list
-        ) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(
-            entry_bl, 
-            &inputs, 
-            &input_liveness, 
-            &entry_regs, 
-            entry_stacks, 
-            entry_arrays,
-            entry_witnesses,
-            &blks, 
-            io_size
-        )
+            phy_mem_list,
+            vir_mem_list,
+        ) = g
+            .bl_eval_entry_fn::<INTERPRET_VERBOSE>(
+                entry_bl,
+                &inputs,
+                &input_liveness,
+                &entry_regs,
+                entry_stacks,
+                entry_arrays,
+                entry_witnesses,
+                &blks,
+                io_size,
+            )
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
         // prover::print_state_list(&bl_exec_state);
         // let _ = prover::sort_by_block(&bl_exec_state);
@@ -152,7 +174,8 @@ impl ZSharpFE {
             let state = &bl_exec_state[i];
             let prefix = format!("Block_{}_f{}_lex0_", state.blk_id, state.blk_id);
             block_id_list.push(state.blk_id);
-            let mut inputs = HashMap::<String, Value, BuildHasherDefault<fxhash::FxHasher>>::default();
+            let mut inputs =
+                HashMap::<String, Value, BuildHasherDefault<fxhash::FxHasher>>::default();
             // Process reg_ins
             if i == 0 {
                 for j in 0..prog_reg_in.len() {
@@ -190,124 +213,193 @@ impl ZSharpFE {
             for j in 0..state.phy_mem_op.len() {
                 // addr
                 let addr = to_const_value(state.phy_mem_op[j].addr_t.clone())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 inputs.insert(format!("{}%pm{:06}a{}", prefix, j, suffix), addr);
                 // data
                 let data = to_const_value(state.phy_mem_op[j].data_t.clone())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 inputs.insert(format!("{}%pm{:06}v{}", prefix, j, suffix), data);
             }
             // Process virtual mems
             for j in 0..state.vir_mem_op.len() {
                 // addr
                 let addr = to_const_value(state.vir_mem_op[j].addr_t.clone())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 inputs.insert(format!("{}%vm{:06}a{}", prefix, j, suffix), addr);
                 // data
                 let data = to_const_value(state.vir_mem_op[j].data_t.clone())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 inputs.insert(format!("{}%vm{:06}d{}", prefix, j, suffix), data);
                 // ls
                 let ls = to_const_value(state.vir_mem_op[j].ls_t.clone().unwrap())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 inputs.insert(format!("{}%vm{:06}l{}", prefix, j, suffix), ls);
                 // ts
                 let ts = to_const_value(state.vir_mem_op[j].ts_t.clone().unwrap())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 inputs.insert(format!("{}%vm{:06}t{}", prefix, j, suffix), ts);
             }
             // Process witnesses
             for j in 0..state.wit_op.len() {
                 // witness
                 let wit = to_const_value(state.wit_op[j].clone())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
+                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));
                 inputs.insert(format!("{}%wt{:06}{}", prefix, j, suffix), wit);
             }
             block_io_map_list.push(inputs);
         }
-        let init_phy_mem_list = init_phy_mem_list.iter().map(|i|
-            [
-                to_const_value(i.addr_t.clone())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
-                to_const_value(i.data_t.clone())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
-            ]
-        ).collect();
-        let init_vir_mem_list = init_vir_mem_list.iter().map(|i|
-            [
-                to_const_value(i.addr_t.clone())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
-                to_const_value(i.data_t.clone())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
-                to_const_value(i.ls_t.clone().unwrap())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
-                to_const_value(i.ts_t.clone().unwrap())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
-            ]
-        ).collect();
-        let phy_mem_list = phy_mem_list.iter().map(|i|
-            (
-                to_const_value(i.addr_t.clone())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
-                to_const_value(i.data_t.clone())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
-            )
-        ).collect();
-        let vir_mem_list = vir_mem_list.iter().map(|i|
-            [
-                to_const_value(i.addr_t.clone())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
-                to_const_value(i.data_t.clone())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
-                to_const_value(i.ls_t.clone().unwrap())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
-                to_const_value(i.ts_t.clone().unwrap())
-                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
-            ]
-        ).collect();
+        let init_phy_mem_list = init_phy_mem_list
+            .iter()
+            .map(|i| {
+                [
+                    to_const_value(i.addr_t.clone())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                    to_const_value(i.data_t.clone())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                ]
+            })
+            .collect();
+        let init_vir_mem_list = init_vir_mem_list
+            .iter()
+            .map(|i| {
+                [
+                    to_const_value(i.addr_t.clone())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                    to_const_value(i.data_t.clone())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                    to_const_value(i.ls_t.clone().unwrap())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                    to_const_value(i.ts_t.clone().unwrap())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                ]
+            })
+            .collect();
+        let phy_mem_list = phy_mem_list
+            .iter()
+            .map(|i| {
+                (
+                    to_const_value(i.addr_t.clone())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                    to_const_value(i.data_t.clone())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                )
+            })
+            .collect();
+        let vir_mem_list = vir_mem_list
+            .iter()
+            .map(|i| {
+                [
+                    to_const_value(i.addr_t.clone())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                    to_const_value(i.data_t.clone())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                    to_const_value(i.ls_t.clone().unwrap())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                    to_const_value(i.ts_t.clone().unwrap())
+                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                ]
+            })
+            .collect();
         let block_outputs_list = [
-            vec![prog_reg_in.iter().map(|j|
-                if let Some(k) = j {
-                    Some(to_const_value(k.clone())
-                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)))
-                } else { None }
-            ).collect()],
-            bl_exec_state.iter().map(|i| i.reg_out.iter().map(|j|
-                if let Some(k) = j {
-                    Some(to_const_value(k.clone())
-                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)))
-                } else { None }
-            ).collect()).collect()
-        ].concat();
-        let block_mems_list = bl_exec_state.iter().map(|i| [
-            i.phy_mem_op.iter().flat_map(|pm: &MemOp| [
-                // addr
-                Some(to_const_value(pm.addr_t.clone())
-                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))),
-                // data
-                Some(to_const_value(pm.data_t.clone())
-                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))),
-            ]).collect::<Vec<Option<Value>>>(),
-            i.vir_mem_op.iter().flat_map(|vm: &MemOp| [
-                // addr
-                Some(to_const_value(vm.addr_t.clone())
-                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))),
-                // data
-                Some(to_const_value(vm.data_t.clone())
-                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e))),
-                // ls
-                if let Some(ls) = &vm.ls_t {
-                    Some(to_const_value(ls.clone())
-                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)))
-                } else { None },
-                // ts
-                if let Some(ts) = &vm.ts_t {
-                    Some(to_const_value(ts.clone())
-                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)))
-                } else { None },
-            ]).collect::<Vec<Option<Value>>>(),
-        ].concat()).collect();
-        return (ret, block_id_list, block_outputs_list, block_mems_list, block_io_map_list, init_phy_mem_list, init_vir_mem_list, phy_mem_list, vir_mem_list);
+            vec![prog_reg_in
+                .iter()
+                .map(|j| {
+                    if let Some(k) = j {
+                        Some(
+                            to_const_value(k.clone())
+                                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                        )
+                    } else {
+                        None
+                    }
+                })
+                .collect()],
+            bl_exec_state
+                .iter()
+                .map(|i| {
+                    i.reg_out
+                        .iter()
+                        .map(|j| {
+                            if let Some(k) = j {
+                                Some(
+                                    to_const_value(k.clone())
+                                        .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                                )
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                })
+                .collect(),
+        ]
+        .concat();
+        let block_mems_list =
+            bl_exec_state
+                .iter()
+                .map(|i| {
+                    [
+                        i.phy_mem_op
+                            .iter()
+                            .flat_map(|pm: &MemOp| {
+                                [
+                                    // addr
+                                    Some(to_const_value(pm.addr_t.clone()).unwrap_or_else(|e| {
+                                        panic!("const_entry_fn failed: {}", e)
+                                    })),
+                                    // data
+                                    Some(to_const_value(pm.data_t.clone()).unwrap_or_else(|e| {
+                                        panic!("const_entry_fn failed: {}", e)
+                                    })),
+                                ]
+                            })
+                            .collect::<Vec<Option<Value>>>(),
+                        i.vir_mem_op
+                            .iter()
+                            .flat_map(|vm: &MemOp| {
+                                [
+                                    // addr
+                                    Some(to_const_value(vm.addr_t.clone()).unwrap_or_else(|e| {
+                                        panic!("const_entry_fn failed: {}", e)
+                                    })),
+                                    // data
+                                    Some(to_const_value(vm.data_t.clone()).unwrap_or_else(|e| {
+                                        panic!("const_entry_fn failed: {}", e)
+                                    })),
+                                    // ls
+                                    if let Some(ls) = &vm.ls_t {
+                                        Some(to_const_value(ls.clone()).unwrap_or_else(|e| {
+                                            panic!("const_entry_fn failed: {}", e)
+                                        }))
+                                    } else {
+                                        None
+                                    },
+                                    // ts
+                                    if let Some(ts) = &vm.ts_t {
+                                        Some(to_const_value(ts.clone()).unwrap_or_else(|e| {
+                                            panic!("const_entry_fn failed: {}", e)
+                                        }))
+                                    } else {
+                                        None
+                                    },
+                                ]
+                            })
+                            .collect::<Vec<Option<Value>>>(),
+                    ]
+                    .concat()
+                })
+                .collect();
+        return (
+            ret,
+            block_id_list,
+            block_outputs_list,
+            block_mems_list,
+            block_io_map_list,
+            init_phy_mem_list,
+            init_vir_mem_list,
+            phy_mem_list,
+            vir_mem_list,
+        );
     }
 }
 
@@ -2284,7 +2376,6 @@ impl<'ast> ZGen<'ast> {
                     .borrow_mut()
                     .push(term![IMPLIES; path, asrt]);
             }
-
         } else {
             self.assertions.borrow_mut().push(asrt);
         }
@@ -2358,11 +2449,14 @@ impl<'ast> ZGen<'ast> {
         _md: &Option<ArrayParamMetadata>,
     ) -> Result<T, CircError> {
         match vis {
-            ZVis::Public => {
-                self.circ
-                    .borrow_mut()
-                    .declare_input(f, name, ty, None, precomputed_value, mangle_name)
-            }
+            ZVis::Public => self.circ.borrow_mut().declare_input(
+                f,
+                name,
+                ty,
+                None,
+                precomputed_value,
+                mangle_name,
+            ),
             ZVis::Private(i) => self.circ.borrow_mut().declare_input(
                 f,
                 name,

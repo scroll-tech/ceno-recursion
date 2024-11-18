@@ -35,7 +35,7 @@ $$
 \forall_{x, y}, A(x, y)z(y) \cdot B(x, y)z(y) - C(x, y)z(y) = 0
 $$
 
-Sumcheck 1 invokes `m = log(M)` rounds to prove that given `Az`, `Bz`, `Cz` supplied by the prover, 
+Sumcheck 1 invokes `m = log(M)` rounds to prove that given `Az`, `Bz`, `Cz` supplied by the prover,
 $$
 \sum_{x\in \{0, 1\}^m} \tilde{eq}(\tau, x)(\tilde{Az}(x)\cdot \tilde{Bz}(x) - \tilde{Cz}(x)) = 0
 $$
@@ -60,7 +60,7 @@ Note that to fully utilize the tensor structure and avoid the prover paying for 
 2. Then on bits of $Q$ in _reverse order_ (from least significant to most significant)
 3. Finally on bits of $P$ (most significant to least significant)
 
-This is necessary because if the evaluation begins with bits of $P$ or the most significant bit of $Q$, then the $Q_{\text{max}} - Q_i$ unused entries are no longer zero in the next round. To accomodate for the reverse evaluation in $Q$, entries $\tilde{Az}$, $\tilde{Bz}$, and $\tilde{Cz}$ are also stored in reverse-bits-of-$Q$ order. This allows the final claims to be in the correct order: $v_a = \tilde{Az}(r_i, r_j, r_x)$, $v_b = \tilde{Bz}(r_i, r_j, r_x)$, $v_c = \tilde{Cz}(r_i, r_j, r_x)$. 
+This is necessary because if the evaluation begins with bits of $P$ or the most significant bit of $Q$, then the $Q_{\text{max}} - Q_i$ unused entries are no longer zero in the next round. To accomodate for the reverse evaluation in $Q$, entries $\tilde{Az}$, $\tilde{Bz}$, and $\tilde{Cz}$ are also stored in reverse-bits-of-$Q$ order. This allows the final claims to be in the correct order: $v_a = \tilde{Az}(r_i, r_j, r_x)$, $v_b = \tilde{Bz}(r_i, r_j, r_x)$, $v_c = \tilde{Cz}(r_i, r_j, r_x)$.
 
 
 [Sumcheck 2](https://github.com/Jiangkm3/spartan_parallel/blob/master/src/r1csproof.rs#L462) now requires `log(P) + log(Y) = p + y` rounds to check `Az`, `Bz`, and `Cz` for every `A`, `B`, and `C`. To do so, the prover first computes $\tilde{z}_{r_j}(i, y) = \tilde{z}(i, r_j, y)$, then proves:

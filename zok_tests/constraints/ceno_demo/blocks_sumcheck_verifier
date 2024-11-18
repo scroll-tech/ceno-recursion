@@ -36,7 +36,7 @@ Instructions:
     field[self^num_vars.check_and_generate_subclaim.0.0 + 1 <U32>] expected_vec.check_and_generate_subclaim.0.0
     expected_vec.check_and_generate_subclaim.0.0[0 <Field>] = asserted_sum.check_and_generate_subclaim.0.0 <field>
     u32 i.check_and_generate_subclaim.0.0 = 0 <U32>
-Transition: 
+Transition:
     i.check_and_generate_subclaim.0.0 != self^num_vars.check_and_generate_subclaim.0.0 ? -> 7 : -> 9
 
 Block 7:
@@ -124,7 +124,7 @@ Instructions:
     field load^1.check_and_generate_subclaim.0.0 = evaluations.check_and_generate_subclaim.0.0[1 <Field>]
     assert load^0.check_and_generate_subclaim.0.1 + load^1.check_and_generate_subclaim.0.0 == expected.check_and_generate_subclaim.0.0
     i.check_and_generate_subclaim.0.0 = i.check_and_generate_subclaim.0.0 + 1 <U32>
-Transition: 
+Transition:
     i.check_and_generate_subclaim.0.0 != self^num_vars.check_and_generate_subclaim.0.0 ? -> 7 : -> 9
 
 Block 9:
@@ -196,7 +196,7 @@ Instructions:
     field res.interpolate_uni_poly.0.0 = 0 <Field>
     field denom_up.interpolate_uni_poly.0.0 = 1 <Field>
     u32 e.interpolate_uni_poly.0.0 = 1 <U32>
-Transition: 
+Transition:
     e.interpolate_uni_poly.0.0 != len.interpolate_uni_poly.0.0 ? -> 11 : -> 12
 
 Block 11:
@@ -248,7 +248,7 @@ Instructions:
     field prod.interpolate_uni_poly.0.0 = prod.interpolate_uni_poly.0.0 * tmp.interpolate_uni_poly.0.0
     field denom_up.interpolate_uni_poly.0.0 = denom_up.interpolate_uni_poly.0.0 * (F)e.interpolate_uni_poly.0.0
     e.interpolate_uni_poly.0.0 = e.interpolate_uni_poly.0.0 + 1 <U32>
-Transition: 
+Transition:
     e.interpolate_uni_poly.0.0 != len.interpolate_uni_poly.0.0 ? -> 11 : -> 12
 
 Block 12:
@@ -295,7 +295,7 @@ Outputs:
 Instructions:
     field denom_down.interpolate_uni_poly.0.0 = 1 <Field>
     u32 it.interpolate_uni_poly.0.0 = len.interpolate_uni_poly.0.0
-Transition: 
+Transition:
     it.interpolate_uni_poly.0.0 > 0 <U32> ? -> 13 : -> 14
 
 Block 13:
@@ -350,7 +350,7 @@ Instructions:
         field denom_up.interpolate_uni_poly.0.0 = -1 <Field> * denom_up.interpolate_uni_poly.0.0 * (F)len.interpolate_uni_poly.0.0 - i.interpolate_uni_poly.0.0
         field denom_down.interpolate_uni_poly.0.0 = denom_down.interpolate_uni_poly.0.0 * (F)i.interpolate_uni_poly.0.0
     u32 it.interpolate_uni_poly.0.0 = it.interpolate_uni_poly.0.0 - 1 <U32>
-Transition: 
+Transition:
     it.interpolate_uni_poly.0.0 > 0 <U32> ? -> 13 : -> 14
 
 Block 14:
@@ -590,7 +590,7 @@ Instructions:
     field vs^polynomials_received.verify_sumcheck.0.0 = struct^0^polynomials_received.verify_sumcheck.0.0
     u32 vs^round.verify_sumcheck.0.0 = struct^0^round.verify_sumcheck.0.0
     u32 i.verify_sumcheck.0.0 = 0 <U32>
-Transition: 
+Transition:
     i.verify_sumcheck.0.0 != aux_info^num_variables.verify_sumcheck.0.0 ? -> 20 : -> 25
 
 Block 20:
@@ -638,7 +638,7 @@ Instructions:
     field load^0^evaluations.verify_sumcheck.0.0 = proof^proofs.verify_sumcheck.0.0[i.verify_sumcheck.0.0]
     field prover_msg^evaluations.verify_sumcheck.0.0 = load^0^evaluations.verify_sumcheck.0.0
     u32 j.verify_sumcheck.0.0 = 0 <U32>
-Transition: 
+Transition:
     j.verify_sumcheck.0.0 != aux_info^max_degree.verify_sumcheck.0.0 + 1 <U32> ? -> 21 : -> 23
 
 Block 21:
@@ -744,7 +744,7 @@ Instructions:
     field ret^0^hash.verify_sumcheck.1.0 = %RET^hash.append_message_field
     field t^hash.verify_sumcheck.0.0 = ret^0^hash.verify_sumcheck.1.0
     j.verify_sumcheck.0.0 = j.verify_sumcheck.0.0 + 1 <U32>
-Transition: 
+Transition:
     j.verify_sumcheck.0.0 != aux_info^max_degree.verify_sumcheck.0.0 + 1 <U32> ? -> 21 : -> 23
 
 Block 23:
@@ -859,7 +859,7 @@ Instructions:
     field vs^polynomials_received.verify_sumcheck.0.0 = ret^0^polynomials_received.verify_sumcheck.0.0
     u32 vs^round.verify_sumcheck.0.0 = ret^0^round.verify_sumcheck.0.0
     i.verify_sumcheck.0.0 = i.verify_sumcheck.0.0 + 1 <U32>
-Transition: 
+Transition:
     i.verify_sumcheck.0.0 != aux_info^num_variables.verify_sumcheck.0.0 ? -> 20 : -> 25
 
 Block 25:
@@ -1068,7 +1068,7 @@ Instructions:
     u32 %o12 = %w49
     field %o13 = %w50
     field %o1(BN) = %w52 != %w49 ? 7 <Field> : 9 <Field>
-Transition: 
+Transition:
     %w52 != %w49 ? -> 7 : -> 9
 
 Block 7:
@@ -1211,7 +1211,7 @@ Instructions:
     u32 %o12 = %w49
     field %o13 = %w50
     field %o1(BN) = %w52 != %w49 ? 7 <Field> : 9 <Field>
-Transition: 
+Transition:
     %w52 != %w49 ? -> 7 : -> 9
 
 Block 9:
@@ -1334,7 +1334,7 @@ Instructions:
     u32 %o20 = %w49
     field %o21 = %w50
     field %o1(BN) = %w74 != %w69 ? 11 <Field> : 12 <Field>
-Transition: 
+Transition:
     %w74 != %w69 ? -> 11 : -> 12
 
 Block 11:
@@ -1428,7 +1428,7 @@ Instructions:
     u32 %o20 = %w49
     field %o21 = %w50
     field %o1(BN) = %w74 != %w69 ? 11 <Field> : 12 <Field>
-Transition: 
+Transition:
     %w74 != %w69 ? -> 11 : -> 12
 
 Block 12:
@@ -1515,7 +1515,7 @@ Instructions:
     u32 %o20 = %w49
     field %o21 = %w50
     field %o1(BN) = %w77 > 0 <U32> ? 13 <Field> : 14 <Field>
-Transition: 
+Transition:
     %w77 > 0 <U32> ? -> 13 : -> 14
 
 Block 13:
@@ -1612,7 +1612,7 @@ Instructions:
     u32 %o20 = %w49
     field %o21 = %w50
     field %o1(BN) = %w77 > 0 <U32> ? 13 <Field> : 14 <Field>
-Transition: 
+Transition:
     %w77 > 0 <U32> ? -> 13 : -> 14
 
 Block 14:
@@ -2010,7 +2010,7 @@ Instructions:
     field %o18 = %w116
     u32 %o19 = %w117
     field %o1(BN) = %w81 != %w35 ? 20 <Field> : 25 <Field>
-Transition: 
+Transition:
     %w81 != %w35 ? -> 20 : -> 25
 
 Block 20:
@@ -2098,7 +2098,7 @@ Instructions:
     field %o20 = %w116
     u32 %o21 = %w117
     field %o1(BN) = %w120 != %w34 + 1 <U32> ? 21 <Field> : 23 <Field>
-Transition: 
+Transition:
     %w120 != %w34 + 1 <U32> ? -> 21 : -> 23
 
 Block 21:
@@ -2286,7 +2286,7 @@ Instructions:
     field %o20 = %w116
     u32 %o21 = %w117
     field %o1(BN) = %w120 != %w34 + 1 <U32> ? 21 <Field> : 23 <Field>
-Transition: 
+Transition:
     %w120 != %w34 + 1 <U32> ? -> 21 : -> 23
 
 Block 23:
@@ -2479,7 +2479,7 @@ Instructions:
     field %o18 = %w116
     u32 %o19 = %w117
     field %o1(BN) = %w81 != %w35 ? 20 <Field> : 25 <Field>
-Transition: 
+Transition:
     %w81 != %w35 ? -> 20 : -> 25
 
 Block 25:

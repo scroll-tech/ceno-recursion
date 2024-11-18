@@ -39,7 +39,7 @@ void identity(DT* OUTPUT_m) {
 			if(i==j) {
 				OUTPUT_m[i*N+j] = 1;
 			 } else{
-				OUTPUT_m[i*N+j] = 0; 
+				OUTPUT_m[i*N+j] = 0;
 			 }	
 		}
 	}

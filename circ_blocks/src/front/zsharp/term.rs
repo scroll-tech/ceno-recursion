@@ -41,7 +41,8 @@ impl Display for Ty {
                     dims.push((ro, n));
                 }
                 write!(f, "{bb}")?;
-                dims.iter().try_for_each(|d| write!(f, "[{}{}]", if *d.0 {"ro "} else {""}, d.1))
+                dims.iter()
+                    .try_for_each(|d| write!(f, "[{}{}]", if *d.0 { "ro " } else { "" }, d.1))
             }
             Ty::MutArray(n) => write!(f, "MutArray({n})"),
         }
@@ -850,7 +851,7 @@ pub fn uint_to_bits(u: T) -> Result<T, String> {
             ir_array(
                 Sort::Bool,
                 (0..*n).rev().map(|i| term![Op::BvBit(i); u.term.clone()]),
-            )
+            ),
         )),
         u => Err(format!("Cannot do uint-to-bits on {u}")),
     }
@@ -885,7 +886,10 @@ pub fn field_to_bits(f: T, n: usize) -> Result<T, String> {
 
 pub fn field_to_bool(f: T) -> Result<T, String> {
     match &f.ty {
-        Ty::Field => Ok(T::new(Ty::Bool, term![Op::BvBit(0); term![Op::PfToBv(1); f.term]])),
+        Ty::Field => Ok(T::new(
+            Ty::Bool,
+            term![Op::BvBit(0); term![Op::PfToBv(1); f.term]],
+        )),
         u => Err(format!("Cannot do uint-to-bits on {u}")),
     }
 }

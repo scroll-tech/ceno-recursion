@@ -84,9 +84,9 @@ def check_and_generate_subclaim(SumcheckIOPVerifierState self, field asserted_su
 // store msg_list[0] as the index to the next cell
 // Perform one check on the entire t_list at the very end
 def verify_sumcheck(
-    field claimed_sum, 
-    SumcheckProof proof, 
-    VPAuxInfo aux_info, 
+    field claimed_sum,
+    SumcheckProof proof,
+    VPAuxInfo aux_info,
     Transcript[0] t_list,
     field[0] msg_list
 ) -> SumCheckSubClaim:

@@ -8,7 +8,7 @@ TL;DR:
 1. Function calls using physical memory seems possible using a Base Pointer. Although it is different from x86-32
    base pointers such that we don't have @BP per stack frame, rather a different @BP per call.
 2. Also, base pointers need to be pushed along with any other STOREs, including scoping over local variables and
-   function calls. There are some optimizations but the most aggressive push / pulls of @BP should always be correct. 
+   function calls. There are some optimizations but the most aggressive push / pulls of @BP should always be correct.
 
 --
 Notations: we would utilize the following registers:
@@ -100,7 +100,7 @@ Example 2: Recursion + Multiple Returns
         else:
             return fib(n - 1) + fib(n - 2)
         return b
-    
+
     def main() -> u32:
         u32 b = 7
         b = fib(b)
@@ -162,11 +162,11 @@ def fib(u32 n) -> u32:
             u32 @TMP2 = @RET
 
         @RET = @TMP1 + @TMP2
-    
+
     LOAD_P(@BP + 2, k)
     LOAD_P(@BP + 1, b)
     LOAD_P(@BP, @BP)
-    
+
     def main() -> u32:
         u32 b = 7
 

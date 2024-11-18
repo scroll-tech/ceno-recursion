@@ -1,14 +1,19 @@
-use serde::{Serialize, Deserialize};
-use std::ops::{Neg, Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
-use ff::{derive::subtle::{Choice, ConditionallySelectable, ConstantTimeEq}, Field};
+use ff::{
+    derive::subtle::{Choice, ConditionallySelectable, ConstantTimeEq},
+    Field,
+};
 use rand::RngCore;
+use serde::{Deserialize, Serialize};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use crate::ff_field::FGoldilocks;
 use ff::derive::subtle::CtOption;
 use rug::Integer;
 
 /// Degree 2 FGoldilocks extension field mod x^2 - 7
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash,
+)]
 pub struct FGoldilocksExt2(pub [FGoldilocks; 2]);
 
 impl FGoldilocksExt2 {

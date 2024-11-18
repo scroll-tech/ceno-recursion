@@ -3,7 +3,7 @@ def main() -> field:
     field b = 4
     a = 3
     field i = 10
-    for field i in 0..4 do    
+    for field i in 0..4 do
         a = a + 1
         field a = 60
         field i = 10

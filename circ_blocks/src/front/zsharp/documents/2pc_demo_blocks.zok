@@ -27,7 +27,7 @@ Block 2:
     field a = 20 <Field>
     // Update %SP before creating another stack frame
     %SP = %SP + 2 <Field>
-    
+
     // Create new stack frame for function call
     %PHY[%SP + 0] = %BP
     field %BP = %SP
@@ -37,7 +37,7 @@ Block 2:
     %PHY[%SP + 3] = i
     %PHY[%SP + 4] = %RP
     %SP = %SP + 5 <Field>
-    
+
     // Set parameters of ADD() to func call arguments
     // We need @ARG because if we do B = A directly then C = B is using the wrong value
     field @ARG0 = a
@@ -62,13 +62,13 @@ Block 3:
     %BP = %PHY[%BP + 0]
     // Set B to return value
     b = %RET0
-    
+
     // Create new stack frame since we will overwrite B
     %PHY[%SP + 0] = %BP
     field %BP = %SP
     %PHY[%SP + 1] = b
     field b = 10 <Field>
-    
+
     // Update iterator
     i = i + 1 <Field>
     // Update %SP & pop variables out as we exit scope

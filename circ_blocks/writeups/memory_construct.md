@@ -49,7 +49,7 @@ Note that constraint 7 works because:
 ## Write-Once Approach
 The write-once memory operations are denoted as a quadruple:
 - `(phy_addr, val, vir_addr, ls, ts)`
-During constraint generation, 
+During constraint generation,
 - Virtual address 0 is skipped, AND
 for every STORE:
 - Perform a LOAD to obtain the previous physical address: `phy_addr, val = 0, vir_addr, ls = LOAD, ts`
@@ -76,7 +76,7 @@ And check:
 For every memory operation at execution time, introduce the following triple:
 - `(vir_addr, val, ts)`
 In addition, a hidden fourth variable `phy_addr` only visible to the prover.
-During constraint generation, 
+During constraint generation,
 - Virtual address & physical address 0 are skipped
 For every STORE:
 - Increment the timestamp

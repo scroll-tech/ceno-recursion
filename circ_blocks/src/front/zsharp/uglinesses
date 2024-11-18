@@ -1,4 +1,4 @@
-overloading: 
+overloading:
     Functions are imported by name. If many functions have the same name
     but different signatures, all of them get imported, and which one to
     use in a particular call is inferred. (ZoK manual section 3.8)

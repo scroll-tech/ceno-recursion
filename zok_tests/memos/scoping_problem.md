@@ -34,8 +34,8 @@ Block 2:
     field a = 4
     j = j + 1
     pop a <- stack
-Transition: j < Y ? Block 2 : Block 3    
-    
+Transition: j < Y ? Block 2 : Block 3
+
 Block 3:
     push b -> stack
     field b = 5

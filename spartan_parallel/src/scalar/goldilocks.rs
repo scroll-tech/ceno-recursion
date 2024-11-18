@@ -177,19 +177,19 @@ impl From<u64> for Scalar {
 
 impl ConstantTimeEq for Scalar {
   fn ct_eq(&self, other: &Self) -> Choice {
-      self.to_canonical_u64().ct_eq(&other.to_canonical_u64())
+    self.to_canonical_u64().ct_eq(&other.to_canonical_u64())
   }
 }
 
 impl PartialEq for Scalar {
   fn eq(&self, other: &Scalar) -> bool {
-      self.to_canonical_u64() == other.to_canonical_u64()
+    self.to_canonical_u64() == other.to_canonical_u64()
   }
 }
 
 impl ConditionallySelectable for Scalar {
   fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
-      Self(u64::conditional_select(&a.0, &b.0, choice))
+    Self(u64::conditional_select(&a.0, &b.0, choice))
   }
 }
 
@@ -203,40 +203,40 @@ const INV: u64 = 0xFFFF_FFFE_FFFF_FFFF;
 /// Compute the inverse of 2^exp in this field.
 #[inline]
 fn inverse_2exp(exp: usize) -> u64 {
-    // Let p = char(F). Since 2^exp is in the prime subfield, i.e. an
-    // element of GF_p, its inverse must be as well. Thus we may add
-    // multiples of p without changing the result. In particular,
-    // 2^-exp = 2^-exp - p 2^-exp
-    //        = 2^-exp (1 - p)
-    //        = p - (p - 1) / 2^exp
+  // Let p = char(F). Since 2^exp is in the prime subfield, i.e. an
+  // element of GF_p, its inverse must be as well. Thus we may add
+  // multiples of p without changing the result. In particular,
+  // 2^-exp = 2^-exp - p 2^-exp
+  //        = 2^-exp (1 - p)
+  //        = p - (p - 1) / 2^exp
 
-    // If this field's two adicity, t, is at least exp, then 2^exp divides
-    // p - 1, so this division can be done with a simple bit shift. If
-    // exp > t, we repeatedly multiply by 2^-t and reduce exp until it's in
-    // the right range.
+  // If this field's two adicity, t, is at least exp, then 2^exp divides
+  // p - 1, so this division can be done with a simple bit shift. If
+  // exp > t, we repeatedly multiply by 2^-t and reduce exp until it's in
+  // the right range.
 
-    // NB: The only reason this is split into two cases is to save
-    // the multiplication (and possible calculation of
-    // inverse_2_pow_adicity) in the usual case that exp <=
-    // TWO_ADICITY. Can remove the branch and simplify if that
-    // saving isn't worth it.
-    let res = if exp > 32 {
-        // NB: This should be a compile-time constant
-        // MODULUS - ((MODULUS - 1) >> 32)
-        let inverse_2_pow_adicity = Scalar(0xfffffffe00000002);
+  // NB: The only reason this is split into two cases is to save
+  // the multiplication (and possible calculation of
+  // inverse_2_pow_adicity) in the usual case that exp <=
+  // TWO_ADICITY. Can remove the branch and simplify if that
+  // saving isn't worth it.
+  let res = if exp > 32 {
+    // NB: This should be a compile-time constant
+    // MODULUS - ((MODULUS - 1) >> 32)
+    let inverse_2_pow_adicity = Scalar(0xfffffffe00000002);
 
-        let mut res = inverse_2_pow_adicity;
-        let mut e = exp - 32;
+    let mut res = inverse_2_pow_adicity;
+    let mut e = exp - 32;
 
-        while e > 32 {
-            res *= inverse_2_pow_adicity;
-            e -= 32;
-        }
-        res * Scalar(P - ((P - 1) >> e))
-    } else {
-        Scalar(P - ((P - 1) >> exp))
-    };
-    res.0
+    while e > 32 {
+      res *= inverse_2_pow_adicity;
+      e -= 32;
+    }
+    res * Scalar(P - ((P - 1) >> e))
+  } else {
+    Scalar(P - ((P - 1) >> exp))
+  };
+  res.0
 }
 
 /// This is a 'safe' iteration for the modular inversion algorithm. It
@@ -244,29 +244,29 @@ fn inverse_2exp(exp: usize) -> u64 {
 /// when f + g >= 2^64.
 #[inline(always)]
 fn safe_iteration(f: &mut u64, g: &mut u64, c: &mut i128, d: &mut i128, k: &mut u32) {
-    if f < g {
-        std::mem::swap(f, g);
-        std::mem::swap(c, d);
-    }
-    if *f & 3 == *g & 3 {
-        // f - g = 0 (mod 4)
-        *f -= *g;
-        *c -= *d;
+  if f < g {
+    std::mem::swap(f, g);
+    std::mem::swap(c, d);
+  }
+  if *f & 3 == *g & 3 {
+    // f - g = 0 (mod 4)
+    *f -= *g;
+    *c -= *d;
 
-        // kk >= 2 because f is now 0 (mod 4).
-        let kk = f.trailing_zeros();
-        *f >>= kk;
-        *d <<= kk;
-        *k += kk;
-    } else {
-        // f + g = 0 (mod 4)
-        *f = (*f >> 2) + (*g >> 2) + 1u64;
-        *c += *d;
-        let kk = f.trailing_zeros();
-        *f >>= kk;
-        *d <<= kk + 2;
-        *k += kk + 2;
-    }
+    // kk >= 2 because f is now 0 (mod 4).
+    let kk = f.trailing_zeros();
+    *f >>= kk;
+    *d <<= kk;
+    *k += kk;
+  } else {
+    // f + g = 0 (mod 4)
+    *f = (*f >> 2) + (*g >> 2) + 1u64;
+    *c += *d;
+    let kk = f.trailing_zeros();
+    *f >>= kk;
+    *d <<= kk + 2;
+    *k += kk + 2;
+  }
 }
 
 /// This is an 'unsafe' iteration for the modular inversion
@@ -274,103 +274,100 @@ fn safe_iteration(f: &mut u64, g: &mut u64, c: &mut i128, d: &mut i128, k: &mut 
 /// wrong answer if f + g >= 2^64.
 #[inline(always)]
 unsafe fn unsafe_iteration(f: &mut u64, g: &mut u64, c: &mut i128, d: &mut i128, k: &mut u32) {
-    if *f < *g {
-        std::mem::swap(f, g);
-        std::mem::swap(c, d);
-    }
-    if *f & 3 == *g & 3 {
-        // f - g = 0 (mod 4)
-        *f -= *g;
-        *c -= *d;
-    } else {
-        // f + g = 0 (mod 4)
-        *f += *g;
-        *c += *d;
-    }
+  if *f < *g {
+    std::mem::swap(f, g);
+    std::mem::swap(c, d);
+  }
+  if *f & 3 == *g & 3 {
+    // f - g = 0 (mod 4)
+    *f -= *g;
+    *c -= *d;
+  } else {
+    // f + g = 0 (mod 4)
+    *f += *g;
+    *c += *d;
+  }
 
-    // kk >= 2 because f is now 0 (mod 4).
-    let kk = f.trailing_zeros();
-    *f >>= kk;
-    *d <<= kk;
-    *k += kk;
+  // kk >= 2 because f is now 0 (mod 4).
+  let kk = f.trailing_zeros();
+  *f >>= kk;
+  *d <<= kk;
+  *k += kk;
 }
 
 /// Try to invert an element in a prime field.
 /// See Handbook of Elliptic and Hyperelliptic Cryptography, Algorithms 11.6 and 11.12.
 #[allow(clippy::many_single_char_names)]
 pub(crate) fn try_inverse_u64(x: &u64) -> Option<u64> {
-    let mut f = *x;
-    let mut g = P;
-    // NB: These two are very rarely such that their absolute
-    // value exceeds (p-1)/2; we are paying the price of i128 for
-    // the whole calculation, just for the times they do
-    // though. Measurements suggest a further 10% time saving if c
-    // and d could be replaced with i64's.
-    let mut c = 1i128;
-    let mut d = 0i128;
+  let mut f = *x;
+  let mut g = P;
+  // NB: These two are very rarely such that their absolute
+  // value exceeds (p-1)/2; we are paying the price of i128 for
+  // the whole calculation, just for the times they do
+  // though. Measurements suggest a further 10% time saving if c
+  // and d could be replaced with i64's.
+  let mut c = 1i128;
+  let mut d = 0i128;
 
-    if f == 0 {
-        return None;
+  if f == 0 {
+    return None;
+  }
+
+  // f and g must always be odd.
+  let mut k = f.trailing_zeros();
+  f >>= k;
+  if f == 1 {
+    return Some(inverse_2exp(k as usize));
+  }
+
+  // The first two iterations are unrolled. This is to handle
+  // the case where f and g are both large and f+g can
+  // overflow. log2(max{f,g}) goes down by at least one each
+  // iteration though, so after two iterations we can be sure
+  // that f+g won't overflow.
+
+  // Iteration 1:
+  safe_iteration(&mut f, &mut g, &mut c, &mut d, &mut k);
+
+  if f == 1 {
+    // c must be -1 or 1 here.
+    if c == -1 {
+      return Some(P - inverse_2exp(k as usize));
     }
+    debug_assert!(c == 1, "bug in try_inverse_u64");
+    return Some(inverse_2exp(k as usize));
+  }
 
-    // f and g must always be odd.
-    let mut k = f.trailing_zeros();
-    f >>= k;
-    if f == 1 {
-        return Some(inverse_2exp(k as usize));
+  // Iteration 2:
+  safe_iteration(&mut f, &mut g, &mut c, &mut d, &mut k);
+
+  // Remaining iterations:
+  while f != 1 {
+    unsafe {
+      unsafe_iteration(&mut f, &mut g, &mut c, &mut d, &mut k);
     }
+  }
 
-    // The first two iterations are unrolled. This is to handle
-    // the case where f and g are both large and f+g can
-    // overflow. log2(max{f,g}) goes down by at least one each
-    // iteration though, so after two iterations we can be sure
-    // that f+g won't overflow.
+  // The following two loops adjust c so it's in the canonical range
+  // [0, F::ORDER).
 
-    // Iteration 1:
-    safe_iteration(&mut f, &mut g, &mut c, &mut d, &mut k);
+  // The maximum number of iterations observed here is 2; should
+  // prove this.
+  while c < 0 {
+    c += P as i128;
+  }
 
-    if f == 1 {
-        // c must be -1 or 1 here.
-        if c == -1 {
-            return Some(P - inverse_2exp(k as usize));
-        }
-        debug_assert!(c == 1, "bug in try_inverse_u64");
-        return Some(inverse_2exp(k as usize));
-    }
+  // The maximum number of iterations observed here is 1; should
+  // prove this.
+  while c >= P as i128 {
+    c -= P as i128;
+  }
 
-    // Iteration 2:
-    safe_iteration(&mut f, &mut g, &mut c, &mut d, &mut k);
-
-    // Remaining iterations:
-    while f != 1 {
-        unsafe {
-            unsafe_iteration(&mut f, &mut g, &mut c, &mut d, &mut k);
-        }
-    }
-
-    // The following two loops adjust c so it's in the canonical range
-    // [0, F::ORDER).
-
-    // The maximum number of iterations observed here is 2; should
-    // prove this.
-    while c < 0 {
-        c += P as i128;
-    }
-
-    // The maximum number of iterations observed here is 1; should
-    // prove this.
-    while c >= P as i128 {
-        c -= P as i128;
-    }
-
-    // Precomputing the binary inverses rather than using inverse_2exp
-    // saves ~5ns on my machine.
-    let res = Scalar(c as u64) * Scalar(inverse_2exp(k as usize));
-    debug_assert!(
-        Scalar(*x) * res == Scalar::one(),
-        "bug in try_inverse_u64"
-    );
-    Some(res.0)
+  // Precomputing the binary inverses rather than using inverse_2exp
+  // saves ~5ns on my machine.
+  let res = Scalar(c as u64) * Scalar(inverse_2exp(k as usize));
+  debug_assert!(Scalar(*x) * res == Scalar::one(), "bug in try_inverse_u64");
+  Some(res.0)
 }
 
 impl Neg for Scalar {
@@ -378,11 +375,11 @@ impl Neg for Scalar {
 
   #[inline]
   fn neg(self) -> Self {
-      if self.0 == 0 {
-          self
-      } else {
-          Self(P - self.to_canonical_u64())
-      }
+    if self.0 == 0 {
+      self
+    } else {
+      Self(P - self.to_canonical_u64())
+    }
   }
 }
 
@@ -458,7 +455,7 @@ impl Scalar {
   fn to_canonical_u64(&self) -> u64 {
     let mut c = self.0;
     if c >= P {
-        c -= P;
+      c -= P;
     }
     c
   }
@@ -485,8 +482,8 @@ impl Scalar {
     let mut res: u128 = 0;
 
     for &byte in bytes.iter().rev() {
-        res = (res << 8) | (byte as u128);
-        res %= P as u128;
+      res = (res << 8) | (byte as u128);
+      res %= P as u128;
     }
 
     CtOption::new(Scalar(res as u64), Choice::from(1u8))
@@ -506,8 +503,8 @@ impl Scalar {
     let mut res: u128 = 0;
 
     for &byte in bytes.iter().rev() {
-        res = (res << 8) | (byte as u128);
-        res %= P as u128;
+      res = (res << 8) | (byte as u128);
+      res %= P as u128;
     }
 
     Scalar(res as u64)
@@ -588,11 +585,11 @@ impl Scalar {
   /// failing if the element is zero.
   pub fn invert(&self) -> CtOption<Self> {
     match try_inverse_u64(&self.0) {
-        Some(p) => CtOption::new(Self(p), Choice::from(1)),
-        None => CtOption::new(Self(0), Choice::from(0)),
+      Some(p) => CtOption::new(Self(p), Choice::from(1)),
+      None => CtOption::new(Self(0), Choice::from(0)),
     }
   }
-  
+
   pub fn batch_invert(inputs: &mut [Scalar]) -> Scalar {
     // This code is essentially identical to the FieldElement
     // implementation, and is documented there.  Unfortunately,
@@ -690,10 +687,9 @@ mod tests {
 
     assert_eq!(
       Scalar::from_bytes(&[
-        0x01, 0x0f, 0x9c, 0x44, 0xe3, 0x11, 0x06, 0xa4, 
-        0x47, 0x93, 0x85, 0x68, 0xa7, 0x1b, 0x0e, 0xd0, 
-        0x65, 0xbe, 0xf5, 0x17, 0xd2, 0x73, 0xec, 0xce, 
-        0x3d, 0x9a, 0x30, 0x7c, 0x1b, 0x41, 0x99, 0x03
+        0x01, 0x0f, 0x9c, 0x44, 0xe3, 0x11, 0x06, 0xa4, 0x47, 0x93, 0x85, 0x68, 0xa7, 0x1b, 0x0e,
+        0xd0, 0x65, 0xbe, 0xf5, 0x17, 0xd2, 0x73, 0xec, 0xce, 0x3d, 0x9a, 0x30, 0x7c, 0x1b, 0x41,
+        0x99, 0x03
       ])
       .unwrap(),
       Scalar(2973136677702561314)
@@ -701,14 +697,11 @@ mod tests {
 
     assert_eq!(
       Scalar::from_bytes_wide(&[
-        0x01, 0x0f, 0x9c, 0x44, 0xe3, 0x11, 0x06, 0xa4, 
-        0x47, 0xa3, 0x0a, 0x56, 0x56, 0xe6, 0xc6, 0x6a, 
-        0x05, 0xd7, 0xd3, 0x2d, 0x9a, 0x65, 0xa5, 0xbf, 
-        0x00, 0xe3, 0x78, 0x38, 0x3d, 0xb7, 0x20, 0xb7, 
-        0xea, 0xfd, 0x26, 0x1f, 0xf7, 0x8f, 0x45, 0x01, 
-        0x8b, 0x30, 0xb9, 0x6f, 0xe2, 0x25, 0x23, 0x13, 
-        0x0b, 0x14, 0x01, 0x1e, 0x33, 0x5c, 0x64, 0x2d, 
-        0x7f, 0xfa, 0xac, 0xb3, 0xa2, 0x8f, 0x4f, 0x00,
+        0x01, 0x0f, 0x9c, 0x44, 0xe3, 0x11, 0x06, 0xa4, 0x47, 0xa3, 0x0a, 0x56, 0x56, 0xe6, 0xc6,
+        0x6a, 0x05, 0xd7, 0xd3, 0x2d, 0x9a, 0x65, 0xa5, 0xbf, 0x00, 0xe3, 0x78, 0x38, 0x3d, 0xb7,
+        0x20, 0xb7, 0xea, 0xfd, 0x26, 0x1f, 0xf7, 0x8f, 0x45, 0x01, 0x8b, 0x30, 0xb9, 0x6f, 0xe2,
+        0x25, 0x23, 0x13, 0x0b, 0x14, 0x01, 0x1e, 0x33, 0x5c, 0x64, 0x2d, 0x7f, 0xfa, 0xac, 0xb3,
+        0xa2, 0x8f, 0x4f, 0x00,
       ]),
       Scalar(4689423654514323432)
     );

@@ -57,7 +57,7 @@ int min_with_aux(int *data, int *aux, int len, int stride) {
 
 /**
  * Iteration loop unrolled and depth minimized by computing minimum over tree structure
- */ 
+ */
 void iteration_unrolled_inner_depth(int *data_inner, int *cluster, int *OUTPUT_cluster, int *OUTPUT_count, int len_inner, int num_cluster) {
 	int i,c;
 	int dist[num_cluster];
@@ -74,7 +74,7 @@ void iteration_unrolled_inner_depth(int *data_inner, int *cluster, int *OUTPUT_c
 	for(i = 0; i < len_inner; i++) {
 	  int dx = data_inner[i*D];
 	  int dy = data_inner[i*D+1];
-  
+
 	  for(c = 0; c < num_cluster; c++) {
 			pos[c]=c;
 			dist[c] = dist2(cluster[D*c], cluster[D*c+1], dx, dy);
@@ -89,7 +89,7 @@ void iteration_unrolled_inner_depth(int *data_inner, int *cluster, int *OUTPUT_c
 
 /**
  * Iteration unrolled outer loop
- */ 
+ */
 void iteration_unrolled_outer(int *data, int *cluster, int *OUTPUT_cluster) {
 	// int j, c;
 	int j,c;	
@@ -144,11 +144,11 @@ void iteration_unrolled_outer(int *data, int *cluster, int *OUTPUT_cluster) {
 
 	// Recompute cluster Pos
 	// Compute mean
-	for(c = 0; c < NC; c++) {  
+	for(c = 0; c < NC; c++) {
 	  if(count[c] >0 ) {
 			OUTPUT_cluster[c*D] /= count[c];
 			OUTPUT_cluster[c*D+1] /= count[c];
-	  } 
+	  }
 	}
 }
 
@@ -165,7 +165,7 @@ void kmeans(int *data, int *OUTPUT_res) {
 		cluster[c*D+1] = data[((c+3)%LEN)*D+1];
 	}
 
-	for (p = 0; p < PRECISION; p++) { 
+	for (p = 0; p < PRECISION; p++) {
 		int new_cluster[NC*D];
 		iteration_unrolled_outer(data, cluster, new_cluster);
 		// iteration(data, cluster, new_cluster, len, num_cluster);
@@ -176,7 +176,7 @@ void kmeans(int *data, int *OUTPUT_res) {
 		}
 	}
 
-	for(c = 0; c < NC; c++) {  
+	for(c = 0; c < NC; c++) {
 		OUTPUT_res[c*D] = cluster[c*D];
 		OUTPUT_res[c*D+1] = cluster[c*D+1];
 	}
@@ -199,7 +199,7 @@ int main(__attribute__((private(0))) int a[20], __attribute__((private(1))) int 
 
     struct output output;
     kmeans(data, output.cluster);
-   
+
     int sum = 0;
     for (int i = 0; i < D * NC; i++)
     {

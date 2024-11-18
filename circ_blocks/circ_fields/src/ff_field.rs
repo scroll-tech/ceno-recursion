@@ -151,9 +151,4 @@ def_field!(
     4
 );
 
-def_field!(
-    f_goldilocks,
-    "18446744069414584321",
-    "7",
-    2
-);
+def_field!(f_goldilocks, "18446744069414584321", "7", 2);

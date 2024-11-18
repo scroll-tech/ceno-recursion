@@ -2,9 +2,7 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::needless_range_loop)]
 use super::dense_mlpoly::DensePolynomial;
-use super::dense_mlpoly::{
-  EqPolynomial, IdentityPolynomial, PolyEvalProof,
-};
+use super::dense_mlpoly::{EqPolynomial, IdentityPolynomial, PolyEvalProof};
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::product_tree::{DotProductCircuit, ProductCircuit, ProductCircuitEvalProofBatched};
@@ -61,7 +59,6 @@ impl Derefs {
   }
 }
 
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DerefsEvalProof {
   proof_derefs: PolyEvalProof,
@@ -102,7 +99,7 @@ impl DerefsEvalProof {
     };
     // decommit the joint polynomial at r_joint
     eval_joint.append_to_transcript(b"joint_claim_eval", transcript);
-    let proof_derefs= PolyEvalProof::prove(
+    let proof_derefs = PolyEvalProof::prove(
       joint_poly,
       None,
       &r_joint,
@@ -178,12 +175,7 @@ impl DerefsEvalProof {
     evals.extend(eval_col_ops_val_vec);
     evals.resize(evals.len().next_power_of_two(), Scalar::zero());
 
-    DerefsEvalProof::verify_single(
-      &self.proof_derefs,
-      r,
-      evals,
-      transcript,
-    )
+    DerefsEvalProof::verify_single(&self.proof_derefs, r, evals, transcript)
   }
 }
 
@@ -403,7 +395,13 @@ impl SparseMatPolynomial {
 
   // Z is consisted of vector segments
   // Z[i] contains entries i * max_num_cols ~ i * max_num_cols + num_cols
-  pub fn multiply_vec_disjoint_rounds(&self, num_rows: usize, max_num_cols: usize, _num_cols: usize, z: &Vec<Vec<Scalar>>) -> Vec<Scalar> {
+  pub fn multiply_vec_disjoint_rounds(
+    &self,
+    num_rows: usize,
+    max_num_cols: usize,
+    _num_cols: usize,
+    z: &Vec<Vec<Scalar>>,
+  ) -> Vec<Scalar> {
     (0..self.M.len())
       .map(|i| {
         let row = self.M[i].row;
@@ -876,14 +874,15 @@ impl HashLayerProof {
     let eval_init_val = EqPolynomial::new(r.to_vec()).evaluate(rand_mem);
     let hash_init_at_rand_mem =
       hash_func(&eval_init_addr, &eval_init_val, &Scalar::zero()) - r_multiset_check; // verify the claim_last of init chunk
-    /* TODO: IMPORTANT, DEBUG, CHECK FAIL
-    assert_eq!(&hash_init_at_rand_mem, claim_init);
-    */
+                                                                                      /* TODO: IMPORTANT, DEBUG, CHECK FAIL
+                                                                                      assert_eq!(&hash_init_at_rand_mem, claim_init);
+                                                                                      */
 
     // read
     for i in 0..eval_ops_addr.len() {
       let hash_read_at_rand_ops =
-        hash_func(&eval_ops_addr[i], &eval_ops_val[i], &eval_read_ts[i]) - r_multiset_check; // verify the claim_last of init chunk
+        hash_func(&eval_ops_addr[i], &eval_ops_val[i], &eval_read_ts[i]) - r_multiset_check;
+      // verify the claim_last of init chunk
       /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       assert_eq!(&hash_read_at_rand_ops, &claim_read[i]);
       */
@@ -893,7 +892,8 @@ impl HashLayerProof {
     for i in 0..eval_ops_addr.len() {
       let eval_write_ts = eval_read_ts[i] + Scalar::one();
       let hash_write_at_rand_ops =
-        hash_func(&eval_ops_addr[i], &eval_ops_val[i], &eval_write_ts) - r_multiset_check; // verify the claim_last of init chunk
+        hash_func(&eval_ops_addr[i], &eval_ops_val[i], &eval_write_ts) - r_multiset_check;
+      // verify the claim_last of init chunk
       /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       assert_eq!(&hash_write_at_rand_ops, &claim_write[i]);
       */
@@ -932,12 +932,9 @@ impl HashLayerProof {
     // verify derefs at rand_ops
     let (eval_row_ops_val, eval_col_ops_val) = &self.eval_derefs;
     assert_eq!(eval_row_ops_val.len(), eval_col_ops_val.len());
-    self.proof_derefs.verify(
-      rand_ops,
-      eval_row_ops_val,
-      eval_col_ops_val,
-      transcript,
-    )?;
+    self
+      .proof_derefs
+      .verify(rand_ops, eval_row_ops_val, eval_col_ops_val, transcript)?;
 
     // verify the decommitments used in evaluation sum-check
     let eval_val_vec = &self.eval_val;
@@ -978,11 +975,9 @@ impl HashLayerProof {
     let mut r_joint_ops = challenges_ops;
     r_joint_ops.extend(rand_ops);
     joint_claim_eval_ops.append_to_transcript(b"joint_claim_eval_ops", transcript);
-    self.proof_ops.verify_plain(
-      transcript,
-      &r_joint_ops,
-      &joint_claim_eval_ops,
-    )?;
+    self
+      .proof_ops
+      .verify_plain(transcript, &r_joint_ops, &joint_claim_eval_ops)?;
 
     // verify proof-mem using comm_comb_mem at rand_mem
     // form a single decommitment using comb_comb_mem at rand_mem
@@ -1000,11 +995,9 @@ impl HashLayerProof {
     let mut r_joint_mem = challenges_mem;
     r_joint_mem.extend(rand_mem);
     joint_claim_eval_mem.append_to_transcript(b"joint_claim_eval_mem", transcript);
-    self.proof_mem.verify_plain(
-      transcript,
-      &r_joint_mem,
-      &joint_claim_eval_mem,
-    )?;
+    self
+      .proof_mem
+      .verify_plain(transcript, &r_joint_mem, &joint_claim_eval_mem)?;
 
     // verify the claims from the product layer
     let (eval_ops_addr, eval_read_ts, eval_audit_ts) = &self.eval_row;
@@ -1474,14 +1467,8 @@ impl SparseMatPolyEvalProof {
       timer_build_network.stop();
 
       let timer_eval_network = Timer::new("evalproof_layered_network");
-      let poly_eval_network_proof = PolyEvalNetworkProof::prove(
-        &mut net,
-        dense,
-        &derefs,
-        evals,
-        transcript,
-        random_tape,
-      );
+      let poly_eval_network_proof =
+        PolyEvalNetworkProof::prove(&mut net, dense, &derefs, evals, transcript, random_tape);
       timer_eval_network.stop();
 
       poly_eval_network_proof
@@ -1623,13 +1610,7 @@ mod tests {
 
     let mut verifier_transcript = Transcript::new(b"example");
     assert!(proof
-      .verify(
-        &poly_comm,
-        &rx,
-        &ry,
-        &evals,
-        &mut verifier_transcript,
-      )
+      .verify(&poly_comm, &rx, &ry, &evals, &mut verifier_transcript,)
       .is_ok());
   }
 }

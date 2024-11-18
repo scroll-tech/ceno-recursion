@@ -2386,7 +2386,7 @@ impl Computations {
 
 /// Compute a (deterministic) prime-field challenge.
 pub fn pf_challenge(name: &str, field: &FieldT) -> FieldV {
-    use rand::SeedableRng;
+    use rand_chacha::rand_core::SeedableRng;
     use rand_chacha::ChaChaRng;
     use std::hash::{Hash, Hasher};
     // hash the string

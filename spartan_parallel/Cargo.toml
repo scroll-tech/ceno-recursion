@@ -11,16 +11,9 @@ license-file = "LICENSE"
 keywords = ["zkSNARKs", "cryptography", "proofs"]
 
 [dependencies]
-<<<<<<< HEAD
 curve25519-dalek = { version = "4", features = [
     "serde",
     "alloc",
-=======
-curve25519-dalek = { version = "3.2.1", features = [
-  "serde",
-  "u64_backend",
-  "alloc",
->>>>>>> origin/main
 ], default-features = false }
 merlin = { version = "3", default-features = false }
 rand = { version = "0", features = ["getrandom"], default-features = false }

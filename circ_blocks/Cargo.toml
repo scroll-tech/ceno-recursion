@@ -24,7 +24,7 @@ ieee754 = { version = "0.2", optional = true }
 zokrates_parser = { path = "third_party/ZoKrates/zokrates_parser", optional = true }
 zokrates_pest_ast = { path = "third_party/ZoKrates/zokrates_pest_ast", optional = true }
 typed-arena = { version = "2", optional = true }
-log = "0"
+log = "0.4"
 thiserror = "1"
 bellman = { git = "https://github.com/alex-ozdemir/bellman.git", branch = "mirage", optional = true }
 rug-polynomial = { version = "0.2.5", optional = true }
@@ -67,9 +67,9 @@ regex = "1"
 [dev-dependencies]
 quickcheck = "1"
 quickcheck_macros = "1"
-env_logger = "0"
-bls12_381 = "0"
-approx = "0"
+env_logger = "0.8"
+bls12_381 = "0.7"
+approx = "0.5"
 
 [patch.crates-io]
 ff = { path = "../ff" }

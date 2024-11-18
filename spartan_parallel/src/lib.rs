@@ -1031,8 +1031,8 @@ impl SNARK {
     }
     let io_width = 2 * num_inputs_unpadded;
 
-    fn extract_assignment(stuff: Vec<Assignment>) -> Vec<Vec<Scalar>> {
-      stuff.into_iter().map(|v| v.assignment).collect()
+    fn extract_assignment(assigned: Vec<Assignment>) -> Vec<Vec<Scalar>> {
+      assigned.into_iter().map(|v| v.assignment).collect()
     }
 
     // --

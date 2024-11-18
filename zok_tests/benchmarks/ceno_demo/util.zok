@@ -1,0 +1,17 @@
+def inline max(u32 a, u32 b) -> u32:
+    return a < b ? b : a
+
+def ceil_log2(u32 x) -> u32:
+    witness u32 width
+    // TODO: is there concern for overflow?
+    assert(width <= 32)
+    // Supply bits in BIG ENDIAN order except the first bit, which needs to be 1
+    u32 acc_bit = 1
+    for u32 i in 1..width do
+        acc_bit = acc_bit * 2
+        witness u32 next_bit
+        assert(next_bit * (1 - next_bit) == 0)
+        acc_bit = acc_bit + next_bit
+    endfor
+    assert(acc_bit == x)
+    return width

@@ -1,0 +1,2726 @@
+--
+Set Input Output after Spilling:
+Entry block: 0
+
+...
+
+Block 6:
+Func: check_and_generate_subclaim, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 1
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    asserted_sum.check_and_generate_subclaim.0.0: field
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^finished.check_and_generate_subclaim.0.0: bool
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Instructions:
+    assert self^finished.check_and_generate_subclaim.0.0
+    field[self^num_vars.check_and_generate_subclaim.0.0 + 1 <U32>] expected_vec.check_and_generate_subclaim.0.0
+    expected_vec.check_and_generate_subclaim.0.0[0 <Field>] = asserted_sum.check_and_generate_subclaim.0.0 <field>
+    u32 i.check_and_generate_subclaim.0.0 = 0 <U32>
+Transition:
+    i.check_and_generate_subclaim.0.0 != self^num_vars.check_and_generate_subclaim.0.0 ? -> 7 : -> 9
+
+Block 7:
+Func: check_and_generate_subclaim, Scope: 2
+Exec Bound: 1, While Loop: true, Num VM Ops: 2
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    eval_at.interpolate_uni_poly.0.0: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    p_i.interpolate_uni_poly.0.0: field
+    p_i_len.interpolate_uni_poly.0.0: u32
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Instructions:
+    field load^0.check_and_generate_subclaim.0.0 = self^polynomials_received.check_and_generate_subclaim.0.0[i.check_and_generate_subclaim.0.0]
+    field evaluations.check_and_generate_subclaim.0.0 = load^0.check_and_generate_subclaim.0.0
+    field load^0.check_and_generate_subclaim.0.1 = self^challenges.check_and_generate_subclaim.0.0[i.check_and_generate_subclaim.0.0]
+    field challenge.check_and_generate_subclaim.0.0 = load^0.check_and_generate_subclaim.0.1
+    u32 p_i_len.interpolate_uni_poly.0.0 = self^max_degree.check_and_generate_subclaim.0.0 + 1 <U32>
+    field p_i.interpolate_uni_poly.0.0 = evaluations.check_and_generate_subclaim.0.0
+    field eval_at.interpolate_uni_poly.0.0 = challenge.check_and_generate_subclaim.0.0
+    %PHY[%SP + 0] = %BP <field>
+    field %BP = %SP
+    %PHY[%SP + 1] = evaluations.check_and_generate_subclaim.0.0 <field>
+    %PHY[%SP + 2] = %RP <field>
+    field %RP = 8 <Field>
+    %SP = %SP + 3 <Field>
+Transition: -> 10
+
+Block 8:
+Func: check_and_generate_subclaim, Scope: 3
+Exec Bound: 1, While Loop: false, Num VM Ops: 4
+Inputs:
+    %AS: field
+    %BP: field
+    %RET.interpolate_uni_poly: field
+    %SP: field
+    %TS: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Instructions:
+    field %RP = %PHY[%BP + 2]
+    field evaluations.check_and_generate_subclaim.0.0 = %PHY[%BP + 1]
+    field %BP = %PHY[%BP + 0]
+    field ret^0.check_and_generate_subclaim.0.0 = %RET.interpolate_uni_poly
+    expected_vec.check_and_generate_subclaim.0.0[i.check_and_generate_subclaim.0.0 + 1 <U32>] = ret^0.check_and_generate_subclaim.0.0 <field>
+    field load^0.check_and_generate_subclaim.0.1 = expected_vec.check_and_generate_subclaim.0.0[i.check_and_generate_subclaim.0.0]
+    field expected.check_and_generate_subclaim.0.0 = load^0.check_and_generate_subclaim.0.1
+    field load^0.check_and_generate_subclaim.0.1 = evaluations.check_and_generate_subclaim.0.0[0 <Field>]
+    field load^1.check_and_generate_subclaim.0.0 = evaluations.check_and_generate_subclaim.0.0[1 <Field>]
+    assert load^0.check_and_generate_subclaim.0.1 + load^1.check_and_generate_subclaim.0.0 == expected.check_and_generate_subclaim.0.0
+    i.check_and_generate_subclaim.0.0 = i.check_and_generate_subclaim.0.0 + 1 <U32>
+Transition:
+    i.check_and_generate_subclaim.0.0 != self^num_vars.check_and_generate_subclaim.0.0 ? -> 7 : -> 9
+
+Block 9:
+Func: check_and_generate_subclaim, Scope: 1
+Exec Bound: 1, While Loop: false, Num VM Ops: 1
+Inputs:
+    %BP: field
+    %RP: field
+    %TS: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+Outputs:
+    %BP: field
+    %RET^expected_evaluation.check_and_generate_subclaim: field
+    %RET^point.check_and_generate_subclaim: field
+    %TS: field
+Instructions:
+    field load^0.check_and_generate_subclaim.0.2 = expected_vec.check_and_generate_subclaim.0.0[self^num_vars.check_and_generate_subclaim.0.0]
+    field struct^0^point.check_and_generate_subclaim.0.0 = self^challenges.check_and_generate_subclaim.0.0
+    field struct^0^expected_evaluation.check_and_generate_subclaim.0.0 = load^0.check_and_generate_subclaim.0.2
+    field %RET^expected_evaluation.check_and_generate_subclaim = struct^0^expected_evaluation.check_and_generate_subclaim.0.0
+    field %RET^point.check_and_generate_subclaim = struct^0^point.check_and_generate_subclaim.0.0
+Transition: -> %RP
+
+Block 10:
+Func: interpolate_uni_poly, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 1
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    eval_at.interpolate_uni_poly.0.0: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    p_i.interpolate_uni_poly.0.0: field
+    p_i_len.interpolate_uni_poly.0.0: u32
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    denom_up.interpolate_uni_poly.0.0: field
+    e.interpolate_uni_poly.0.0: u32
+    eval_at.interpolate_uni_poly.0.0: field
+    evals.interpolate_uni_poly.0.0: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    len.interpolate_uni_poly.0.0: u32
+    p_i.interpolate_uni_poly.0.0: field
+    prod.interpolate_uni_poly.0.0: field
+    res.interpolate_uni_poly.0.0: field
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Instructions:
+    u32 len.interpolate_uni_poly.0.0 = p_i_len.interpolate_uni_poly.0.0
+    field[len.interpolate_uni_poly.0.0] evals.interpolate_uni_poly.0.0
+    field prod.interpolate_uni_poly.0.0 = eval_at.interpolate_uni_poly.0.0
+    evals.interpolate_uni_poly.0.0[0 <Field>] = eval_at.interpolate_uni_poly.0.0 <field>
+    field res.interpolate_uni_poly.0.0 = 0 <Field>
+    field denom_up.interpolate_uni_poly.0.0 = 1 <Field>
+    u32 e.interpolate_uni_poly.0.0 = 1 <U32>
+Transition:
+    e.interpolate_uni_poly.0.0 != len.interpolate_uni_poly.0.0 ? -> 11 : -> 12
+
+Block 11:
+Func: interpolate_uni_poly, Scope: 2
+Exec Bound: 1, While Loop: true, Num VM Ops: 1
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    denom_up.interpolate_uni_poly.0.0: field
+    e.interpolate_uni_poly.0.0: u32
+    eval_at.interpolate_uni_poly.0.0: field
+    evals.interpolate_uni_poly.0.0: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    len.interpolate_uni_poly.0.0: u32
+    p_i.interpolate_uni_poly.0.0: field
+    prod.interpolate_uni_poly.0.0: field
+    res.interpolate_uni_poly.0.0: field
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    denom_up.interpolate_uni_poly.0.0: field
+    e.interpolate_uni_poly.0.0: u32
+    eval_at.interpolate_uni_poly.0.0: field
+    evals.interpolate_uni_poly.0.0: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    len.interpolate_uni_poly.0.0: u32
+    p_i.interpolate_uni_poly.0.0: field
+    prod.interpolate_uni_poly.0.0: field
+    res.interpolate_uni_poly.0.0: field
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Instructions:
+    field tmp.interpolate_uni_poly.0.0 = eval_at.interpolate_uni_poly.0.0 - (F)e.interpolate_uni_poly.0.0
+    evals.interpolate_uni_poly.0.0[e.interpolate_uni_poly.0.0] = tmp.interpolate_uni_poly.0.0 <field>
+    field prod.interpolate_uni_poly.0.0 = prod.interpolate_uni_poly.0.0 * tmp.interpolate_uni_poly.0.0
+    field denom_up.interpolate_uni_poly.0.0 = denom_up.interpolate_uni_poly.0.0 * (F)e.interpolate_uni_poly.0.0
+    e.interpolate_uni_poly.0.0 = e.interpolate_uni_poly.0.0 + 1 <U32>
+Transition:
+    e.interpolate_uni_poly.0.0 != len.interpolate_uni_poly.0.0 ? -> 11 : -> 12
+
+Block 12:
+Func: interpolate_uni_poly, Scope: 1
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    denom_up.interpolate_uni_poly.0.0: field
+    evals.interpolate_uni_poly.0.0: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    len.interpolate_uni_poly.0.0: u32
+    p_i.interpolate_uni_poly.0.0: field
+    prod.interpolate_uni_poly.0.0: field
+    res.interpolate_uni_poly.0.0: field
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    denom_down.interpolate_uni_poly.0.0: field
+    denom_up.interpolate_uni_poly.0.0: field
+    evals.interpolate_uni_poly.0.0: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    it.interpolate_uni_poly.0.0: u32
+    len.interpolate_uni_poly.0.0: u32
+    p_i.interpolate_uni_poly.0.0: field
+    prod.interpolate_uni_poly.0.0: field
+    res.interpolate_uni_poly.0.0: field
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Instructions:
+    field denom_down.interpolate_uni_poly.0.0 = 1 <Field>
+    u32 it.interpolate_uni_poly.0.0 = len.interpolate_uni_poly.0.0
+Transition:
+    it.interpolate_uni_poly.0.0 > 0 <U32> ? -> 13 : -> 14
+
+Block 13:
+Func: interpolate_uni_poly, Scope: 1
+Exec Bound: 1, While Loop: true, Num VM Ops: 2
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    denom_down.interpolate_uni_poly.0.0: field
+    denom_up.interpolate_uni_poly.0.0: field
+    evals.interpolate_uni_poly.0.0: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    it.interpolate_uni_poly.0.0: u32
+    len.interpolate_uni_poly.0.0: u32
+    p_i.interpolate_uni_poly.0.0: field
+    prod.interpolate_uni_poly.0.0: field
+    res.interpolate_uni_poly.0.0: field
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    denom_down.interpolate_uni_poly.0.0: field
+    denom_up.interpolate_uni_poly.0.0: field
+    evals.interpolate_uni_poly.0.0: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    it.interpolate_uni_poly.0.0: u32
+    len.interpolate_uni_poly.0.0: u32
+    p_i.interpolate_uni_poly.0.0: field
+    prod.interpolate_uni_poly.0.0: field
+    res.interpolate_uni_poly.0.0: field
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Instructions:
+    u32 i.interpolate_uni_poly.0.0 = it.interpolate_uni_poly.0.0 - 1 <U32>
+    field load^0.interpolate_uni_poly.0.0 = p_i.interpolate_uni_poly.0.0[i.interpolate_uni_poly.0.0]
+    field load^1.interpolate_uni_poly.0.0 = evals.interpolate_uni_poly.0.0[i.interpolate_uni_poly.0.0]
+    field res.interpolate_uni_poly.0.0 = res.interpolate_uni_poly.0.0 + load^0.interpolate_uni_poly.0.0 * prod.interpolate_uni_poly.0.0 * denom_down.interpolate_uni_poly.0.0 / denom_up.interpolate_uni_poly.0.0 * load^1.interpolate_uni_poly.0.0
+    if i.interpolate_uni_poly.0.0 != 0 <U32>:
+        field denom_up.interpolate_uni_poly.0.0 = -1 <Field> * denom_up.interpolate_uni_poly.0.0 * (F)len.interpolate_uni_poly.0.0 - i.interpolate_uni_poly.0.0
+        field denom_down.interpolate_uni_poly.0.0 = denom_down.interpolate_uni_poly.0.0 * (F)i.interpolate_uni_poly.0.0
+    u32 it.interpolate_uni_poly.0.0 = it.interpolate_uni_poly.0.0 - 1 <U32>
+Transition:
+    it.interpolate_uni_poly.0.0 > 0 <U32> ? -> 13 : -> 14
+
+Block 14:
+Func: interpolate_uni_poly, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    res.interpolate_uni_poly.0.0: field
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RET.interpolate_uni_poly: field
+    %SP: field
+    %TS: field
+    expected_vec.check_and_generate_subclaim.0.0: field
+    i.check_and_generate_subclaim.0.0: u32
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Instructions:
+    field %RET.interpolate_uni_poly = res.interpolate_uni_poly.0.0
+Transition: -> %RP
+
+Block 15:
+Func: verify_round_and_update_state, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 2
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    i.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    prover_msg^evaluations.verify_round_and_update_state.0.0: field
+    self^challenges.verify_round_and_update_state.0.0: field
+    self^finished.verify_round_and_update_state.0.0: bool
+    self^max_degree.verify_round_and_update_state.0.0: u32
+    self^num_vars.verify_round_and_update_state.0.0: u32
+    self^polynomials_received.verify_round_and_update_state.0.0: field
+    self^round.verify_round_and_update_state.0.0: u32
+    t^hash.verify_sumcheck.0.0: field
+    transcript^hash.verify_round_and_update_state.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RET^challenges.verify_round_and_update_state: field
+    %RET^finished.verify_round_and_update_state: bool
+    %RET^max_degree.verify_round_and_update_state: u32
+    %RET^num_vars.verify_round_and_update_state: u32
+    %RET^polynomials_received.verify_round_and_update_state: field
+    %RET^round.verify_round_and_update_state: u32
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    i.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    t^hash.verify_sumcheck.0.0: field
+Instructions:
+    assert !self^finished.verify_round_and_update_state.0.0
+    field challenge.verify_round_and_update_state.0.0 = transcript^hash.verify_round_and_update_state.0.0
+    self^challenges.verify_round_and_update_state.0.0[self^round.verify_round_and_update_state.0.0 - 1 <U32>] = challenge.verify_round_and_update_state.0.0 <field>
+    self^polynomials_received.verify_round_and_update_state.0.0[self^round.verify_round_and_update_state.0.0 - 1 <U32>] = prover_msg^evaluations.verify_round_and_update_state.0.0 <field>
+    if self^round.verify_round_and_update_state.0.0 == self^num_vars.verify_round_and_update_state.0.0:
+        bool self^finished.verify_round_and_update_state.0.0 = true
+    else:
+        u32 self^round.verify_round_and_update_state.0.0 = self^round.verify_round_and_update_state.0.0 + 1 <U32>
+    field %RET^challenges.verify_round_and_update_state = self^challenges.verify_round_and_update_state.0.0
+    bool %RET^finished.verify_round_and_update_state = self^finished.verify_round_and_update_state.0.0
+    u32 %RET^max_degree.verify_round_and_update_state = self^max_degree.verify_round_and_update_state.0.0
+    u32 %RET^num_vars.verify_round_and_update_state = self^num_vars.verify_round_and_update_state.0.0
+    field %RET^polynomials_received.verify_round_and_update_state = self^polynomials_received.verify_round_and_update_state.0.0
+    u32 %RET^round.verify_round_and_update_state = self^round.verify_round_and_update_state.0.0
+Transition: -> %RP
+
+Block 16:
+Func: verify_sumcheck, Scope: 1
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %TS: field
+    claimed_sum.verify_sumcheck.0.0: field
+Outputs:
+    %BP: field
+    %RET^expected_evaluation.verify_sumcheck: field
+    %RET^point.verify_sumcheck: field
+    %TS: field
+Instructions:
+    field[0 <U32>] array^0.verify_sumcheck.0.0
+    field struct^0^point.verify_sumcheck.0.0 = array^0.verify_sumcheck.0.0
+    field struct^0^expected_evaluation.verify_sumcheck.0.0 = claimed_sum.verify_sumcheck.0.0
+    field %RET^expected_evaluation.verify_sumcheck = struct^0^expected_evaluation.verify_sumcheck.0.0
+    field %RET^point.verify_sumcheck = struct^0^point.verify_sumcheck.0.0
+Transition: -> %RP
+
+Block 17:
+Func: verify_sumcheck, Scope: 1
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    proof^proofs.verify_sumcheck.0.0: field
+    t^hash.verify_sumcheck.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    f.append_message_u32.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    t^hash.append_message_u32.0.0: field
+Instructions:
+    field t^hash.append_message_u32.0.0 = t^hash.verify_sumcheck.0.0
+    u32 f.append_message_u32.0.0 = aux_info^num_variables.verify_sumcheck.0.0
+    %PHY[%SP + 0] = %BP <field>
+    field %BP = %SP
+    %PHY[%SP + 1] = %RP <field>
+    field %RP = 18 <Field>
+    %SP = %SP + 2 <Field>
+Transition: -> 28
+
+Block 18:
+Func: verify_sumcheck, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %AS: field
+    %BP: field
+    %RET^hash.append_message_u32: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    proof^proofs.verify_sumcheck.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    f.append_message_u32.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    t^hash.append_message_u32.0.0: field
+Instructions:
+    field %RP = %PHY[%BP + 1]
+    field %BP = %PHY[%BP + 0]
+    field ret^0^hash.verify_sumcheck.0.0 = %RET^hash.append_message_u32
+    field t^hash.verify_sumcheck.0.0 = ret^0^hash.verify_sumcheck.0.0
+    field t^hash.append_message_u32.0.0 = t^hash.verify_sumcheck.0.0
+    u32 f.append_message_u32.0.0 = aux_info^max_degree.verify_sumcheck.0.0
+    %PHY[%SP + 0] = %BP <field>
+    field %BP = %SP
+    %PHY[%SP + 1] = %RP <field>
+    field %RP = 19 <Field>
+    %SP = %SP + 2 <Field>
+Transition: -> 28
+
+Block 19:
+Func: verify_sumcheck, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %AS: field
+    %BP: field
+    %RET^hash.append_message_u32: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    proof^proofs.verify_sumcheck.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    i.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    t^hash.verify_sumcheck.0.0: field
+    vs^challenges.verify_sumcheck.0.0: field
+    vs^finished.verify_sumcheck.0.0: bool
+    vs^max_degree.verify_sumcheck.0.0: u32
+    vs^num_vars.verify_sumcheck.0.0: u32
+    vs^polynomials_received.verify_sumcheck.0.0: field
+    vs^round.verify_sumcheck.0.0: u32
+Instructions:
+    field %RP = %PHY[%BP + 1]
+    field %BP = %PHY[%BP + 0]
+    field ret^0^hash.verify_sumcheck.0.0 = %RET^hash.append_message_u32
+    field t^hash.verify_sumcheck.0.0 = ret^0^hash.verify_sumcheck.0.0
+    field[aux_info^num_variables.verify_sumcheck.0.0] challenges.verify_sumcheck.0.0
+    field[0][aux_info^num_variables.verify_sumcheck.0.0] polynomials_received.verify_sumcheck.0.0
+    u32 struct^0^round.verify_sumcheck.0.0 = 1 <U32>
+    u32 struct^0^num_vars.verify_sumcheck.0.0 = aux_info^num_variables.verify_sumcheck.0.0
+    u32 struct^0^max_degree.verify_sumcheck.0.0 = aux_info^max_degree.verify_sumcheck.0.0
+    bool struct^0^finished.verify_sumcheck.0.0 = false
+    field struct^0^polynomials_received.verify_sumcheck.0.0 = polynomials_received.verify_sumcheck.0.0
+    field struct^0^challenges.verify_sumcheck.0.0 = challenges.verify_sumcheck.0.0
+    field vs^challenges.verify_sumcheck.0.0 = struct^0^challenges.verify_sumcheck.0.0
+    bool vs^finished.verify_sumcheck.0.0 = struct^0^finished.verify_sumcheck.0.0
+    u32 vs^max_degree.verify_sumcheck.0.0 = struct^0^max_degree.verify_sumcheck.0.0
+    u32 vs^num_vars.verify_sumcheck.0.0 = struct^0^num_vars.verify_sumcheck.0.0
+    field vs^polynomials_received.verify_sumcheck.0.0 = struct^0^polynomials_received.verify_sumcheck.0.0
+    u32 vs^round.verify_sumcheck.0.0 = struct^0^round.verify_sumcheck.0.0
+    u32 i.verify_sumcheck.0.0 = 0 <U32>
+Transition:
+    i.verify_sumcheck.0.0 != aux_info^num_variables.verify_sumcheck.0.0 ? -> 20 : -> 25
+
+Block 20:
+Func: verify_sumcheck, Scope: 2
+Exec Bound: 1, While Loop: true, Num VM Ops: 1
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    i.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    t^hash.verify_sumcheck.0.0: field
+    vs^challenges.verify_sumcheck.0.0: field
+    vs^finished.verify_sumcheck.0.0: bool
+    vs^max_degree.verify_sumcheck.0.0: u32
+    vs^num_vars.verify_sumcheck.0.0: u32
+    vs^polynomials_received.verify_sumcheck.0.0: field
+    vs^round.verify_sumcheck.0.0: u32
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    i.verify_sumcheck.0.0: u32
+    j.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    prover_msg^evaluations.verify_sumcheck.0.0: field
+    t^hash.verify_sumcheck.0.0: field
+    vs^challenges.verify_sumcheck.0.0: field
+    vs^finished.verify_sumcheck.0.0: bool
+    vs^max_degree.verify_sumcheck.0.0: u32
+    vs^num_vars.verify_sumcheck.0.0: u32
+    vs^polynomials_received.verify_sumcheck.0.0: field
+    vs^round.verify_sumcheck.0.0: u32
+Instructions:
+    field load^0^evaluations.verify_sumcheck.0.0 = proof^proofs.verify_sumcheck.0.0[i.verify_sumcheck.0.0]
+    field prover_msg^evaluations.verify_sumcheck.0.0 = load^0^evaluations.verify_sumcheck.0.0
+    u32 j.verify_sumcheck.0.0 = 0 <U32>
+Transition:
+    j.verify_sumcheck.0.0 != aux_info^max_degree.verify_sumcheck.0.0 + 1 <U32> ? -> 21 : -> 23
+
+Block 21:
+Func: verify_sumcheck, Scope: 5
+Exec Bound: 1, While Loop: true, Num VM Ops: 1
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    i.verify_sumcheck.0.0: u32
+    j.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    prover_msg^evaluations.verify_sumcheck.0.0: field
+    t^hash.verify_sumcheck.0.0: field
+    vs^challenges.verify_sumcheck.0.0: field
+    vs^finished.verify_sumcheck.0.0: bool
+    vs^max_degree.verify_sumcheck.0.0: u32
+    vs^num_vars.verify_sumcheck.0.0: u32
+    vs^polynomials_received.verify_sumcheck.0.0: field
+    vs^round.verify_sumcheck.0.0: u32
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    f.append_message_field.0.0: field
+    i.verify_sumcheck.0.0: u32
+    j.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    prover_msg^evaluations.verify_sumcheck.0.0: field
+    t^hash.append_message_field.0.0: field
+    vs^challenges.verify_sumcheck.0.0: field
+    vs^finished.verify_sumcheck.0.0: bool
+    vs^max_degree.verify_sumcheck.0.0: u32
+    vs^num_vars.verify_sumcheck.0.0: u32
+    vs^polynomials_received.verify_sumcheck.0.0: field
+    vs^round.verify_sumcheck.0.0: u32
+Instructions:
+    field load^0.verify_sumcheck.1.0 = prover_msg^evaluations.verify_sumcheck.0.0[j.verify_sumcheck.0.0]
+    field t^hash.append_message_field.0.0 = t^hash.verify_sumcheck.0.0
+    field f.append_message_field.0.0 = load^0.verify_sumcheck.1.0
+    %PHY[%SP + 0] = %BP <field>
+    field %BP = %SP
+    %PHY[%SP + 1] = aux_info^max_degree.verify_sumcheck.0.0 <u32>
+    %PHY[%SP + 2] = %RP <field>
+    field %RP = 22 <Field>
+    %SP = %SP + 3 <Field>
+Transition: -> 27
+
+Block 22:
+Func: verify_sumcheck, Scope: 6
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %AS: field
+    %BP: field
+    %RET^hash.append_message_field: field
+    %SP: field
+    %TS: field
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    i.verify_sumcheck.0.0: u32
+    j.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    prover_msg^evaluations.verify_sumcheck.0.0: field
+    vs^challenges.verify_sumcheck.0.0: field
+    vs^finished.verify_sumcheck.0.0: bool
+    vs^max_degree.verify_sumcheck.0.0: u32
+    vs^num_vars.verify_sumcheck.0.0: u32
+    vs^polynomials_received.verify_sumcheck.0.0: field
+    vs^round.verify_sumcheck.0.0: u32
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    i.verify_sumcheck.0.0: u32
+    j.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    prover_msg^evaluations.verify_sumcheck.0.0: field
+    t^hash.verify_sumcheck.0.0: field
+    vs^challenges.verify_sumcheck.0.0: field
+    vs^finished.verify_sumcheck.0.0: bool
+    vs^max_degree.verify_sumcheck.0.0: u32
+    vs^num_vars.verify_sumcheck.0.0: u32
+    vs^polynomials_received.verify_sumcheck.0.0: field
+    vs^round.verify_sumcheck.0.0: u32
+Instructions:
+    field %RP = %PHY[%BP + 2]
+    u32 aux_info^max_degree.verify_sumcheck.0.0 = %PHY[%BP + 1]
+    field %BP = %PHY[%BP + 0]
+    field ret^0^hash.verify_sumcheck.1.0 = %RET^hash.append_message_field
+    field t^hash.verify_sumcheck.0.0 = ret^0^hash.verify_sumcheck.1.0
+    j.verify_sumcheck.0.0 = j.verify_sumcheck.0.0 + 1 <U32>
+Transition:
+    j.verify_sumcheck.0.0 != aux_info^max_degree.verify_sumcheck.0.0 + 1 <U32> ? -> 21 : -> 23
+
+Block 23:
+Func: verify_sumcheck, Scope: 4
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    i.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    prover_msg^evaluations.verify_sumcheck.0.0: field
+    t^hash.verify_sumcheck.0.0: field
+    vs^challenges.verify_sumcheck.0.0: field
+    vs^finished.verify_sumcheck.0.0: bool
+    vs^max_degree.verify_sumcheck.0.0: u32
+    vs^num_vars.verify_sumcheck.0.0: u32
+    vs^polynomials_received.verify_sumcheck.0.0: field
+    vs^round.verify_sumcheck.0.0: u32
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    i.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    prover_msg^evaluations.verify_round_and_update_state.0.0: field
+    self^challenges.verify_round_and_update_state.0.0: field
+    self^finished.verify_round_and_update_state.0.0: bool
+    self^max_degree.verify_round_and_update_state.0.0: u32
+    self^num_vars.verify_round_and_update_state.0.0: u32
+    self^polynomials_received.verify_round_and_update_state.0.0: field
+    self^round.verify_round_and_update_state.0.0: u32
+    t^hash.verify_sumcheck.0.0: field
+    transcript^hash.verify_round_and_update_state.0.0: field
+Instructions:
+    field self^challenges.verify_round_and_update_state.0.0 = vs^challenges.verify_sumcheck.0.0
+    bool self^finished.verify_round_and_update_state.0.0 = vs^finished.verify_sumcheck.0.0
+    u32 self^max_degree.verify_round_and_update_state.0.0 = vs^max_degree.verify_sumcheck.0.0
+    u32 self^num_vars.verify_round_and_update_state.0.0 = vs^num_vars.verify_sumcheck.0.0
+    field self^polynomials_received.verify_round_and_update_state.0.0 = vs^polynomials_received.verify_sumcheck.0.0
+    u32 self^round.verify_round_and_update_state.0.0 = vs^round.verify_sumcheck.0.0
+    field prover_msg^evaluations.verify_round_and_update_state.0.0 = prover_msg^evaluations.verify_sumcheck.0.0
+    field transcript^hash.verify_round_and_update_state.0.0 = t^hash.verify_sumcheck.0.0
+    %PHY[%SP + 0] = %BP <field>
+    field %BP = %SP
+    %PHY[%SP + 1] = %RP <field>
+    field %RP = 24 <Field>
+    %SP = %SP + 2 <Field>
+Transition: -> 15
+
+Block 24:
+Func: verify_sumcheck, Scope: 3
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %AS: field
+    %BP: field
+    %RET^challenges.verify_round_and_update_state: field
+    %RET^finished.verify_round_and_update_state: bool
+    %RET^max_degree.verify_round_and_update_state: u32
+    %RET^num_vars.verify_round_and_update_state: u32
+    %RET^polynomials_received.verify_round_and_update_state: field
+    %RET^round.verify_round_and_update_state: u32
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    i.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    t^hash.verify_sumcheck.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    i.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    t^hash.verify_sumcheck.0.0: field
+    vs^challenges.verify_sumcheck.0.0: field
+    vs^finished.verify_sumcheck.0.0: bool
+    vs^max_degree.verify_sumcheck.0.0: u32
+    vs^num_vars.verify_sumcheck.0.0: u32
+    vs^polynomials_received.verify_sumcheck.0.0: field
+    vs^round.verify_sumcheck.0.0: u32
+Instructions:
+    field %RP = %PHY[%BP + 1]
+    field %BP = %PHY[%BP + 0]
+    field ret^0^challenges.verify_sumcheck.0.0 = %RET^challenges.verify_round_and_update_state
+    bool ret^0^finished.verify_sumcheck.0.0 = %RET^finished.verify_round_and_update_state
+    u32 ret^0^max_degree.verify_sumcheck.0.0 = %RET^max_degree.verify_round_and_update_state
+    u32 ret^0^num_vars.verify_sumcheck.0.0 = %RET^num_vars.verify_round_and_update_state
+    field ret^0^polynomials_received.verify_sumcheck.0.0 = %RET^polynomials_received.verify_round_and_update_state
+    u32 ret^0^round.verify_sumcheck.0.0 = %RET^round.verify_round_and_update_state
+    field vs^challenges.verify_sumcheck.0.0 = ret^0^challenges.verify_sumcheck.0.0
+    bool vs^finished.verify_sumcheck.0.0 = ret^0^finished.verify_sumcheck.0.0
+    u32 vs^max_degree.verify_sumcheck.0.0 = ret^0^max_degree.verify_sumcheck.0.0
+    u32 vs^num_vars.verify_sumcheck.0.0 = ret^0^num_vars.verify_sumcheck.0.0
+    field vs^polynomials_received.verify_sumcheck.0.0 = ret^0^polynomials_received.verify_sumcheck.0.0
+    u32 vs^round.verify_sumcheck.0.0 = ret^0^round.verify_sumcheck.0.0
+    i.verify_sumcheck.0.0 = i.verify_sumcheck.0.0 + 1 <U32>
+Transition:
+    i.verify_sumcheck.0.0 != aux_info^num_variables.verify_sumcheck.0.0 ? -> 20 : -> 25
+
+Block 25:
+Func: verify_sumcheck, Scope: 1
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    claimed_sum.verify_sumcheck.0.0: field
+    vs^challenges.verify_sumcheck.0.0: field
+    vs^finished.verify_sumcheck.0.0: bool
+    vs^max_degree.verify_sumcheck.0.0: u32
+    vs^num_vars.verify_sumcheck.0.0: u32
+    vs^polynomials_received.verify_sumcheck.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    asserted_sum.check_and_generate_subclaim.0.0: field
+    self^challenges.check_and_generate_subclaim.0.0: field
+    self^finished.check_and_generate_subclaim.0.0: bool
+    self^max_degree.check_and_generate_subclaim.0.0: u32
+    self^num_vars.check_and_generate_subclaim.0.0: u32
+    self^polynomials_received.check_and_generate_subclaim.0.0: field
+Instructions:
+    field self^challenges.check_and_generate_subclaim.0.0 = vs^challenges.verify_sumcheck.0.0
+    bool self^finished.check_and_generate_subclaim.0.0 = vs^finished.verify_sumcheck.0.0
+    u32 self^max_degree.check_and_generate_subclaim.0.0 = vs^max_degree.verify_sumcheck.0.0
+    u32 self^num_vars.check_and_generate_subclaim.0.0 = vs^num_vars.verify_sumcheck.0.0
+    field self^polynomials_received.check_and_generate_subclaim.0.0 = vs^polynomials_received.verify_sumcheck.0.0
+    field asserted_sum.check_and_generate_subclaim.0.0 = claimed_sum.verify_sumcheck.0.0
+    %PHY[%SP + 0] = %BP <field>
+    field %BP = %SP
+    %PHY[%SP + 1] = %RP <field>
+    field %RP = 26 <Field>
+    %SP = %SP + 2 <Field>
+Transition: -> 6
+
+Block 26:
+Func: verify_sumcheck, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %BP: field
+    %RET^expected_evaluation.check_and_generate_subclaim: field
+    %RET^point.check_and_generate_subclaim: field
+    %TS: field
+Outputs:
+    %BP: field
+    %RET^expected_evaluation.verify_sumcheck: field
+    %RET^point.verify_sumcheck: field
+    %TS: field
+Instructions:
+    field %RP = %PHY[%BP + 1]
+    field %BP = %PHY[%BP + 0]
+    field ret^0^expected_evaluation.verify_sumcheck.0.0 = %RET^expected_evaluation.check_and_generate_subclaim
+    field ret^0^point.verify_sumcheck.0.0 = %RET^point.check_and_generate_subclaim
+    field sc^expected_evaluation.verify_sumcheck.0.0 = ret^0^expected_evaluation.verify_sumcheck.0.0
+    field sc^point.verify_sumcheck.0.0 = ret^0^point.verify_sumcheck.0.0
+    field %RET^expected_evaluation.verify_sumcheck = sc^expected_evaluation.verify_sumcheck.0.0
+    field %RET^point.verify_sumcheck = sc^point.verify_sumcheck.0.0
+Transition: -> %RP
+
+Block 27:
+Func: append_message_field, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    f.append_message_field.0.0: field
+    i.verify_sumcheck.0.0: u32
+    j.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    prover_msg^evaluations.verify_sumcheck.0.0: field
+    t^hash.append_message_field.0.0: field
+    vs^challenges.verify_sumcheck.0.0: field
+    vs^finished.verify_sumcheck.0.0: bool
+    vs^max_degree.verify_sumcheck.0.0: u32
+    vs^num_vars.verify_sumcheck.0.0: u32
+    vs^polynomials_received.verify_sumcheck.0.0: field
+    vs^round.verify_sumcheck.0.0: u32
+Outputs:
+    %AS: field
+    %BP: field
+    %RET^hash.append_message_field: field
+    %SP: field
+    %TS: field
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    i.verify_sumcheck.0.0: u32
+    j.verify_sumcheck.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    prover_msg^evaluations.verify_sumcheck.0.0: field
+    vs^challenges.verify_sumcheck.0.0: field
+    vs^finished.verify_sumcheck.0.0: bool
+    vs^max_degree.verify_sumcheck.0.0: u32
+    vs^num_vars.verify_sumcheck.0.0: u32
+    vs^polynomials_received.verify_sumcheck.0.0: field
+    vs^round.verify_sumcheck.0.0: u32
+Instructions:
+    field t^hash.append_message_field.0.0 = t^hash.append_message_field.0.0 + f.append_message_field.0.0
+    field %RET^hash.append_message_field = t^hash.append_message_field.0.0
+Transition: -> %RP
+
+Block 28:
+Func: append_message_u32, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %AS: field
+    %BP: field
+    %RP: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    f.append_message_u32.0.0: u32
+    proof^proofs.verify_sumcheck.0.0: field
+    t^hash.append_message_u32.0.0: field
+Outputs:
+    %AS: field
+    %BP: field
+    %RET^hash.append_message_u32: field
+    %SP: field
+    %TS: field
+    aux_info^max_degree.verify_sumcheck.0.0: u32
+    aux_info^num_variables.verify_sumcheck.0.0: u32
+    claimed_sum.verify_sumcheck.0.0: field
+    proof^proofs.verify_sumcheck.0.0: field
+Instructions:
+    field t^hash.append_message_u32.0.0 = t^hash.append_message_u32.0.0 + (F)f.append_message_u32.0.0
+    field %RET^hash.append_message_u32 = t^hash.append_message_u32.0.0
+Transition: -> %RP
+
+
+--
+Post-Processing:
+Entry block: 0
+
+...
+
+Block 6:
+Func: check_and_generate_subclaim, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 1
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i8: field
+    %i9: field
+    %i10: bool
+    %i11: u32
+    %i12: u32
+    %i13: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: field
+    %o9: u32
+    %o10: field
+    %o11: u32
+    %o12: u32
+    %o13: field
+Instructions:
+    assert %i1(BN) == 6 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    field %w45 = %i8
+    field %w46 = %i9
+    bool %w47 = %i10
+    u32 %w48 = %i11
+    u32 %w49 = %i12
+    field %w50 = %i13
+    assert %w47
+    field[%w49 + 1 <U32>] %w51
+    %w51[0 <Field>] = %w45 <field>
+    u32 %w52 = 0 <U32>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    field %o8 = %w51
+    u32 %o9 = %w52
+    field %o10 = %w46
+    u32 %o11 = %w48
+    u32 %o12 = %w49
+    field %o13 = %w50
+    field %o1(BN) = %w52 != %w49 ? 7 <Field> : 9 <Field>
+Transition:
+    %w52 != %w49 ? -> 7 : -> 9
+
+Block 7:
+Func: check_and_generate_subclaim, Scope: 2
+Exec Bound: 1, While Loop: true, Num VM Ops: 2
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i8: field
+    %i9: u32
+    %i10: field
+    %i11: u32
+    %i12: u32
+    %i13: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: field
+    %o9: field
+    %o10: u32
+    %o11: field
+    %o12: u32
+    %o13: field
+    %o14: u32
+    %o15: u32
+    %o16: field
+Instructions:
+    assert %i1(BN) == 7 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    field %w51 = %i8
+    u32 %w52 = %i9
+    field %w46 = %i10
+    u32 %w48 = %i11
+    u32 %w49 = %i12
+    field %w50 = %i13
+    field %w53 = %w50[%w52]
+    field %w54 = %w53
+    field %w55 = %w46[%w52]
+    field %w56 = %w55
+    u32 %w57 = %w48 + 1 <U32>
+    field %w58 = %w54
+    field %w59 = %w56
+    %PHY[%SP + 0] = %w5(BP) <field>
+    %w5(BP) = %w4(SP)
+    %PHY[%SP + 1] = %w54 <field>
+    %PHY[%SP + 2] = %w3(RP) <field>
+    %w3(RP) = 8 <Field>
+    %w4(SP) = %w4(SP) + 3 <Field>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    field %o8 = %w59
+    field %o9 = %w51
+    u32 %o10 = %w52
+    field %o11 = %w58
+    u32 %o12 = %w57
+    field %o13 = %w46
+    u32 %o14 = %w48
+    u32 %o15 = %w49
+    field %o16 = %w50
+    field %o1(BN) = 10 <Field>
+Transition: -> 10
+
+Block 8:
+Func: check_and_generate_subclaim, Scope: 3
+Exec Bound: 1, While Loop: false, Num VM Ops: 4
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i2(RET): field
+    %i6(SP): field
+    %i3(TS): field
+    %i9: field
+    %i10: u32
+    %i11: field
+    %i12: u32
+    %i13: u32
+    %i14: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: field
+    %o9: u32
+    %o10: field
+    %o11: u32
+    %o12: u32
+    %o13: field
+Instructions:
+    assert %i1(BN) == 8 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w60 = %i2(RET)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    field %w51 = %i9
+    u32 %w52 = %i10
+    field %w46 = %i11
+    u32 %w48 = %i12
+    u32 %w49 = %i13
+    field %w50 = %i14
+    field %w3(RP) = %PHY[%BP + 2]
+    field %w54 = %PHY[%BP + 1]
+    field %w5(BP) = %PHY[%BP + 0]
+    field %w61 = %w60
+    %w51[%w52 + 1 <U32>] = %w61 <field>
+    field %w55 = %w51[%w52]
+    field %w62 = %w55
+    field %w55 = %w54[0 <Field>]
+    field %w63 = %w54[1 <Field>]
+    assert %w55 + %w63 == %w62
+    %w52 = %w52 + 1 <U32>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    field %o8 = %w51
+    u32 %o9 = %w52
+    field %o10 = %w46
+    u32 %o11 = %w48
+    u32 %o12 = %w49
+    field %o13 = %w50
+    field %o1(BN) = %w52 != %w49 ? 7 <Field> : 9 <Field>
+Transition:
+    %w52 != %w49 ? -> 7 : -> 9
+
+Block 9:
+Func: check_and_generate_subclaim, Scope: 1
+Exec Bound: 1, While Loop: false, Num VM Ops: 1
+Inputs:
+    %i1(BN): field
+    %i7(BP): field
+    %i5(RP): field
+    %i3(TS): field
+    %i8: field
+    %i10: field
+    %i12: u32
+Outputs:
+    %o1(BN): field
+    %o7(BP): field
+    %o8: field
+    %o9: field
+    %o3(TS): field
+Instructions:
+    assert %i1(BN) == 9 <Field>
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w1(TS) = %i3(TS)
+    field %w51 = %i8
+    field %w46 = %i10
+    u32 %w49 = %i12
+    field %w64 = %w51[%w49]
+    field %w65 = %w46
+    field %w66 = %w64
+    field %w67 = %w66
+    field %w68 = %w65
+    field %o7(BP) = %w5(BP)
+    field %o8 = %w67
+    field %o9 = %w68
+    field %o3(TS) = %w1(TS)
+    field %o1(BN) = %w3(RP)
+Transition: -> %w3(RP)
+
+Block 10:
+Func: interpolate_uni_poly, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 1
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i8: field
+    %i9: field
+    %i10: u32
+    %i11: field
+    %i12: u32
+    %i13: field
+    %i14: u32
+    %i15: u32
+    %i16: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: field
+    %o9: u32
+    %o10: field
+    %o11: field
+    %o12: field
+    %o13: u32
+    %o14: u32
+    %o15: field
+    %o16: field
+    %o17: field
+    %o18: field
+    %o19: u32
+    %o20: u32
+    %o21: field
+Instructions:
+    assert %i1(BN) == 10 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    field %w59 = %i8
+    field %w51 = %i9
+    u32 %w52 = %i10
+    field %w58 = %i11
+    u32 %w57 = %i12
+    field %w46 = %i13
+    u32 %w48 = %i14
+    u32 %w49 = %i15
+    field %w50 = %i16
+    u32 %w69 = %w57
+    field[%w69] %w70
+    field %w71 = %w59
+    %w70[0 <Field>] = %w59 <field>
+    field %w72 = 0 <Field>
+    field %w73 = 1 <Field>
+    u32 %w74 = 1 <U32>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    field %o8 = %w73
+    u32 %o9 = %w74
+    field %o10 = %w59
+    field %o11 = %w70
+    field %o12 = %w51
+    u32 %o13 = %w52
+    u32 %o14 = %w69
+    field %o15 = %w58
+    field %o16 = %w71
+    field %o17 = %w72
+    field %o18 = %w46
+    u32 %o19 = %w48
+    u32 %o20 = %w49
+    field %o21 = %w50
+    field %o1(BN) = %w74 != %w69 ? 11 <Field> : 12 <Field>
+Transition:
+    %w74 != %w69 ? -> 11 : -> 12
+
+Block 11:
+Func: interpolate_uni_poly, Scope: 2
+Exec Bound: 1, While Loop: true, Num VM Ops: 1
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i8: field
+    %i9: u32
+    %i10: field
+    %i11: field
+    %i12: field
+    %i13: u32
+    %i14: u32
+    %i15: field
+    %i16: field
+    %i17: field
+    %i18: field
+    %i19: u32
+    %i20: u32
+    %i21: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: field
+    %o9: u32
+    %o10: field
+    %o11: field
+    %o12: field
+    %o13: u32
+    %o14: u32
+    %o15: field
+    %o16: field
+    %o17: field
+    %o18: field
+    %o19: u32
+    %o20: u32
+    %o21: field
+Instructions:
+    assert %i1(BN) == 11 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    field %w73 = %i8
+    u32 %w74 = %i9
+    field %w59 = %i10
+    field %w70 = %i11
+    field %w51 = %i12
+    u32 %w52 = %i13
+    u32 %w69 = %i14
+    field %w58 = %i15
+    field %w71 = %i16
+    field %w72 = %i17
+    field %w46 = %i18
+    u32 %w48 = %i19
+    u32 %w49 = %i20
+    field %w50 = %i21
+    field %w75 = %w59 - (F)%w74
+    %w70[%w74] = %w75 <field>
+    %w71 = %w71 * %w75
+    %w73 = %w73 * (F)%w74
+    %w74 = %w74 + 1 <U32>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    field %o8 = %w73
+    u32 %o9 = %w74
+    field %o10 = %w59
+    field %o11 = %w70
+    field %o12 = %w51
+    u32 %o13 = %w52
+    u32 %o14 = %w69
+    field %o15 = %w58
+    field %o16 = %w71
+    field %o17 = %w72
+    field %o18 = %w46
+    u32 %o19 = %w48
+    u32 %o20 = %w49
+    field %o21 = %w50
+    field %o1(BN) = %w74 != %w69 ? 11 <Field> : 12 <Field>
+Transition:
+    %w74 != %w69 ? -> 11 : -> 12
+
+Block 12:
+Func: interpolate_uni_poly, Scope: 1
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i8: field
+    %i11: field
+    %i12: field
+    %i13: u32
+    %i14: u32
+    %i15: field
+    %i16: field
+    %i17: field
+    %i18: field
+    %i19: u32
+    %i20: u32
+    %i21: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: field
+    %o9: field
+    %o10: field
+    %o11: field
+    %o12: u32
+    %o13: u32
+    %o14: u32
+    %o15: field
+    %o16: field
+    %o17: field
+    %o18: field
+    %o19: u32
+    %o20: u32
+    %o21: field
+Instructions:
+    assert %i1(BN) == 12 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    field %w73 = %i8
+    field %w70 = %i11
+    field %w51 = %i12
+    u32 %w52 = %i13
+    u32 %w69 = %i14
+    field %w58 = %i15
+    field %w71 = %i16
+    field %w72 = %i17
+    field %w46 = %i18
+    u32 %w48 = %i19
+    u32 %w49 = %i20
+    field %w50 = %i21
+    field %w76 = 1 <Field>
+    u32 %w77 = %w69
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    field %o8 = %w76
+    field %o9 = %w73
+    field %o10 = %w70
+    field %o11 = %w51
+    u32 %o12 = %w52
+    u32 %o13 = %w77
+    u32 %o14 = %w69
+    field %o15 = %w58
+    field %o16 = %w71
+    field %o17 = %w72
+    field %o18 = %w46
+    u32 %o19 = %w48
+    u32 %o20 = %w49
+    field %o21 = %w50
+    field %o1(BN) = %w77 > 0 <U32> ? 13 <Field> : 14 <Field>
+Transition:
+    %w77 > 0 <U32> ? -> 13 : -> 14
+
+Block 13:
+Func: interpolate_uni_poly, Scope: 1
+Exec Bound: 1, While Loop: true, Num VM Ops: 2
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i8: field
+    %i9: field
+    %i10: field
+    %i11: field
+    %i12: u32
+    %i13: u32
+    %i14: u32
+    %i15: field
+    %i16: field
+    %i17: field
+    %i18: field
+    %i19: u32
+    %i20: u32
+    %i21: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: field
+    %o9: field
+    %o10: field
+    %o11: field
+    %o12: u32
+    %o13: u32
+    %o14: u32
+    %o15: field
+    %o16: field
+    %o17: field
+    %o18: field
+    %o19: u32
+    %o20: u32
+    %o21: field
+Instructions:
+    assert %i1(BN) == 13 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    field %w76 = %i8
+    field %w73 = %i9
+    field %w70 = %i10
+    field %w51 = %i11
+    u32 %w52 = %i12
+    u32 %w77 = %i13
+    u32 %w69 = %i14
+    field %w58 = %i15
+    field %w71 = %i16
+    field %w72 = %i17
+    field %w46 = %i18
+    u32 %w48 = %i19
+    u32 %w49 = %i20
+    field %w50 = %i21
+    u32 %w78 = %w77 - 1 <U32>
+    field %w79 = %w58[%w78]
+    field %w80 = %w70[%w78]
+    %w72 = %w72 + %w79 * %w71 * %w76 / %w73 * %w80
+    if %w78 != 0 <U32>:
+        %w73 = -1 <Field> * %w73 * (F)%w69 - %w78
+        %w76 = %w76 * (F)%w78
+    %w77 = %w77 - 1 <U32>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    field %o8 = %w76
+    field %o9 = %w73
+    field %o10 = %w70
+    field %o11 = %w51
+    u32 %o12 = %w52
+    u32 %o13 = %w77
+    u32 %o14 = %w69
+    field %o15 = %w58
+    field %o16 = %w71
+    field %o17 = %w72
+    field %o18 = %w46
+    u32 %o19 = %w48
+    u32 %o20 = %w49
+    field %o21 = %w50
+    field %o1(BN) = %w77 > 0 <U32> ? 13 <Field> : 14 <Field>
+Transition:
+    %w77 > 0 <U32> ? -> 13 : -> 14
+
+Block 14:
+Func: interpolate_uni_poly, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i11: field
+    %i12: u32
+    %i17: field
+    %i18: field
+    %i19: u32
+    %i20: u32
+    %i21: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o2(RET): field
+    %o6(SP): field
+    %o3(TS): field
+    %o9: field
+    %o10: u32
+    %o11: field
+    %o12: u32
+    %o13: u32
+    %o14: field
+Instructions:
+    assert %i1(BN) == 14 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    field %w51 = %i11
+    u32 %w52 = %i12
+    field %w72 = %i17
+    field %w46 = %i18
+    u32 %w48 = %i19
+    u32 %w49 = %i20
+    field %w50 = %i21
+    field %w60 = %w72
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o2(RET) = %w60
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    field %o9 = %w51
+    u32 %o10 = %w52
+    field %o11 = %w46
+    u32 %o12 = %w48
+    u32 %o13 = %w49
+    field %o14 = %w50
+    field %o1(BN) = %w3(RP)
+Transition: -> %w3(RP)
+
+Block 15:
+Func: verify_round_and_update_state, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 2
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i8: u32
+    %i9: u32
+    %i10: field
+    %i11: u32
+    %i12: field
+    %i13: field
+    %i14: field
+    %i15: bool
+    %i16: u32
+    %i17: u32
+    %i18: field
+    %i19: u32
+    %i20: field
+    %i21: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o8: field
+    %o9: bool
+    %o10: u32
+    %o11: u32
+    %o12: field
+    %o13: u32
+    %o6(SP): field
+    %o3(TS): field
+    %o14: u32
+    %o15: u32
+    %o16: field
+    %o17: u32
+    %o18: field
+    %o19: field
+Instructions:
+    assert %i1(BN) == 15 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    u32 %w34 = %i8
+    u32 %w35 = %i9
+    field %w32 = %i10
+    u32 %w81 = %i11
+    field %w33 = %i12
+    field %w82 = %i13
+    field %w83 = %i14
+    bool %w84 = %i15
+    u32 %w85 = %i16
+    u32 %w86 = %i17
+    field %w87 = %i18
+    u32 %w88 = %i19
+    field %w36 = %i20
+    field %w89 = %i21
+    assert !%w84
+    field %w90 = %w89
+    %w83[%w88 - 1 <U32>] = %w90 <field>
+    %w87[%w88 - 1 <U32>] = %w82 <field>
+    if %w88 == %w86:
+        %w84 = true
+    else:
+        %w88 = %w88 + 1 <U32>
+    field %w91 = %w83
+    bool %w92 = %w84
+    u32 %w93 = %w85
+    u32 %w94 = %w86
+    field %w95 = %w87
+    u32 %w96 = %w88
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o8 = %w91
+    bool %o9 = %w92
+    u32 %o10 = %w93
+    u32 %o11 = %w94
+    field %o12 = %w95
+    u32 %o13 = %w96
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    u32 %o14 = %w34
+    u32 %o15 = %w35
+    field %o16 = %w32
+    u32 %o17 = %w81
+    field %o18 = %w33
+    field %o19 = %w36
+    field %o1(BN) = %w3(RP)
+Transition: -> %w3(RP)
+
+Block 16:
+Func: verify_sumcheck, Scope: 1
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i3(TS): field
+    %i10: field
+Outputs:
+    %o1(BN): field
+    %o7(BP): field
+    %o8: field
+    %o9: field
+    %o3(TS): field
+Instructions:
+    assert %i1(BN) == 16 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w1(TS) = %i3(TS)
+    field %w32 = %i10
+    field[0 <U32>] %w97
+    field %w98 = %w97
+    field %w99 = %w32
+    field %w37 = %w99
+    field %w38 = %w98
+    field %o7(BP) = %w5(BP)
+    field %o8 = %w37
+    field %o9 = %w38
+    field %o3(TS) = %w1(TS)
+    field %o1(BN) = %w3(RP)
+Transition: -> %w3(RP)
+
+Block 17:
+Func: verify_sumcheck, Scope: 1
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i8: u32
+    %i9: u32
+    %i10: field
+    %i11: field
+    %i12: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: u32
+    %o9: u32
+    %o10: field
+    %o11: u32
+    %o12: field
+    %o13: field
+Instructions:
+    assert %i1(BN) == 17 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    u32 %w34 = %i8
+    u32 %w35 = %i9
+    field %w32 = %i10
+    field %w33 = %i11
+    field %w36 = %i12
+    field %w100 = %w36
+    u32 %w101 = %w35
+    %PHY[%SP + 0] = %w5(BP) <field>
+    %w5(BP) = %w4(SP)
+    %PHY[%SP + 1] = %w3(RP) <field>
+    %w3(RP) = 18 <Field>
+    %w4(SP) = %w4(SP) + 2 <Field>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    u32 %o8 = %w34
+    u32 %o9 = %w35
+    field %o10 = %w32
+    u32 %o11 = %w101
+    field %o12 = %w33
+    field %o13 = %w100
+    field %o1(BN) = 28 <Field>
+Transition: -> 28
+
+Block 18:
+Func: verify_sumcheck, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i8: field
+    %i6(SP): field
+    %i3(TS): field
+    %i9: u32
+    %i10: u32
+    %i11: field
+    %i12: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: u32
+    %o9: u32
+    %o10: field
+    %o11: u32
+    %o12: field
+    %o13: field
+Instructions:
+    assert %i1(BN) == 18 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w102 = %i8
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    u32 %w34 = %i9
+    u32 %w35 = %i10
+    field %w32 = %i11
+    field %w33 = %i12
+    field %w3(RP) = %PHY[%BP + 1]
+    field %w5(BP) = %PHY[%BP + 0]
+    field %w103 = %w102
+    field %w36 = %w103
+    field %w100 = %w36
+    u32 %w101 = %w34
+    %PHY[%SP + 0] = %w5(BP) <field>
+    %w5(BP) = %w4(SP)
+    %PHY[%SP + 1] = %w3(RP) <field>
+    field %w3(RP) = 19 <Field>
+    %w4(SP) = %w4(SP) + 2 <Field>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    u32 %o8 = %w34
+    u32 %o9 = %w35
+    field %o10 = %w32
+    u32 %o11 = %w101
+    field %o12 = %w33
+    field %o13 = %w100
+    field %o1(BN) = 28 <Field>
+Transition: -> 28
+
+Block 19:
+Func: verify_sumcheck, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i8: field
+    %i6(SP): field
+    %i3(TS): field
+    %i9: u32
+    %i10: u32
+    %i11: field
+    %i12: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: u32
+    %o9: u32
+    %o10: field
+    %o11: u32
+    %o12: field
+    %o13: field
+    %o14: field
+    %o15: bool
+    %o16: u32
+    %o17: u32
+    %o18: field
+    %o19: u32
+Instructions:
+    assert %i1(BN) == 19 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w102 = %i8
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    u32 %w34 = %i9
+    u32 %w35 = %i10
+    field %w32 = %i11
+    field %w33 = %i12
+    field %w3(RP) = %PHY[%BP + 1]
+    field %w5(BP) = %PHY[%BP + 0]
+    field %w103 = %w102
+    field %w36 = %w103
+    field[%w35] %w104
+    field[0][%w35] %w105
+    u32 %w106 = 1 <U32>
+    u32 %w107 = %w35
+    u32 %w108 = %w34
+    bool %w109 = false
+    field %w110 = %w105
+    field %w111 = %w104
+    field %w112 = %w111
+    bool %w113 = %w109
+    u32 %w114 = %w108
+    u32 %w115 = %w107
+    field %w116 = %w110
+    u32 %w117 = %w106
+    u32 %w81 = 0 <U32>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    u32 %o8 = %w34
+    u32 %o9 = %w35
+    field %o10 = %w32
+    u32 %o11 = %w81
+    field %o12 = %w33
+    field %o13 = %w36
+    field %o14 = %w112
+    bool %o15 = %w113
+    u32 %o16 = %w114
+    u32 %o17 = %w115
+    field %o18 = %w116
+    u32 %o19 = %w117
+    field %o1(BN) = %w81 != %w35 ? 20 <Field> : 25 <Field>
+Transition:
+    %w81 != %w35 ? -> 20 : -> 25
+
+Block 20:
+Func: verify_sumcheck, Scope: 2
+Exec Bound: 1, While Loop: true, Num VM Ops: 1
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i8: u32
+    %i9: u32
+    %i10: field
+    %i11: u32
+    %i12: field
+    %i13: field
+    %i14: field
+    %i15: bool
+    %i16: u32
+    %i17: u32
+    %i18: field
+    %i19: u32
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: u32
+    %o9: u32
+    %o10: field
+    %o11: u32
+    %o12: u32
+    %o13: field
+    %o14: field
+    %o15: field
+    %o16: field
+    %o17: bool
+    %o18: u32
+    %o19: u32
+    %o20: field
+    %o21: u32
+Instructions:
+    assert %i1(BN) == 20 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    u32 %w34 = %i8
+    u32 %w35 = %i9
+    field %w32 = %i10
+    u32 %w81 = %i11
+    field %w33 = %i12
+    field %w36 = %i13
+    field %w112 = %i14
+    bool %w113 = %i15
+    u32 %w114 = %i16
+    u32 %w115 = %i17
+    field %w116 = %i18
+    u32 %w117 = %i19
+    field %w118 = %w33[%w81]
+    field %w119 = %w118
+    u32 %w120 = 0 <U32>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    u32 %o8 = %w34
+    u32 %o9 = %w35
+    field %o10 = %w32
+    u32 %o11 = %w81
+    u32 %o12 = %w120
+    field %o13 = %w33
+    field %o14 = %w119
+    field %o15 = %w36
+    field %o16 = %w112
+    bool %o17 = %w113
+    u32 %o18 = %w114
+    u32 %o19 = %w115
+    field %o20 = %w116
+    u32 %o21 = %w117
+    field %o1(BN) = %w120 != %w34 + 1 <U32> ? 21 <Field> : 23 <Field>
+Transition:
+    %w120 != %w34 + 1 <U32> ? -> 21 : -> 23
+
+Block 21:
+Func: verify_sumcheck, Scope: 5
+Exec Bound: 1, While Loop: true, Num VM Ops: 1
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i8: u32
+    %i9: u32
+    %i10: field
+    %i11: u32
+    %i12: u32
+    %i13: field
+    %i14: field
+    %i15: field
+    %i16: field
+    %i17: bool
+    %i18: u32
+    %i19: u32
+    %i20: field
+    %i21: u32
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: u32
+    %o9: field
+    %o10: field
+    %o11: u32
+    %o12: u32
+    %o13: field
+    %o14: field
+    %o15: field
+    %o16: field
+    %o17: bool
+    %o18: u32
+    %o19: u32
+    %o20: field
+    %o21: u32
+Instructions:
+    assert %i1(BN) == 21 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    u32 %w34 = %i8
+    u32 %w35 = %i9
+    field %w32 = %i10
+    u32 %w81 = %i11
+    u32 %w120 = %i12
+    field %w33 = %i13
+    field %w119 = %i14
+    field %w36 = %i15
+    field %w112 = %i16
+    bool %w113 = %i17
+    u32 %w114 = %i18
+    u32 %w115 = %i19
+    field %w116 = %i20
+    u32 %w117 = %i21
+    field %w121 = %w119[%w120]
+    field %w122 = %w36
+    field %w123 = %w121
+    %PHY[%SP + 0] = %w5(BP) <field>
+    %w5(BP) = %w4(SP)
+    %PHY[%SP + 1] = %w34 <u32>
+    %PHY[%SP + 2] = %w3(RP) <field>
+    %w3(RP) = 22 <Field>
+    %w4(SP) = %w4(SP) + 3 <Field>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    u32 %o8 = %w35
+    field %o9 = %w32
+    field %o10 = %w123
+    u32 %o11 = %w81
+    u32 %o12 = %w120
+    field %o13 = %w33
+    field %o14 = %w119
+    field %o15 = %w122
+    field %o16 = %w112
+    bool %o17 = %w113
+    u32 %o18 = %w114
+    u32 %o19 = %w115
+    field %o20 = %w116
+    u32 %o21 = %w117
+    field %o1(BN) = 27 <Field>
+Transition: -> 27
+
+Block 22:
+Func: verify_sumcheck, Scope: 6
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i8: field
+    %i6(SP): field
+    %i3(TS): field
+    %i9: u32
+    %i10: field
+    %i11: u32
+    %i12: u32
+    %i13: field
+    %i14: field
+    %i15: field
+    %i16: bool
+    %i17: u32
+    %i18: u32
+    %i19: field
+    %i20: u32
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: u32
+    %o9: u32
+    %o10: field
+    %o11: u32
+    %o12: u32
+    %o13: field
+    %o14: field
+    %o15: field
+    %o16: field
+    %o17: bool
+    %o18: u32
+    %o19: u32
+    %o20: field
+    %o21: u32
+Instructions:
+    assert %i1(BN) == 22 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w124 = %i8
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    u32 %w35 = %i9
+    field %w32 = %i10
+    u32 %w81 = %i11
+    u32 %w120 = %i12
+    field %w33 = %i13
+    field %w119 = %i14
+    field %w112 = %i15
+    bool %w113 = %i16
+    u32 %w114 = %i17
+    u32 %w115 = %i18
+    field %w116 = %i19
+    u32 %w117 = %i20
+    field %w3(RP) = %PHY[%BP + 2]
+    u32 %w34 = %PHY[%BP + 1]
+    field %w5(BP) = %PHY[%BP + 0]
+    field %w125 = %w124
+    field %w36 = %w125
+    %w120 = %w120 + 1 <U32>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    u32 %o8 = %w34
+    u32 %o9 = %w35
+    field %o10 = %w32
+    u32 %o11 = %w81
+    u32 %o12 = %w120
+    field %o13 = %w33
+    field %o14 = %w119
+    field %o15 = %w36
+    field %o16 = %w112
+    bool %o17 = %w113
+    u32 %o18 = %w114
+    u32 %o19 = %w115
+    field %o20 = %w116
+    u32 %o21 = %w117
+    field %o1(BN) = %w120 != %w34 + 1 <U32> ? 21 <Field> : 23 <Field>
+Transition:
+    %w120 != %w34 + 1 <U32> ? -> 21 : -> 23
+
+Block 23:
+Func: verify_sumcheck, Scope: 4
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i8: u32
+    %i9: u32
+    %i10: field
+    %i11: u32
+    %i13: field
+    %i14: field
+    %i15: field
+    %i16: field
+    %i17: bool
+    %i18: u32
+    %i19: u32
+    %i20: field
+    %i21: u32
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: u32
+    %o9: u32
+    %o10: field
+    %o11: u32
+    %o12: field
+    %o13: field
+    %o14: field
+    %o15: bool
+    %o16: u32
+    %o17: u32
+    %o18: field
+    %o19: u32
+    %o20: field
+    %o21: field
+Instructions:
+    assert %i1(BN) == 23 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    u32 %w34 = %i8
+    u32 %w35 = %i9
+    field %w32 = %i10
+    u32 %w81 = %i11
+    field %w33 = %i13
+    field %w119 = %i14
+    field %w36 = %i15
+    field %w112 = %i16
+    bool %w113 = %i17
+    u32 %w114 = %i18
+    u32 %w115 = %i19
+    field %w116 = %i20
+    u32 %w117 = %i21
+    field %w83 = %w112
+    bool %w84 = %w113
+    u32 %w85 = %w114
+    u32 %w86 = %w115
+    field %w87 = %w116
+    u32 %w88 = %w117
+    field %w82 = %w119
+    field %w89 = %w36
+    %PHY[%SP + 0] = %w5(BP) <field>
+    %w5(BP) = %w4(SP)
+    %PHY[%SP + 1] = %w3(RP) <field>
+    %w3(RP) = 24 <Field>
+    %w4(SP) = %w4(SP) + 2 <Field>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    u32 %o8 = %w34
+    u32 %o9 = %w35
+    field %o10 = %w32
+    u32 %o11 = %w81
+    field %o12 = %w33
+    field %o13 = %w82
+    field %o14 = %w83
+    bool %o15 = %w84
+    u32 %o16 = %w85
+    u32 %o17 = %w86
+    field %o18 = %w87
+    u32 %o19 = %w88
+    field %o20 = %w36
+    field %o21 = %w89
+    field %o1(BN) = 15 <Field>
+Transition: -> 15
+
+Block 24:
+Func: verify_sumcheck, Scope: 3
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i8: field
+    %i9: bool
+    %i10: u32
+    %i11: u32
+    %i12: field
+    %i13: u32
+    %i6(SP): field
+    %i3(TS): field
+    %i14: u32
+    %i15: u32
+    %i16: field
+    %i17: u32
+    %i18: field
+    %i19: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: u32
+    %o9: u32
+    %o10: field
+    %o11: u32
+    %o12: field
+    %o13: field
+    %o14: field
+    %o15: bool
+    %o16: u32
+    %o17: u32
+    %o18: field
+    %o19: u32
+Instructions:
+    assert %i1(BN) == 24 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w91 = %i8
+    bool %w92 = %i9
+    u32 %w93 = %i10
+    u32 %w94 = %i11
+    field %w95 = %i12
+    u32 %w96 = %i13
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    u32 %w34 = %i14
+    u32 %w35 = %i15
+    field %w32 = %i16
+    u32 %w81 = %i17
+    field %w33 = %i18
+    field %w36 = %i19
+    field %w3(RP) = %PHY[%BP + 1]
+    field %w5(BP) = %PHY[%BP + 0]
+    field %w126 = %w91
+    bool %w127 = %w92
+    u32 %w128 = %w93
+    u32 %w129 = %w94
+    field %w130 = %w95
+    u32 %w131 = %w96
+    field %w112 = %w126
+    bool %w113 = %w127
+    u32 %w114 = %w128
+    u32 %w115 = %w129
+    field %w116 = %w130
+    u32 %w117 = %w131
+    %w81 = %w81 + 1 <U32>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    u32 %o8 = %w34
+    u32 %o9 = %w35
+    field %o10 = %w32
+    u32 %o11 = %w81
+    field %o12 = %w33
+    field %o13 = %w36
+    field %o14 = %w112
+    bool %o15 = %w113
+    u32 %o16 = %w114
+    u32 %o17 = %w115
+    field %o18 = %w116
+    u32 %o19 = %w117
+    field %o1(BN) = %w81 != %w35 ? 20 <Field> : 25 <Field>
+Transition:
+    %w81 != %w35 ? -> 20 : -> 25
+
+Block 25:
+Func: verify_sumcheck, Scope: 1
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i10: field
+    %i14: field
+    %i15: bool
+    %i16: u32
+    %i17: u32
+    %i18: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o5(RP): field
+    %o6(SP): field
+    %o3(TS): field
+    %o8: field
+    %o9: field
+    %o10: bool
+    %o11: u32
+    %o12: u32
+    %o13: field
+Instructions:
+    assert %i1(BN) == 25 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    field %w32 = %i10
+    field %w112 = %i14
+    bool %w113 = %i15
+    u32 %w114 = %i16
+    u32 %w115 = %i17
+    field %w116 = %i18
+    field %w46 = %w112
+    bool %w47 = %w113
+    u32 %w48 = %w114
+    u32 %w49 = %w115
+    field %w50 = %w116
+    field %w45 = %w32
+    %PHY[%SP + 0] = %w5(BP) <field>
+    %w5(BP) = %w4(SP)
+    %PHY[%SP + 1] = %w3(RP) <field>
+    %w3(RP) = 26 <Field>
+    %w4(SP) = %w4(SP) + 2 <Field>
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o5(RP) = %w3(RP)
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    field %o8 = %w45
+    field %o9 = %w46
+    bool %o10 = %w47
+    u32 %o11 = %w48
+    u32 %o12 = %w49
+    field %o13 = %w50
+    field %o1(BN) = 6 <Field>
+Transition: -> 6
+
+Block 26:
+Func: verify_sumcheck, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %i1(BN): field
+    %i7(BP): field
+    %i8: field
+    %i9: field
+    %i3(TS): field
+Outputs:
+    %o1(BN): field
+    %o7(BP): field
+    %o8: field
+    %o9: field
+    %o3(TS): field
+Instructions:
+    assert %i1(BN) == 26 <Field>
+    field %w5(BP) = %i7(BP)
+    field %w67 = %i8
+    field %w68 = %i9
+    field %w1(TS) = %i3(TS)
+    field %w3(RP) = %PHY[%BP + 1]
+    field %w5(BP) = %PHY[%BP + 0]
+    field %w132 = %w67
+    field %w133 = %w68
+    field %w134 = %w132
+    field %w135 = %w133
+    field %w37 = %w134
+    field %w38 = %w135
+    field %o7(BP) = %w5(BP)
+    field %o8 = %w37
+    field %o9 = %w38
+    field %o3(TS) = %w1(TS)
+    field %o1(BN) = %w3(RP)
+Transition: -> %w3(RP)
+
+Block 27:
+Func: append_message_field, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i8: u32
+    %i9: field
+    %i10: field
+    %i11: u32
+    %i12: u32
+    %i13: field
+    %i14: field
+    %i15: field
+    %i16: field
+    %i17: bool
+    %i18: u32
+    %i19: u32
+    %i20: field
+    %i21: u32
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o8: field
+    %o6(SP): field
+    %o3(TS): field
+    %o9: u32
+    %o10: field
+    %o11: u32
+    %o12: u32
+    %o13: field
+    %o14: field
+    %o15: field
+    %o16: bool
+    %o17: u32
+    %o18: u32
+    %o19: field
+    %o20: u32
+Instructions:
+    assert %i1(BN) == 27 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    u32 %w35 = %i8
+    field %w32 = %i9
+    field %w123 = %i10
+    u32 %w81 = %i11
+    u32 %w120 = %i12
+    field %w33 = %i13
+    field %w119 = %i14
+    field %w122 = %i15
+    field %w112 = %i16
+    bool %w113 = %i17
+    u32 %w114 = %i18
+    u32 %w115 = %i19
+    field %w116 = %i20
+    u32 %w117 = %i21
+    %w122 = %w122 + %w123
+    field %w124 = %w122
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o8 = %w124
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    u32 %o9 = %w35
+    field %o10 = %w32
+    u32 %o11 = %w81
+    u32 %o12 = %w120
+    field %o13 = %w33
+    field %o14 = %w119
+    field %o15 = %w112
+    bool %o16 = %w113
+    u32 %o17 = %w114
+    u32 %o18 = %w115
+    field %o19 = %w116
+    u32 %o20 = %w117
+    field %o1(BN) = %w3(RP)
+Transition: -> %w3(RP)
+
+Block 28:
+Func: append_message_u32, Scope: 0
+Exec Bound: 1, While Loop: false, Num VM Ops: 0
+Inputs:
+    %i1(BN): field
+    %i4(AS): field
+    %i7(BP): field
+    %i5(RP): field
+    %i6(SP): field
+    %i3(TS): field
+    %i8: u32
+    %i9: u32
+    %i10: field
+    %i11: u32
+    %i12: field
+    %i13: field
+Outputs:
+    %o1(BN): field
+    %o4(AS): field
+    %o7(BP): field
+    %o8: field
+    %o6(SP): field
+    %o3(TS): field
+    %o9: u32
+    %o10: u32
+    %o11: field
+    %o12: field
+Instructions:
+    assert %i1(BN) == 28 <Field>
+    field %w2(AS) = %i4(AS)
+    field %w5(BP) = %i7(BP)
+    field %w3(RP) = %i5(RP)
+    field %w4(SP) = %i6(SP)
+    field %w1(TS) = %i3(TS)
+    u32 %w34 = %i8
+    u32 %w35 = %i9
+    field %w32 = %i10
+    u32 %w101 = %i11
+    field %w33 = %i12
+    field %w100 = %i13
+    %w100 = %w100 + (F)%w101
+    field %w102 = %w100
+    field %o4(AS) = %w2(AS)
+    field %o7(BP) = %w5(BP)
+    field %o8 = %w102
+    field %o6(SP) = %w4(SP)
+    field %o3(TS) = %w1(TS)
+    u32 %o9 = %w34
+    u32 %o10 = %w35
+    field %o11 = %w32
+    field %o12 = %w33
+    field %o1(BN) = %w3(RP)
+Transition: -> %w3(RP)

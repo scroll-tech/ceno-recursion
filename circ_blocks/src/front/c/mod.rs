@@ -465,7 +465,7 @@ impl CGen {
         }
     }
 
-    /// Computes base[val / loc]    
+    /// Computes base[val / loc]
     fn rebuild_lval(&mut self, base: CTerm, loc: CLoc, val: CTerm) -> Result<CTerm, String> {
         match loc {
             CLoc::Var(_) => Ok(val),

@@ -4,12 +4,12 @@ set -ex
 
 disable -r time
 
-# cargo build --release --features c --example circ 
+# cargo build --release --features c --example circ
 
 BIN=./target/release/examples/circ
 export CARGO_MANIFEST_DIR=$(pwd)
 
-case "$OSTYPE" in 
+case "$OSTYPE" in
     darwin*)
         alias measure_time="gtime --format='LOG: compile time: %e seconds %M kB'"
     ;;

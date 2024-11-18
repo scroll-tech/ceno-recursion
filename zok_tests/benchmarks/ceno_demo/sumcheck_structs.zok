@@ -17,7 +17,7 @@ struct VPAuxInfo {
 
 struct SumCheckSubClaim {
     Challenge[0] point
-    ExtField expected_evaluation    
+    ExtField expected_evaluation
 }
 
 struct SumcheckIOPVerifierState {
@@ -36,5 +36,5 @@ struct SumcheckIOPVerifierStateAndTranscript {
 
 struct SumCheckSubClaimAndTranscript {
     SumCheckSubClaim sc
-    Transcript t 
+    Transcript t
 }

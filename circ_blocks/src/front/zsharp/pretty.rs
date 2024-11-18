@@ -15,23 +15,23 @@ pub fn pretty_block_content(indent: usize, bc: &BlockContent) {
         BlockContent::MemPop((val, ty, offset)) => { println!("{ty} {} = %PHY[%BP + {offset}]", pretty_name(val)) }
         BlockContent::ArrayInit((arr, ty, size_expr, ro)) => {
             print!("{ty}[");
-            pretty_expr::<false>(&size_expr); 
+            pretty_expr::<false>(&size_expr);
             print!("] {arr}");
             if *ro { print!(", ro"); }
             println!("");
         }
-        BlockContent::Store((val, ty, arr, id, init, ro)) => { 
-            print!("{arr}["); 
-            pretty_expr::<false>(&id); print!("] = "); 
-            pretty_expr::<false>(&val); 
+        BlockContent::Store((val, ty, arr, id, init, ro)) => {
+            print!("{arr}[");
+            pretty_expr::<false>(&id); print!("] = ");
+            pretty_expr::<false>(&val);
             print!(" <{ty}>");
             if *init { print!(", init"); }
             if *ro { print!(", ro"); }
-            println!(); 
+            println!();
         }
-        BlockContent::Load((val, ty, arr, id, ro)) => { 
-            print!("{ty} {} = {arr}[", pretty_name(val)); 
-            pretty_expr::<false>(&id); 
+        BlockContent::Load((val, ty, arr, id, ro)) => {
+            print!("{ty} {} = {arr}[", pretty_name(val));
+            pretty_expr::<false>(&id);
             print!("]");
             if *ro { print!(", ro"); }
             println!("");
@@ -41,7 +41,7 @@ pub fn pretty_block_content(indent: usize, bc: &BlockContent) {
             if *ro { print!(", ro"); }
             println!("");
         }
-        BlockContent::Branch((cond, if_insts, else_insts)) => { 
+        BlockContent::Branch((cond, if_insts, else_insts)) => {
             print!("if ");
             pretty_expr::<false>(cond);
             println!(":");
@@ -106,7 +106,7 @@ fn pretty_def_stmt(d: &DefinitionStatement) {
         match l {
             TypedIdentifierOrAssignee::Assignee(a) => { pretty_ident_expr(&a.id); }
             TypedIdentifierOrAssignee::TypedIdentifier(ti) => { pretty_typed_ident(&ti); }
-        }        
+        }
     }
     print!(" = ");
     pretty_expr::<false>(&d.expression);

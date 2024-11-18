@@ -216,7 +216,7 @@ impl DensePolynomialPqx {
 
   // Bound the entire "p" section to r_p
   // Must occur after r_q's are bounded
-  pub fn bound_poly_vars_rp(&mut self, 
+  pub fn bound_poly_vars_rp(&mut self,
       r_p: &Vec<Scalar>,
     ) {
       for r in r_p {
@@ -225,7 +225,7 @@ impl DensePolynomialPqx {
     }
 
   // Bound the entire "q_rev" section to r_q
-  pub fn bound_poly_vars_rq(&mut self, 
+  pub fn bound_poly_vars_rq(&mut self,
     r_q: &Vec<Scalar>,
   ) {
     for r in r_q {
@@ -234,7 +234,7 @@ impl DensePolynomialPqx {
   }
 
   // Bound the entire "w" section to r_w
-  pub fn bound_poly_vars_rw(&mut self, 
+  pub fn bound_poly_vars_rw(&mut self,
     r_w: &Vec<Scalar>,
   ) {
     for r in r_w {
@@ -243,7 +243,7 @@ impl DensePolynomialPqx {
   }
 
   // Bound the entire "x_rev" section to r_x
-  pub fn bound_poly_vars_rx(&mut self, 
+  pub fn bound_poly_vars_rx(&mut self,
     r_x: &Vec<Scalar>,
   ) {
     for r in r_x {
@@ -277,9 +277,9 @@ impl DensePolynomialPqx {
               let x = rev_bits(x_rev * step_x, self.max_num_inputs);
               for w in 0..min(self.num_witness_secs, self.Z[p][q_rev].len()) {
                 Z_poly[
-                    p * self.max_num_proofs * self.num_witness_secs * self.max_num_inputs 
-                  + q * self.num_witness_secs * self.max_num_inputs 
-                  + w * self.max_num_inputs 
+                    p * self.max_num_proofs * self.num_witness_secs * self.max_num_inputs
+                  + q * self.num_witness_secs * self.max_num_inputs
+                  + w * self.max_num_inputs
                   + x
                 ] = self.Z[p][q_rev][w][x_rev];
             }

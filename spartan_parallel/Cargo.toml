@@ -12,9 +12,9 @@ keywords = ["zkSNARKs", "cryptography", "proofs"]
 
 [dependencies]
 curve25519-dalek = { version = "3.2.1", features = [
-    "serde",
-    "u64_backend",
-    "alloc",
+  "serde",
+  "u64_backend",
+  "alloc",
 ], default-features = false }
 merlin = { version = "3.0.0", default-features = false }
 rand = { version = "0.7.3", features = ["getrandom"], default-features = false }
@@ -53,18 +53,22 @@ required-features = ["std"]
 [features]
 default = ["std", "simd_backend"]
 std = [
-    "curve25519-dalek/std",
-    "digest/std",
-    "merlin/std",
-    "rand/std",
-    "sha3/std",
-    "byteorder/std",
-    "serde/std",
-    "subtle/std",
-    "zeroize/std",
-    "itertools/use_std",
-    "flate2/rust_backend",
+  "curve25519-dalek/std",
+  "digest/std",
+  "merlin/std",
+  "rand/std",
+  "sha3/std",
+  "byteorder/std",
+  "serde/std",
+  "subtle/std",
+  "zeroize/std",
+  "itertools/use_std",
+  "flate2/rust_backend",
 ]
 simd_backend = ["curve25519-dalek/simd_backend"]
 multicore = ["rayon"]
 profile = ["colored"]
+
+[[example]]
+name = "interface"
+required-features = ["multicore", "profile"]

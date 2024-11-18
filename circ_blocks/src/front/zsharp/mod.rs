@@ -62,7 +62,7 @@ impl FrontEnd for ZSharpFE {
         g.visit_files();
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
-        
+
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
         println!("Entry block: {entry_bl}");
         for b in &blks {
@@ -70,7 +70,7 @@ impl FrontEnd for ZSharpFE {
             println!("");
         }
         let (blks, entry_bl, input_liveness) = g.optimize_block::<GEN_VERBOSE>(blks, entry_bl, inputs, i.no_opt);
-        let (blks, _, io_size, _, live_io_list, num_mem_accesses, live_vm_list) = 
+        let (blks, _, io_size, _, live_io_list, num_mem_accesses, live_vm_list) =
             g.process_block::<GEN_VERBOSE, 0>(blks, entry_bl);
         // NOTE: The input of block 0 includes %BN, which should be removed when reasoning about function input
         let func_input_width = blks[0].get_num_inputs() - 1;
@@ -88,9 +88,9 @@ impl FrontEnd for ZSharpFE {
 impl ZSharpFE {
     /// Execute the Z# front-end interpreter on the supplied file with the supplied inputs
     pub fn interpret(
-        i: Inputs, 
-        entry_regs: &Vec<Integer>, 
-        entry_stacks: &Vec<Vec<Integer>>, 
+        i: Inputs,
+        entry_regs: &Vec<Integer>,
+        entry_stacks: &Vec<Vec<Integer>>,
         entry_arrays: &Vec<Vec<Integer>>,
         entry_witnesses: &Vec<Integer>,
     ) -> (
@@ -110,30 +110,30 @@ impl ZSharpFE {
         g.visit_files();
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
-        
+
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
         let (blks, entry_bl, input_liveness) = g.optimize_block::<INTERPRET_VERBOSE>(blks, entry_bl, inputs.clone(), i.no_opt);
         let (blks, entry_bl, io_size, _, _, _, _) = g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl);
 
         println!("\n\n--\nInterpretation:");
         let (
-            ret, 
-            _, 
-            prog_reg_in, 
-            bl_exec_state, 
+            ret,
+            _,
+            prog_reg_in,
+            bl_exec_state,
             init_phy_mem_list,
             init_vir_mem_list,
-            phy_mem_list, 
+            phy_mem_list,
             vir_mem_list
         ) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(
-            entry_bl, 
-            &inputs, 
-            &input_liveness, 
-            &entry_regs, 
-            entry_stacks, 
+            entry_bl,
+            &inputs,
+            &input_liveness,
+            &entry_regs,
+            entry_stacks,
             entry_arrays,
             entry_witnesses,
-            &blks, 
+            &blks,
             io_size
         )
             .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e));

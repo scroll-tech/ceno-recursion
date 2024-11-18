@@ -321,57 +321,6 @@ fn bl_trans_replace<'ast>(
     }
 }
 
-/*
-// Sort functions in topological order
-fn top_sort_helper(
-    cur_name: &str,
-    call_graph: &BTreeMap<String, BTreeSet<String>>,
-    mut visited: BTreeMap<String, bool>,
-    mut chain: Vec<String>
-) -> (Vec<String>, BTreeMap<String, bool>) {
-    visited.insert(cur_name.to_string(), true);
-    for s in call_graph.get(cur_name).unwrap() {
-        if !visited.get(s).unwrap() {
-            (chain, visited) = top_sort_helper(s, call_graph, visited, chain);
-        }
-    }
-    chain.insert(0, cur_name.to_string());
-    return (chain, visited);
-}
-
-fn fn_top_sort(
-    bls: &Vec<Block>,
-    successor: &Vec<BTreeSet<usize>>,
-    successor_fn: &Vec<BTreeSet<usize>>,
-) -> Vec<String> {
-    // First construct function call graph
-    let mut fn_call_graph: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    // Initialize every function to NOT VISITED
-    let mut visited = BTreeMap::new();
-    fn_call_graph.insert("main".to_string(), BTreeSet::new());
-    for cur_bl in 0..bls.len() {
-        let b = &bls[cur_bl];
-        let caller_name = b.fn_name.to_string();
-        if !visited.contains_key(&caller_name) {
-            visited.insert(caller_name.to_string(), false);
-            fn_call_graph.insert(caller_name.to_string(), BTreeSet::new());
-        }
-        // if cur_bl is a caller of a function, add the call to call graph
-        if successor_fn[cur_bl].len() != 0 && successor_fn[cur_bl] != successor[cur_bl] {
-            assert_eq!(successor[cur_bl].len(), 1);
-            assert_eq!(successor_fn[cur_bl].len(), 1);
-            let callee_name = bls[Vec::from_iter(successor[cur_bl].clone())[0]].fn_name.to_string();
-
-            let mut callee_list = fn_call_graph.get(&caller_name).unwrap().clone();
-            callee_list.insert(callee_name);
-            fn_call_graph.insert(caller_name, callee_list);
-        }
-    }
-    // Next perform top sort using call graph
-    top_sort_helper("main", &fn_call_graph, visited, Vec::new()).0
-}
-*/
-
 // Given an expression, find all variables it references
 fn expr_find_val(e: &Expression) -> BTreeSet<String> {
     match e {
@@ -452,28 +401,6 @@ fn stmt_find_val(s: &Statement) -> (BTreeSet<String>, BTreeSet<String>) {
         Statement::Assertion(a) => (BTreeSet::new(), expr_find_val(&a.expression)),
         Statement::Conditional(_c) => {
             panic!("Blocks should not contain conditional statements.")
-            /*
-            // KILL is empty
-            // GEN is the union of the two branches
-            // Iterate through if branch
-            let mut if_gen_set = BTreeSet::new();
-            for s in c.ifbranch.iter().rev() {
-                let (kill, gen) = stmt_find_val(&s);
-                if_gen_set = la_kill(if_gen_set, &kill);
-                if_gen_set = la_gen(if_gen_set, &gen);
-            }
-            let mut else_gen_set = BTreeSet::new();
-            for s in c.elsebranch.iter().rev() {
-                let (kill, gen) = stmt_find_val(&s);
-                else_gen_set = la_kill(else_gen_set, &kill);
-                else_gen_set = la_gen(else_gen_set, &gen);
-            }
-            let mut gen_set = BTreeSet::new();
-            gen_set.extend(if_gen_set);
-            gen_set.extend(else_gen_set);
-            gen_set.extend(expr_find_val(&c.condition));
-            (BTreeSet::new(), gen_set)
-            */
         }
         Statement::Iteration(_) => {
             panic!("Blocks should not contain iteration statements.")
@@ -975,30 +902,6 @@ fn var_to_reg_stmt<'ast>(
         }
         Statement::Conditional(_c) => {
             panic!("Blocks should not contain conditional statements.")
-            /*
-            let new_cond: Expression;
-            (new_cond, reg_map) = var_to_reg_expr(&c.condition, reg_map);
-            let mut new_ifbranch = Vec::new();
-            for s in &c.ifbranch {
-                let new_stmt: Statement;
-                (new_stmt, reg_map) = var_to_reg_stmt(s, reg_map);
-                new_ifbranch.push(new_stmt);
-            }
-            let mut new_elsebranch = Vec::new();
-            for s in &c.elsebranch {
-                let new_stmt: Statement;
-                (new_stmt, reg_map) = var_to_reg_stmt(s, reg_map);
-                new_elsebranch.push(new_stmt);
-            }
-            let new_stmt = ConditionalStatement {
-                condition: new_cond,
-                ifbranch: new_ifbranch,
-                dummy: Vec::new(),
-                elsebranch: new_elsebranch,
-                span: Span::new("", 0, 0).unwrap()
-            };
-            (Statement::Conditional(new_stmt), reg_map)
-            */
         }
         Statement::Iteration(_) => {
             panic!("Blocks should not contain iteration statements.")
@@ -1811,27 +1714,6 @@ fn bmc_inst<'ast>(inst: &Vec<BlockContent<'ast>>) -> (usize, usize, Vec<bool>) {
                     vm_liveness.extend(vec![true, true, true, true]);
                 }
             }
-            /*
-            BlockContent::Load(_) => {
-                vir_mem_accesses_count += 1;
-                //                      phy_addr  vir_addr  data      ls        ts
-                vm_liveness.extend(vec![false,    true,     true,     true,     true]);
-            }
-            // Store includes init, invalidate, & store
-            BlockContent::Store((_, _, _, _, init)) => {
-                if *init {
-                    vir_mem_accesses_count += 1;
-                    //                      phy_addr  vir_addr  data      ls        ts
-                    vm_liveness.extend(vec![true,     true,     true,     true,     true]);
-                } else {
-                    vir_mem_accesses_count += 3;
-                    //                      phy_addr  vir_addr  data      ls        ts
-                    vm_liveness.extend(vec![true,     true,     false,    true,     true,    // retrieval
-                                            true,     true,     false,    true,     true,    // invalidation
-                                            true,     true,     true,     true,     true,]); // allocation
-                }
-            }
-            */
             BlockContent::Branch((_, if_inst, else_inst)) => {
                 let (if_phy_mem_accesses_count, if_vir_mem_accesses_count, if_vm_liveness) =
                     bmc_inst(&if_inst);
@@ -3991,18 +3873,6 @@ impl<'ast> ZGen<'ast> {
                 &exit_bls_fn,
             );
         }
-
-        /*
-        // Perform topological sort on functions
-        let sorted_fns = fn_top_sort(&bls, &successor, &successor_fn);
-        if VERBOSE {
-            print!("FN TOP SORT: {}", sorted_fns[0]);
-            for i in 1..sorted_fns.len() {
-                print!(" -> {}", sorted_fns[i]);
-            }
-            println!();
-        }
-        */
 
         // VtR
         let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) =

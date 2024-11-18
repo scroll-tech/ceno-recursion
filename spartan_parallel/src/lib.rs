@@ -395,7 +395,6 @@ impl ShiftProofs {
       rc.push(next_c);
       next_c *= c;
     }
-
     // Proof of opening
     self.proof.verify_uni_batched_instances(
       transcript,
@@ -842,34 +841,16 @@ impl SNARK {
     // PREPROCESSING
     // --
     // unwrap the assignments
-    let mut block_vars_mat = block_vars_mat
-      .into_iter()
-      .map(|a| a.into_iter().map(|v| v.assignment).collect_vec())
-      .collect_vec();
-    let mut exec_inputs_list = exec_inputs_list
-      .into_iter()
-      .map(|v| v.assignment)
-      .collect_vec();
-    let mut init_phy_mems_list = init_phy_mems_list
-      .into_iter()
-      .map(|v| v.assignment)
-      .collect_vec();
-    let mut init_vir_mems_list = init_vir_mems_list
-      .into_iter()
-      .map(|v| v.assignment)
-      .collect_vec();
-    let mut addr_phy_mems_list = addr_phy_mems_list
-      .into_iter()
-      .map(|v| v.assignment)
-      .collect_vec();
-    let mut addr_vir_mems_list = addr_vir_mems_list
-      .into_iter()
-      .map(|v| v.assignment)
-      .collect_vec();
-    let mut addr_ts_bits_list = addr_ts_bits_list
-      .into_iter()
-      .map(|v| v.assignment)
-      .collect_vec();
+    fn unwrap_assignment(assigned: Vec<Assignment>) -> Vec<Vec<Scalar>> {
+      assigned.into_iter().map(|v| v.assignment).collect()
+    }
+    let mut block_vars_mat: Vec<_> = block_vars_mat.into_iter().map(unwrap_assignment).collect();
+    let mut exec_inputs_list: Vec<_> = unwrap_assignment(exec_inputs_list);
+    let mut init_phy_mems_list = unwrap_assignment(init_phy_mems_list);
+    let mut init_vir_mems_list = unwrap_assignment(init_vir_mems_list);
+    let mut addr_phy_mems_list = unwrap_assignment(addr_phy_mems_list);
+    let mut addr_vir_mems_list = unwrap_assignment(addr_vir_mems_list);
+    let mut addr_ts_bits_list = unwrap_assignment(addr_ts_bits_list);
 
     // --
     // INSTANCE COMMITMENTS

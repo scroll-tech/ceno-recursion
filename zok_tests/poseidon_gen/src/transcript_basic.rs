@@ -66,15 +66,6 @@ impl<E: Poseidon + SmallField + AdaptedField> Transcript<E> {
         self.digest = PoseidonHash::two_to_one(&self.digest, &elem_f);
     }
 
-    // // Append the message to the transcript.
-    // pub fn append_serializable_element<S: Serialize>(
-    //     &mut self,
-    //     _label: &'static [u8],
-    //     _element: &S,
-    // ) {
-    //     unimplemented!()
-    // }
-
     // Generate the challenge from the current transcript
     // and append it to the transcript.
     //

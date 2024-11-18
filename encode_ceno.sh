@@ -1,2 +1,7 @@
 #!/bin/bash
-cd circ_blocks && target/release/examples/zxc ceno_demo/tower_verifier
+set -euxo pipefail
+
+cd circ_blocks
+
+cargo run --release \
+    --example zxc -- ceno_demo/tower_verifier

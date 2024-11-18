@@ -38,38 +38,6 @@ pub fn check(arg_sorts: &[&Sort]) -> Result<Sort, TypeErrorReason> {
 }
 
 /// Evaluate [super::ExtOp::UniqDeriGcd].
-#[cfg(feature = "poly")]
-pub fn eval(args: &[&Value]) -> Value {
-    use rug_polynomial::ModPoly;
-    let sort = args[0].sort().as_array().0.clone();
-    let field = sort.as_pf().clone();
-    let mut roots: Vec<Integer> = Vec::new();
-    let deg = args[0].as_array().size;
-    for t in args[0].as_array().values() {
-        let tuple = t.as_tuple();
-        let cond = tuple[1].as_bool();
-        if cond {
-            roots.push(tuple[0].as_pf().i());
-        }
-    }
-    let p = ModPoly::with_roots(roots, field.modulus());
-    let dp = p.derivative();
-    let (g, s, t) = p.xgcd(&dp);
-    assert_eq!(g.len(), 1);
-    assert_eq!(g.get_coefficient(0), 1);
-    let coeff_arr = |s: ModPoly| {
-        let v: Vec<Value> = (0..deg)
-            .map(|i| Value::Field(field.new_v(s.get_coefficient(i))))
-            .collect();
-        Value::Array(Array::from_vec(sort.clone(), sort.clone(), v))
-    };
-    let s_cs = coeff_arr(s);
-    let t_cs = coeff_arr(t);
-    Value::Tuple(Box::new([s_cs, t_cs]))
-}
-
-/// Evaluate [super::ExtOp::UniqDeriGcd].
-#[cfg(not(feature = "poly"))]
 pub fn eval(_args: &[&Value]) -> Value {
     panic!("Cannot evalute Op::UniqDeriGcd without 'poly' feature")
 }

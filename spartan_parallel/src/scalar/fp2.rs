@@ -16,4 +16,4 @@ impl From<GoldilocksExt2> for ScalarExt2 {
     fn from(g: GoldilocksExt2) -> Self {
         Self(g)
     }
-  }
+}

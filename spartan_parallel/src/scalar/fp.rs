@@ -109,16 +109,7 @@ impl Scalar {
   /// Exponentiates `self` by `by`, where `by` is a
   /// little-endian order integer exponent.
   pub fn pow(&self, by: &[u64; 4]) -> Self {
-    let mut res = Self::one();
-    for e in by.iter().rev() {
-      for i in (0..64).rev() {
-        res = res.square();
-        let mut tmp = res;
-        tmp *= self;
-        res.conditional_assign(&tmp, (((*e >> i) & 0x1) as u8).into());
-      }
-    }
-    res
+    self.0.pow(by).into()
   }
 
   /// Exponentiates `self` by `by`, where `by` is a
@@ -128,17 +119,7 @@ impl Scalar {
   /// to the exponent.** If the exponent is fixed,
   /// this operation is effectively constant time.
   pub fn pow_vartime(&self, by: &[u64; 4]) -> Self {
-    let mut res = Self::one();
-    for e in by.iter().rev() {
-      for i in (0..64).rev() {
-        res = res.square();
-
-        if ((*e >> i) & 1) == 1 {
-          res.mul_assign(self);
-        }
-      }
-    }
-    res
+    self.0.pow_vartime(by).into()
   }
 
   /// Computes the multiplicative inverse of this element,

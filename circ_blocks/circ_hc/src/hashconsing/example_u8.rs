@@ -27,7 +27,7 @@ impl crate::Table<u8> for Table {
     #[allow(dead_code)]
     fn create(op: &u8, children: Vec<Node>) -> Node {
         FACTORY.mk(ActualNode {
-            op: op.clone(),
+            op: *op,
             cs: children,
         })
     }

@@ -7,11 +7,10 @@ const TOTAL_NUM_VARS_BOUND: usize = 100000000;
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
 use circ::ir::opt::{opt, Opt};
-use circ::target::r1cs::opt::reduce_linearities;
 use circ::target::r1cs::trans::to_r1cs;
 use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
 use circ::target::r1cs::ProverData;
-use circ::target::r1cs::{Lc, R1cs, VarType};
+use circ::target::r1cs::{Lc, VarType};
 use core::cmp::min;
 use rug::Integer;
 
@@ -148,11 +147,11 @@ fn get_sparse_cons_with_v_check(
         .into_iter()
         .map(|(x, y)| (x, integer_to_bytes(y)))
         .collect();
-    return Some(SparseMatEntry {
+    Some(SparseMatEntry {
         args_a,
         args_b,
         args_c,
-    });
+    })
 }
 
 // Convert an integer into a little-endian byte array
@@ -203,7 +202,7 @@ fn write_bytes(mut f: &File, bytes: &[u8; 32]) -> std::io::Result<()> {
     for i in 0..size {
         write!(&mut f, "{} ", bytes[i])?;
     }
-    writeln!(&mut f, "")?;
+    writeln!(&mut f)?;
 
     Ok(())
 }
@@ -256,22 +255,22 @@ impl CompileTimeKnowledge {
         for i in 0..self.block_num_instances {
             write!(&mut f, "{:>6}", i)?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         write!(&mut f, "{:>11}: ", "Num Vars")?;
         for i in &self.num_vars_per_block {
             write!(&mut f, "{:>6}", i)?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         write!(&mut f, "{:>11}: ", "Num Phy Ops")?;
         for i in &self.block_num_phy_ops {
             write!(&mut f, "{:>6}", i)?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         write!(&mut f, "{:>11}: ", "Num Vir Ops")?;
         for i in &self.block_num_vir_ops {
             write!(&mut f, "{:>6}", i)?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         writeln!(&mut f, "Max TS Width: {}", self.max_ts_width)?;
 
         // Instances
@@ -293,11 +292,11 @@ impl CompileTimeKnowledge {
                     } else {
                         write!(&mut f, "    {} ", var)?;
                     }
-                    writeln!(&mut f, "{}", bytes_to_integer(&val))?;
+                    writeln!(&mut f, "{}", bytes_to_integer(val))?;
                     pad = true;
                 }
                 if !pad {
-                    writeln!(&mut f, "")?;
+                    writeln!(&mut f)?;
                 }
                 write!(&mut f, "  B ")?;
                 let mut pad = false;
@@ -307,11 +306,11 @@ impl CompileTimeKnowledge {
                     } else {
                         write!(&mut f, "    {} ", var)?;
                     }
-                    writeln!(&mut f, "{}", bytes_to_integer(&val))?;
+                    writeln!(&mut f, "{}", bytes_to_integer(val))?;
                     pad = true;
                 }
                 if !pad {
-                    writeln!(&mut f, "")?;
+                    writeln!(&mut f)?;
                 }
                 write!(&mut f, "  C ")?;
                 let mut pad = false;
@@ -321,24 +320,24 @@ impl CompileTimeKnowledge {
                     } else {
                         write!(&mut f, "    {} ", var)?;
                     }
-                    writeln!(&mut f, "{}", bytes_to_integer(&val))?;
+                    writeln!(&mut f, "{}", bytes_to_integer(val))?;
                     pad = true;
                 }
                 if !pad {
-                    writeln!(&mut f, "")?;
+                    writeln!(&mut f)?;
                 }
-                writeln!(&mut f, "")?;
+                writeln!(&mut f)?;
             }
             counter += 1;
         }
         writeln!(&mut f, "INST_END")?;
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
 
         write!(&mut f, "Input Liveness: ")?;
         for b in &self.input_liveness {
             write!(&mut f, "{} ", if *b { 1 } else { 0 })?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         writeln!(&mut f, "Prog Input Width: {}", self.func_input_width)?;
         writeln!(&mut f, "Input Offset: {}", self.input_offset)?;
         writeln!(&mut f, "Input Block Num: {}", self.input_block_num)?;
@@ -395,12 +394,12 @@ impl RunTimeKnowledge {
         for i in 0..self.block_num_proofs.len() {
             write!(&mut f, "{:>6}", i)?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         writeln!(&mut f, "{:>11}: ", "Num Proofs")?;
         for i in &self.block_num_proofs {
             write!(&mut f, "{:>6}", i)?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         writeln!(&mut f, "Total Num Proofs: {}", self.consis_num_proofs)?;
         writeln!(
             &mut f,
@@ -433,7 +432,7 @@ impl RunTimeKnowledge {
                 for assg in &exec.assignment {
                     write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
                 }
-                writeln!(&mut f, "")?;
+                writeln!(&mut f)?;
                 exec_counter += 1;
             }
             block_counter += 1;
@@ -445,7 +444,7 @@ impl RunTimeKnowledge {
             for assg in &exec.assignment {
                 write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
             }
-            writeln!(&mut f, "")?;
+            writeln!(&mut f)?;
             exec_counter += 1;
         }
         writeln!(&mut f, "INIT_PHY_MEMS")?;
@@ -455,7 +454,7 @@ impl RunTimeKnowledge {
             for assg in &addr.assignment {
                 write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
             }
-            writeln!(&mut f, "")?;
+            writeln!(&mut f)?;
             addr_counter += 1;
         }
         writeln!(&mut f, "INIT_VIR_MEMS")?;
@@ -465,7 +464,7 @@ impl RunTimeKnowledge {
             for assg in &addr.assignment {
                 write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
             }
-            writeln!(&mut f, "")?;
+            writeln!(&mut f)?;
             addr_counter += 1;
         }
         writeln!(&mut f, "ADDR_PHY_MEMS")?;
@@ -475,7 +474,7 @@ impl RunTimeKnowledge {
             for assg in &addr.assignment {
                 write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
             }
-            writeln!(&mut f, "")?;
+            writeln!(&mut f)?;
             addr_counter += 1;
         }
         writeln!(&mut f, "ADDR_VIR_MEMS")?;
@@ -485,7 +484,7 @@ impl RunTimeKnowledge {
             for assg in &addr.assignment {
                 write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
             }
-            writeln!(&mut f, "")?;
+            writeln!(&mut f)?;
             addr_counter += 1;
         }
         writeln!(&mut f, "ADDR_VM_BITS")?;
@@ -495,24 +494,25 @@ impl RunTimeKnowledge {
             for assg in &addr.assignment {
                 write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
             }
-            writeln!(&mut f, "")?;
+            writeln!(&mut f)?;
             addr_counter += 1;
         }
         write!(&mut f, "Inputs: ")?;
         for assg in &self.input {
-            write!(&mut f, "{} ", bytes_to_integer(&assg))?;
+            write!(&mut f, "{} ", bytes_to_integer(assg))?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         write!(&mut f, "Input Mems: ")?;
         for assg in &self.input_mem {
-            write!(&mut f, "{} ", bytes_to_integer(&assg))?;
+            write!(&mut f, "{} ", bytes_to_integer(assg))?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         write!(&mut f, "Outputs: ")?;
-        for assg in &[self.output] {
-            write!(&mut f, "{} ", bytes_to_integer(&assg))?;
+        {
+            let assg = &self.output;
+            write!(&mut f, "{} ", bytes_to_integer(assg))?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         writeln!(&mut f, "Output Exec Num: {}", self.output_exec_num)?;
         Ok(())
     }
@@ -613,18 +613,16 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
                 println!(
                     "{}: vis: {}, round: {}, random: {}, committed: {}",
                     v,
-                    if m.vis == None {
+                    if m.vis.is_none() {
                         "PUBLIC"
+                    } else if m.vis == Some(0) {
+                        "PROVER"
                     } else {
-                        if m.vis == Some(0) {
-                            "PROVER"
-                        } else {
-                            "VERIFIER"
-                        }
+                        "VERIFIER"
                     },
-                    m.round.to_string(),
-                    m.random.to_string(),
-                    m.committed.to_string()
+                    m.round,
+                    m.random,
+                    m.committed
                 );
             }
             println!("Output:");
@@ -708,7 +706,8 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         let num_pm_vars = VARS_PER_ST_ACCESS * block_num_mem_accesses[b].0;
         let num_live_vm_vars = live_vm_list[b].len();
         let num_vm_vars = VARS_PER_VM_ACCESS * block_num_mem_accesses[b].1;
-        let new_i = {
+
+        {
             // physical memory accesses
             if i < num_pm_vars {
                 io_width + i
@@ -721,8 +720,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
             else {
                 io_width + num_vm_vars + (i - num_live_vm_vars)
             }
-        };
-        new_i
+        }
     };
     // 0th entry is constant
     let v_cnst = 0;
@@ -1201,7 +1199,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
 
     println!("\n--\nFUNC");
     print!("{:3} ", " ");
-    for i in 0..if entry_regs.len() == 0 { 1 } else { 0 } {
+    for i in 0..if entry_regs.is_empty() { 1 } else { 0 } {
         print!("{:3} ", i);
     }
     println!();
@@ -1529,8 +1527,7 @@ fn main() {
         let mut reader = BufReader::new(f);
         let mut buffer = String::new();
         reader.read_line(&mut buffer).unwrap();
-        let _ = buffer.trim();
-        while buffer != "END".to_string() {
+        while buffer.trim() != "END" {
             let split: Vec<String> = buffer
                 .split(' ')
                 .map(|i| i.to_string().trim().to_string())
@@ -1547,7 +1544,7 @@ fn main() {
                 entry_stacks.push(
                     split[2..split.len() - 1]
                         .iter()
-                        .map(|entry| Integer::from_str_radix(&entry, 10).unwrap())
+                        .map(|entry| Integer::from_str_radix(entry, 10).unwrap())
                         .collect(),
                 );
                 entry_arrays.push(vec![]);
@@ -1561,7 +1558,7 @@ fn main() {
                 entry_arrays.push(
                     split[2..split.len() - 1]
                         .iter()
-                        .map(|entry| Integer::from_str_radix(&entry, 10).unwrap())
+                        .map(|entry| Integer::from_str_radix(entry, 10).unwrap())
                         .collect(),
                 );
                 mem_alloc_counter += split.len() - 3; // var, "[", and "]"
@@ -1582,8 +1579,7 @@ fn main() {
         let mut reader = BufReader::new(f);
         let mut buffer = String::new();
         reader.read_line(&mut buffer).unwrap();
-        let _ = buffer.trim();
-        while buffer != "END".to_string() {
+        while buffer.trim() != "END" {
             let split: Vec<String> = buffer
                 .split(' ')
                 .map(|i| i.to_string().trim().to_string())
@@ -1591,7 +1587,7 @@ fn main() {
             entry_witnesses.extend(
                 split
                     .iter()
-                    .map(|entry| Integer::from_str_radix(&entry, 10).unwrap()),
+                    .map(|entry| Integer::from_str_radix(entry, 10).unwrap()),
             );
             buffer.clear();
             reader.read_line(&mut buffer).unwrap();

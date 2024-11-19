@@ -9,6 +9,12 @@ pub struct NodeCache<Op, T: Table<Op>, V> {
     inner: HashMap<T::Weak, V>,
 }
 
+impl<Op, T: Table<Op>, V> Default for NodeCache<Op, T, V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<Op, T: Table<Op>, V> NodeCache<Op, T, V> {
     /// Create an empty cache.
     pub fn new() -> Self {

@@ -1,0 +1,100 @@
+name: Sanity checks
+
+on:
+  merge_group:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  sanity:
+    name: Sanity check
+    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          components: rustfmt
+          # TODO(Matthias): see whether we can keep this in sync with rust-toolchain.toml automatically?
+          toolchain: nightly-2024-10-03
+      - name: Cargo cache
+        uses: actions/cache@v3
+        with:
+            # target directories gotten via
+            # `find . -name target -type d -not -path '*/src/*' -printf '%P\n' | sort`
+            # We need to exclude `./circ_blocks/src/target` because it just a source directory with an unfortunate name.
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            circ_blocks/circ_fields/target
+            circ_blocks/circ_hc/target
+            circ_blocks/circ_opt/target
+            circ_blocks/circ_waksman/target
+            circ_blocks/target
+            circ_blocks/third_party/ZoKrates/zokrates_parser/target
+            circ_blocks/third_party/ZoKrates/zokrates_pest_ast/target
+            circ_blocks/third_party/ZoKrates/zokrates_stdlib/target
+            ff/ff_derive/target
+            ff/target
+            spartan_parallel/target
+            zok_tests/poseidon_gen/target
+          key: sanity-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+
+      - name: Run sanity check
+        run: |
+            set -euxo pipefail
+
+            for cargo_toml in $(git ls-files '**/Cargo.toml'); do
+                (
+                    cd "$(dirname ${cargo_toml})"
+                    cargo fmt --check
+                    cargo check --all-targets
+                )
+            done
+
+  legacy-scripts:
+    name: Run legacy scripts
+    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          # TODO(Matthias): see whether we can keep this in sync with rust-toolchain.toml automatically?
+          toolchain: nightly-2024-10-03
+      - name: Cargo cache
+        uses: actions/cache@v3
+        with:
+            # target directories gotten via
+            # `find . -name target -type d -not -path '*/src/*' -printf '%P\n' | sort`
+            # We need to exclude `./circ_blocks/src/target` because it just a source directory with an unfortunate name.
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            circ_blocks/circ_fields/target
+            circ_blocks/circ_hc/target
+            circ_blocks/circ_opt/target
+            circ_blocks/circ_waksman/target
+            circ_blocks/target
+            circ_blocks/third_party/ZoKrates/zokrates_parser/target
+            circ_blocks/third_party/ZoKrates/zokrates_pest_ast/target
+            circ_blocks/third_party/ZoKrates/zokrates_stdlib/target
+            ff/ff_derive/target
+            ff/target
+            spartan_parallel/target
+            zok_tests/poseidon_gen/target
+          key: scripts-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+
+      - name: Run legacy scripts
+        run: |
+            set -euxo pipefail
+            ./setup.sh
+            # TODO: fix, then enable it.
+            # ./encode_ceno.sh

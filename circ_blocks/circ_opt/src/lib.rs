@@ -116,19 +116,15 @@ impl Default for R1csOpt {
 
 #[derive(ValueEnum, Debug, PartialEq, Eq, Clone, Copy)]
 /// Which field division-by-zero semantics to encode in R1cs
+#[derive(Default)]
 pub enum FieldDivByZero {
     /// Division-by-zero renders the circuit incomplete
+    #[default]
     Incomplete,
     /// Division-by-zero gives zero
     Zero,
     /// Division-by-zero gives a per-division unspecified result
     NonDet,
-}
-
-impl Default for FieldDivByZero {
-    fn default() -> Self {
-        FieldDivByZero::Incomplete
-    }
 }
 
 /// Options for the prime field used
@@ -157,6 +153,7 @@ pub struct FieldOpt {
 
 #[derive(ValueEnum, Debug, PartialEq, Eq, Clone, Copy)]
 /// Which field to use
+#[derive(Default)]
 pub enum BuiltinField {
     /// BLS12-381 scalar field
     Bls12381,
@@ -165,18 +162,10 @@ pub enum BuiltinField {
     // Curve-25519 scalar field
     Curve25519,
     // Goldilocks base field
+    #[default]
     Goldilocks,
     // Goldilocks extension
     GoldilocksExt2,
-}
-
-impl Default for BuiltinField {
-    fn default() -> Self {
-        // BuiltinField::Bls12381
-        // BuiltinField::Curve25519
-        BuiltinField::Goldilocks
-        // BuiltinField::GoldilocksExt2
-    }
 }
 
 /// Options for the prime field used
@@ -203,17 +192,13 @@ pub struct IrOpt {
 #[derive(ValueEnum, Debug, PartialEq, Eq, Clone, Copy)]
 /// When evaluating IR, if a field element x >= 2^b is converted to a length-b bit-vector, the
 /// result should be
+#[derive(Default)]
 pub enum FieldToBv {
     /// x % 2^b
+    #[default]
     Wrap,
     /// a panic
     Panic,
-}
-
-impl Default for FieldToBv {
-    fn default() -> Self {
-        FieldToBv::Wrap
-    }
 }
 
 /// Options related to memory.
@@ -263,62 +248,46 @@ pub struct RamOpt {
 
 #[derive(ValueEnum, Debug, PartialEq, Eq, Clone, Copy)]
 /// How to argue that values are in a range
+#[derive(Default)]
 pub enum RangeStrategy {
     /// Bit-split them.
     BitSplit,
     /// Add the whole range & sort all values.
+    #[default]
     Sort,
-}
-
-impl Default for RangeStrategy {
-    fn default() -> Self {
-        RangeStrategy::Sort
-    }
 }
 
 #[derive(ValueEnum, Debug, PartialEq, Eq, Clone, Copy)]
 /// How to argue that indices are only repeated in blocks.
+#[derive(Default)]
 pub enum IndexStrategy {
     /// Check that the blocks are sorted
     Sort,
     /// Use the GCD-derivative uniqueness argument
+    #[default]
     Uniqueness,
-}
-
-impl Default for IndexStrategy {
-    fn default() -> Self {
-        IndexStrategy::Uniqueness
-    }
 }
 
 #[derive(ValueEnum, Debug, PartialEq, Eq, Clone, Copy)]
 /// How to argue that accesses have been permuted
+#[derive(Default)]
 pub enum PermutationStrategy {
     /// Use the AS-Waksman network
     Waksman,
     /// Use the (keyed) multi-set hash
+    #[default]
     Msh,
-}
-
-impl Default for PermutationStrategy {
-    fn default() -> Self {
-        PermutationStrategy::Msh
-    }
 }
 
 #[derive(ValueEnum, Debug, PartialEq, Eq, Clone, Copy)]
 /// How to argue that accesses have been permuted
+#[derive(Default)]
 pub enum RomStrategy {
     /// Use Haboeck's argument
+    #[default]
     Haboeck,
     /// Use permute-and-check
     Permute,
-}
-
-impl Default for RomStrategy {
-    fn default() -> Self {
-        RomStrategy::Haboeck
-    }
 }
 
 /// Options for the prime field used

@@ -96,5 +96,4 @@ jobs:
         run: |
             set -euxo pipefail
             ./setup.sh
-            # TODO: fix, then enable it.
-            # ./encode_ceno.sh
+            ./encode_ceno.sh

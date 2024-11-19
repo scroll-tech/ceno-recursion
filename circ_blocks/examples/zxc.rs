@@ -1527,8 +1527,7 @@ fn main() {
         let mut reader = BufReader::new(f);
         let mut buffer = String::new();
         reader.read_line(&mut buffer).unwrap();
-        let _ = buffer.trim();
-        while buffer != *"END" {
+        while buffer.trim() != "END" {
             let split: Vec<String> = buffer
                 .split(' ')
                 .map(|i| i.to_string().trim().to_string())
@@ -1580,8 +1579,7 @@ fn main() {
         let mut reader = BufReader::new(f);
         let mut buffer = String::new();
         reader.read_line(&mut buffer).unwrap();
-        let _ = buffer.trim();
-        while buffer != *"END" {
+        while buffer.trim() != "END" {
             let split: Vec<String> = buffer
                 .split(' ')
                 .map(|i| i.to_string().trim().to_string())

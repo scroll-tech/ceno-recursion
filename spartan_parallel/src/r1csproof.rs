@@ -23,15 +23,15 @@ const ONE: Scalar = Scalar::one();
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct R1CSProof<S: SpartanExtensionField> {
-  sc_proof_phase1: ZKSumcheckInstanceProof,
-  sc_proof_phase2: ZKSumcheckInstanceProof,
-  pok_claims_phase2: (KnowledgeProof, ProductProof),
-  proof_eq_sc_phase1: EqualityProof,
-  proof_eq_sc_phase2: EqualityProof,
+  sc_proof_phase1: ZKSumcheckInstanceProof<S>,
+  sc_proof_phase2: ZKSumcheckInstanceProof<S>,
+  pok_claims_phase2: (KnowledgeProof<S>, ProductProof<S>),
+  proof_eq_sc_phase1: EqualityProof<S>,
+  proof_eq_sc_phase2: EqualityProof<S>,
   proof_eval_vars_at_ry_list: Vec<PolyEvalProof>,
 }
 
-impl<S: SpartanExtensionField> R1CSProof {
+impl<S: SpartanExtensionField> R1CSProof<S> {
   fn prove_phase_one(
     num_rounds: usize,
     num_rounds_x_max: usize,
@@ -39,15 +39,15 @@ impl<S: SpartanExtensionField> R1CSProof {
     num_rounds_p: usize,
     num_proofs: &Vec<usize>,
     num_cons: &Vec<usize>,
-    evals_tau_p: &mut DensePolynomial,
-    evals_tau_q: &mut DensePolynomial,
-    evals_tau_x: &mut DensePolynomial,
-    evals_Az: &mut DensePolynomialPqx,
-    evals_Bz: &mut DensePolynomialPqx,
-    evals_Cz: &mut DensePolynomialPqx,
+    evals_tau_p: &mut DensePolynomial<S>,
+    evals_tau_q: &mut DensePolynomial<S>,
+    evals_tau_x: &mut DensePolynomial<S>,
+    evals_Az: &mut DensePolynomialPqx<S>,
+    evals_Bz: &mut DensePolynomialPqx<S>,
+    evals_Cz: &mut DensePolynomialPqx<S>,
     transcript: &mut Transcript,
-    random_tape: &mut RandomTape,
-  ) -> (ZKSumcheckInstanceProof, Vec<S>, Vec<S>, S) {
+    random_tape: &mut RandomTape<S>,
+  ) -> (ZKSumcheckInstanceProof<S>, Vec<S>, Vec<S>, S) {
     let comb_func = |poly_A_comp: &S,
                      poly_B_comp: &S,
                      poly_C_comp: &S,

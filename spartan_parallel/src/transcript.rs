@@ -1,4 +1,4 @@
-use super::scalar::{Scalar, SpartanExtensionField};
+use super::scalar::SpartanExtensionField;
 use merlin::Transcript;
 
 pub trait ProofTranscript<S: SpartanExtensionField> {

@@ -1,7 +1,7 @@
 mod fp;
 mod fp2;
 
-use std::{iter::{Product, Sum}, ops::{Add, Mul, Neg, Sub}};
+use std::{hash::Hash, cmp::Eq, iter::{Product, Sum}, ops::{Add, Mul, Neg, Sub}};
 
 use ceno_goldilocks::ExtensionField;
 pub use fp::Scalar;
@@ -22,6 +22,7 @@ use merlin::Transcript;
 pub trait SpartanExtensionField: 
   Sized 
   + ConstantTimeEq 
+  + Eq
   + PartialEq 
   + From<u64>
   + From<usize>
@@ -35,6 +36,8 @@ pub trait SpartanExtensionField:
   + Sum
   + Product
   + Clone
+  + Serialize
+  + Hash
   + From<Self::InnerType>
   + fmt::Debug
 {

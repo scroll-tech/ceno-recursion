@@ -503,7 +503,7 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
         // for efficiency we batch them using random weights
 
         // produce two weights
-        let w = transcript.challenge_vector(b"combine_two_claims_to_one", 2);
+        let w: Vec<S> = transcript.challenge_vector(b"combine_two_claims_to_one", 2);
 
         // compute a weighted sum of the RHS
         let target = w[0] * claim_per_round + w[1] * eval;
@@ -517,7 +517,7 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
 
           let blind_eval = &blinds_evals[j];
 
-          w[0] * blind_sc + w[1] * blind_eval
+          w[0] * *blind_sc + w[1] * *blind_eval
         };
 
         let a = {
@@ -741,7 +741,7 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
         // for efficiency we batch them using random weights
 
         // produce two weights
-        let w = transcript.challenge_vector(b"combine_two_claims_to_one", 2);
+        let w: Vec<S> = transcript.challenge_vector(b"combine_two_claims_to_one", 2);
 
         // compute a weighted sum of the RHS
         let target = w[0] * claim_per_round + w[1] * eval;
@@ -755,7 +755,7 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
 
           let blind_eval = &blinds_evals[j];
 
-          w[0] * blind_sc + w[1] * blind_eval
+          w[0] * *blind_sc + w[1] * *blind_eval
         };
 
         let a = {

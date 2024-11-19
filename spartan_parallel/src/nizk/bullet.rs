@@ -4,15 +4,17 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 use super::super::errors::ProofVerifyError;
-use super::super::scalar::{Scalar, SpartanExtensionField};
+use super::super::scalar::SpartanExtensionField;
 use super::super::transcript::ProofTranscript;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BulletReductionProof;
+pub struct BulletReductionProof<S: SpartanExtensionField>{
+  _phantom: S
+}
 
-impl BulletReductionProof {
+impl<S: SpartanExtensionField> BulletReductionProof<S> {
   /// Create an inner-product proof.
   ///
   /// The proof is created with respect to the bases \\(G\\).
@@ -25,23 +27,23 @@ impl BulletReductionProof {
   /// either 0 or a power of 2.
   pub fn prove(
     transcript: &mut Transcript,
-    a_vec: &[Scalar],
-    b_vec: &[Scalar],
-    blind: &Scalar,
-    blinds_vec: &[(Scalar, Scalar)],
+    a_vec: &[S],
+    b_vec: &[S],
+    blind: &S,
+    blinds_vec: &[(S, S)],
   ) -> (
-    Scalar,
-    Scalar,
-    Scalar,
+    S,
+    S,
+    S,
   ) {
     // Create slices G, H, a, b backed by their respective
     // vectors.  This lets us reslice as we compress the lengths
     // of the vectors in the main loop below.
-    let mut a = &mut a_vec.to_owned()[..];
-    let mut b = &mut b_vec.to_owned()[..];
+    let mut a: &mut [S] = &mut a_vec.to_owned()[..];
+    let mut b: &mut [S] = &mut b_vec.to_owned()[..];
 
     let mut blinds_iter = blinds_vec.iter();
-    let mut blind_fin = *blind;
+    let mut blind_fin: S = *blind;
 
     let mut n = a.len();
     assert_eq!(a.len(), n);
@@ -57,7 +59,7 @@ impl BulletReductionProof {
 
       let (blind_L, blind_R) = blinds_iter.next().unwrap();
 
-      let u = transcript.challenge_scalar(b"u");
+      let u: S = transcript.challenge_scalar(b"u");
       let u_inv = u.invert().unwrap();
 
       for i in 0..n {
@@ -65,7 +67,7 @@ impl BulletReductionProof {
         b_L[i] = b_L[i] * u_inv + u * b_R[i];
       }
 
-      blind_fin = blind_fin + blind_L * u * u + blind_R * u_inv * u_inv;
+      blind_fin = blind_fin + *blind_L * u * u + *blind_R * u_inv * u_inv;
 
       a = a_L;
       b = b_L;
@@ -85,7 +87,7 @@ impl BulletReductionProof {
     &self,
     n: usize,
     transcript: &mut Transcript,
-  ) -> Result<(Vec<Scalar>, Vec<Scalar>, Vec<Scalar>), ProofVerifyError> {
+  ) -> Result<(Vec<S>, Vec<S>, Vec<S>), ProofVerifyError> {
     let mut lg_n = 0usize;
     assert!(n > 0, "n must not be 0");
 
@@ -103,7 +105,7 @@ impl BulletReductionProof {
 
     // 2. Compute 1/(u_k...u_1) and 1/u_k, ..., 1/u_1
     let mut challenges_inv = challenges.clone();
-    let allinv = Scalar::batch_invert(&mut challenges_inv);
+    let allinv = S::batch_invert(&mut challenges_inv);
 
     // 3. Compute u_i^2 and (1/u_i)^2
     for i in 0..lg_n {
@@ -135,9 +137,9 @@ impl BulletReductionProof {
   pub fn verify(
     &self,
     n: usize,
-    a: &[Scalar],
+    a: &[S],
     transcript: &mut Transcript,
-) -> Result<Scalar, ProofVerifyError> {
+) -> Result<S, ProofVerifyError> {
     let (_u_sq, _u_inv_sq, s) = self.verification_scalars(n, transcript)?;
 
     let a_hat = inner_product(a, &s);
@@ -151,14 +153,14 @@ impl BulletReductionProof {
 ///    {\langle {\mathbf{a}}, {\mathbf{b}} \rangle} = \sum\_{i=0}^{n-1} a\_i \cdot b\_i.
 /// \\]
 /// Panics if the lengths of \\(\mathbf{a}\\) and \\(\mathbf{b}\\) are not equal.
-pub fn inner_product(a: &[Scalar], b: &[Scalar]) -> Scalar {
+pub fn inner_product<S: SpartanExtensionField>(a: &[S], b: &[S]) -> S {
   assert!(
     a.len() == b.len(),
     "inner_product(a,b): lengths of vectors do not match"
   );
-  let mut out = Scalar::zero();
+  let mut out = S::field_zero();
   for i in 0..a.len() {
-    out += a[i] * b[i];
+    out = out + a[i] * b[i];
   }
   out
 }

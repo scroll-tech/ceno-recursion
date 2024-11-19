@@ -7,6 +7,7 @@ use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;
+use crate::{Transcript, AppendToTranscript, ProofTranscript};
 use super::SpartanExtensionField;
 use super::Scalar;
 
@@ -25,6 +26,14 @@ impl SpartanExtensionField for ScalarExt2 {
 
   fn inner(&self) -> &GoldilocksExt2 {
       &self.0
+  }
+
+  fn field_zero() -> Self {
+      GoldilocksExt2::ZERO.into()
+  }
+
+  fn field_one() -> Self {
+      GoldilocksExt2::ONE.into()
   }
 
   fn random<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> Self {
@@ -55,6 +64,20 @@ impl SpartanExtensionField for ScalarExt2 {
   fn from_bytes_wide(bytes: &[u8; 64]) -> ScalarExt2 {
     GoldilocksExt2::from_uniform_bytes(bytes).into()
   }
+
+  /// Append Goldilocks scalar to transcript
+  fn append_field_to_transcript(label: &'static [u8], transcript: &mut Transcript, input: Self) {
+    transcript.append_scalar(label, &input);
+  }
+  
+  /// Append a vector Goldilocks scalars to transcript
+  fn append_field_vector_to_transcript(label: &'static [u8], transcript: &mut Transcript, input: &[Self]) {
+      transcript.append_message(label, b"begin_append_vector");
+      for item in input {
+        transcript.append_scalar(label, item);
+      }
+      transcript.append_message(label, b"end_append_vector");
+  }
 }
 
 impl ConstantTimeEq for ScalarExt2 {
@@ -70,6 +93,11 @@ impl PartialEq for ScalarExt2 {
 impl From<u64> for ScalarExt2 {
   fn from(val: u64) -> ScalarExt2 {
     GoldilocksExt2::from_base(&Goldilocks(val)).into()
+  }
+}
+impl From<usize> for ScalarExt2 {
+  fn from(val: usize) -> ScalarExt2 {
+    GoldilocksExt2::from_base(&Goldilocks(val as u64)).into()
   }
 }
 impl ConditionallySelectable for ScalarExt2 {
@@ -167,6 +195,22 @@ where
     I: Iterator<Item = T>,
   {
     iter.fold(ScalarExt2::one(), |acc, item| acc * item.borrow())
+  }
+}
+
+impl AppendToTranscript for ScalarExt2 {
+  fn append_to_transcript(&self, label: &'static [u8], transcript: &mut Transcript) {
+    transcript.append_scalar(label, self);
+  }
+}
+
+impl AppendToTranscript for [ScalarExt2] {
+  fn append_to_transcript(&self, label: &'static [u8], transcript: &mut Transcript) {
+    transcript.append_message(label, b"begin_append_vector");
+    for item in self {
+      transcript.append_scalar(label, item);
+    }
+    transcript.append_message(label, b"end_append_vector");
   }
 }
 

@@ -1,9 +1,10 @@
 #![allow(clippy::too_many_arguments)]
+use crate::scalar::SpartanExtensionField;
+
 use super::errors::ProofVerifyError;
 use super::nizk::DotProductProofLog;
 use super::math::Math;
 use super::random::RandomTape;
-use super::scalar::Scalar;
 use super::transcript::ProofTranscript;
 use core::ops::Index;
 use std::collections::HashMap;
@@ -14,36 +15,36 @@ use serde::{Deserialize, Serialize};
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
-pub struct DensePolynomial {
+pub struct DensePolynomial<S: SpartanExtensionField> {
   num_vars: usize, // the number of variables in the multilinear polynomial
   len: usize,
-  Z: Vec<Scalar>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
+  Z: Vec<S>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
 }
 
-pub struct PolyCommitmentBlinds {
-  pub(crate) blinds: Vec<Scalar>,
+pub struct PolyCommitmentBlinds<S: SpartanExtensionField> {
+  pub(crate) blinds: Vec<S>,
 }
 
-pub struct EqPolynomial {
-  r: Vec<Scalar>,
+pub struct EqPolynomial<S: SpartanExtensionField> {
+  r: Vec<S>,
 }
 
-impl EqPolynomial {
-  pub fn new(r: Vec<Scalar>) -> Self {
+impl<S: SpartanExtensionField> EqPolynomial<S> {
+  pub fn new(r: Vec<S>) -> Self {
     EqPolynomial { r }
   }
 
-  pub fn evaluate(&self, rx: &[Scalar]) -> Scalar {
+  pub fn evaluate(&self, rx: &[S]) -> S {
     assert_eq!(self.r.len(), rx.len());
     (0..rx.len())
-      .map(|i| self.r[i] * rx[i] + (Scalar::one() - self.r[i]) * (Scalar::one() - rx[i]))
+      .map(|i| self.r[i] * rx[i] + (S::field_one() - self.r[i]) * (S::field_one() - rx[i]))
       .product()
   }
 
-  pub fn evals(&self) -> Vec<Scalar> {
+  pub fn evals(&self) -> Vec<S> {
     let ell = self.r.len();
 
-    let mut evals: Vec<Scalar> = vec![Scalar::one(); ell.pow2()];
+    let mut evals: Vec<S> = vec![S::field_one(); ell.pow2()];
     let mut size = 1;
     for j in 0..ell {
       // in each iteration, we double the size of chis
@@ -59,10 +60,10 @@ impl EqPolynomial {
   }
 
   // Only bound Eq on the first self.r.len() of the total_len variables
-  pub fn evals_front(&self, total_len: usize) -> Vec<Scalar> {
+  pub fn evals_front(&self, total_len: usize) -> Vec<S> {
     let ell = self.r.len();
 
-    let mut evals: Vec<Scalar> = vec![Scalar::one(); total_len.pow2()];
+    let mut evals: Vec<S> = vec![S::field_one(); total_len.pow2()];
     let base_size = (total_len - ell).pow2();
     let mut size = base_size;
     for j in 0..ell {
@@ -86,9 +87,9 @@ impl EqPolynomial {
     (ell / 2, ell - ell / 2)
   }
 
-  pub fn compute_factored_evals(&self) -> (Vec<Scalar>, Vec<Scalar>) {
+  pub fn compute_factored_evals(&self) -> (Vec<S>, Vec<S>) {
     let ell = self.r.len();
-    let (left_num_vars, _right_num_vars) = EqPolynomial::compute_factored_lens(ell);
+    let (left_num_vars, _right_num_vars) = EqPolynomial::<S>::compute_factored_lens(ell);
 
     let L = EqPolynomial::new(self.r[..left_num_vars].to_vec()).evals();
     let R = EqPolynomial::new(self.r[left_num_vars..ell].to_vec()).evals();
@@ -96,28 +97,32 @@ impl EqPolynomial {
     (L, R)
   }
 }
-pub struct IdentityPolynomial {
+pub struct IdentityPolynomial<S: SpartanExtensionField> {
   size_point: usize,
+  _phantom: S,
 }
 
-impl IdentityPolynomial {
+impl<S: SpartanExtensionField> IdentityPolynomial<S> {
   pub fn new(size_point: usize) -> Self {
-    IdentityPolynomial { size_point }
+    IdentityPolynomial { 
+      size_point, 
+      _phantom: S::field_zero() 
+    }
   }
 
-  pub fn evaluate(&self, r: &[Scalar]) -> Scalar {
+  pub fn evaluate(&self, r: &[S]) -> S {
     let len = r.len();
     assert_eq!(len, self.size_point);
     (0..len)
-      .map(|i| Scalar::from((len - i - 1).pow2() as u64) * r[i])
+      .map(|i| S::from((len - i - 1).pow2() as u64) * r[i])
       .sum()
   }
 }
 
-impl DensePolynomial {
-  pub fn new(mut Z: Vec<Scalar>) -> Self {
+impl<S: SpartanExtensionField> DensePolynomial<S> {
+  pub fn new(mut Z: Vec<S>) -> Self {
     // If length of Z is not a power of 2, append Z with 0
-    let zero = Scalar::zero();
+    let zero = S::field_zero();
     Z.extend(vec![zero; Z.len().next_power_of_two() - Z.len()]);
     DensePolynomial {
       num_vars: Z.len().log_2(),
@@ -134,11 +139,11 @@ impl DensePolynomial {
     self.len
   }
 
-  pub fn clone(&self) -> DensePolynomial {
+  pub fn clone(&self) -> DensePolynomial<S> {
     DensePolynomial::new(self.Z[0..self.len].to_vec())
   }
 
-  pub fn split(&self, idx: usize) -> (DensePolynomial, DensePolynomial) {
+  pub fn split(&self, idx: usize) -> (DensePolynomial<S>, DensePolynomial<S>) {
     assert!(idx < self.len());
     (
       DensePolynomial::new(self.Z[..idx].to_vec()),
@@ -146,8 +151,8 @@ impl DensePolynomial {
     )
   }
 
-  pub fn bound(&self, L: &[Scalar]) -> Vec<Scalar> {
-    let (left_num_vars, right_num_vars) = EqPolynomial::compute_factored_lens(self.get_num_vars());
+  pub fn bound(&self, L: &[S]) -> Vec<S> {
+    let (left_num_vars, right_num_vars) = EqPolynomial::<S>::compute_factored_lens(self.get_num_vars());
     let L_size = left_num_vars.pow2();
     let R_size = right_num_vars.pow2();
     (0..R_size)
@@ -155,10 +160,10 @@ impl DensePolynomial {
       .collect()
   }
 
-  pub fn bound_poly_var_top(&mut self, r: &Scalar) {
+  pub fn bound_poly_var_top(&mut self, r: &S) {
     let n = self.len() / 2;
     for i in 0..n {
-      self.Z[i] = self.Z[i] + r * (self.Z[i + n] - self.Z[i]);
+      self.Z[i] = self.Z[i] + *r * (self.Z[i + n] - self.Z[i]);
     }
     self.num_vars -= 1;
     self.len = n;
@@ -166,7 +171,7 @@ impl DensePolynomial {
 
   // Bound_var_top but the polynomial is in (x, q, p) form and certain (p, q) pair is invalid
   pub fn bound_poly_var_top_disjoint_rounds(&mut self, 
-    r: &Scalar,
+    r: &S,
     proof_space: usize, 
     instance_space: usize,
     cons_len: usize, 
@@ -183,7 +188,7 @@ impl DensePolynomial {
       for q in 0..max_q {
         for x in 0..cons_len {
           let i = x * proof_space * instance_space + q * instance_space + p;
-          self.Z[i] = self.Z[i] + r * (self.Z[i + n] - self.Z[i]);
+          self.Z[i] = self.Z[i] + *r * (self.Z[i + n] - self.Z[i]);
         }
       }
     }
@@ -195,7 +200,7 @@ impl DensePolynomial {
   // Binding the entire "q" section and q is in reverse order
   // Use "num_proofs" to record how many "q"s need to process for each "p"
   pub fn bound_poly_var_front_rq(&mut self, 
-    r_q: &Vec<Scalar>,
+    r_q: &Vec<S>,
     mut max_proof_space: usize, 
     instance_space: usize,
     cons_space: usize,
@@ -214,7 +219,7 @@ impl DensePolynomial {
           // q = 0
           for x in 0..cons_space {
             let i = p * cons_space + x;
-            self.Z[i] = (Scalar::one() - r) * self.Z[i];
+            self.Z[i] = (S::field_one() - r) * self.Z[i];
           }
         } else {
           num_proofs[p] /= 2;
@@ -222,7 +227,7 @@ impl DensePolynomial {
           for q in (0..max_proof_space).step_by(step) {
             for x in 0..cons_space {
               let i = q * instance_space * cons_space + p * cons_space + x;
-              self.Z[i] = self.Z[i] + r * (self.Z[i + n] - self.Z[i]);
+              self.Z[i] = self.Z[i] + *r * (self.Z[i + n] - self.Z[i]);
             }
           }
         }
@@ -234,7 +239,7 @@ impl DensePolynomial {
   }
 
 
-  pub fn bound_poly_var_bot(&mut self, r: &Scalar) {
+  pub fn bound_poly_var_bot(&mut self, r: &S) {
     let n = self.len() / 2;
     for i in 0..n {
       self.Z[i] = self.Z[2 * i] + r * (self.Z[2 * i + 1] - self.Z[2 * i]);
@@ -244,7 +249,7 @@ impl DensePolynomial {
   }
 
   // returns Z(r) in O(n) time
-  pub fn evaluate(&self, r: &[Scalar]) -> Scalar {
+  pub fn evaluate(&self, r: &[S]) -> S {
     // r must have a value for each variable
     assert_eq!(r.len(), self.get_num_vars());
     let chis = EqPolynomial::new(r.to_vec()).evals();

@@ -9,7 +9,6 @@ use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::product_tree::{DotProductCircuit, ProductCircuit, ProductCircuitEvalProofBatched};
 use super::random::RandomTape;
-use super::scalar::Scalar;
 use super::timer::Timer;
 use super::transcript::{AppendToTranscript, ProofTranscript};
 use core::cmp::Ordering;

@@ -1,4 +1,5 @@
 #![allow(clippy::too_many_arguments)]
+use crate::scalar::SpartanExtensionField;
 use crate::{ProverWitnessSecInfo, VerifierWitnessSecInfo};
 use super::dense_mlpoly::{
   DensePolynomial, EqPolynomial, PolyEvalProof,
@@ -21,7 +22,7 @@ const ZERO: Scalar = Scalar::zero();
 const ONE: Scalar = Scalar::one();
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct R1CSProof {
+pub struct R1CSProof<S: SpartanExtensionField> {
   sc_proof_phase1: ZKSumcheckInstanceProof,
   sc_proof_phase2: ZKSumcheckInstanceProof,
   pok_claims_phase2: (KnowledgeProof, ProductProof),
@@ -30,7 +31,7 @@ pub struct R1CSProof {
   proof_eval_vars_at_ry_list: Vec<PolyEvalProof>,
 }
 
-impl R1CSProof {
+impl<S: SpartanExtensionField> R1CSProof {
   fn prove_phase_one(
     num_rounds: usize,
     num_rounds_x_max: usize,
@@ -46,12 +47,12 @@ impl R1CSProof {
     evals_Cz: &mut DensePolynomialPqx,
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
-  ) -> (ZKSumcheckInstanceProof, Vec<Scalar>, Vec<Scalar>, Scalar) {
-    let comb_func = |poly_A_comp: &Scalar,
-                     poly_B_comp: &Scalar,
-                     poly_C_comp: &Scalar,
-                     poly_D_comp: &Scalar|
-     -> Scalar { poly_A_comp * (poly_B_comp * poly_C_comp - poly_D_comp) };
+  ) -> (ZKSumcheckInstanceProof, Vec<S>, Vec<S>, S) {
+    let comb_func = |poly_A_comp: &S,
+                     poly_B_comp: &S,
+                     poly_C_comp: &S,
+                     poly_D_comp: &S|
+     -> S { *poly_A_comp * (*poly_B_comp * *poly_C_comp - *poly_D_comp) };
 
     let (sc_proof_phase_one, r, claims, blind_claim_postsc) =
       ZKSumcheckInstanceProof::prove_cubic_with_additive_term_disjoint_rounds(

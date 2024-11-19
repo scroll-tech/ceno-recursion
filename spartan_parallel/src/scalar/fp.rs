@@ -1,20 +1,19 @@
 use ceno_goldilocks::Goldilocks;
 use core::borrow::Borrow;
 use core::iter::{Product, Sum};
-use ff::FromUniformBytes;
+use ff::{Field, FromUniformBytes};
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;
+use crate::{AppendToTranscript, Transcript, ProofTranscript};
 use super::SpartanExtensionField;
 
 /// Constant representing the modulus
 /// q = 2^64 - 2^32 + 1
 /// 0xFFFFFFFF00000001
-const MODULUS: Scalar = Scalar(Goldilocks(0xFFFF_FFFF_0000_0001));
 const P: u64 = 0xFFFF_FFFF_0000_0001;
-const INV: u64 = 0xFFFF_FFFE_FFFF_FFFF;
 
 /// Field wrapper around base Goldilocks
 #[derive(Clone, Copy, Eq, Serialize, Deserialize, Hash, Debug)]
@@ -25,6 +24,14 @@ impl SpartanExtensionField for Scalar {
 
   fn inner(&self) -> &Goldilocks {
       &self.0
+  }
+
+  fn field_zero() -> Self {
+      Goldilocks::ZERO.into()
+  }
+
+  fn field_one() -> Self {
+      Goldilocks::ONE.into()
   }
 
   fn random<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> Self {
@@ -54,6 +61,20 @@ impl SpartanExtensionField for Scalar {
   fn from_bytes_wide(bytes: &[u8; 64]) -> Scalar {
     Goldilocks::from_uniform_bytes(bytes).into()
   }
+
+  /// Append Goldilocks scalar to transcript
+  fn append_field_to_transcript(label: &'static [u8], transcript: &mut Transcript, input: Self) {
+      transcript.append_scalar(label, &input);
+  }
+
+  /// Append a vector Goldilocks scalars to transcript
+  fn append_field_vector_to_transcript(label: &'static [u8], transcript: &mut Transcript, input: &[Self]) {
+      transcript.append_message(label, b"begin_append_vector");
+      for item in input {
+        transcript.append_scalar(label, item);
+      }
+      transcript.append_message(label, b"end_append_vector");
+  }
 }
 
 impl ConstantTimeEq for Scalar {
@@ -69,6 +90,11 @@ impl PartialEq for Scalar {
 impl From<u64> for Scalar {
   fn from(val: u64) -> Scalar {
     Goldilocks(val).into()
+  }
+}
+impl From<usize> for Scalar {
+  fn from(val: usize) -> Scalar {
+    Goldilocks(val as u64).into()
   }
 }
 impl ConditionallySelectable for Scalar {

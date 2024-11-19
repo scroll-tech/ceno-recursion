@@ -10,6 +10,11 @@ use ff::Field;
 use rand::{CryptoRng, RngCore};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;
+use std::fmt;
+use serde::{Deserialize, Serialize};
+
+use crate::transcript::AppendToTranscript;
+use merlin::Transcript;
 
 /// Trait describing the field element
 /// Wraps around Goldilocks field towers from ceno-goldilocks
@@ -19,6 +24,7 @@ pub trait SpartanExtensionField:
   + ConstantTimeEq 
   + PartialEq 
   + From<u64>
+  + From<usize>
   + ConditionallySelectable
   + Zeroize
   + Neg
@@ -28,13 +34,21 @@ pub trait SpartanExtensionField:
   + Mul<Output = Self>
   + Sum
   + Product
+  + Clone
   + From<Self::InnerType>
+  + fmt::Debug
 {
   /// Inner Goldilocks extension field
   type InnerType: ExtensionField + Field;
 
   /// Return inner Goldilocks field element
   fn inner(&self) -> &Self::InnerType;
+
+  /// Return the additive identity
+  fn field_zero() -> Self;
+
+  /// Return the multiplicative identity
+  fn field_one() -> Self;
 
   /// Sample field element
   fn random<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> Self;
@@ -47,6 +61,12 @@ pub trait SpartanExtensionField:
 
   /// Convert to field element from 64 bytes
   fn from_bytes_wide(bytes: &[u8; 64]) -> Self;
+
+  /// Append a single field element to the transcript
+  fn append_field_to_transcript(label: &'static [u8], transcript: &mut Transcript, input: Self);
+
+  /// Append a vector of field elements to the transcript
+  fn append_field_vector_to_transcript(label: &'static [u8], transcript: &mut Transcript, input: &[Self]);
 
   /// Doubles this field element.
   #[inline]
@@ -133,19 +153,6 @@ pub trait SpartanExtensionField:
     }
 
     ret
-  }
-}
-
-/// Trait describing relationship between primitives and field elements
-pub trait ScalarFromPrimitives {
-  /// Used for converting internal types to base Goldilocks
-  fn to_scalar(self) -> Scalar;
-}
-
-impl ScalarFromPrimitives for usize {
-  #[inline]
-  fn to_scalar(self) -> Scalar {
-    (0..self).map(|_i| Scalar::one()).sum()
   }
 }
 

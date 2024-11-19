@@ -14,7 +14,7 @@ use circ::target::r1cs::{Lc, VarType};
 use core::cmp::min;
 use rug::Integer;
 
-use std::fs::File;
+use std::fs::{create_dir_all, File};
 use std::io::{BufRead, BufReader, Write};
 
 use circ::cfg::{
@@ -23,7 +23,7 @@ use circ::cfg::{
     CircOpt,
 };
 use core::cmp::Ordering;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use libspartan::{
     instance::Instance, Assignment, InputsAssignment, MemsAssignment, SNARKGens, VarsAssignment,
@@ -238,7 +238,8 @@ struct CompileTimeKnowledge {
 
 impl CompileTimeKnowledge {
     fn serialize_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
-        let file_name = format!("../zok_tests/constraints/{}_bin.ctk", benchmark_name);
+        let file_name = format!("../zok_tests/constraints/{benchmark_name}_bin.ctk");
+        create_dir_all(Path::new(&file_name).parent().unwrap())?;
         let mut f = File::create(file_name)?;
         let content = bincode::serialize(&self).unwrap();
         f.write(&content)?;
@@ -246,7 +247,8 @@ impl CompileTimeKnowledge {
     }
 
     fn write_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
-        let file_name = format!("../zok_tests/constraints/{}.ctk", benchmark_name);
+        let file_name = format!("../zok_tests/constraints/{benchmark_name}.ctk");
+        create_dir_all(Path::new(&file_name).parent().unwrap())?;
         let mut f = File::create(file_name)?;
         writeln!(&mut f, "Num Blocks: {}", self.block_num_instances)?;
         writeln!(&mut f, "Max Num Vars: {}", self.num_vars)?;
@@ -375,7 +377,8 @@ struct RunTimeKnowledge {
 
 impl RunTimeKnowledge {
     fn serialize_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
-        let file_name = format!("../zok_tests/inputs/{}_bin.rtk", benchmark_name);
+        let file_name = format!("../zok_tests/inputs/{benchmark_name}_bin.rtk");
+        create_dir_all(Path::new(&file_name).parent().unwrap())?;
         let mut f = File::create(file_name)?;
         let content = bincode::serialize(&self).unwrap();
         f.write(&content)?;
@@ -383,7 +386,9 @@ impl RunTimeKnowledge {
     }
 
     fn write_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
-        let file_name = format!("../zok_tests/inputs/{}.rtk", benchmark_name);
+        let dir = "../zok_tests/inputs";
+        create_dir_all(dir)?;
+        let file_name = format!("{dir}/{benchmark_name}.rtk");
         let mut f = File::create(file_name)?;
         writeln!(
             &mut f,

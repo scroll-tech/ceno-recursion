@@ -427,7 +427,7 @@ fn main() {
   // let ctk = CompileTimeKnowledge::read_from_file(benchmark_name.to_string()).unwrap();
   let ctk = CompileTimeKnowledge::deserialize_from_file(benchmark_name.to_string());
   // let rtk = RunTimeKnowledge::read_from_file(benchmark_name.to_string()).unwrap();
-  let rtk: RunTimeKnowledge<Scalar> = RunTimeKnowledge::<Scalar>::deserialize_from_file(benchmark_name.to_string());
+  let rtk: RunTimeKnowledge<Scalar> = RunTimeKnowledge::deserialize_from_file(benchmark_name.to_string());
 
   // --
   // INSTANCE PREPROCESSING

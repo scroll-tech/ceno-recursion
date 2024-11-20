@@ -10,7 +10,7 @@ use rand::{CryptoRng, RngCore};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;
 use std::fmt;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::transcript::AppendToTranscript;
 use merlin::Transcript;

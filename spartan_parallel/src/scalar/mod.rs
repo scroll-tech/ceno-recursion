@@ -2,7 +2,6 @@ mod fp;
 mod fp2;
 
 use std::{hash::Hash, cmp::Eq, iter::{Product, Sum}, ops::{Add, Mul, Neg, Sub}};
-
 use ceno_goldilocks::ExtensionField;
 pub use fp::Scalar;
 pub use fp2::ScalarExt2;
@@ -70,6 +69,12 @@ pub trait SpartanExtensionField:
 
   /// Append a vector of field elements to the transcript
   fn append_field_vector_to_transcript(label: &'static [u8], transcript: &mut Transcript, input: &[Self]);
+
+  /// Return the neg of field element
+  #[inline]
+  fn negate(&self) -> Self {
+    self.inner().neg().into()
+  }
 
   /// Doubles this field element.
   #[inline]

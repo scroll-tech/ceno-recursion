@@ -14,6 +14,7 @@ const INLINE_SPARTAN_PROOF: bool = false;
 const TOTAL_NUM_VARS_BOUND: usize = 100000000;
 
 use core::cmp::min;
+use libspartan::scalar::{Scalar, SpartanExtensionField};
 use rug::Integer;
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
@@ -41,7 +42,7 @@ use core::cmp::Ordering;
 use std::time::*;
 use serde::{Serialize, Deserialize};
 use libspartan::{
-    instance::Instance, scalar::SpartanExtensionField,
+    instance::Instance, 
     Assignment, VarsAssignment, SNARK, InputsAssignment, MemsAssignment};
 use merlin::Transcript;
 
@@ -337,7 +338,7 @@ impl CompileTimeKnowledge {
 }
 
 #[derive(Serialize, Deserialize)]
-struct RunTimeKnowledge {
+struct RunTimeKnowledge<S: SpartanExtensionField> {
     block_max_num_proofs: usize,
     block_num_proofs: Vec<usize>,
     consis_num_proofs: usize,
@@ -346,14 +347,14 @@ struct RunTimeKnowledge {
     total_num_phy_mem_accesses: usize,
     total_num_vir_mem_accesses: usize,
   
-    block_vars_matrix: Vec<Vec<VarsAssignment>>,
-    exec_inputs: Vec<InputsAssignment>,
+    block_vars_matrix: Vec<Vec<VarsAssignment<S>>>,
+    exec_inputs: Vec<InputsAssignment<S>>,
     // Initial memory state, in (addr, val, ls = STORE, ts = 0) pair, sorted by appearance in program input (the same as address order)
-    init_phy_mems_list: Vec<MemsAssignment>,
-    init_vir_mems_list: Vec<MemsAssignment>,
-    addr_phy_mems_list: Vec<MemsAssignment>,
-    addr_vir_mems_list: Vec<MemsAssignment>,
-    addr_ts_bits_list: Vec<MemsAssignment>,
+    init_phy_mems_list: Vec<MemsAssignment<S>>,
+    init_vir_mems_list: Vec<MemsAssignment<S>>,
+    addr_phy_mems_list: Vec<MemsAssignment<S>>,
+    addr_vir_mems_list: Vec<MemsAssignment<S>>,
+    addr_ts_bits_list: Vec<MemsAssignment<S>>,
   
     input: Vec<[u8; 32]>,
     input_stack: Vec<[u8; 32]>,
@@ -362,7 +363,7 @@ struct RunTimeKnowledge {
     output_exec_num: usize
 }
 
-impl RunTimeKnowledge {
+impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
     fn serialize_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
         let file_name = format!("../zok_tests/inputs/{}_bin.rtk", benchmark_name);
         let mut f = File::create(file_name)?;
@@ -760,7 +761,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 // --
 // Generate witnesses and others
 // --
-fn get_run_time_knowledge<const VERBOSE: bool>(
+fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
     path: PathBuf,
     options: &Options,
     entry_regs: Vec<Integer>,
@@ -773,7 +774,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     prover_data_list: Vec<ProverData>,
     total_num_init_phy_mem_accesses: usize,
     total_num_init_vir_mem_accesses: usize,
-) -> RunTimeKnowledge {
+) -> RunTimeKnowledge<S> {
     let num_blocks = ctk.block_num_instances;
     let num_input_unpadded = ctk.num_inputs_unpadded;
     let io_width = 2 * num_input_unpadded;
@@ -1087,7 +1088,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     }
 }
 
-fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
+fn run_spartan_proof<S: SpartanExtensionField>(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge<S>) {
   // --
   // INSTANCE PREPROCESSING
   // --
@@ -1370,7 +1371,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<false>(
+    let rtk = get_run_time_knowledge::<false, Scalar>(
         path.clone(), 
         &options, 
         entry_regs, 

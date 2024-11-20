@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::scalar::SpartanExtensionField;
 use crate::transcript::AppendToTranscript;
 
 use super::dense_mlpoly::DensePolynomial;
@@ -7,7 +8,6 @@ use super::custom_dense_mlpoly::DensePolynomialPqx;
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::random::RandomTape;
-use super::scalar::Scalar;
 use super::sparse_mlpoly::{
   MultiSparseMatPolynomialAsDense, SparseMatEntry, SparseMatPolyCommitment,
   SparseMatPolyEvalProof, SparseMatPolynomial,
@@ -18,7 +18,7 @@ use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct R1CSInstance {
+pub struct R1CSInstance<S: SpartanExtensionField> {
   // num_instances DOES NOT need to be a power of 2!
   num_instances: usize,
   // num_cons and num_vars need to be power of 2
@@ -26,19 +26,19 @@ pub struct R1CSInstance {
   num_cons: Vec<usize>,
   num_vars: usize,
   // List of individual A, B, C for matrix multiplication
-  A_list: Vec<SparseMatPolynomial>,
-  B_list: Vec<SparseMatPolynomial>,
-  C_list: Vec<SparseMatPolynomial>,
+  A_list: Vec<SparseMatPolynomial<S>>,
+  B_list: Vec<SparseMatPolynomial<S>>,
+  C_list: Vec<SparseMatPolynomial<S>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct R1CSCommitment {
+pub struct R1CSCommitment<S: SpartanExtensionField> {
   num_cons: usize,
   num_vars: usize,
-  comm: SparseMatPolyCommitment,
+  comm: SparseMatPolyCommitment<S>,
 }
 
-impl AppendToTranscript for R1CSCommitment {
+impl<S: SpartanExtensionField> AppendToTranscript for R1CSCommitment<S> {
   fn append_to_transcript(&self, _label: &'static [u8], transcript: &mut Transcript) {
     transcript.append_u64(b"num_cons", self.num_cons as u64);
     transcript.append_u64(b"num_vars", self.num_vars as u64);
@@ -46,11 +46,11 @@ impl AppendToTranscript for R1CSCommitment {
   }
 }
 
-pub struct R1CSDecommitment {
-  dense: MultiSparseMatPolynomialAsDense,
+pub struct R1CSDecommitment<S: SpartanExtensionField> {
+  dense: MultiSparseMatPolynomialAsDense<S>,
 }
 
-impl R1CSCommitment {
+impl<S: SpartanExtensionField> R1CSCommitment<S> {
   pub fn get_num_cons(&self) -> usize {
     self.num_cons
   }
@@ -60,16 +60,16 @@ impl R1CSCommitment {
   }
 }
 
-impl R1CSInstance {
+impl<S: SpartanExtensionField> R1CSInstance<S> {
   pub fn new(
     num_instances: usize,
     max_num_cons: usize,
     num_cons: Vec<usize>,
     num_vars: usize,
-    A_list: &Vec<Vec<(usize, usize, Scalar)>>,
-    B_list: &Vec<Vec<(usize, usize, Scalar)>>,
-    C_list: &Vec<Vec<(usize, usize, Scalar)>>,
-  ) -> R1CSInstance {
+    A_list: &Vec<Vec<(usize, usize, S)>>,
+    B_list: &Vec<Vec<(usize, usize, S)>>,
+    C_list: &Vec<Vec<(usize, usize, S)>>,
+  ) -> R1CSInstance<S> {
     Timer::print(&format!("number_of_instances {num_instances}"));
     Timer::print(&format!("number_of_constraints {max_num_cons}"));
     Timer::print(&format!("number_of_variables {num_vars}"));
@@ -109,25 +109,25 @@ impl R1CSInstance {
       let C = &C_list[inst];
       let list_A = (0..A.len())
         .map(|i| SparseMatEntry::new(A[i].0, A[i].1, A[i].2))
-        .collect::<Vec<SparseMatEntry>>();
+        .collect::<Vec<SparseMatEntry<S>>>();
       let list_B = (0..B.len())
         .map(|i| SparseMatEntry::new(B[i].0, B[i].1, B[i].2))
-        .collect::<Vec<SparseMatEntry>>();
+        .collect::<Vec<SparseMatEntry<S>>>();
       let list_C = (0..C.len())
         .map(|i| SparseMatEntry::new(C[i].0, C[i].1, C[i].2))
-        .collect::<Vec<SparseMatEntry>>();
+        .collect::<Vec<SparseMatEntry<S>>>();
       poly_A_list.push(SparseMatPolynomial::new(num_poly_vars_x, num_poly_vars_y, list_A));
       poly_B_list.push(SparseMatPolynomial::new(num_poly_vars_x, num_poly_vars_y, list_B));
       poly_C_list.push(SparseMatPolynomial::new(num_poly_vars_x, num_poly_vars_y, list_C));
       let mut list_A = (0..A.len())
         .map(|i| SparseMatEntry::new(inst * max_num_cons + A[i].0, A[i].1, A[i].2))
-        .collect::<Vec<SparseMatEntry>>();
+        .collect::<Vec<SparseMatEntry<S>>>();
       let mut list_B = (0..B.len())
         .map(|i| SparseMatEntry::new(inst * max_num_cons + B[i].0, B[i].1, B[i].2))
-        .collect::<Vec<SparseMatEntry>>();
+        .collect::<Vec<SparseMatEntry<S>>>();
       let mut list_C = (0..C.len())
         .map(|i| SparseMatEntry::new(inst * max_num_cons + C[i].0, C[i].1, C[i].2))
-        .collect::<Vec<SparseMatEntry>>();
+        .collect::<Vec<SparseMatEntry<S>>>();
       mat_A.append(&mut list_A);
       mat_B.append(&mut list_B);
       mat_C.append(&mut list_C);
@@ -346,8 +346,8 @@ impl R1CSInstance {
     max_num_inputs: usize,
     max_num_cons: usize,
     num_cons: Vec<usize>,
-    z_mat: &Vec<Vec<Vec<Vec<Scalar>>>>
-  ) -> (DensePolynomialPqx, DensePolynomialPqx, DensePolynomialPqx) {
+    z_mat: &Vec<Vec<Vec<Vec<S>>>>
+  ) -> (DensePolynomialPqx<S>, DensePolynomialPqx<S>, DensePolynomialPqx<S>) {
     assert!(self.num_instances == 1 || self.num_instances == num_instances);
     assert_eq!(max_num_cons, self.max_num_cons);
     let mut Az = Vec::new();
@@ -424,8 +424,8 @@ impl R1CSInstance {
     num_instances: usize,
     num_rows: usize,
     num_cols: usize,
-    evals: &[Scalar],
-  ) -> (Vec<Scalar>, Vec<Scalar>, Vec<Scalar>) {
+    evals: &[S],
+  ) -> (Vec<S>, Vec<S>, Vec<S>) {
     assert!(self.num_instances == 1 || self.num_instances == num_instances);
     assert_eq!(num_rows, self.max_num_cons);
     assert_eq!(num_cols, self.num_vars);
@@ -453,9 +453,9 @@ impl R1CSInstance {
       }
       // Zero instances
       for _ in num_instances..num_instances.next_power_of_two() {
-        evals_A_list.extend(vec![Scalar::zero(); num_cols]);
-        evals_B_list.extend(vec![Scalar::zero(); num_cols]);
-        evals_C_list.extend(vec![Scalar::zero(); num_cols]);
+        evals_A_list.extend(vec![S::field_zero(); num_cols]);
+        evals_B_list.extend(vec![S::field_zero(); num_cols]);
+        evals_C_list.extend(vec![S::field_zero(); num_cols]);
       }
     }
 
@@ -471,9 +471,9 @@ impl R1CSInstance {
     num_segs: usize,
     max_num_cols: usize,
     num_cols: &Vec<usize>,
-    evals: &[Scalar],
+    evals: &[S],
     // Output in p, q, w, i format, where q section has length 1
-  ) -> (Vec<Vec<Vec<Vec<Scalar>>>>, Vec<Vec<Vec<Vec<Scalar>>>>, Vec<Vec<Vec<Vec<Scalar>>>>) {
+  ) -> (Vec<Vec<Vec<Vec<S>>>>, Vec<Vec<Vec<Vec<S>>>>, Vec<Vec<Vec<Vec<S>>>>) {
     assert!(self.num_instances == 1 || self.num_instances == num_instances);
     assert_eq!(num_rows, &self.num_cons);
     assert_eq!(num_segs.next_power_of_two() * max_num_cols, self.num_vars);
@@ -545,7 +545,7 @@ impl R1CSInstance {
   }
   */
 
-  pub fn multi_evaluate(&self, rx: &[Scalar], ry: &[Scalar]) -> Vec<Scalar> {
+  pub fn multi_evaluate(&self, rx: &[S], ry: &[S]) -> Vec<S> {
     let mut eval_list = Vec::new();
     // Evaluate each individual poly on [rx, ry]
     for i in 0..self.num_instances {
@@ -555,10 +555,10 @@ impl R1CSInstance {
     eval_list
   }
 
-  pub fn multi_evaluate_bound_rp(&self, rp: &[Scalar], rx: &[Scalar], ry: &[Scalar]) -> 
+  pub fn multi_evaluate_bound_rp(&self, rp: &[S], rx: &[S], ry: &[S]) -> 
   (
-    Vec<Scalar>,                // Concatenation of each individual block
-    (Scalar, Scalar, Scalar)    // Combined, bound to rp
+    Vec<S>,                // Concatenation of each individual block
+    (S, S, S)    // Combined, bound to rp
   ) {
     let mut a_evals = Vec::new();
     let mut b_evals = Vec::new();
@@ -582,7 +582,7 @@ impl R1CSInstance {
   }
 
   // Used if there is only one instance
-  pub fn evaluate(&self, rx: &[Scalar], ry: &[Scalar]) -> (Scalar, Scalar, Scalar) {
+  pub fn evaluate(&self, rx: &[S], ry: &[S]) -> (S, S, S) {
     assert_eq!(self.num_instances, 1);
 
     let evals = SparseMatPolynomial::multi_evaluate(&[&self.A_list[0], &self.B_list[0], &self.C_list[0]], rx, ry);
@@ -600,10 +600,10 @@ impl R1CSInstance {
     return base;
   }
 
-  pub fn multi_commit(&self) -> (Vec<Vec<usize>>, Vec<R1CSCommitment>, Vec<R1CSDecommitment>) {
+  pub fn multi_commit(&self) -> (Vec<Vec<usize>>, Vec<R1CSCommitment<S>>, Vec<R1CSDecommitment<S>>) {
     let mut nnz_size: HashMap<usize, usize> = HashMap::new();
     let mut label_map: Vec<Vec<usize>> = Vec::new();
-    let mut sparse_polys_list: Vec<Vec<&SparseMatPolynomial>> = Vec::new();
+    let mut sparse_polys_list: Vec<Vec<&SparseMatPolynomial<S>>> = Vec::new();
 
     for i in 0..self.num_instances {
       // A_list
@@ -660,7 +660,7 @@ impl R1CSInstance {
   }
 
   // Used if there is only one instance
-  pub fn commit(&self) -> (R1CSCommitment, R1CSDecommitment) {
+  pub fn commit(&self) -> (R1CSCommitment<S>, R1CSDecommitment<S>) {
     let mut sparse_polys = Vec::new();
     for i in 0..self.num_instances {
       sparse_polys.push(&self.A_list[i]);
@@ -682,19 +682,19 @@ impl R1CSInstance {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct R1CSEvalProof {
-  proof: SparseMatPolyEvalProof,
+pub struct R1CSEvalProof<S: SpartanExtensionField> {
+  proof: SparseMatPolyEvalProof<S>,
 }
 
-impl R1CSEvalProof {
+impl<S: SpartanExtensionField> R1CSEvalProof<S> {
   pub fn prove(
-    decomm: &R1CSDecommitment,
-    rx: &[Scalar], // point at which the polynomial is evaluated
-    ry: &[Scalar],
-    evals: &Vec<Scalar>,
+    decomm: &R1CSDecommitment<S>,
+    rx: &[S], // point at which the polynomial is evaluated
+    ry: &[S],
+    evals: &Vec<S>,
     transcript: &mut Transcript,
-    random_tape: &mut RandomTape,
-  ) -> R1CSEvalProof {
+    random_tape: &mut RandomTape<S>,
+  ) -> R1CSEvalProof<S> {
     let timer = Timer::new("R1CSEvalProof::prove");
     let proof = SparseMatPolyEvalProof::prove(
       &decomm.dense,
@@ -711,10 +711,10 @@ impl R1CSEvalProof {
 
   pub fn verify(
     &self,
-    comm: &R1CSCommitment,
-    rx: &[Scalar], // point at which the R1CS matrix polynomials are evaluated
-    ry: &[Scalar],
-    evals: &Vec<Scalar>,
+    comm: &R1CSCommitment<S>,
+    rx: &[S], // point at which the R1CS matrix polynomials are evaluated
+    ry: &[S],
+    evals: &Vec<S>,
     transcript: &mut Transcript,
   ) -> Result<(), ProofVerifyError> {
     self.proof.verify(

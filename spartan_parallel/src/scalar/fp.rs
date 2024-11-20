@@ -2,7 +2,8 @@ use ceno_goldilocks::Goldilocks;
 use core::borrow::Borrow;
 use core::iter::{Product, Sum};
 use ff::{Field, FromUniformBytes};
-use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
+use std::ops::Neg;
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
@@ -23,15 +24,15 @@ impl SpartanExtensionField for Scalar {
   type InnerType = Goldilocks;
 
   fn inner(&self) -> &Goldilocks {
-      &self.0
+    &self.0
   }
 
   fn field_zero() -> Self {
-      Goldilocks::ZERO.into()
+    Goldilocks::ZERO.into()
   }
 
   fn field_one() -> Self {
-      Goldilocks::ONE.into()
+    Goldilocks::ONE.into()
   }
 
   fn random<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> Self {
@@ -108,10 +109,10 @@ impl Zeroize for Scalar {
   }
 }
 impl Neg for Scalar {
-  type Output = Self;
+  type Output = Scalar;
 
   #[inline]
-  fn neg(self) -> Self {
+  fn neg(self) -> Scalar {
       self.0.neg().into()
   }
 }

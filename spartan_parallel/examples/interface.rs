@@ -186,7 +186,7 @@ struct RunTimeKnowledge<S: SpartanExtensionField> {
   output_exec_num: usize
 }
 
-impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
+impl<S: SpartanExtensionField + for<'de> serde::de::Deserialize<'de>> RunTimeKnowledge<S> {
   fn deserialize_from_file(benchmark_name: String) -> RunTimeKnowledge<S> {
     let file_name = format!("../zok_tests/inputs/{}_bin.rtk", benchmark_name);
     let mut f = File::open(file_name).unwrap();

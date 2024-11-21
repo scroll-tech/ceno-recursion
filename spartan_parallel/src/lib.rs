@@ -837,6 +837,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     let output_block_num = S::from(output_block_num as u64);
     let input: Vec<S> = input.iter().map(|i| S::from_bytes(i).unwrap()).collect();
     let output: S = S::from_bytes(output).unwrap();
+    // These are writing the above numbers to the transcript
     {
       let timer_commit = Timer::new("inst_commit");
       // Commit public parameters
@@ -1621,6 +1622,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     // --
     let timer_proof = Timer::new("Block Correctness Extract");
     let block_wit_secs = vec![&block_vars_prover, &perm_w0_prover, &block_w2_prover, &block_w3_prover, &block_w3_shifted_prover];
+
     let (block_r1cs_sat_proof, block_challenges) = {
       let (proof, block_challenges) = {
         R1CSProof::prove(
@@ -1652,6 +1654,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       // RP-bound evaluation is sorted
       let (_, inst_evals_bound_rp) = block_inst.inst.multi_evaluate_bound_rp(&rp, &rx, &ry);
       timer_eval.stop();
+      // The challenge is already different from verifier at this place.
 
       for r in &inst_evals_list {
         S::append_field_to_transcript(b"ABCr_claim", transcript, *r);
@@ -1661,7 +1664,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let _: S = transcript.challenge_scalar(b"challenge_c0");
       let _: S = transcript.challenge_scalar(b"challenge_c1");
       let _: S = transcript.challenge_scalar(b"challenge_c2");
-      
+
       let r1cs_eval_proof_list = {
         let mut r1cs_eval_proof_list = Vec::new();
         for i in 0..block_comm_list.len() {
@@ -1743,7 +1746,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let _: S = transcript.challenge_scalar(b"challenge_c0");
       let _: S = transcript.challenge_scalar(b"challenge_c1");
       let _: S = transcript.challenge_scalar(b"challenge_c2");
-      
+
       let r1cs_eval_proof = {
         let proof = R1CSEvalProof::prove(
           &pairwise_check_decomm.decomm,
@@ -2119,6 +2122,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     let input_stack: Vec<S> = input_stack.iter().map(|i| S::from_bytes(i).unwrap()).collect();
     let input_mem: Vec<S> = input_mem.iter().map(|i| S::from_bytes(i).unwrap()).collect();
     let output: S = S::from_bytes(output).unwrap();
+    // These are writing the integers to the transcript
     {
       let timer_commit = Timer::new("inst_commit");
       // Commit public parameters
@@ -2444,6 +2448,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     {
       let timer_sat_proof = Timer::new("Block Correctness Extract Sat");
       let block_wit_secs = vec![&block_vars_verifier, &perm_w0_verifier, &block_w2_verifier, &block_w3_verifier, &block_w3_shifted_verifier];
+
       let block_challenges = self.block_r1cs_sat_proof.verify(
         block_num_instances,
         block_max_num_proofs,
@@ -2455,11 +2460,12 @@ impl<S: SpartanExtensionField> SNARK<S> {
         transcript,
       )?;
       timer_sat_proof.stop();
+      // The transcript is different from prover now.
 
       let timer_eval_proof = Timer::new("Block Correctness Extract Eval");
       // Verify Evaluation on BLOCK
       let [_rp, _, rx, ry] = block_challenges;
-      
+
       for r in &self.block_inst_evals_list {
         S::append_field_to_transcript(b"ABCr_claim", transcript, *r);
       }

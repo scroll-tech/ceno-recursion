@@ -233,6 +233,9 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     );
     timer_tmp.stop();
 
+    let test_challenge: S = transcript.challenge_scalar(b"test");
+    println!("test_challenge_prover_start: {:?}", test_challenge);
+
     // Sumcheck 1: (Az * Bz - Cz) * eq(x, q, p) = 0
     let timer_tmp = Timer::new("prove_sum_check");
     let (sc_proof_phase1, rx, _claims_phase1, blind_claim_postsc1) = R1CSProof::prove_phase_one(
@@ -273,6 +276,9 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       random_tape.random_scalar(b"Cz_blind"),
       random_tape.random_scalar(b"prod_Az_Bz_blind"),
     );
+
+    let test_challenge: S = transcript.challenge_scalar(b"test");
+    println!("test_challenge_prover_end: {:?}", test_challenge);
 
     let pok_Cz_claim = { KnowledgeProof::prove(transcript, random_tape, Cz_claim, &Cz_blind) };
 
@@ -608,6 +614,9 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let tau_q = transcript.challenge_vector(b"challenge_tau_q", num_rounds_q);
     let tau_x = transcript.challenge_vector(b"challenge_tau_x", num_rounds_x);
 
+    let test_challenge: S = transcript.challenge_scalar(b"test");
+    println!("test_challenge_verifier_start: {:?}", test_challenge);
+
     let rx =
       self
         .sc_proof_phase1
@@ -615,6 +624,9 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
 
     // perform the intermediate sum-check test with claimed Az, Bz, and Cz
     let (pok_Cz_claim, proof_prod) = &self.pok_claims_phase2;
+
+    let test_challenge: S = transcript.challenge_scalar(b"test");
+    println!("test_challenge_verifier_end: {:?}", test_challenge);
 
     pok_Cz_claim.verify(transcript)?;
     proof_prod.verify(transcript)?;

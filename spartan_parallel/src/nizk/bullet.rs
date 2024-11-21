@@ -3,15 +3,14 @@
 #![allow(non_snake_case)]
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
-use super::super::errors::ProofVerifyError;
 use super::super::scalar::SpartanExtensionField;
 use super::super::transcript::ProofTranscript;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BulletReductionProof<S: SpartanExtensionField>{
-  _phantom: S
+pub struct BulletReductionProof<S: SpartanExtensionField> {
+  _phantom: S,
 }
 
 impl<S: SpartanExtensionField> BulletReductionProof<S> {
@@ -31,11 +30,7 @@ impl<S: SpartanExtensionField> BulletReductionProof<S> {
     b_vec: &[S],
     blind: &S,
     blinds_vec: &[(S, S)],
-  ) -> (
-    S,
-    S,
-    S,
-  ) {
+  ) -> (S, S, S) {
     // Create slices G, H, a, b backed by their respective
     // vectors.  This lets us reslice as we compress the lengths
     // of the vectors in the main loop below.
@@ -73,78 +68,7 @@ impl<S: SpartanExtensionField> BulletReductionProof<S> {
       b = b_L;
     }
 
-    (
-      a[0],
-      b[0],
-      blind_fin,
-    )
-  }
-
-  /// Computes three vectors of verification scalars \\([u\_{i}^{2}]\\), \\([u\_{i}^{-2}]\\) and \\([s\_{i}]\\) for combined multiscalar multiplication
-  /// in a parent protocol. See [inner product protocol notes](index.html#verification-equation) for details.
-  /// The verifier must provide the input length \\(n\\) explicitly to avoid unbounded allocation within the inner product proof.
-  fn verification_scalars(
-    &self,
-    n: usize,
-    transcript: &mut Transcript,
-  ) -> Result<(Vec<S>, Vec<S>, Vec<S>), ProofVerifyError> {
-    let mut lg_n = 0usize;
-    assert!(n > 0, "n must not be 0");
-
-    let mut value = n;
-    while value > 1 {
-        value >>= 1; // Divide value by 2
-        lg_n += 1;
-    }
-    
-    // 1. Recompute x_k,...,x_1 based on the proof transcript
-    let mut challenges = Vec::with_capacity(lg_n);
-    for _i in 0..lg_n {
-      challenges.push(transcript.challenge_scalar(b"u"));
-    }
-
-    // 2. Compute 1/(u_k...u_1) and 1/u_k, ..., 1/u_1
-    let mut challenges_inv = challenges.clone();
-    let allinv = S::batch_invert(&mut challenges_inv);
-
-    // 3. Compute u_i^2 and (1/u_i)^2
-    for i in 0..lg_n {
-      challenges[i] = challenges[i].square();
-      challenges_inv[i] = challenges_inv[i].square();
-    }
-    let challenges_sq = challenges;
-    let challenges_inv_sq = challenges_inv;
-
-    // 4. Compute s values inductively.
-    let mut s = Vec::with_capacity(n);
-    s.push(allinv);
-    for i in 1..n {
-      let lg_i = (32 - 1 - (i as u32).leading_zeros()) as usize;
-      let k = 1 << lg_i;
-      // The challenges are stored in "creation order" as [u_k,...,u_1],
-      // so u_{lg(i)+1} = is indexed by (lg_n-1) - lg_i
-      let u_lg_i_sq = challenges_sq[(lg_n - 1) - lg_i];
-      s.push(s[i - k] * u_lg_i_sq);
-    }
-
-    Ok((challenges_sq, challenges_inv_sq, s))
-  }
-
-  /// This method is for testing that proof generation work,
-  /// but for efficiency the actual protocols would use `verification_scalars`
-  /// method to combine inner product verification with other checks
-  /// in a single multiscalar multiplication.
-  pub fn verify(
-    &self,
-    n: usize,
-    a: &[S],
-    transcript: &mut Transcript,
-) -> Result<S, ProofVerifyError> {
-    let (_u_sq, _u_inv_sq, s) = self.verification_scalars(n, transcript)?;
-
-    let a_hat = inner_product(a, &s);
-
-    Ok(a_hat)
+    (a[0], b[0], blind_fin)
   }
 }
 

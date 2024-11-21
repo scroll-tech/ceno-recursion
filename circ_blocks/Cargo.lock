@@ -1698,7 +1698,6 @@ dependencies = [
  "byteorder",
  "ceno-goldilocks",
  "colored",
- "curve25519-dalek",
  "digest 0.8.1",
  "ff 0.13.0",
  "flate2",

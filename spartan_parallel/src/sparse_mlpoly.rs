@@ -1527,6 +1527,8 @@ impl<S: SpartanExtensionField> SparsePolynomial<S> {
 
 #[cfg(test)]
 mod tests {
+  use crate::scalar::Scalar;
+
   use super::*;
   use rand::rngs::OsRng;
   use rand::RngCore;
@@ -1540,7 +1542,7 @@ mod tests {
     let num_vars_x: usize = num_rows.log_2();
     let num_vars_y: usize = num_cols.log_2();
 
-    let mut M: Vec<SparseMatEntry> = Vec::new();
+    let mut M: Vec<SparseMatEntry<Scalar>> = Vec::new();
 
     for _i in 0..num_nz_entries {
       M.push(SparseMatEntry::new(

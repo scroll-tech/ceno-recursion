@@ -4,9 +4,7 @@
 use crate::scalar::SpartanExtensionField;
 
 use super::dense_mlpoly::DensePolynomial;
-use super::dense_mlpoly::{
-  EqPolynomial, IdentityPolynomial, PolyEvalProof,
-};
+use super::dense_mlpoly::{EqPolynomial, IdentityPolynomial, PolyEvalProof};
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::product_tree::{DotProductCircuit, ProductCircuit, ProductCircuitEvalProofBatched};
@@ -106,7 +104,7 @@ impl<S: SpartanExtensionField> DerefsEvalProof<S> {
     // decommit the joint polynomial at r_joint
     S::append_field_to_transcript(b"joint_claim_eval", transcript, eval_joint);
 
-    let proof_derefs= PolyEvalProof::prove(
+    let proof_derefs = PolyEvalProof::prove(
       joint_poly,
       None,
       &r_joint,
@@ -128,7 +126,10 @@ impl<S: SpartanExtensionField> DerefsEvalProof<S> {
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
   ) -> Self {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, DerefsEvalProof::<S>::protocol_name());
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      DerefsEvalProof::<S>::protocol_name(),
+    );
 
     let evals = {
       let mut evals = eval_row_ops_val_vec.to_owned();
@@ -177,18 +178,16 @@ impl<S: SpartanExtensionField> DerefsEvalProof<S> {
     eval_col_ops_val_vec: &[S],
     transcript: &mut Transcript,
   ) -> Result<(), ProofVerifyError> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, DerefsEvalProof::<S>::protocol_name());
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      DerefsEvalProof::<S>::protocol_name(),
+    );
 
     let mut evals = eval_row_ops_val_vec.to_owned();
     evals.extend(eval_col_ops_val_vec);
     evals.resize(evals.len().next_power_of_two(), S::field_zero());
 
-    DerefsEvalProof::verify_single(
-      &self.proof_derefs,
-      r,
-      evals,
-      transcript,
-    )
+    DerefsEvalProof::verify_single(&self.proof_derefs, r, evals, transcript)
   }
 }
 
@@ -382,11 +381,7 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
       .sum()
   }
 
-  pub fn multi_evaluate(
-    polys: &[&SparseMatPolynomial<S>],
-    rx: &[S],
-    ry: &[S],
-  ) -> Vec<S> {
+  pub fn multi_evaluate(polys: &[&SparseMatPolynomial<S>], rx: &[S], ry: &[S]) -> Vec<S> {
     let eval_table_rx = EqPolynomial::new(rx.to_vec()).evals();
     let eval_table_ry = EqPolynomial::new(ry.to_vec()).evals();
 
@@ -414,7 +409,13 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
 
   // Z is consisted of vector segments
   // Z[i] contains entries i * max_num_cols ~ i * max_num_cols + num_cols
-  pub fn multiply_vec_disjoint_rounds(&self, num_rows: usize, max_num_cols: usize, _num_cols: usize, z: &Vec<Vec<S>>) -> Vec<S> {
+  pub fn multiply_vec_disjoint_rounds(
+    &self,
+    num_rows: usize,
+    max_num_cols: usize,
+    _num_cols: usize,
+    z: &Vec<Vec<S>>,
+  ) -> Vec<S> {
     (0..self.M.len())
       .map(|i| {
         let row = self.M[i].row;
@@ -428,12 +429,7 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
       })
   }
 
-  pub fn compute_eval_table_sparse(
-    &self,
-    rx: &[S],
-    num_rows: usize,
-    num_cols: usize,
-  ) -> Vec<S> {
+  pub fn compute_eval_table_sparse(&self, rx: &[S], num_rows: usize, num_cols: usize) -> Vec<S> {
     assert_eq!(rx.len(), num_rows);
 
     let mut M_evals: Vec<S> = vec![S::field_zero(); num_cols];
@@ -461,14 +457,18 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
 
     for i in 0..self.M.len() {
       let entry = &self.M[i];
-      M_evals[entry.col / max_num_cols][entry.col % max_num_cols] = M_evals[entry.col / max_num_cols][entry.col % max_num_cols] + rx[entry.row] * entry.val;
+      M_evals[entry.col / max_num_cols][entry.col % max_num_cols] =
+        M_evals[entry.col / max_num_cols][entry.col % max_num_cols] + rx[entry.row] * entry.val;
     }
     M_evals
   }
 
   pub fn multi_commit(
     sparse_polys: &[&SparseMatPolynomial<S>],
-  ) -> (SparseMatPolyCommitment<S>, MultiSparseMatPolynomialAsDense<S>) {
+  ) -> (
+    SparseMatPolyCommitment<S>,
+    MultiSparseMatPolynomialAsDense<S>,
+  ) {
     let batch_size = sparse_polys.len();
     let dense = SparseMatPolynomial::multi_sparse_to_dense_rep(sparse_polys);
 
@@ -524,9 +524,7 @@ impl<S: SpartanExtensionField> Layers<S> {
 
     //hash(addr, val, ts) = ts * r_hash_sqr + val * r_hash + addr
     let r_hash_sqr = *r_hash * *r_hash;
-    let hash_func = |addr: &S, val: &S, ts: &S| -> S {
-      *ts * r_hash_sqr + *val * *r_hash + *addr
-    };
+    let hash_func = |addr: &S, val: &S, ts: &S| -> S { *ts * r_hash_sqr + *val * *r_hash + *addr };
 
     // hash init and audit that does not depend on #instances
     let num_mem_cells = eval_table.len();
@@ -707,7 +705,10 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
   ) -> Self {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, HashLayerProof::<S>::protocol_name());
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      HashLayerProof::<S>::protocol_name(),
+    );
 
     let (rand_mem, rand_ops) = rand;
 
@@ -821,9 +822,7 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
     r_multiset_check: &S,
   ) -> Result<(), ProofVerifyError> {
     let r_hash_sqr = *r_hash * *r_hash;
-    let hash_func = |addr: &S, val: &S, ts: &S| -> S {
-      *ts * r_hash_sqr + *val * *r_hash + *addr
-    };
+    let hash_func = |addr: &S, val: &S, ts: &S| -> S { *ts * r_hash_sqr + *val * *r_hash + *addr };
 
     let (rand_mem, _rand_ops) = rand;
     let (claim_init, claim_read, claim_write, claim_audit) = claims;
@@ -833,14 +832,15 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
     let eval_init_val = EqPolynomial::new(r.to_vec()).evaluate(rand_mem);
     let hash_init_at_rand_mem =
       hash_func(&eval_init_addr, &eval_init_val, &S::field_zero()) - *r_multiset_check; // verify the claim_last of init chunk
-    /* TODO: IMPORTANT, DEBUG, CHECK FAIL
-    assert_eq!(&hash_init_at_rand_mem, claim_init);
-    */
+                                                                                        /* TODO: IMPORTANT, DEBUG, CHECK FAIL
+                                                                                        assert_eq!(&hash_init_at_rand_mem, claim_init);
+                                                                                        */
 
     // read
     for i in 0..eval_ops_addr.len() {
       let hash_read_at_rand_ops =
-        hash_func(&eval_ops_addr[i], &eval_ops_val[i], &eval_read_ts[i]) - *r_multiset_check; // verify the claim_last of init chunk
+        hash_func(&eval_ops_addr[i], &eval_ops_val[i], &eval_read_ts[i]) - *r_multiset_check;
+      // verify the claim_last of init chunk
       /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       assert_eq!(&hash_read_at_rand_ops, &claim_read[i]);
       */
@@ -850,7 +850,8 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
     for i in 0..eval_ops_addr.len() {
       let eval_write_ts = eval_read_ts[i] + S::field_one();
       let hash_write_at_rand_ops =
-        hash_func(&eval_ops_addr[i], &eval_ops_val[i], &eval_write_ts) - *r_multiset_check; // verify the claim_last of init chunk
+        hash_func(&eval_ops_addr[i], &eval_ops_val[i], &eval_write_ts) - *r_multiset_check;
+      // verify the claim_last of init chunk
       /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       assert_eq!(&hash_write_at_rand_ops, &claim_write[i]);
       */
@@ -882,19 +883,19 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
     transcript: &mut Transcript,
   ) -> Result<(), ProofVerifyError> {
     let timer = Timer::new("verify_hash_proof");
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, HashLayerProof::<S>::protocol_name());
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      HashLayerProof::<S>::protocol_name(),
+    );
 
     let (rand_mem, rand_ops) = rand;
 
     // verify derefs at rand_ops
     let (eval_row_ops_val, eval_col_ops_val) = &self.eval_derefs;
     assert_eq!(eval_row_ops_val.len(), eval_col_ops_val.len());
-    self.proof_derefs.verify(
-      rand_ops,
-      eval_row_ops_val,
-      eval_col_ops_val,
-      transcript,
-    )?;
+    self
+      .proof_derefs
+      .verify(rand_ops, eval_row_ops_val, eval_col_ops_val, transcript)?;
 
     // verify the decommitments used in evaluation sum-check
     let eval_val_vec = &self.eval_val;
@@ -935,11 +936,9 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
     let mut r_joint_ops = challenges_ops;
     r_joint_ops.extend(rand_ops);
     S::append_field_to_transcript(b"joint_claim_eval_ops", transcript, joint_claim_eval_ops);
-    self.proof_ops.verify_plain(
-      transcript,
-      &r_joint_ops,
-      &joint_claim_eval_ops,
-    )?;
+    self
+      .proof_ops
+      .verify_plain(transcript, &r_joint_ops, &joint_claim_eval_ops)?;
 
     // verify proof-mem using comm_comb_mem at rand_mem
     // form a single decommitment using comb_comb_mem at rand_mem
@@ -958,11 +957,9 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
     r_joint_mem.extend(rand_mem);
     S::append_field_to_transcript(b"joint_claim_eval_mem", transcript, joint_claim_eval_mem);
 
-    self.proof_mem.verify_plain(
-      transcript,
-      &r_joint_mem,
-      &joint_claim_eval_mem,
-    )?;
+    self
+      .proof_mem
+      .verify_plain(transcript, &r_joint_mem, &joint_claim_eval_mem)?;
 
     // verify the claims from the product layer
     let (eval_ops_addr, eval_read_ts, eval_audit_ts) = &self.eval_row;
@@ -1018,7 +1015,10 @@ impl<S: SpartanExtensionField> ProductLayerProof<S> {
     eval: &[S],
     transcript: &mut Transcript,
   ) -> (Self, Vec<S>, Vec<S>) {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, ProductLayerProof::<S>::protocol_name());
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      ProductLayerProof::<S>::protocol_name(),
+    );
 
     let row_eval_init = row_prod_layer.init.evaluate();
     let row_eval_audit = row_prod_layer.audit.evaluate();
@@ -1165,17 +1165,11 @@ impl<S: SpartanExtensionField> ProductLayerProof<S> {
     num_cells: usize,
     eval: &[S],
     transcript: &mut Transcript,
-  ) -> Result<
-    (
-      Vec<S>,
-      Vec<S>,
-      Vec<S>,
-      Vec<S>,
-      Vec<S>,
-    ),
-    ProofVerifyError,
-  > {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, ProductLayerProof::<S>::protocol_name());
+  ) -> Result<(Vec<S>, Vec<S>, Vec<S>, Vec<S>, Vec<S>), ProofVerifyError> {
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      ProductLayerProof::<S>::protocol_name(),
+    );
 
     let timer = Timer::new("verify_prod_proof");
     let num_instances = eval.len();
@@ -1274,7 +1268,10 @@ impl<S: SpartanExtensionField> PolyEvalNetworkProof<S> {
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
   ) -> Self {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, PolyEvalNetworkProof::<S>::protocol_name());
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      PolyEvalNetworkProof::<S>::protocol_name(),
+    );
 
     let (proof_prod_layer, rand_mem, rand_ops) = ProductLayerProof::prove(
       &mut network.row_layers.prod_layer,
@@ -1311,7 +1308,10 @@ impl<S: SpartanExtensionField> PolyEvalNetworkProof<S> {
     transcript: &mut Transcript,
   ) -> Result<(), ProofVerifyError> {
     let timer = Timer::new("verify_polyeval_proof");
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, PolyEvalNetworkProof::<S>::protocol_name());
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      PolyEvalNetworkProof::<S>::protocol_name(),
+    );
 
     let num_instances = evals.len();
     let (r_hash, r_multiset_check) = r_mem_check;
@@ -1396,7 +1396,10 @@ impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
   ) -> SparseMatPolyEvalProof<S> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, SparseMatPolyEvalProof::<S>::protocol_name());
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      SparseMatPolyEvalProof::<S>::protocol_name(),
+    );
 
     // ensure there is one eval for each polynomial in dense
     assert_eq!(evals.len(), dense.batch_size);
@@ -1432,14 +1435,8 @@ impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
       timer_build_network.stop();
 
       let timer_eval_network = Timer::new("evalproof_layered_network");
-      let poly_eval_network_proof = PolyEvalNetworkProof::prove(
-        &mut net,
-        dense,
-        &derefs,
-        evals,
-        transcript,
-        random_tape,
-      );
+      let poly_eval_network_proof =
+        PolyEvalNetworkProof::prove(&mut net, dense, &derefs, evals, transcript, random_tape);
       timer_eval_network.stop();
 
       poly_eval_network_proof
@@ -1458,7 +1455,10 @@ impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
     evals: &[S], // evaluation of \widetilde{M}(r = (rx,ry))
     transcript: &mut Transcript,
   ) -> Result<(), ProofVerifyError> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, SparseMatPolyEvalProof::<S>::protocol_name());
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      SparseMatPolyEvalProof::<S>::protocol_name(),
+    );
 
     // equalize the lengths of rx and ry
     let (rx_ext, ry_ext) = SparseMatPolyEvalProof::equalize(rx, ry);
@@ -1581,13 +1581,7 @@ mod tests {
 
     let mut verifier_transcript = Transcript::new(b"example");
     assert!(proof
-      .verify(
-        &poly_comm,
-        &rx,
-        &ry,
-        &evals,
-        &mut verifier_transcript,
-      )
+      .verify(&poly_comm, &rx, &ry, &evals, &mut verifier_transcript,)
       .is_ok());
   }
 }

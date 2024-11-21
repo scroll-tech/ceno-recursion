@@ -1,16 +1,21 @@
 mod fp;
 mod fp2;
 
-use std::{hash::Hash, cmp::Eq, iter::{Product, Sum}, ops::{Add, Mul, Neg, Sub}};
 use ceno_goldilocks::ExtensionField;
+use ff::Field;
 pub use fp::Scalar;
 pub use fp2::ScalarExt2;
-use ff::Field;
 use rand::{CryptoRng, RngCore};
+use serde::Serialize;
+use std::fmt;
+use std::{
+  cmp::Eq,
+  hash::Hash,
+  iter::{Product, Sum},
+  ops::{Add, Mul, Neg, Sub},
+};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;
-use std::fmt;
-use serde::Serialize;
 
 use crate::transcript::AppendToTranscript;
 use merlin::Transcript;
@@ -18,11 +23,11 @@ use merlin::Transcript;
 /// Trait describing the field element
 /// Wraps around Goldilocks field towers from ceno-goldilocks
 /// See: https://github.com/scroll-tech/ceno-Goldilocks
-pub trait SpartanExtensionField: 
-  Sized 
-  + ConstantTimeEq 
+pub trait SpartanExtensionField:
+  Sized
+  + ConstantTimeEq
   + Eq
-  + PartialEq 
+  + PartialEq
   + From<u64>
   + From<usize>
   + ConditionallySelectable
@@ -68,7 +73,11 @@ pub trait SpartanExtensionField:
   fn append_field_to_transcript(label: &'static [u8], transcript: &mut Transcript, input: Self);
 
   /// Append a vector of field elements to the transcript
-  fn append_field_vector_to_transcript(label: &'static [u8], transcript: &mut Transcript, input: &[Self]);
+  fn append_field_vector_to_transcript(
+    label: &'static [u8],
+    transcript: &mut Transcript,
+    input: &[Self],
+  );
 
   /// Return the neg of field element
   #[inline]

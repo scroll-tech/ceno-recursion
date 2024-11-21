@@ -1,52 +1,52 @@
+use super::Scalar;
+use super::SpartanExtensionField;
+use crate::{AppendToTranscript, ProofTranscript, Transcript};
 use ceno_goldilocks::{ExtensionField, Goldilocks, GoldilocksExt2};
 use core::borrow::Borrow;
 use core::iter::{Product, Sum};
-use ff::{Field, FromUniformBytes};
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use ff::{Field, FromUniformBytes};
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;
-use crate::{Transcript, AppendToTranscript, ProofTranscript};
-use super::SpartanExtensionField;
-use super::Scalar;
 
 /// Field wrapper around ext2 Goldilocks
 #[derive(Clone, Copy, Eq, Serialize, Deserialize, Hash, Debug)]
 pub struct ScalarExt2(GoldilocksExt2);
 
 impl From<GoldilocksExt2> for ScalarExt2 {
-    fn from(g: GoldilocksExt2) -> Self {
-        Self(g)
-    }
+  fn from(g: GoldilocksExt2) -> Self {
+    Self(g)
+  }
 }
 
 impl SpartanExtensionField for ScalarExt2 {
   type InnerType = GoldilocksExt2;
 
   fn inner(&self) -> &GoldilocksExt2 {
-      &self.0
+    &self.0
   }
 
   fn field_zero() -> Self {
-      GoldilocksExt2::ZERO.into()
+    GoldilocksExt2::ZERO.into()
   }
 
   fn field_one() -> Self {
-      GoldilocksExt2::ONE.into()
+    GoldilocksExt2::ONE.into()
   }
 
   fn random<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> Self {
-    GoldilocksExt2([
-        *Scalar::random(rng).inner(), 
-        *Scalar::random(rng).inner()
-    ]).into()
+    GoldilocksExt2([*Scalar::random(rng).inner(), *Scalar::random(rng).inner()]).into()
   }
 
   /// Attempts to convert a little-endian byte representation of
   /// a scalar into a `ScalarExt2`, failing if the input is not canonical.
   fn from_bytes(bytes: &[u8; 32]) -> CtOption<ScalarExt2> {
-    CtOption::new(GoldilocksExt2::from_base(&Goldilocks::from_uniform_bytes(bytes)).into(), Choice::from(1u8))
+    CtOption::new(
+      GoldilocksExt2::from_base(&Goldilocks::from_uniform_bytes(bytes)).into(),
+      Choice::from(1u8),
+    )
   }
 
   /// Converts an element of `ScalarExt2` into a byte representation in
@@ -69,14 +69,18 @@ impl SpartanExtensionField for ScalarExt2 {
   fn append_field_to_transcript(label: &'static [u8], transcript: &mut Transcript, input: Self) {
     transcript.append_scalar(label, &input);
   }
-  
+
   /// Append a vector Goldilocks scalars to transcript
-  fn append_field_vector_to_transcript(label: &'static [u8], transcript: &mut Transcript, input: &[Self]) {
-      transcript.append_message(label, b"begin_append_vector");
-      for item in input {
-        transcript.append_scalar(label, item);
-      }
-      transcript.append_message(label, b"end_append_vector");
+  fn append_field_vector_to_transcript(
+    label: &'static [u8],
+    transcript: &mut Transcript,
+    input: &[Self],
+  ) {
+    transcript.append_message(label, b"begin_append_vector");
+    for item in input {
+      transcript.append_scalar(label, item);
+    }
+    transcript.append_message(label, b"end_append_vector");
   }
 }
 
@@ -115,7 +119,7 @@ impl Neg for ScalarExt2 {
 
   #[inline]
   fn neg(self) -> Self {
-      self.0.neg().into()
+    self.0.neg().into()
   }
 }
 impl Default for ScalarExt2 {
@@ -216,4 +220,3 @@ impl AppendToTranscript for [ScalarExt2] {
 
 crate::impl_binops_additive!(ScalarExt2, ScalarExt2);
 crate::impl_binops_multiplicative!(ScalarExt2, ScalarExt2);
-

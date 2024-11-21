@@ -27,7 +27,10 @@ impl<S: SpartanExtensionField> KnowledgeProof<S> {
     x: &S,
     r: &S,
   ) -> KnowledgeProof<S> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, KnowledgeProof::<S>::protocol_name());
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      KnowledgeProof::<S>::protocol_name(),
+    );
 
     // produce two random Scalars
     let t1 = random_tape.random_scalar(b"t1");
@@ -41,10 +44,7 @@ impl<S: SpartanExtensionField> KnowledgeProof<S> {
     KnowledgeProof { z1, z2 }
   }
 
-  pub fn verify(
-    &self,
-    _transcript: &mut Transcript,
-  ) -> Result<(), ProofVerifyError> {
+  pub fn verify(&self, _transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
     // TODO: Alternative PCS Verification
     Ok(())
   }
@@ -68,7 +68,10 @@ impl<S: SpartanExtensionField> EqualityProof<S> {
     _v2: &S,
     s2: &S,
   ) -> EqualityProof<S> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, EqualityProof::<S>::protocol_name());
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      EqualityProof::<S>::protocol_name(),
+    );
 
     // produce a random Scalar
     let r = random_tape.random_scalar(b"r");
@@ -78,10 +81,7 @@ impl<S: SpartanExtensionField> EqualityProof<S> {
     EqualityProof { z }
   }
 
-  pub fn verify(
-    &self,
-    _transcript: &mut Transcript,
-  ) -> Result<(), ProofVerifyError> {
+  pub fn verify(&self, _transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
     // TODO: Alternative PCS Verification
     Ok(())
   }
@@ -107,7 +107,10 @@ impl<S: SpartanExtensionField> ProductProof<S> {
     _z: &S,
     rZ: &S,
   ) -> ProductProof<S> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, ProductProof::<S>::protocol_name());
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      ProductProof::<S>::protocol_name(),
+    );
 
     // produce five random Scalar
     let b1 = random_tape.random_scalar(b"b1");
@@ -128,19 +131,12 @@ impl<S: SpartanExtensionField> ProductProof<S> {
     ProductProof { z }
   }
 
-  fn check_equality(
-    _c: &S,
-    _z1: &S,
-    _z2: &S,
-  ) -> bool {
+  fn check_equality(_c: &S, _z1: &S, _z2: &S) -> bool {
     // TODO: Alternative PCS Verification
     true
   }
 
-  pub fn verify(
-    &self,
-    _transcript: &mut Transcript,
-  ) -> Result<(), ProofVerifyError> {
+  pub fn verify(&self, _transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
     // TODO: Alternative PCS Verification
     Ok(())
   }
@@ -172,7 +168,10 @@ impl<S: SpartanExtensionField> DotProductProof<S> {
     _y: &S,
     blind_y: &S,
   ) -> DotProductProof<S> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, DotProductProof::<S>::protocol_name());
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      DotProductProof::<S>::protocol_name(),
+    );
 
     let n = x_vec.len();
     assert_eq!(x_vec.len(), a_vec.len());
@@ -193,19 +192,14 @@ impl<S: SpartanExtensionField> DotProductProof<S> {
     let z_delta = c * *blind_x + r_delta;
     let z_beta = c * *blind_y + r_beta;
 
-    DotProductProof {
-      z,
-      z_delta,
-      z_beta,
-    }
+    DotProductProof { z, z_delta, z_beta }
   }
 
-  pub fn verify(
-    &self,
-    transcript: &mut Transcript,
-    a: &[S],
-  ) -> Result<(), ProofVerifyError> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, DotProductProof::<S>::protocol_name());
+  pub fn verify(&self, transcript: &mut Transcript, a: &[S]) -> Result<(), ProofVerifyError> {
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      DotProductProof::<S>::protocol_name(),
+    );
     S::append_field_vector_to_transcript(b"a", transcript, a);
     let _c: S = transcript.challenge_scalar(b"c");
     let _dotproduct_z_a = DotProductProof::compute_dotproduct(&self.z, a);
@@ -240,7 +234,10 @@ impl<S: SpartanExtensionField> DotProductProofLog<S> {
     _y: &S,
     blind_y: &S,
   ) -> DotProductProofLog<S> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(transcript, DotProductProofLog::<S>::protocol_name());
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      DotProductProofLog::<S>::protocol_name(),
+    );
 
     let n = x_vec.len();
     assert_eq!(x_vec.len(), a_vec.len());
@@ -264,14 +261,7 @@ impl<S: SpartanExtensionField> DotProductProofLog<S> {
 
     let blind_Gamma: S = *blind_x + r * *blind_y;
     let (x_hat, a_hat, rhat_Gamma) =
-      BulletReductionProof::prove(
-        transcript,
-        x_vec,
-        a_vec,
-        &blind_Gamma,
-        &blinds_vec,
-      );
-    
+      BulletReductionProof::prove(transcript, x_vec, a_vec, &blind_Gamma, &blinds_vec);
 
     let y_hat = x_hat * a_hat;
 
@@ -280,10 +270,7 @@ impl<S: SpartanExtensionField> DotProductProofLog<S> {
     let z1 = d + c * y_hat;
     let z2 = a_hat * (c * rhat_Gamma + r_beta) + r_delta;
 
-    DotProductProofLog {
-      z1,
-      z2,
-    }
+    DotProductProofLog { z1, z2 }
   }
 
   pub fn verify(

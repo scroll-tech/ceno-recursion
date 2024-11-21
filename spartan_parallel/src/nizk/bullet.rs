@@ -10,8 +10,8 @@ use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BulletReductionProof<S: SpartanExtensionField>{
-  _phantom: S
+pub struct BulletReductionProof<S: SpartanExtensionField> {
+  _phantom: S,
 }
 
 impl<S: SpartanExtensionField> BulletReductionProof<S> {
@@ -31,11 +31,7 @@ impl<S: SpartanExtensionField> BulletReductionProof<S> {
     b_vec: &[S],
     blind: &S,
     blinds_vec: &[(S, S)],
-  ) -> (
-    S,
-    S,
-    S,
-  ) {
+  ) -> (S, S, S) {
     // Create slices G, H, a, b backed by their respective
     // vectors.  This lets us reslice as we compress the lengths
     // of the vectors in the main loop below.
@@ -73,11 +69,7 @@ impl<S: SpartanExtensionField> BulletReductionProof<S> {
       b = b_L;
     }
 
-    (
-      a[0],
-      b[0],
-      blind_fin,
-    )
+    (a[0], b[0], blind_fin)
   }
 
   /// Computes three vectors of verification scalars \\([u\_{i}^{2}]\\), \\([u\_{i}^{-2}]\\) and \\([s\_{i}]\\) for combined multiscalar multiplication
@@ -93,10 +85,10 @@ impl<S: SpartanExtensionField> BulletReductionProof<S> {
 
     let mut value = n;
     while value > 1 {
-        value >>= 1; // Divide value by 2
-        lg_n += 1;
+      value >>= 1; // Divide value by 2
+      lg_n += 1;
     }
-    
+
     // 1. Recompute x_k,...,x_1 based on the proof transcript
     let mut challenges = Vec::with_capacity(lg_n);
     for _i in 0..lg_n {
@@ -139,7 +131,7 @@ impl<S: SpartanExtensionField> BulletReductionProof<S> {
     n: usize,
     a: &[S],
     transcript: &mut Transcript,
-) -> Result<S, ProofVerifyError> {
+  ) -> Result<S, ProofVerifyError> {
     let (_u_sq, _u_inv_sq, s) = self.verification_scalars(n, transcript)?;
 
     let a_hat = inner_product(a, &s);

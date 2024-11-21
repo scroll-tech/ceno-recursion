@@ -10,10 +10,10 @@ use super::nizk::DotProductProof;
 use super::random::RandomTape;
 use super::transcript::{AppendToTranscript, ProofTranscript};
 use super::unipoly::{CompressedUniPoly, UniPoly};
-use std::cmp::min;
 use itertools::izip;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
+use std::cmp::min;
 
 const MODE_P: usize = 1;
 const MODE_Q: usize = 2;
@@ -25,7 +25,7 @@ pub struct SumcheckInstanceProof<S: SpartanExtensionField> {
   compressed_polys: Vec<CompressedUniPoly<S>>,
 }
 
-impl<S:SpartanExtensionField> SumcheckInstanceProof<S> {
+impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
   pub fn new(compressed_polys: Vec<CompressedUniPoly<S>>) -> SumcheckInstanceProof<S> {
     SumcheckInstanceProof { compressed_polys }
   }
@@ -73,12 +73,8 @@ pub struct ZKSumcheckInstanceProof<S: SpartanExtensionField> {
 }
 
 impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
-  pub fn new(
-    proofs: Vec<DotProductProof<S>>,
-  ) -> Self {
-    ZKSumcheckInstanceProof {
-      proofs,
-    }
+  pub fn new(proofs: Vec<DotProductProof<S>>) -> Self {
+    ZKSumcheckInstanceProof { proofs }
   }
 
   pub fn verify(
@@ -130,22 +126,24 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
         let poly_A_bound_point = poly_A[len + i] + poly_A[len + i] - poly_A[i];
         let poly_B_bound_point = poly_B[len + i] + poly_B[len + i] - poly_B[i];
         let poly_C_bound_point = poly_C[len + i] + poly_C[len + i] - poly_C[i];
-        eval_point_2 = eval_point_2 + comb_func(
-          &poly_A_bound_point,
-          &poly_B_bound_point,
-          &poly_C_bound_point,
-        );
+        eval_point_2 = eval_point_2
+          + comb_func(
+            &poly_A_bound_point,
+            &poly_B_bound_point,
+            &poly_C_bound_point,
+          );
 
         // eval 3: bound_func is -2A(low) + 3A(high); computed incrementally with bound_func applied to eval(2)
         let poly_A_bound_point = poly_A_bound_point + poly_A[len + i] - poly_A[i];
         let poly_B_bound_point = poly_B_bound_point + poly_B[len + i] - poly_B[i];
         let poly_C_bound_point = poly_C_bound_point + poly_C[len + i] - poly_C[i];
 
-        eval_point_3 = eval_point_3 + comb_func(
-          &poly_A_bound_point,
-          &poly_B_bound_point,
-          &poly_C_bound_point,
-        );
+        eval_point_3 = eval_point_3
+          + comb_func(
+            &poly_A_bound_point,
+            &poly_B_bound_point,
+            &poly_C_bound_point,
+          );
       }
 
       let evals = vec![eval_point_0, e - eval_point_0, eval_point_2, eval_point_3];
@@ -188,12 +186,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     coeffs: &[S],
     comb_func: F,
     transcript: &mut Transcript,
-  ) -> (
-    Self,
-    Vec<S>,
-    (Vec<S>, Vec<S>, S),
-    (Vec<S>, Vec<S>, Vec<S>),
-  )
+  ) -> (Self, Vec<S>, (Vec<S>, Vec<S>, S), (Vec<S>, Vec<S>, Vec<S>))
   where
     F: Fn(&S, &S, &S) -> S,
   {
@@ -222,22 +215,24 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
           let poly_A_bound_point = poly_A[len + i] + poly_A[len + i] - poly_A[i];
           let poly_B_bound_point = poly_B[len + i] + poly_B[len + i] - poly_B[i];
           let poly_C_bound_point = poly_C_par[len + i] + poly_C_par[len + i] - poly_C_par[i];
-          eval_point_2 = eval_point_2 + comb_func(
-            &poly_A_bound_point,
-            &poly_B_bound_point,
-            &poly_C_bound_point,
-          );
+          eval_point_2 = eval_point_2
+            + comb_func(
+              &poly_A_bound_point,
+              &poly_B_bound_point,
+              &poly_C_bound_point,
+            );
 
           // eval 3: bound_func is -2A(low) + 3A(high); computed incrementally with bound_func applied to eval(2)
           let poly_A_bound_point = poly_A_bound_point + poly_A[len + i] - poly_A[i];
           let poly_B_bound_point = poly_B_bound_point + poly_B[len + i] - poly_B[i];
           let poly_C_bound_point = poly_C_bound_point + poly_C_par[len + i] - poly_C_par[i];
 
-          eval_point_3 = eval_point_3 + comb_func(
-            &poly_A_bound_point,
-            &poly_B_bound_point,
-            &poly_C_bound_point,
-          );
+          eval_point_3 = eval_point_3
+            + comb_func(
+              &poly_A_bound_point,
+              &poly_B_bound_point,
+              &poly_C_bound_point,
+            );
         }
 
         evals.push((eval_point_0, eval_point_2, eval_point_3));
@@ -259,20 +254,22 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
           let poly_A_bound_point = poly_A[len + i] + poly_A[len + i] - poly_A[i];
           let poly_B_bound_point = poly_B[len + i] + poly_B[len + i] - poly_B[i];
           let poly_C_bound_point = poly_C[len + i] + poly_C[len + i] - poly_C[i];
-          eval_point_2 = eval_point_2 + comb_func(
-            &poly_A_bound_point,
-            &poly_B_bound_point,
-            &poly_C_bound_point,
-          );
+          eval_point_2 = eval_point_2
+            + comb_func(
+              &poly_A_bound_point,
+              &poly_B_bound_point,
+              &poly_C_bound_point,
+            );
           // eval 3: bound_func is -2A(low) + 3A(high); computed incrementally with bound_func applied to eval(2)
           let poly_A_bound_point = poly_A_bound_point + poly_A[len + i] - poly_A[i];
           let poly_B_bound_point = poly_B_bound_point + poly_B[len + i] - poly_B[i];
           let poly_C_bound_point = poly_C_bound_point + poly_C[len + i] - poly_C[i];
-          eval_point_3 = eval_point_3 + comb_func(
-            &poly_A_bound_point,
-            &poly_B_bound_point,
-            &poly_C_bound_point,
-          );
+          eval_point_3 = eval_point_3
+            + comb_func(
+              &poly_A_bound_point,
+              &poly_B_bound_point,
+              &poly_C_bound_point,
+            );
         }
         evals.push((eval_point_0, eval_point_2, eval_point_3));
       }
@@ -411,11 +408,21 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
       // Mode = 1 ==> p
       // Mode = 3 ==> w
       // Mode = 4 ==> x (y)
-      let mode = if j < num_rounds_y_max { MODE_X } else if j < num_rounds_y_max + num_rounds_w { MODE_W } else { MODE_P };
+      let mode = if j < num_rounds_y_max {
+        MODE_X
+      } else if j < num_rounds_y_max + num_rounds_w {
+        MODE_W
+      } else {
+        MODE_P
+      };
 
-      if inputs_len > 1 { inputs_len /= 2 }
-      else if witness_secs_len > 1 { witness_secs_len /= 2 }
-      else { instance_len /= 2 };
+      if inputs_len > 1 {
+        inputs_len /= 2
+      } else if witness_secs_len > 1 {
+        witness_secs_len /= 2
+      } else {
+        instance_len /= 2
+      };
 
       let poly = {
         let mut eval_point_0 = S::field_zero();
@@ -426,7 +433,9 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
         // So min(instance_len, num_proofs.len()) suffices
         for p in 0..min(instance_len, num_inputs.len()) {
           let p_inst = if single_inst { 0 } else { p };
-          if mode == MODE_X && num_inputs[p] > 1 { num_inputs[p] /= 2; }
+          if mode == MODE_X && num_inputs[p] > 1 {
+            num_inputs[p] /= 2;
+          }
           for w in 0..min(witness_secs_len, num_witness_secs) {
             for y in 0..num_inputs[p] {
               // evaluate A on p, w, y
@@ -437,31 +446,52 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
                 MODE_P => poly_A[p + instance_len],
                 MODE_W => poly_A[p],
                 MODE_X => poly_A[p],
-                _ => { panic!("DensePolynomialPqx bound failed: unrecognized mode {}!", mode); }
+                _ => {
+                  panic!(
+                    "DensePolynomialPqx bound failed: unrecognized mode {}!",
+                    mode
+                  );
+                }
               };
 
               // eval 0: bound_func is A(low)
-              eval_point_0 = eval_point_0 + comb_func(&poly_A_index_p_w_y, &poly_B.index(p_inst, 0, w, y), &poly_C.index(p, 0, w, y)); // Az[0, x, x, x, ...]
+              eval_point_0 = eval_point_0
+                + comb_func(
+                  &poly_A_index_p_w_y,
+                  &poly_B.index(p_inst, 0, w, y),
+                  &poly_C.index(p, 0, w, y),
+                ); // Az[0, x, x, x, ...]
 
               // eval 2: bound_func is -A(low) + 2*A(high)
-              let poly_A_bound_point = poly_A_index_high_p_w_y + poly_A_index_high_p_w_y - poly_A_index_p_w_y;
-              let poly_B_bound_point = poly_B.index_high(p_inst, 0, w, y, mode) + poly_B.index_high(p_inst, 0, w, y, mode) - poly_B.index(p_inst, 0, w, y); // Az[2, x, x, ...]
-              let poly_C_bound_point = poly_C.index_high(p, 0, w, y, mode) + poly_C.index_high(p, 0, w, y, mode) - poly_C.index(p, 0, w, y);
-              eval_point_2 = eval_point_2 + comb_func(
-                &poly_A_bound_point,
-                &poly_B_bound_point,
-                &poly_C_bound_point,
-              );
+              let poly_A_bound_point =
+                poly_A_index_high_p_w_y + poly_A_index_high_p_w_y - poly_A_index_p_w_y;
+              let poly_B_bound_point = poly_B.index_high(p_inst, 0, w, y, mode)
+                + poly_B.index_high(p_inst, 0, w, y, mode)
+                - poly_B.index(p_inst, 0, w, y); // Az[2, x, x, ...]
+              let poly_C_bound_point = poly_C.index_high(p, 0, w, y, mode)
+                + poly_C.index_high(p, 0, w, y, mode)
+                - poly_C.index(p, 0, w, y);
+              eval_point_2 = eval_point_2
+                + comb_func(
+                  &poly_A_bound_point,
+                  &poly_B_bound_point,
+                  &poly_C_bound_point,
+                );
 
               // eval 3: bound_func is -2A(low) + 3A(high); computed incrementally with bound_func applied to eval(2)
-              let poly_A_bound_point = poly_A_bound_point + poly_A_index_high_p_w_y - poly_A_index_p_w_y;
-              let poly_B_bound_point = poly_B_bound_point + poly_B.index_high(p_inst, 0, w, y, mode) - poly_B.index(p_inst, 0, w, y); // Az[3, x, x, ...]
-              let poly_C_bound_point = poly_C_bound_point + poly_C.index_high(p, 0, w, y, mode) - poly_C.index(p, 0, w, y);
-              eval_point_3 = eval_point_3 + comb_func(
-                &poly_A_bound_point,
-                &poly_B_bound_point,
-                &poly_C_bound_point,
-              );
+              let poly_A_bound_point =
+                poly_A_bound_point + poly_A_index_high_p_w_y - poly_A_index_p_w_y;
+              let poly_B_bound_point = poly_B_bound_point
+                + poly_B.index_high(p_inst, 0, w, y, mode)
+                - poly_B.index(p_inst, 0, w, y); // Az[3, x, x, ...]
+              let poly_C_bound_point =
+                poly_C_bound_point + poly_C.index_high(p, 0, w, y, mode) - poly_C.index(p, 0, w, y);
+              eval_point_3 = eval_point_3
+                + comb_func(
+                  &poly_A_bound_point,
+                  &poly_B_bound_point,
+                  &poly_C_bound_point,
+                );
             }
           }
         }
@@ -565,7 +595,11 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
     (
       ZKSumcheckInstanceProof::new(proofs),
       r,
-      vec![poly_A[0], poly_B.index(0, 0, 0, 0), poly_C.index(0, 0, 0, 0)],
+      vec![
+        poly_A[0],
+        poly_B.index(0, 0, 0, 0),
+        poly_C.index(0, 0, 0, 0),
+      ],
       blinds_evals[num_rounds - 1],
     )
   }
@@ -597,7 +631,10 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
     // poly_A is the EQ polynomial of size P * Q_max * X
     // poly_BCD are the AzBzCz polynomials, with size Q_sum * X
     // Thus, we need to separate the rounds into rounds for X, Q_rev, and P
-    assert_eq!(num_rounds, num_rounds_x_max + num_rounds_q_max + num_rounds_p);
+    assert_eq!(
+      num_rounds,
+      num_rounds_x_max + num_rounds_q_max + num_rounds_p
+    );
     assert_eq!(poly_B.num_witness_secs, 1);
     assert_eq!(poly_C.num_witness_secs, 1);
     assert_eq!(poly_D.num_witness_secs, 1);
@@ -645,11 +682,21 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
       // Mode = 1 ==> p
       // Mode = 2 ==> q
       // Mode = 4 ==> x
-      let mode = if j < num_rounds_x_max { MODE_X } else if j < num_rounds_x_max + num_rounds_q_max { MODE_Q } else { MODE_P };
+      let mode = if j < num_rounds_x_max {
+        MODE_X
+      } else if j < num_rounds_x_max + num_rounds_q_max {
+        MODE_Q
+      } else {
+        MODE_P
+      };
 
-      if cons_len > 1 { cons_len /= 2 }
-      else if proof_len > 1 { proof_len /= 2 }
-      else { instance_len /= 2 };
+      if cons_len > 1 {
+        cons_len /= 2
+      } else if proof_len > 1 {
+        proof_len /= 2
+      } else {
+        instance_len /= 2
+      };
 
       let poly = {
         let mut eval_point_0 = S::field_zero();
@@ -659,9 +706,13 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
         // We are guaranteed initially instance_len < num_proofs.len() < instance_len x 2
         // So min(instance_len, num_proofs.len()) suffices
         for p in 0..min(instance_len, num_proofs.len()) {
-          if mode == MODE_X && num_cons[p] > 1 { num_cons[p] /= 2; }
+          if mode == MODE_X && num_cons[p] > 1 {
+            num_cons[p] /= 2;
+          }
           // If q > num_proofs[p], the polynomials always evaluate to 0
-          if mode == MODE_Q && num_proofs[p] > 1 { num_proofs[p] /= 2; }
+          if mode == MODE_Q && num_proofs[p] > 1 {
+            num_proofs[p] /= 2;
+          }
           for q in 0..num_proofs[p] {
             let step_q = proof_len / num_proofs[p];
             let step_x = cons_len / num_cons[p];
@@ -674,35 +725,59 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
                 MODE_P => poly_Ap[p + instance_len] * poly_Aq[q * step_q] * poly_Ax[x * step_x],
                 MODE_Q => poly_Ap[p] * poly_Aq[q * step_q + proof_len] * poly_Ax[x * step_x],
                 MODE_X => poly_Ap[p] * poly_Aq[q * step_q] * poly_Ax[x * step_x + cons_len],
-                _ => { panic!("DensePolynomialPqx bound failed: unrecognized mode {}!", mode); }
+                _ => {
+                  panic!(
+                    "DensePolynomialPqx bound failed: unrecognized mode {}!",
+                    mode
+                  );
+                }
               };
 
               // eval 0: bound_func is A(low)
-              eval_point_0 = eval_point_0 + comb_func(&poly_A_index_p_q_x, &poly_B.index(p, q, 0, x), &poly_C.index(p, q, 0, x), &poly_D.index(p, q, 0, x)); // Az[0, x, x, x, ...]
+              eval_point_0 = eval_point_0
+                + comb_func(
+                  &poly_A_index_p_q_x,
+                  &poly_B.index(p, q, 0, x),
+                  &poly_C.index(p, q, 0, x),
+                  &poly_D.index(p, q, 0, x),
+                ); // Az[0, x, x, x, ...]
 
               // eval 2: bound_func is -A(low) + 2*A(high)
-              let poly_A_bound_point = poly_A_index_high_p_q_x + poly_A_index_high_p_q_x - poly_A_index_p_q_x;
-              let poly_B_bound_point = poly_B.index_high(p, q, 0, x, mode) + poly_B.index_high(p, q, 0, x, mode) - poly_B.index(p, q, 0, x); // Az[2, x, x, ...]
-              let poly_C_bound_point = poly_C.index_high(p, q, 0, x, mode) + poly_C.index_high(p, q, 0, x, mode) - poly_C.index(p, q, 0, x);
-              let poly_D_bound_point = poly_D.index_high(p, q, 0, x, mode) + poly_D.index_high(p, q, 0, x, mode) - poly_D.index(p, q, 0, x);
-              eval_point_2 = eval_point_2 + comb_func(
-                &poly_A_bound_point,
-                &poly_B_bound_point,
-                &poly_C_bound_point,
-                &poly_D_bound_point,
-              );
+              let poly_A_bound_point =
+                poly_A_index_high_p_q_x + poly_A_index_high_p_q_x - poly_A_index_p_q_x;
+              let poly_B_bound_point = poly_B.index_high(p, q, 0, x, mode)
+                + poly_B.index_high(p, q, 0, x, mode)
+                - poly_B.index(p, q, 0, x); // Az[2, x, x, ...]
+              let poly_C_bound_point = poly_C.index_high(p, q, 0, x, mode)
+                + poly_C.index_high(p, q, 0, x, mode)
+                - poly_C.index(p, q, 0, x);
+              let poly_D_bound_point = poly_D.index_high(p, q, 0, x, mode)
+                + poly_D.index_high(p, q, 0, x, mode)
+                - poly_D.index(p, q, 0, x);
+              eval_point_2 = eval_point_2
+                + comb_func(
+                  &poly_A_bound_point,
+                  &poly_B_bound_point,
+                  &poly_C_bound_point,
+                  &poly_D_bound_point,
+                );
 
               // eval 3: bound_func is -2A(low) + 3A(high); computed incrementally with bound_func applied to eval(2)
-              let poly_A_bound_point = poly_A_bound_point + poly_A_index_high_p_q_x - poly_A_index_p_q_x;
-              let poly_B_bound_point = poly_B_bound_point + poly_B.index_high(p, q, 0, x, mode) - poly_B.index(p, q, 0, x); // Az[3, x, x, ...]
-              let poly_C_bound_point = poly_C_bound_point + poly_C.index_high(p, q, 0, x, mode) - poly_C.index(p, q, 0, x);
-              let poly_D_bound_point = poly_D_bound_point + poly_D.index_high(p, q, 0, x, mode) - poly_D.index(p, q, 0, x);
-              eval_point_3 = eval_point_3 + comb_func(
-                &poly_A_bound_point,
-                &poly_B_bound_point,
-                &poly_C_bound_point,
-                &poly_D_bound_point,
-              );
+              let poly_A_bound_point =
+                poly_A_bound_point + poly_A_index_high_p_q_x - poly_A_index_p_q_x;
+              let poly_B_bound_point =
+                poly_B_bound_point + poly_B.index_high(p, q, 0, x, mode) - poly_B.index(p, q, 0, x); // Az[3, x, x, ...]
+              let poly_C_bound_point =
+                poly_C_bound_point + poly_C.index_high(p, q, 0, x, mode) - poly_C.index(p, q, 0, x);
+              let poly_D_bound_point =
+                poly_D_bound_point + poly_D.index_high(p, q, 0, x, mode) - poly_D.index(p, q, 0, x);
+              eval_point_3 = eval_point_3
+                + comb_func(
+                  &poly_A_bound_point,
+                  &poly_B_bound_point,
+                  &poly_C_bound_point,
+                  &poly_D_bound_point,
+                );
             }
           }
         }
@@ -721,9 +796,13 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
       let r_j = transcript.challenge_scalar(b"challenge_nextround");
 
       // bound all tables to the verifier's challenege
-      if mode == 1 { poly_Ap.bound_poly_var_top(&r_j); }
-      else if mode == 2 { poly_Aq.bound_poly_var_top(&r_j); }
-      else { poly_Ax.bound_poly_var_top(&r_j); }
+      if mode == 1 {
+        poly_Ap.bound_poly_var_top(&r_j);
+      } else if mode == 2 {
+        poly_Aq.bound_poly_var_top(&r_j);
+      } else {
+        poly_Ax.bound_poly_var_top(&r_j);
+      }
       poly_B.bound_poly(&r_j, mode);
       poly_C.bound_poly(&r_j, mode);
       poly_D.bound_poly(&r_j, mode);
@@ -803,7 +882,12 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
     (
       ZKSumcheckInstanceProof::new(proofs),
       r,
-      vec![poly_Ap[0] * poly_Aq[0] * poly_Ax[0], poly_B.index(0, 0, 0, 0), poly_C.index(0, 0, 0, 0), poly_D.index(0, 0, 0, 0)],
+      vec![
+        poly_Ap[0] * poly_Aq[0] * poly_Ax[0],
+        poly_B.index(0, 0, 0, 0),
+        poly_C.index(0, 0, 0, 0),
+        poly_D.index(0, 0, 0, 0),
+      ],
       blinds_evals[num_rounds - 1],
     )
   }

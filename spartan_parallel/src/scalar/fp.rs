@@ -1,15 +1,15 @@
+use super::SpartanExtensionField;
+use crate::{AppendToTranscript, ProofTranscript, Transcript};
 use ceno_goldilocks::Goldilocks;
 use core::borrow::Borrow;
 use core::iter::{Product, Sum};
-use ff::{Field, FromUniformBytes};
 use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
-use std::ops::Neg;
+use ff::{Field, FromUniformBytes};
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
+use std::ops::Neg;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;
-use crate::{AppendToTranscript, Transcript, ProofTranscript};
-use super::SpartanExtensionField;
 
 /// Constant representing the modulus
 /// q = 2^64 - 2^32 + 1
@@ -38,7 +38,7 @@ impl SpartanExtensionField for Scalar {
   fn random<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> Self {
     let mut res = rng.next_u64();
     while res >= P {
-        res = rng.next_u64();
+      res = rng.next_u64();
     }
     Goldilocks(res).into()
   }
@@ -46,14 +46,17 @@ impl SpartanExtensionField for Scalar {
   /// Attempts to convert a little-endian byte representation of
   /// a scalar into a `Scalar`, failing if the input is not canonical.
   fn from_bytes(bytes: &[u8; 32]) -> CtOption<Scalar> {
-    CtOption::new(Goldilocks::from_uniform_bytes(bytes).into(), Choice::from(1u8))
+    CtOption::new(
+      Goldilocks::from_uniform_bytes(bytes).into(),
+      Choice::from(1u8),
+    )
   }
 
   /// Converts an element of `Scalar` into a byte representation in
   /// little-endian byte order.
   fn to_bytes(&self) -> [u8; 32] {
     let mut res = [0; 32];
-    res[..8].copy_from_slice(&self.0.0.to_le_bytes());
+    res[..8].copy_from_slice(&self.0 .0.to_le_bytes());
     res
   }
 
@@ -65,16 +68,20 @@ impl SpartanExtensionField for Scalar {
 
   /// Append Goldilocks scalar to transcript
   fn append_field_to_transcript(label: &'static [u8], transcript: &mut Transcript, input: Self) {
-      transcript.append_scalar(label, &input);
+    transcript.append_scalar(label, &input);
   }
 
   /// Append a vector Goldilocks scalars to transcript
-  fn append_field_vector_to_transcript(label: &'static [u8], transcript: &mut Transcript, input: &[Self]) {
-      transcript.append_message(label, b"begin_append_vector");
-      for item in input {
-        transcript.append_scalar(label, item);
-      }
-      transcript.append_message(label, b"end_append_vector");
+  fn append_field_vector_to_transcript(
+    label: &'static [u8],
+    transcript: &mut Transcript,
+    input: &[Self],
+  ) {
+    transcript.append_message(label, b"begin_append_vector");
+    for item in input {
+      transcript.append_scalar(label, item);
+    }
+    transcript.append_message(label, b"end_append_vector");
   }
 }
 
@@ -100,7 +107,9 @@ impl From<usize> for Scalar {
 }
 impl ConditionallySelectable for Scalar {
   fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
-      Self(Goldilocks(u64::conditional_select(&a.0.0, &b.0.0, choice)))
+    Self(Goldilocks(u64::conditional_select(
+      &a.0 .0, &b.0 .0, choice,
+    )))
   }
 }
 impl Zeroize for Scalar {
@@ -113,7 +122,7 @@ impl Neg for Scalar {
 
   #[inline]
   fn neg(self) -> Scalar {
-      self.0.neg().into()
+    self.0.neg().into()
   }
 }
 impl Default for Scalar {
@@ -124,7 +133,7 @@ impl Default for Scalar {
 }
 impl From<Goldilocks> for Scalar {
   fn from(g: Goldilocks) -> Self {
-      Self(g)
+    Self(g)
   }
 }
 impl Scalar {
@@ -193,4 +202,3 @@ where
 
 crate::impl_binops_additive!(Scalar, Scalar);
 crate::impl_binops_multiplicative!(Scalar, Scalar);
-

@@ -2082,11 +2082,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
     let proof_size = bincode::serialize(&self).unwrap().len();
     let commit_size = 
       bincode::serialize(&block_comm_list).unwrap().len() + 
-      // bincode::serialize(&block_gens).unwrap().len() + 
       bincode::serialize(&pairwise_check_comm).unwrap().len() + 
-      // bincode::serialize(&pairwise_check_gens).unwrap().len() + 
       bincode::serialize(&perm_root_comm).unwrap().len();
-      // bincode::serialize(&perm_root_gens).unwrap().len();
     let meta_size = 
       // usize
       19 * std::mem::size_of::<usize>() +

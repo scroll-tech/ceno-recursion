@@ -1,16 +1,13 @@
 //! Reads in constraints and inputs from zok_tests/constraints and zok_tests/inputs
 //! Used as a temporary interface to / from CirC
 #![allow(clippy::assertions_on_result_states)]
-use std::io::{BufRead, Read};
-use std::{default, env};
-use std::{fs::File, io::BufReader};
+use std::fs::File;
+use std::io::Read;
 
 use libspartan::{instance::Instance, InputsAssignment, MemsAssignment, VarsAssignment, SNARK};
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::time::*;
-
-const TOTAL_NUM_VARS_BOUND: usize = 10000000;
 
 // Everything provided by the frontend
 #[derive(Serialize, Deserialize)]
@@ -459,45 +456,39 @@ fn interface() {
   println!("Generating Circuits...");
   // --
   // BLOCK INSTANCES
-  let (block_num_vars, block_num_cons, block_num_non_zero_entries, mut block_inst) =
-    Instance::gen_block_inst::<true>(
-      block_num_instances_bound,
-      num_vars,
-      &ctk.args,
-      num_inputs_unpadded,
-      &block_num_phy_ops,
-      &block_num_vir_ops,
-      &ctk.num_vars_per_block,
-      &rtk.block_num_proofs,
-    );
+  let (_, block_num_cons, _, mut block_inst) = Instance::gen_block_inst::<true>(
+    block_num_instances_bound,
+    num_vars,
+    &ctk.args,
+    num_inputs_unpadded,
+    &block_num_phy_ops,
+    &block_num_vir_ops,
+    &ctk.num_vars_per_block,
+    &rtk.block_num_proofs,
+  );
   println!("Finished Block");
 
   // Pairwise INSTANCES
   // CONSIS_CHECK & PHY_MEM_COHERE
-  let (
-    pairwise_check_num_vars,
-    pairwise_check_num_cons,
-    pairwise_check_num_non_zero_entries,
-    mut pairwise_check_inst,
-  ) = Instance::gen_pairwise_check_inst::<true>(
-    ctk.max_ts_width,
-    mem_addr_ts_bits_size,
-    rtk.consis_num_proofs,
-    rtk.total_num_phy_mem_accesses,
-    rtk.total_num_vir_mem_accesses,
-  );
-  println!("Finished Pairwise");
-
-  // PERM INSTANCES
-  // PERM_ROOT
-  let (perm_root_num_cons, perm_root_num_non_zero_entries, perm_root_inst) =
-    Instance::gen_perm_root_inst::<true>(
-      num_inputs_unpadded,
-      num_ios,
+  let (_, pairwise_check_num_cons, _, mut pairwise_check_inst) =
+    Instance::gen_pairwise_check_inst::<true>(
+      ctk.max_ts_width,
+      mem_addr_ts_bits_size,
       rtk.consis_num_proofs,
       rtk.total_num_phy_mem_accesses,
       rtk.total_num_vir_mem_accesses,
     );
+  println!("Finished Pairwise");
+
+  // PERM INSTANCES
+  // PERM_ROOT
+  let (perm_root_num_cons, _, perm_root_inst) = Instance::gen_perm_root_inst::<true>(
+    num_inputs_unpadded,
+    num_ios,
+    rtk.consis_num_proofs,
+    rtk.total_num_phy_mem_accesses,
+    rtk.total_num_vir_mem_accesses,
+  );
   println!("Finished Perm");
 
   // --

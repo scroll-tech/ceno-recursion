@@ -1,14 +1,5 @@
 // TODO: Might want to simplify Liveness Analysis & PMR now that scope changes are handled in optimization
 
-/*
-use bellman::gadgets::test::TestConstraintSystem;
-use bellman::groth16::{
-    create_random_proof, generate_parameters, generate_random_parameters, prepare_verifying_key,
-    verify_proof, Parameters, Proof, VerifyingKey,
-};
-use bellman::Circuit;
-use bls12_381::{Bls12, Scalar};
-*/
 const PRINT_PROOF: bool = false;
 const INLINE_SPARTAN_PROOF: bool = false;
 const TOTAL_NUM_VARS_BOUND: usize = 100000000;
@@ -19,24 +10,21 @@ use rug::Integer;
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
 use circ::ir::opt::{opt, Opt};
-/*
-use circ::target::r1cs::bellman::parse_instance;
-*/
-use circ::target::r1cs::{R1cs, VarType, Lc};
-use circ::target::r1cs::opt::reduce_linearities;
 use circ::target::r1cs::trans::to_r1cs;
 use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
 use circ::target::r1cs::ProverData;
+use circ::target::r1cs::{Lc, VarType};
+use core::cmp::min;
+use rug::Integer;
 
-use std::fs::File;
-use std::io::{BufReader, BufRead, Write};
+use std::fs::{create_dir_all, File};
+use std::io::{BufRead, BufReader, Write};
 
 use circ::cfg::{
     cfg,
     clap::{self, Parser, ValueEnum},
     CircOpt,
 };
-use std::path::PathBuf;
 use core::cmp::Ordering;
 
 use std::time::*;
@@ -45,6 +33,8 @@ use libspartan::{
     instance::Instance, 
     Assignment, VarsAssignment, SNARK, InputsAssignment, MemsAssignment};
 use merlin::Transcript;
+use serde::{Deserialize, Serialize};
+use std::time::*;
 
 // How many reserved variables (EXCLUDING V) are in front of the actual input / output?
 // %BN, %RET, %TS, %AS, %SP, %BP
@@ -64,19 +54,6 @@ struct Options {
     #[arg(name = "PATH")]
     path: PathBuf,
 
-    /*
-    #[arg(long, default_value = "P", parse(from_os_str))]
-    prover_key: PathBuf,
-
-    #[arg(long, default_value = "V", parse(from_os_str))]
-    verifier_key: PathBuf,
-
-    #[arg(long, default_value = "pi", parse(from_os_str))]
-    proof: PathBuf,
-
-    #[arg(long, default_value = "x", parse(from_os_str))]
-    instance: PathBuf,
-    */
     #[arg(short = 'L')]
     /// skip linearity reduction entirely
     skip_linred: bool,
@@ -114,12 +91,12 @@ enum ProofOption {
 struct SparseMatEntry {
     args_a: Vec<(usize, [u8; 32])>,
     args_b: Vec<(usize, [u8; 32])>,
-    args_c: Vec<(usize, [u8; 32])>
+    args_c: Vec<(usize, [u8; 32])>,
 }
 
 // When adding the validity check, what does the sparse format look like?
 fn get_sparse_cons_with_v_check(
-    c: &(Lc, Lc, Lc), 
+    c: &(Lc, Lc, Lc),
     v_cnst: usize,
     io_relabel: impl FnOnce(usize) -> Option<usize> + std::marker::Copy,
     witness_relabel: impl FnOnce(usize) -> usize + std::marker::Copy,
@@ -136,7 +113,7 @@ fn get_sparse_cons_with_v_check(
             match var.ty() {
                 VarType::Inst => args_a.push((io_relabel(var.number())?, coeff.i())),
                 VarType::FinalWit => args_a.push((witness_relabel(var.number()), coeff.i())),
-                _ => panic!("Unsupported variable type!")
+                _ => panic!("Unsupported variable type!"),
             }
         }
         if !c.1.constant_is_zero() {
@@ -146,7 +123,7 @@ fn get_sparse_cons_with_v_check(
             match var.ty() {
                 VarType::Inst => args_b.push((io_relabel(var.number())?, coeff.i())),
                 VarType::FinalWit => args_b.push((witness_relabel(var.number()), coeff.i())),
-                _ => panic!("Unsupported variable type!")
+                _ => panic!("Unsupported variable type!"),
             }
         }
         if !c.2.constant_is_zero() {
@@ -154,26 +131,41 @@ fn get_sparse_cons_with_v_check(
         }
         for (var, coeff) in c.2.monomials.iter() {
             match var.ty() {
-                VarType::Inst => {
-                    args_c.push((io_relabel(var.number())?, coeff.i()))
-                },
+                VarType::Inst => args_c.push((io_relabel(var.number())?, coeff.i())),
                 VarType::FinalWit => args_c.push((witness_relabel(var.number()), coeff.i())),
-                _ => panic!("Unsupported variable type!")
+                _ => panic!("Unsupported variable type!"),
             }
         }
         (args_a, args_b, args_c)
     };
-    let args_a = args_a.into_iter().map(|(x, y)| (x, integer_to_bytes(y))).collect();
-    let args_b = args_b.into_iter().map(|(x, y)| (x, integer_to_bytes(y))).collect();
-    let args_c = args_c.into_iter().map(|(x, y)| (x, integer_to_bytes(y))).collect();
-    return Some(SparseMatEntry { args_a, args_b, args_c });
+    let args_a = args_a
+        .into_iter()
+        .map(|(x, y)| (x, integer_to_bytes(y)))
+        .collect();
+    let args_b = args_b
+        .into_iter()
+        .map(|(x, y)| (x, integer_to_bytes(y)))
+        .collect();
+    let args_c = args_c
+        .into_iter()
+        .map(|(x, y)| (x, integer_to_bytes(y)))
+        .collect();
+    Some(SparseMatEntry {
+        args_a,
+        args_b,
+        args_c,
+    })
 }
 
 // Convert an integer into a little-endian byte array
 fn integer_to_bytes(mut raw: Integer) -> [u8; 32] {
     let mut res = [0; 32];
     let width = Integer::from(256);
-    let field = Integer::from_str_radix("7237005577332262213973186563042994240857116359379907606001950938285454250989", 10).unwrap();
+    let field = Integer::from_str_radix(
+        "7237005577332262213973186563042994240857116359379907606001950938285454250989",
+        10,
+    )
+    .unwrap();
     // Cast negative number to the other side of the field
     if raw < 0 {
         raw += field;
@@ -181,7 +173,10 @@ fn integer_to_bytes(mut raw: Integer) -> [u8; 32] {
     let mut i = 0;
     while raw != 0 {
         if i >= 32 {
-            panic!("Failed to convert integer to byte array: integer is too large! Remainder is: {:?}", raw)
+            panic!(
+                "Failed to convert integer to byte array: integer is too large! Remainder is: {:?}",
+                raw
+            )
         }
         res[i] = (raw.clone() % width.clone()).to_u8().unwrap();
         raw /= width.clone();
@@ -210,7 +205,7 @@ fn write_bytes(mut f: &File, bytes: &[u8; 32]) -> std::io::Result<()> {
     for i in 0..size {
         write!(&mut f, "{} ", bytes[i])?;
     }
-    writeln!(&mut f, "")?;
+    writeln!(&mut f)?;
 
     Ok(())
 }
@@ -227,20 +222,27 @@ struct CompileTimeKnowledge {
     block_num_phy_ops: Vec<usize>,
     block_num_vir_ops: Vec<usize>,
     max_ts_width: usize,
-  
-    args: Vec<Vec<(Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>)>>,
-  
+
+    args: Vec<
+        Vec<(
+            Vec<(usize, [u8; 32])>,
+            Vec<(usize, [u8; 32])>,
+            Vec<(usize, [u8; 32])>,
+        )>,
+    >,
+
     input_liveness: Vec<bool>,
     func_input_width: usize,
     input_offset: usize,
     input_block_num: usize,
     output_offset: usize,
-    output_block_num: usize
+    output_block_num: usize,
 }
 
 impl CompileTimeKnowledge {
     fn serialize_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
-        let file_name = format!("../zok_tests/constraints/{}_bin.ctk", benchmark_name);
+        let file_name = format!("../zok_tests/constraints/{benchmark_name}_bin.ctk");
+        create_dir_all(Path::new(&file_name).parent().unwrap())?;
         let mut f = File::create(file_name)?;
         let content = bincode::serialize(&self).unwrap();
         f.write(&content)?;
@@ -248,7 +250,8 @@ impl CompileTimeKnowledge {
     }
 
     fn write_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
-        let file_name = format!("../zok_tests/constraints/{}.ctk", benchmark_name);
+        let file_name = format!("../zok_tests/constraints/{benchmark_name}.ctk");
+        create_dir_all(Path::new(&file_name).parent().unwrap())?;
         let mut f = File::create(file_name)?;
         writeln!(&mut f, "Num Blocks: {}", self.block_num_instances)?;
         writeln!(&mut f, "Max Num Vars: {}", self.num_vars)?;
@@ -257,28 +260,34 @@ impl CompileTimeKnowledge {
         for i in 0..self.block_num_instances {
             write!(&mut f, "{:>6}", i)?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         write!(&mut f, "{:>11}: ", "Num Vars")?;
         for i in &self.num_vars_per_block {
             write!(&mut f, "{:>6}", i)?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         write!(&mut f, "{:>11}: ", "Num Phy Ops")?;
         for i in &self.block_num_phy_ops {
             write!(&mut f, "{:>6}", i)?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         write!(&mut f, "{:>11}: ", "Num Vir Ops")?;
         for i in &self.block_num_vir_ops {
             write!(&mut f, "{:>6}", i)?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         writeln!(&mut f, "Max TS Width: {}", self.max_ts_width)?;
 
         // Instances
         let mut counter = 0;
         for inst in &self.args {
-            writeln!(&mut f, "--\nINST {}, {} x {}", counter, inst.len(), self.num_vars_per_block[counter])?;
+            writeln!(
+                &mut f,
+                "--\nINST {}, {} x {}",
+                counter,
+                inst.len(),
+                self.num_vars_per_block[counter]
+            )?;
             for cons in inst {
                 write!(&mut f, "  A ")?;
                 let mut pad = false;
@@ -288,10 +297,12 @@ impl CompileTimeKnowledge {
                     } else {
                         write!(&mut f, "    {} ", var)?;
                     }
-                    writeln!(&mut f, "{}", bytes_to_integer(&val))?;
+                    writeln!(&mut f, "{}", bytes_to_integer(val))?;
                     pad = true;
                 }
-                if !pad { writeln!(&mut f, "")?; }
+                if !pad {
+                    writeln!(&mut f)?;
+                }
                 write!(&mut f, "  B ")?;
                 let mut pad = false;
                 for (var, val) in &cons.1 {
@@ -300,10 +311,12 @@ impl CompileTimeKnowledge {
                     } else {
                         write!(&mut f, "    {} ", var)?;
                     }
-                    writeln!(&mut f, "{}", bytes_to_integer(&val))?;
+                    writeln!(&mut f, "{}", bytes_to_integer(val))?;
                     pad = true;
                 }
-                if !pad { writeln!(&mut f, "")?; }
+                if !pad {
+                    writeln!(&mut f)?;
+                }
                 write!(&mut f, "  C ")?;
                 let mut pad = false;
                 for (var, val) in &cons.2 {
@@ -312,22 +325,24 @@ impl CompileTimeKnowledge {
                     } else {
                         write!(&mut f, "    {} ", var)?;
                     }
-                    writeln!(&mut f, "{}", bytes_to_integer(&val))?;
+                    writeln!(&mut f, "{}", bytes_to_integer(val))?;
                     pad = true;
                 }
-                if !pad { writeln!(&mut f, "")?; }
-                writeln!(&mut f, "")?;
+                if !pad {
+                    writeln!(&mut f)?;
+                }
+                writeln!(&mut f)?;
             }
             counter += 1;
         }
         writeln!(&mut f, "INST_END")?;
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
 
         write!(&mut f, "Input Liveness: ")?;
         for b in &self.input_liveness {
             write!(&mut f, "{} ", if *b { 1 } else { 0 })?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         writeln!(&mut f, "Prog Input Width: {}", self.func_input_width)?;
         writeln!(&mut f, "Input Offset: {}", self.input_offset)?;
         writeln!(&mut f, "Input Block Num: {}", self.input_block_num)?;
@@ -360,12 +375,13 @@ struct RunTimeKnowledge<S: SpartanExtensionField> {
     input_stack: Vec<[u8; 32]>,
     input_mem: Vec<[u8; 32]>,
     output: [u8; 32],
-    output_exec_num: usize
+    output_exec_num: usize,
 }
 
 impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
     fn serialize_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
-        let file_name = format!("../zok_tests/inputs/{}_bin.rtk", benchmark_name);
+        let file_name = format!("../zok_tests/inputs/{benchmark_name}_bin.rtk");
+        create_dir_all(Path::new(&file_name).parent().unwrap())?;
         let mut f = File::create(file_name)?;
         let content = bincode::serialize(&self).unwrap();
         f.write(&content)?;
@@ -373,24 +389,46 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
     }
 
     fn write_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
-        let file_name = format!("../zok_tests/inputs/{}.rtk", benchmark_name);
+        let dir = "../zok_tests/inputs";
+        create_dir_all(dir)?;
+        let file_name = format!("{dir}/{benchmark_name}.rtk");
         let mut f = File::create(file_name)?;
-        writeln!(&mut f, "Block Max Num Proofs: {}", self.block_max_num_proofs)?;
+        writeln!(
+            &mut f,
+            "Block Max Num Proofs: {}",
+            self.block_max_num_proofs
+        )?;
         write!(&mut f, "{:>11}: ", "Block")?;
         for i in 0..self.block_num_proofs.len() {
             write!(&mut f, "{:>6}", i)?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         writeln!(&mut f, "{:>11}: ", "Num Proofs")?;
         for i in &self.block_num_proofs {
             write!(&mut f, "{:>6}", i)?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         writeln!(&mut f, "Total Num Proofs: {}", self.consis_num_proofs)?;
-        writeln!(&mut f, "Total Num Init Phy Mem Acc: {}", self.total_num_init_phy_mem_accesses)?;
-        writeln!(&mut f, "Total Num Init Vir Mem Acc: {}", self.total_num_init_vir_mem_accesses)?;
-        writeln!(&mut f, "Total Num Phy Mem Acc: {}", self.total_num_phy_mem_accesses)?;
-        writeln!(&mut f, "Total Num Vir Mem Acc: {}", self.total_num_vir_mem_accesses)?;
+        writeln!(
+            &mut f,
+            "Total Num Init Phy Mem Acc: {}",
+            self.total_num_init_phy_mem_accesses
+        )?;
+        writeln!(
+            &mut f,
+            "Total Num Init Vir Mem Acc: {}",
+            self.total_num_init_vir_mem_accesses
+        )?;
+        writeln!(
+            &mut f,
+            "Total Num Phy Mem Acc: {}",
+            self.total_num_phy_mem_accesses
+        )?;
+        writeln!(
+            &mut f,
+            "Total Num Vir Mem Acc: {}",
+            self.total_num_vir_mem_accesses
+        )?;
 
         writeln!(&mut f, "BLOCK_VARS")?;
         let mut block_counter = 0;
@@ -402,7 +440,7 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
                 for assg in &exec.assignment {
                     write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
                 }
-                writeln!(&mut f, "")?;
+                writeln!(&mut f)?;
                 exec_counter += 1;
             }
             block_counter += 1;
@@ -414,7 +452,7 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
             for assg in &exec.assignment {
                 write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
             }
-            writeln!(&mut f, "")?;
+            writeln!(&mut f)?;
             exec_counter += 1;
         }
         writeln!(&mut f, "INIT_PHY_MEMS")?;
@@ -424,7 +462,7 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
             for assg in &addr.assignment {
                 write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
             }
-            writeln!(&mut f, "")?;
+            writeln!(&mut f)?;
             addr_counter += 1;
         }
         writeln!(&mut f, "INIT_VIR_MEMS")?;
@@ -434,7 +472,7 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
             for assg in &addr.assignment {
                 write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
             }
-            writeln!(&mut f, "")?;
+            writeln!(&mut f)?;
             addr_counter += 1;
         }
         writeln!(&mut f, "ADDR_PHY_MEMS")?;
@@ -444,7 +482,7 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
             for assg in &addr.assignment {
                 write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
             }
-            writeln!(&mut f, "")?;
+            writeln!(&mut f)?;
             addr_counter += 1;
         }
         writeln!(&mut f, "ADDR_VIR_MEMS")?;
@@ -454,7 +492,7 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
             for assg in &addr.assignment {
                 write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
             }
-            writeln!(&mut f, "")?;
+            writeln!(&mut f)?;
             addr_counter += 1;
         }
         writeln!(&mut f, "ADDR_VM_BITS")?;
@@ -464,24 +502,25 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
             for assg in &addr.assignment {
                 write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
             }
-            writeln!(&mut f, "")?;
+            writeln!(&mut f)?;
             addr_counter += 1;
         }
         write!(&mut f, "Inputs: ")?;
         for assg in &self.input {
-            write!(&mut f, "{} ", bytes_to_integer(&assg))?;
+            write!(&mut f, "{} ", bytes_to_integer(assg))?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         write!(&mut f, "Input Mems: ")?;
         for assg in &self.input_mem {
-            write!(&mut f, "{} ", bytes_to_integer(&assg))?;
+            write!(&mut f, "{} ", bytes_to_integer(assg))?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         write!(&mut f, "Outputs: ")?;
-        for assg in &[self.output] {
-            write!(&mut f, "{} ", bytes_to_integer(&assg))?;
+        {
+            let assg = &self.output;
+            write!(&mut f, "{} ", bytes_to_integer(assg))?;
         }
-        writeln!(&mut f, "")?;
+        writeln!(&mut f)?;
         writeln!(&mut f, "Output Exec Num: {}", self.output_exec_num)?;
         Ok(())
     }
@@ -491,13 +530,10 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
 struct InstanceSortHelper {
     num_exec: usize,
     index: usize,
-  }
+}
 impl InstanceSortHelper {
-fn new(num_exec: usize, index: usize) -> InstanceSortHelper {
-        InstanceSortHelper {
-            num_exec,
-            index
-        }
+    fn new(num_exec: usize, index: usize) -> InstanceSortHelper {
+        InstanceSortHelper { num_exec, index }
     }
 }
 // Ordering of InstanceSortHelper solely by num_exec
@@ -505,19 +541,18 @@ impl Ord for InstanceSortHelper {
     fn cmp(&self, other: &Self) -> Ordering {
         self.num_exec.cmp(&other.num_exec)
     }
-  }
-  impl PartialOrd for InstanceSortHelper {
+}
+impl PartialOrd for InstanceSortHelper {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
-  }
-  impl PartialEq for InstanceSortHelper {
+}
+impl PartialEq for InstanceSortHelper {
     fn eq(&self, other: &Self) -> bool {
         self.num_exec == other.num_exec
     }
-  }
-  impl Eq for InstanceSortHelper {}
-  
+}
+impl Eq for InstanceSortHelper {}
 
 // --
 // Generate constraints and others
@@ -525,22 +560,27 @@ impl Ord for InstanceSortHelper {
 fn get_compile_time_knowledge<const VERBOSE: bool>(
     path: PathBuf,
     options: &Options,
-) -> (CompileTimeKnowledge, Vec<usize>, Vec<usize>, Vec<ProverData>) {
+) -> (
+    CompileTimeKnowledge,
+    Vec<usize>,
+    Vec<usize>,
+    Vec<ProverData>,
+) {
     println!("Generating Compiler Time Data...");
 
     let (
-        cs, 
-        func_input_width, 
-        num_inputs_unpadded, 
-        live_io_list, 
-        block_num_mem_accesses, 
+        cs,
+        func_input_width,
+        num_inputs_unpadded,
+        live_io_list,
+        block_num_mem_accesses,
         live_vm_list,
         input_liveness,
     ) = {
         let inputs = zsharp::Inputs {
             file: path.clone(),
             mode: Mode::Proof,
-            no_opt: options.no_opt
+            no_opt: options.no_opt,
         };
         ZSharpFE::gen(inputs)
     };
@@ -567,7 +607,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
             Opt::Flatten,
             Opt::ConstantFold(Box::new([])),
             Opt::Inline,
-            Opt::SkolemizeChallenges
+            Opt::SkolemizeChallenges,
         ],
     );
     println!("done.");
@@ -578,8 +618,20 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
             println!("VariableMetadata:");
             for v in &c.metadata.ordered_input_names() {
                 let m = &c.metadata.lookup(v);
-                println!("{}: vis: {}, round: {}, random: {}, committed: {}", 
-                    v, if m.vis == None {"PUBLIC"} else {if m.vis == Some(0) {"PROVER"} else {"VERIFIER"}}, m.round.to_string(), m.random.to_string(), m.committed.to_string());
+                println!(
+                    "{}: vis: {}, round: {}, random: {}, committed: {}",
+                    v,
+                    if m.vis.is_none() {
+                        "PUBLIC"
+                    } else if m.vis == Some(0) {
+                        "PROVER"
+                    } else {
+                        "VERIFIER"
+                    },
+                    m.round,
+                    m.random,
+                    m.committed
+                );
             }
             println!("Output:");
             for t in &c.outputs {
@@ -588,7 +640,9 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         }
     }
 
-    if VERBOSE { println!("Converting to r1cs:"); }
+    if VERBOSE {
+        println!("Converting to r1cs:");
+    }
     let mut block_num = 0;
     let mut block_name = format!("Block_{}", block_num);
     // Obtain a list of (r1cs, io_map) for all blocks
@@ -613,32 +667,24 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         let (prover_data, _) = r1cs.clone().finalize(c);
         prover_data_list.push(prover_data);
 
-        /*
-        let r1cs = {
-            let old_size = r1cs.constraints().len();
-            let r1cs = reduce_linearities(r1cs, cfg());
-            let new_size = r1cs.constraints().len();
-            if VERBOSE {
-                println!("{} linear reduction: {} -> {}", block_name, old_size, new_size);
-            }
-            r1cs
-        };
-        */
-        let num_witnesses = 
-            io_width // input + output
+        let num_witnesses = io_width // input + output
             + r1cs.num_vars()
             + VARS_PER_VM_ACCESS * block_num_mem_accesses[block_num].1 - live_vm_list[block_num].len() // remove live vm vars, add all vm vars
             - live_io_list[block_num].0.len() - live_io_list[block_num].1.len(); // remove all inputs / outputs
         num_vars_per_block.push(num_witnesses.next_power_of_two());
         // Include V * V = V
         let num_cons = r1cs.constraints().len() + 1;
-        if num_witnesses > max_num_witnesses { max_num_witnesses = num_witnesses };
-        if num_cons > max_num_cons { max_num_cons = num_cons };
+        if num_witnesses > max_num_witnesses {
+            max_num_witnesses = num_witnesses
+        };
+        if num_cons > max_num_cons {
+            max_num_cons = num_cons
+        };
         r1cs_list.push(r1cs);
         block_num += 1;
         block_name = format!("Block_{}", block_num);
     }
-    
+
     let max_num_witnesses = max_num_witnesses.next_power_of_two();
     let max_num_cons = max_num_cons.next_power_of_two();
 
@@ -664,11 +710,12 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         }
     };
     // Add all IOs and WV in front
-    let witness_relabel = |b: usize, i: usize|  -> usize {
+    let witness_relabel = |b: usize, i: usize| -> usize {
         let num_pm_vars = VARS_PER_ST_ACCESS * block_num_mem_accesses[b].0;
         let num_live_vm_vars = live_vm_list[b].len();
         let num_vm_vars = VARS_PER_VM_ACCESS * block_num_mem_accesses[b].1;
-        let new_i = {
+
+        {
             // physical memory accesses
             if i < num_pm_vars {
                 io_width + i
@@ -681,8 +728,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
             else {
                 io_width + num_vm_vars + (i - num_live_vm_vars)
             }
-        };
-        new_i
+        }
     };
     // 0th entry is constant
     let v_cnst = 0;
@@ -691,13 +737,25 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
         let r1cs = &r1cs_list[b];
         sparse_mat_entry.push(Vec::new());
         // First constraint is V * V = V
-        let (args_a, args_b, args_c) =
-            (vec![(v_cnst, integer_to_bytes(Integer::from(1)))], vec![(v_cnst, integer_to_bytes(Integer::from(1)))], vec![(v_cnst, integer_to_bytes(Integer::from(1)))]);
-        sparse_mat_entry[b].push(SparseMatEntry { args_a, args_b, args_c });
+        let (args_a, args_b, args_c) = (
+            vec![(v_cnst, integer_to_bytes(Integer::from(1)))],
+            vec![(v_cnst, integer_to_bytes(Integer::from(1)))],
+            vec![(v_cnst, integer_to_bytes(Integer::from(1)))],
+        );
+        sparse_mat_entry[b].push(SparseMatEntry {
+            args_a,
+            args_b,
+            args_c,
+        });
         // Iterate
         for c in r1cs.constraints() {
             // Any constraints involving the variable "return" should be discarded
-            if let Some(next_entry) = get_sparse_cons_with_v_check(c, v_cnst, |i| io_relabel(b, i), |i| witness_relabel(b, i)) {
+            if let Some(next_entry) = get_sparse_cons_with_v_check(
+                c,
+                v_cnst,
+                |i| io_relabel(b, i),
+                |i| witness_relabel(b, i),
+            ) {
                 sparse_mat_entry[b].push(next_entry);
             }
         }
@@ -712,7 +770,10 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
             for i in 0..min(10, sparse_mat_entry[b].len()) {
                 println!("  ROW {}", i);
                 let e = &sparse_mat_entry[b][i];
-                println!("    A: {:?}\n    B: {:?}\n    C: {:?}", e.args_a, e.args_b, e.args_c);
+                println!(
+                    "    A: {:?}\n    B: {:?}\n    C: {:?}",
+                    e.args_a, e.args_b, e.args_c
+                );
             }
             if sparse_mat_entry[b].len() > 10 {
                 println!("...");
@@ -723,38 +784,49 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     // Collect all necessary info
     let block_num_instances = r1cs_list.len();
     let num_vars = max_num_witnesses;
-    let args: Vec<Vec<(Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>, Vec<(usize, [u8; 32])>)>> = 
-        sparse_mat_entry.iter().map(|v| v.iter().map(|i| (
-            i.args_a.clone(), 
-            i.args_b.clone(), 
-            i.args_c.clone()
-        )).collect()).collect();
+    let args: Vec<
+        Vec<(
+            Vec<(usize, [u8; 32])>,
+            Vec<(usize, [u8; 32])>,
+            Vec<(usize, [u8; 32])>,
+        )>,
+    > = sparse_mat_entry
+        .iter()
+        .map(|v| {
+            v.iter()
+                .map(|i| (i.args_a.clone(), i.args_b.clone(), i.args_c.clone()))
+                .collect()
+        })
+        .collect();
     let input_block_num = 0;
     let output_block_num = block_num_instances;
 
     let live_io_size = live_io_list.iter().map(|i| i.0.len() + i.1.len()).collect();
-    let live_mem_size = (0..live_vm_list.len()).map(|i| VARS_PER_ST_ACCESS * block_num_mem_accesses[i].0 + live_vm_list[i].len()).collect();
-    
-    (CompileTimeKnowledge {
-        block_num_instances,
-        num_vars,
-        num_inputs_unpadded,
-        num_vars_per_block,
-        block_num_phy_ops: block_num_mem_accesses.iter().map(|i| i.0).collect(),
-        block_num_vir_ops: block_num_mem_accesses.iter().map(|i| i.1).collect(),
-        max_ts_width: MAX_TS_WIDTH,
-        args,
-        
-        input_liveness,
-        func_input_width,
-        input_offset: NUM_RESERVED_VARS,
-        input_block_num,
-        output_offset: OUTPUT_OFFSET,
-        output_block_num
-      },
-      live_io_size,
-      live_mem_size,
-      prover_data_list
+    let live_mem_size = (0..live_vm_list.len())
+        .map(|i| VARS_PER_ST_ACCESS * block_num_mem_accesses[i].0 + live_vm_list[i].len())
+        .collect();
+
+    (
+        CompileTimeKnowledge {
+            block_num_instances,
+            num_vars,
+            num_inputs_unpadded,
+            num_vars_per_block,
+            block_num_phy_ops: block_num_mem_accesses.iter().map(|i| i.0).collect(),
+            block_num_vir_ops: block_num_mem_accesses.iter().map(|i| i.1).collect(),
+            max_ts_width: MAX_TS_WIDTH,
+            args,
+
+            input_liveness,
+            func_input_width,
+            input_offset: NUM_RESERVED_VARS,
+            input_block_num,
+            output_offset: OUTPUT_OFFSET,
+            output_block_num,
+        },
+        live_io_size,
+        live_mem_size,
+        prover_data_list,
     )
 }
 
@@ -783,23 +855,29 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
     // bl_outputs are used to fill in io part of vars
     // bl_io_map is used to compute witness part of vars
     let (
-        _, 
-        block_id_list, 
-        bl_outputs_list, 
-        bl_mems_list, 
+        _,
+        block_id_list,
+        bl_outputs_list,
+        bl_mems_list,
         bl_io_map_list,
         init_phy_mem_list,
         init_vir_mem_list,
-        phy_mem_list, 
+        phy_mem_list,
         vir_mem_list,
     ) = {
         let inputs = zsharp::Inputs {
             file: path,
             mode: Mode::Proof,
-            no_opt: options.no_opt
+            no_opt: options.no_opt,
         };
 
-        ZSharpFE::interpret(inputs, &entry_regs, &entry_stacks, &entry_arrays, &entry_witnesses)
+        ZSharpFE::interpret(
+            inputs,
+            &entry_regs,
+            &entry_stacks,
+            &entry_arrays,
+            &entry_witnesses,
+        )
     };
 
     // Meta info
@@ -821,11 +899,13 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
     let output_exec_num = block_id_list.len() - 1;
 
     // num_blocks_live is # of non-zero entries in block_num_proofs
-    let num_blocks_live = block_num_proofs.iter().fold(0, |i, j| if *j > 0 { i + 1 } else { i });
+    let num_blocks_live = block_num_proofs
+        .iter()
+        .fold(0, |i, j| if *j > 0 { i + 1 } else { i });
     // Sort blocks by number of execution
     let mut inst_sorter = Vec::new();
     for i in 0..num_blocks {
-      inst_sorter.push(InstanceSortHelper::new(block_num_proofs[i], i))
+        inst_sorter.push(InstanceSortHelper::new(block_num_proofs[i], i))
     }
     // Sort from high -> low
     inst_sorter.sort_by(|a, b| b.cmp(a));
@@ -848,13 +928,20 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
     for i in 0..block_id_list.len() {
         let id = block_id_list[i];
         let input = bl_io_map_list[i].clone();
-        if VERBOSE { println!("ID: {}", id); }
+        if VERBOSE {
+            println!("ID: {}", id);
+        }
         let mut evaluator = StagedWitCompEvaluator::new(&prover_data_list[id].precompute);
         let mut eval = Vec::new();
         eval.extend(evaluator.eval_stage(input).into_iter().cloned());
         // Drop the last entry of io, which is the dummy return 0
         eval.pop();
-        eval.extend(evaluator.eval_stage(Default::default()).into_iter().cloned());
+        eval.extend(
+            evaluator
+                .eval_stage(Default::default())
+                .into_iter()
+                .cloned(),
+        );
 
         // Vars are described in a length-(num_vars) array, consisted of input + output + witnesses
         let mut vars: Vec<Integer> = vec![zero.clone(); ctk.num_vars_per_block[id]];
@@ -927,9 +1014,25 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
             }
         }
 
-        let inputs = [vars[..io_width].to_vec(), vec![zero.clone(); io_width.next_power_of_two() - io_width]].concat();
-        let inputs_assignment = Assignment::new(&inputs.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap();
-        let vars_assignment = Assignment::new(&vars.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap();
+        let inputs = [
+            vars[..io_width].to_vec(),
+            vec![zero.clone(); io_width.next_power_of_two() - io_width],
+        ]
+        .concat();
+        let inputs_assignment = Assignment::new(
+            &inputs
+                .iter()
+                .map(|i| integer_to_bytes(i.clone()))
+                .collect::<Vec<[u8; 32]>>(),
+        )
+        .unwrap();
+        let vars_assignment = Assignment::new(
+            &vars
+                .iter()
+                .map(|i| integer_to_bytes(i.clone()))
+                .collect::<Vec<[u8; 32]>>(),
+        )
+        .unwrap();
 
         let slot = index_rev[id];
         exec_inputs.push(inputs_assignment.clone());
@@ -940,26 +1043,40 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
     let mut init_phy_mems_list = Vec::new();
     for i in 0..init_phy_mem_list.len() {
         let m = &init_phy_mem_list[i];
-        
+
         let mut mem: Vec<Integer> = vec![zero.clone(); 4];
         mem[0] = one.clone();
         mem[2] = m[0].as_integer().unwrap();
         mem[3] = m[1].as_integer().unwrap();
-        
-        init_phy_mems_list.push(Assignment::new(&mem.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap())
+
+        init_phy_mems_list.push(
+            Assignment::new(
+                &mem.iter()
+                    .map(|i| integer_to_bytes(i.clone()))
+                    .collect::<Vec<[u8; 32]>>(),
+            )
+            .unwrap(),
+        )
     }
     let mut init_vir_mems_list = Vec::new();
     // No need to record TS bits since it is always 0
     // Also no need for D since this is not a coherence check
     for i in 0..init_vir_mem_list.len() {
         let m = &init_vir_mem_list[i];
-        
+
         let mut mem: Vec<Integer> = vec![zero.clone(); 4];
         mem[0] = one.clone();
         mem[2] = m[0].as_integer().unwrap();
         mem[3] = m[1].as_integer().unwrap();
-        
-        init_vir_mems_list.push(Assignment::new(&mem.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap())
+
+        init_vir_mems_list.push(
+            Assignment::new(
+                &mem.iter()
+                    .map(|i| integer_to_bytes(i.clone()))
+                    .collect::<Vec<[u8; 32]>>(),
+            )
+            .unwrap(),
+        )
     }
 
     // Physical Memory: valid, D, addr, data
@@ -973,11 +1090,27 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
         mem[3] = m.1.as_integer().unwrap();
         // backend requires the 1st entry to be v[k + 1] * (1 - addr[k + 1] + addr[k])
         if i != 0 {
-            phy_mem_last[1] = mem[0].clone() * (one.clone() - mem[2].clone() + phy_mem_last[2].clone());
-            addr_phy_mems_list.push(Assignment::new(&phy_mem_last.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap());
+            phy_mem_last[1] =
+                mem[0].clone() * (one.clone() - mem[2].clone() + phy_mem_last[2].clone());
+            addr_phy_mems_list.push(
+                Assignment::new(
+                    &phy_mem_last
+                        .iter()
+                        .map(|i| integer_to_bytes(i.clone()))
+                        .collect::<Vec<[u8; 32]>>(),
+                )
+                .unwrap(),
+            );
         }
         if i == phy_mem_list.len() - 1 {
-            addr_phy_mems_list.push(Assignment::new(&mem.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap());
+            addr_phy_mems_list.push(
+                Assignment::new(
+                    &mem.iter()
+                        .map(|i| integer_to_bytes(i.clone()))
+                        .collect::<Vec<[u8; 32]>>(),
+                )
+                .unwrap(),
+            );
         } else {
             phy_mem_last = mem;
         }
@@ -991,19 +1124,20 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
     let mut ts_bits_last: Vec<Integer> = Vec::new();
     for i in 0..vir_mem_list.len() {
         let m = &vir_mem_list[i];
-        
+
         let mut mem: Vec<Integer> = vec![zero.clone(); 8];
         mem[0] = one.clone();
         mem[2] = m[0].as_integer().unwrap();
         mem[3] = m[1].as_integer().unwrap();
         mem[4] = m[2].as_integer().unwrap();
         mem[5] = m[3].as_integer().unwrap();
-        
+
         let ts_bits: Vec<Integer> = vec![zero.clone(); (MAX_TS_WIDTH + 2).next_power_of_two()];
         // D1, D2, D3, D4
         if i != 0 {
             // D1[k] = v[k + 1] * (1 - addr[k + 1] + addr[k])
-            vir_mem_last[1] = mem[0].clone() * (one.clone() - mem[2].clone() + vir_mem_last[2].clone());
+            vir_mem_last[1] =
+                mem[0].clone() * (one.clone() - mem[2].clone() + vir_mem_last[2].clone());
             // D2[k] = D1[k] * (ls[k + 1] - STORE), where STORE = 0
             ts_bits_last[0] = vir_mem_last[1].clone() * mem[4].clone();
             // Bits of D1[k] * (ts[k + 1] - ts[k]) in ts_bits_last[2..]
@@ -1018,12 +1152,43 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
                     d4 /= 2;
                 }
             }
-            addr_vir_mems_list.push(Assignment::new(&vir_mem_last.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap());
-            addr_ts_bits_list.push(Assignment::new(&ts_bits_last.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap());
+            addr_vir_mems_list.push(
+                Assignment::new(
+                    &vir_mem_last
+                        .iter()
+                        .map(|i| integer_to_bytes(i.clone()))
+                        .collect::<Vec<[u8; 32]>>(),
+                )
+                .unwrap(),
+            );
+            addr_ts_bits_list.push(
+                Assignment::new(
+                    &ts_bits_last
+                        .iter()
+                        .map(|i| integer_to_bytes(i.clone()))
+                        .collect::<Vec<[u8; 32]>>(),
+                )
+                .unwrap(),
+            );
         }
         if i == vir_mem_list.len() - 1 {
-            addr_vir_mems_list.push(Assignment::new(&mem.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap());
-            addr_ts_bits_list.push(Assignment::new(&ts_bits.iter().map(|i| integer_to_bytes(i.clone())).collect::<Vec<[u8; 32]>>()).unwrap());
+            addr_vir_mems_list.push(
+                Assignment::new(
+                    &mem.iter()
+                        .map(|i| integer_to_bytes(i.clone()))
+                        .collect::<Vec<[u8; 32]>>(),
+                )
+                .unwrap(),
+            );
+            addr_ts_bits_list.push(
+                Assignment::new(
+                    &ts_bits
+                        .iter()
+                        .map(|i| integer_to_bytes(i.clone()))
+                        .collect::<Vec<[u8; 32]>>(),
+                )
+                .unwrap(),
+            );
         } else {
             vir_mem_last = mem;
             ts_bits_last = ts_bits;
@@ -1031,12 +1196,18 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
     }
 
     // Fold entry_arrays
-    let entry_stacks = entry_stacks.into_iter().fold(Vec::new(), |acc, a| [acc, a].concat()).to_vec();
-    let entry_arrays = entry_arrays.into_iter().fold(Vec::new(), |acc, a| [acc, a].concat()).to_vec();
+    let entry_stacks = entry_stacks
+        .into_iter()
+        .fold(Vec::new(), |acc, a| [acc, a].concat())
+        .to_vec();
+    let entry_arrays = entry_arrays
+        .into_iter()
+        .fold(Vec::new(), |acc, a| [acc, a].concat())
+        .to_vec();
 
     println!("\n--\nFUNC");
     print!("{:3} ", " ");
-    for i in 0..if entry_regs.len() == 0 {1} else {0} {
+    for i in 0..if entry_regs.is_empty() { 1 } else { 0 } {
         print!("{:3} ", i);
     }
     println!();
@@ -1058,9 +1229,18 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
     print!("{:3} ", "O");
     println!("{:3} ", func_outputs);
 
-    let func_inputs = entry_regs.iter().map(|i| integer_to_bytes(i.clone())).collect();
-    let input_stack = entry_stacks.iter().map(|i| integer_to_bytes(i.clone())).collect();
-    let input_mem = entry_arrays.iter().map(|i| integer_to_bytes(i.clone())).collect();
+    let func_inputs = entry_regs
+        .iter()
+        .map(|i| integer_to_bytes(i.clone()))
+        .collect();
+    let input_stack = entry_stacks
+        .iter()
+        .map(|i| integer_to_bytes(i.clone()))
+        .collect();
+    let input_mem = entry_arrays
+        .iter()
+        .map(|i| integer_to_bytes(i.clone()))
+        .collect();
     let func_outputs = integer_to_bytes(func_outputs);
 
     RunTimeKnowledge {
@@ -1071,7 +1251,7 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
         total_num_init_vir_mem_accesses,
         total_num_phy_mem_accesses,
         total_num_vir_mem_accesses,
-      
+
         block_vars_matrix,
         exec_inputs,
         init_phy_mems_list,
@@ -1079,12 +1259,12 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
         addr_phy_mems_list,
         addr_vir_mems_list,
         addr_ts_bits_list,
-      
+
         input: func_inputs,
         input_stack,
         input_mem,
         output: func_outputs,
-        output_exec_num
+        output_exec_num,
     }
 }
 
@@ -1105,50 +1285,57 @@ fn run_spartan_proof<S: SpartanExtensionField>(ctk: CompileTimeKnowledge, rtk: R
   let max_block_num_phy_ops = *block_num_phy_ops.iter().max().unwrap();
   let max_block_num_vir_ops = *block_num_vir_ops.iter().max().unwrap();
 
-  let mem_addr_ts_bits_size = (2 + ctk.max_ts_width).next_power_of_two();
+    let mem_addr_ts_bits_size = (2 + ctk.max_ts_width).next_power_of_two();
 
-  assert_eq!(num_vars, num_vars.next_power_of_two());
-  assert!(ctk.args.len() == block_num_instances_bound);
-  assert!(block_num_phy_ops.len() == block_num_instances_bound);
-  // If output_block_num < block_num_instances, the prover can cheat by executing the program multiple times
-  assert!(ctk.output_block_num >= block_num_instances_bound);
+    assert_eq!(num_vars, num_vars.next_power_of_two());
+    assert!(ctk.args.len() == block_num_instances_bound);
+    assert!(block_num_phy_ops.len() == block_num_instances_bound);
+    // If output_block_num < block_num_instances, the prover can cheat by executing the program multiple times
+    assert!(ctk.output_block_num >= block_num_instances_bound);
 
-  println!("Generating Circuits...");
-  // --
-  // BLOCK INSTANCES
-  let (block_num_vars, block_num_cons, block_num_non_zero_entries, mut block_inst) = Instance::gen_block_inst::<true>(
-    block_num_instances_bound, 
-    num_vars, 
-    &ctk.args,
-    num_inputs_unpadded,
-    &block_num_phy_ops,
-    &block_num_vir_ops,
-    &ctk.num_vars_per_block,
-    &rtk.block_num_proofs,
-  );
-  println!("Finished Block");
+    println!("Generating Circuits...");
+    // --
+    // BLOCK INSTANCES
+    let (block_num_vars, block_num_cons, block_num_non_zero_entries, mut block_inst) =
+        Instance::gen_block_inst::<true>(
+            block_num_instances_bound,
+            num_vars,
+            &ctk.args,
+            num_inputs_unpadded,
+            &block_num_phy_ops,
+            &block_num_vir_ops,
+            &ctk.num_vars_per_block,
+            &rtk.block_num_proofs,
+        );
+    println!("Finished Block");
 
-  // Pairwise INSTANCES
-  // CONSIS_CHECK & PHY_MEM_COHERE
-  let (pairwise_check_num_vars, pairwise_check_num_cons, pairwise_check_num_non_zero_entries, mut pairwise_check_inst) = Instance::gen_pairwise_check_inst::<true>(
-    ctk.max_ts_width, 
-    mem_addr_ts_bits_size,
-    rtk.consis_num_proofs,
-    rtk.total_num_phy_mem_accesses,
-    rtk.total_num_vir_mem_accesses,
-  );
-  println!("Finished Pairwise");
+    // Pairwise INSTANCES
+    // CONSIS_CHECK & PHY_MEM_COHERE
+    let (
+        pairwise_check_num_vars,
+        pairwise_check_num_cons,
+        pairwise_check_num_non_zero_entries,
+        mut pairwise_check_inst,
+    ) = Instance::gen_pairwise_check_inst::<true>(
+        ctk.max_ts_width,
+        mem_addr_ts_bits_size,
+        rtk.consis_num_proofs,
+        rtk.total_num_phy_mem_accesses,
+        rtk.total_num_vir_mem_accesses,
+    );
+    println!("Finished Pairwise");
 
-  // PERM INSTANCES
-  // PERM_ROOT
-  let (perm_root_num_cons, perm_root_num_non_zero_entries, perm_root_inst) = Instance::gen_perm_root_inst::<true>(
-    num_inputs_unpadded, 
-    num_ios,
-    rtk.consis_num_proofs,
-    rtk.total_num_phy_mem_accesses,
-    rtk.total_num_vir_mem_accesses,
-  );
-  println!("Finished Perm");
+    // PERM INSTANCES
+    // PERM_ROOT
+    let (perm_root_num_cons, perm_root_num_non_zero_entries, perm_root_inst) =
+        Instance::gen_perm_root_inst::<true>(
+            num_inputs_unpadded,
+            num_ios,
+            rtk.consis_num_proofs,
+            rtk.total_num_phy_mem_accesses,
+            rtk.total_num_vir_mem_accesses,
+        );
+    println!("Finished Perm");
 
   // --
   // COMMITMENT PREPROCESSING
@@ -1163,16 +1350,16 @@ fn run_spartan_proof<S: SpartanExtensionField>(ctk: CompileTimeKnowledge, rtk: R
   let (perm_root_comm, perm_root_decomm) = SNARK::encode(&perm_root_inst);
   println!("Finished Perm");
 
-  // --
-  // WITNESS PREPROCESSING
-  // --
-  let block_num_proofs = rtk.block_num_proofs;
-  let block_vars_matrix = rtk.block_vars_matrix;
+    // --
+    // WITNESS PREPROCESSING
+    // --
+    let block_num_proofs = rtk.block_num_proofs;
+    let block_vars_matrix = rtk.block_vars_matrix;
 
-  assert!(block_num_proofs.len() <= block_num_instances_bound);
-  assert!(block_vars_matrix.len() <= block_num_instances_bound);
-  let preprocess_time = preprocess_start.elapsed();
-  println!("Preprocess time: {}ms", preprocess_time.as_millis());
+    assert!(block_num_proofs.len() <= block_num_instances_bound);
+    assert!(block_vars_matrix.len() <= block_num_instances_bound);
+    let preprocess_time = preprocess_start.elapsed();
+    println!("Preprocess time: {}ms", preprocess_time.as_millis());
 
   println!("Running the proof...");
   // produce a proof of satisfiability
@@ -1294,7 +1481,7 @@ fn main() {
     let compiler_start = Instant::now();
     let benchmark_name = options.path.as_os_str().to_str().unwrap();
     let path = PathBuf::from(format!("../zok_tests/benchmarks/{}.zok", benchmark_name));
-    let (ctk, live_io_size, live_mem_size, prover_data_list) = 
+    let (ctk, live_io_size, live_mem_size, prover_data_list) =
         get_compile_time_knowledge::<false>(path.clone(), &options);
     let compiler_time = compiler_start.elapsed();
 
@@ -1317,33 +1504,45 @@ fn main() {
         let mut reader = BufReader::new(f);
         let mut buffer = String::new();
         reader.read_line(&mut buffer).unwrap();
-        let _ = buffer.trim();
-        while buffer != "END".to_string() {
-        let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
-        // split is either of form [VAR, VAL] or [VAR, "[", ENTRY_0, ENTRY_1, ..., "]"] 
-        if let Ok(val) = Integer::from_str_radix(&split[1], 10) {
-            entry_regs.push(val);
-            entry_stacks.push(vec![]);
-            entry_arrays.push(vec![]);
-        } else if split[1] == "[ro" {
-            assert_eq!(split[split.len() - 1], "]");
-            entry_regs.push(Integer::from(stack_alloc_counter));
-            // Parse the entries
-            entry_stacks.push(split[2..split.len() - 1].iter().map(|entry| Integer::from_str_radix(&entry, 10).unwrap()).collect());
-            entry_arrays.push(vec![]);
-            stack_alloc_counter += split.len() - 3; // var, "[", and "]"
-        } else {
-            assert_eq!(split[1], "[");
-            assert_eq!(split[split.len() - 1], "]");
-            entry_regs.push(Integer::from(mem_alloc_counter));
-            entry_stacks.push(vec![]);
-            // Parse the entries
-            entry_arrays.push(split[2..split.len() - 1].iter().map(|entry| Integer::from_str_radix(&entry, 10).unwrap()).collect());
-            mem_alloc_counter += split.len() - 3; // var, "[", and "]"
+        while buffer.trim() != "END" {
+            let split: Vec<String> = buffer
+                .split(' ')
+                .map(|i| i.to_string().trim().to_string())
+                .collect();
+            // split is either of form [VAR, VAL] or [VAR, "[", ENTRY_0, ENTRY_1, ..., "]"]
+            if let Ok(val) = Integer::from_str_radix(&split[1], 10) {
+                entry_regs.push(val);
+                entry_stacks.push(vec![]);
+                entry_arrays.push(vec![]);
+            } else if split[1] == "[ro" {
+                assert_eq!(split[split.len() - 1], "]");
+                entry_regs.push(Integer::from(stack_alloc_counter));
+                // Parse the entries
+                entry_stacks.push(
+                    split[2..split.len() - 1]
+                        .iter()
+                        .map(|entry| Integer::from_str_radix(entry, 10).unwrap())
+                        .collect(),
+                );
+                entry_arrays.push(vec![]);
+                stack_alloc_counter += split.len() - 3; // var, "[", and "]"
+            } else {
+                assert_eq!(split[1], "[");
+                assert_eq!(split[split.len() - 1], "]");
+                entry_regs.push(Integer::from(mem_alloc_counter));
+                entry_stacks.push(vec![]);
+                // Parse the entries
+                entry_arrays.push(
+                    split[2..split.len() - 1]
+                        .iter()
+                        .map(|entry| Integer::from_str_radix(entry, 10).unwrap())
+                        .collect(),
+                );
+                mem_alloc_counter += split.len() - 3; // var, "[", and "]"
+            }
+            buffer.clear();
+            reader.read_line(&mut buffer).unwrap();
         }
-        buffer.clear();
-        reader.read_line(&mut buffer).unwrap();
-    }
     }
     // Insert [%SP, %AS] to the front of entry_reg
     entry_regs.insert(0, Integer::from(mem_alloc_counter));
@@ -1357,10 +1556,16 @@ fn main() {
         let mut reader = BufReader::new(f);
         let mut buffer = String::new();
         reader.read_line(&mut buffer).unwrap();
-        let _ = buffer.trim();
-        while buffer != "END".to_string() {
-            let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
-            entry_witnesses.extend(split.iter().map(|entry| Integer::from_str_radix(&entry, 10).unwrap()));
+        while buffer.trim() != "END" {
+            let split: Vec<String> = buffer
+                .split(' ')
+                .map(|i| i.to_string().trim().to_string())
+                .collect();
+            entry_witnesses.extend(
+                split
+                    .iter()
+                    .map(|entry| Integer::from_str_radix(entry, 10).unwrap()),
+            );
             buffer.clear();
             reader.read_line(&mut buffer).unwrap();
         }
@@ -1378,12 +1583,12 @@ fn main() {
         entry_stacks, 
         entry_arrays, 
         entry_witnesses,
-        &ctk, 
-        live_io_size, 
-        live_mem_size, 
+        &ctk,
+        live_io_size,
+        live_mem_size,
         prover_data_list,
         stack_alloc_counter,
-        mem_alloc_counter
+        mem_alloc_counter,
     );
     let witness_time = witness_start.elapsed();
 

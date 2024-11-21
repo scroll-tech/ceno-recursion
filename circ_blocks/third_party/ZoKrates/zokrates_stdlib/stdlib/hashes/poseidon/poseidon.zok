@@ -19,7 +19,7 @@ def mix<N>(field[N] state, field[7][7] m) -> field[N]:
     field[N] out = [0; N]
     for u32 i in 0..N do
         field acc = 0
-        for u32 j in 0..N do 
+        for u32 j in 0..N do
             acc = acc + (state[j] * m[i][j])
         endfor
         out[i] = acc

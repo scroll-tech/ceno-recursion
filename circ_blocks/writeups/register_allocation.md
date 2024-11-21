@@ -85,7 +85,7 @@ With the above challenges in mind, we incorporate Static Analysis into our gener
 1. During block generation
   - Rename variables on scope change to avoid any continuation passing, with the only exception of spilling `%RP` before a function call
   - For every variable, append its function name, scope, and location to it. e.g. `a -> main.a1.0`
-2. A liveness analysis computes the set of live variables for each **transition state (TS)**. 
+2. A liveness analysis computes the set of live variables for each **transition state (TS)**.
 3. After liveness analysis
   - Iterate through all transition states to obtain the **io width**, defined as the maximum number of variables alive & in-scope within a TS.
   - For each TS, define its **spill size** as (number of live variables - io_width).

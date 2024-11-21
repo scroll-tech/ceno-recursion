@@ -19,8 +19,8 @@
 //         - if it is not TOP, update the last bit of its state to 0 (dead at current scope, unchanged in stack)
 //    POP: If a variable is popped out from the stack,
 //         - if it is TOP or if the last bit of its state is 0, remove the statement
-//         - if it is TOP, set the state to [0, 0] (dead at new scope, dead in stack, 
-//               we are doing backward analysis, so POP corresponds to extension of the state) 
+//         - if it is TOP, set the state to [0, 0] (dead at new scope, dead in stack,
+//               we are doing backward analysis, so POP corresponds to extension of the state)
 //         - otherwise, set the last bit to 0 and extend the state by another 0
 //   PUSH: If a variable is pushed onto stack,
 //         - remove the last bit of the variable state (again, we are doing things backwards)

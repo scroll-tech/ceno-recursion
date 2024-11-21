@@ -10,6 +10,7 @@ use core::ops::Index;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::collections::HashMap;
 
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
@@ -467,7 +468,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
         random_tape,
         &LZ,
         &LZ_blind,
-        &R,
+        R,
         &Zc_list[i],
         blind_Zr,
       );

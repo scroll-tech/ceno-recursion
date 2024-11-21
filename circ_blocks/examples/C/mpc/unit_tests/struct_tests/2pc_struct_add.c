@@ -1,4 +1,4 @@
-struct test {   
+struct test {
     int a;
     int b;
 };

@@ -49,7 +49,7 @@ To obtain the tail labels, we perform a backward analysis within each function, 
 
 We further record the number of constraints for each block through two more states: `count` and `agg_count`:
 - STATE: `count` records the number of constraints for the current component, `agg_count` records the number of constraints for the previous component
-- JOIN: 
+- JOIN:
   - `count[i] = num_constraints[i] + sum(count[s] * num_iteration[s]) + num_constraints[t]`, where `i` is the current block, `s` are all successors with higher scope than the current block, and `t` is the tail of the component. If `t` does not exist, `count[i] = 0`
   - `agg_count[i] = num_constraints[i] + sum(count[s]) + agg_count[t]`. If `t` does not exist, `agg_count[i] = num_constraints[i]`
 

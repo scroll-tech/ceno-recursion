@@ -66,7 +66,7 @@ Instructions:
     assert %i1(BN) == 5 <Field>
     field %w1(TS) = %i3(TS)
     field %w12 = %i7
-    u32 %w7 = %i8  <-- instructions: 
+    u32 %w7 = %i8  <-- instructions:
     u32 %w8 = %i9      assertion, assignment, conditional, and mem_ops
     ...
     if %w5 < %w19 && %w19 < %w8 && %w20 < %w17:
@@ -77,6 +77,6 @@ Instructions:
         Dummy Load
     ...
     field %o1(BN) = %w19 != 1600 <U32> ? 5 <Field> : 6 <Field>
-Transition: 
+Transition:
     %w19 != 1600 <U32> ? -> 5 : -> 6  <-- transition marks the label of the next block
 ```

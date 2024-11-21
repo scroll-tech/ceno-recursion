@@ -6,7 +6,7 @@ This file demonstrates the stack construction (simulation) in the current circ b
 
 There are three factors that contributes to the current stack construction:
 
-1. There are infinitely many registers, which can represent infinitely many variables, as long as they have a unique identifier. 
+1. There are infinitely many registers, which can represent infinitely many variables, as long as they have a unique identifier.
 
     This implies that we don't need to store every local variable onto the stack.
 
@@ -43,7 +43,7 @@ and `push` only occurs:
 Generally speaking, stack frames generated from scoping changes and function calls look different. In this case, we argue that if `init`, `push`, and `pop` are done correctly, then the procedure is sound:
 
 1. A new scope within the same function can only be entered from and exited to the same outer scope. As a result,
-    
+
     - when we are in any scope, we know exactly what variables have been defined in the outer scope, so we can `init` inside the scope.
     - after a variable is redefined in the current scope, any changes to it is unrelated to the outer scope, so we can `pop` before exiting the scope.
 
@@ -148,7 +148,7 @@ The example is converted to:
  3     field b = 4
  4     for field i in 0..X do
            INIT UPDATE
-           MAYBE INIT; PUSH a 
+           MAYBE INIT; PUSH a
  5         field a = 10
  6         for field j in 0..Y do
                INIT UPDATE
@@ -170,7 +170,7 @@ With the original `INIT` and `PUSH`, the code should look like this:
 ```
  4     for field i in 0..X do
            INIT
-           PUSH a 
+           PUSH a
  5         field a = 10
  6         for field j in 0..Y do
                INIT
@@ -193,7 +193,7 @@ Also, line 5 and 9 share the same `var_assg`, which now looks like:
 -----------|-------|-----|-------|----
 `var_name` | `%BP` | `a` | `%BP` | `b`
 
-This is acceptable because the 2 frames always pop at the same time (and thus technically we should only have one `POP` on line 9). 
+This is acceptable because the 2 frames always pop at the same time (and thus technically we should only have one `POP` on line 9).
 
 This also answers the question of why we need a `POP` when `offset = 0`, because we might have other stack frames within the same scope. On the other hand, if the stack frame is empty, then `var_assg` is empty and `POP` would not be executed anyways.
 

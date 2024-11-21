@@ -49,10 +49,10 @@ void max_pooling(DT *vals, DT *OUTPUT_res, int cols, int rows) {
 			}
 			if(vals[(y + 1) *cols + x] > max) {
 				max = vals[(y + 1) * cols + x];
-			} 
+			}
 			if(vals[(y + 1) *cols + x + 1] > max) {
 				max = vals[(y + 1) * cols + x + 1];
-			} 
+			}
 			OUTPUT_res[i * cols_res + j] = max;
 		}
 	}
@@ -60,7 +60,7 @@ void max_pooling(DT *vals, DT *OUTPUT_res, int cols, int rows) {
 
 void max_pooling_outputs(DT *vals, DT *OUTPUT_res, int outputs, int cols, int rows) {
 	for(int o = 0; o < outputs; o++) {
-		int size = cols*rows; 
+		int size = cols*rows;
 		DT input_layer[size]; // We copy data, because compiler is unable to slice array efficiently
 		memcpy(input_layer, vals+o*size, size * sizeof(DT));
 		int output_size = cols/2*rows/2;
@@ -70,7 +70,7 @@ void max_pooling_outputs(DT *vals, DT *OUTPUT_res, int outputs, int cols, int ro
 	}
 }
 
-DT mmulT_unrolled_inner(DT* a, DT* b, int common) { 
+DT mmulT_unrolled_inner(DT* a, DT* b, int common) {
 	DT sum = 0;
 	
 	int j = 0;
@@ -155,7 +155,7 @@ void convolution_naive_outputs(DT *image, DT* kernels, DT* OUTPUT_layer, int ima
 #define IMAGE_WIDTH_2 MAX_POOLING_WIDTH_1
 #define MAX_POOLING_SIZE_1 (OUTPUT_CHANNELS*MAX_POOLING_WIDTH_1 * MAX_POOLING_WIDTH_1) // 16*12*12
 #define IMAGE_CROP_2 (MAX_POOLING_WIDTH_1-WINDOW_WIDTH +1) // 12-5+1 = 8
-#define SIZE_KERNELS_2 (WINDOW_WIDTH*WINDOW_WIDTH)  // 5*5 = 25 
+#define SIZE_KERNELS_2 (WINDOW_WIDTH*WINDOW_WIDTH)  // 5*5 = 25
 #define SIZE_ALL_KERNELS_2 (SIZE_KERNELS_2 * OUTPUT_CHANNELS) // 16 * 25
 
 #define SIZE_CONVOLUTION_2 (IMAGE_CROP_2*IMAGE_CROP_2) // 8*8 = 64
@@ -176,7 +176,7 @@ typedef struct
 typedef struct
 {
 	DT kernelsL1[OUTPUT_CHANNELS * WINDOW_WIDTH * WINDOW_WIDTH]; // (1)
-	DT kernelsL2[OUTPUT_CHANNELS * SIZE_KERNELS_2]; // (16 * 
+	DT kernelsL2[OUTPUT_CHANNELS * SIZE_KERNELS_2]; // (16 *
 	DT kernelsFC1[FULLY_CONNECTED_WIDTH * MAX_POOLING_SIZE_2]; // (16 * 4 * 4) * 100 = 256 * 100
 	DT kernelsFC2[FINAL_OUTPUT_CHANNELS * FULLY_CONNECTED_WIDTH]; // 100 * 10
 } InputB;

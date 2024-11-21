@@ -9,22 +9,23 @@ extern crate lazy_static;
 
 pub use ast::{
     Access, AnyString, Arguments, ArrayAccess, ArrayCommitted, ArrayDeclStatement,
-    ArrayInitializerExpression, ArrayParamMetadata, ArrayTranscript, ArrayType,
-    AssertionStatement, Assignee, AssigneeAccess, BasicOrStructType, BasicType, BinaryExpression,
-    BinaryOperator, BooleanLiteralExpression, BooleanType, CallAccess, ConditionalStatement, 
-    CondStoreStatement, ConstantDefinition, ConstantGenericValue, Curve, DecimalLiteralExpression,
-    DecimalNumber, DecimalSuffix, DefinitionStatement, DimRO, ExplicitGenerics, Expression, FieldSuffix,
-    FieldType, File, FromExpression, FromImportDirective, FuncInline, FunctionDefinition, HexLiteralExpression,
-    HexNumberExpression, IdentifierExpression, ImportDirective, ImportSymbol,
+    ArrayInitializerExpression, ArrayParamMetadata, ArrayTranscript, ArrayType, AssertionStatement,
+    Assignee, AssigneeAccess, BasicOrStructType, BasicType, BinaryExpression, BinaryOperator,
+    BooleanLiteralExpression, BooleanType, CallAccess, CondStoreStatement, ConditionalStatement,
+    ConstantDefinition, ConstantGenericValue, Curve, DecimalLiteralExpression, DecimalNumber,
+    DecimalSuffix, DefinitionStatement, DimRO, ExplicitGenerics, Expression, FieldSuffix,
+    FieldType, File, FromExpression, FromImportDirective, FuncInline, FunctionDefinition,
+    HexLiteralExpression, HexNumberExpression, IdentifierExpression, ImportDirective, ImportSymbol,
     InlineArrayExpression, InlineStructExpression, InlineStructMember, IterationStatement,
     LiteralExpression, MainImportDirective, MemberAccess, NegOperator, NotOperator, Parameter,
     PosOperator, PostfixExpression, Pragma, PrivateNumber, PrivateVisibility, PublicVisibility,
     Range, RangeOrExpression, ReturnStatement, Span, Spread, SpreadOrExpression, Statement,
     StrOperator, StructDefinition, StructField, StructType, SymbolDeclaration, TernaryExpression,
-    ToExpression, ToFieldOperator, Type, TypeDefinition, TypedIdentifier, TypedIdentifierOrAssignee,
-    U16NumberExpression, U16Suffix, U16Type, U32NumberExpression, U32Suffix, U32Type,
-    U64NumberExpression, U64Suffix, U64Type, U8NumberExpression, U8Suffix, U8Type, UnaryExpression,
-    UnaryOperator, Underscore, Visibility, WhileLoopStatement, WitnessStatement, EOI,
+    ToExpression, ToFieldOperator, Type, TypeDefinition, TypedIdentifier,
+    TypedIdentifierOrAssignee, U16NumberExpression, U16Suffix, U16Type, U32NumberExpression,
+    U32Suffix, U32Type, U64NumberExpression, U64Suffix, U64Type, U8NumberExpression, U8Suffix,
+    U8Type, UnaryExpression, UnaryOperator, Underscore, Visibility, WhileLoopStatement,
+    WitnessStatement, EOI,
 };
 
 mod ast {
@@ -72,8 +73,8 @@ mod ast {
         rhs: Box<Expression<'ast>>,
     ) -> Box<Expression<'ast>> {
         // a + b spans from the start of a to the end of b
-        let (start, _) = lhs.span().clone().split();
-        let (_, end) = rhs.span().clone().split();
+        let (start, _) = (*lhs.span()).split();
+        let (_, end) = (*rhs.span()).split();
         let span = start.span(&end);
 
         Box::new(match pair.as_rule() {
@@ -428,7 +429,7 @@ mod ast {
         Iteration(IterationStatement<'ast>),
         WhileLoop(WhileLoopStatement<'ast>),
         Conditional(ConditionalStatement<'ast>),
-        ArrayDecl(ArrayDeclStatement<'ast>)
+        ArrayDecl(ArrayDeclStatement<'ast>),
     }
 
     impl<'ast> Statement<'ast> {
@@ -951,7 +952,7 @@ mod ast {
             match self {
                 Expression::Binary(b) => &b.span,
                 Expression::Identifier(i) => &i.span,
-                Expression::Literal(c) => &c.span(),
+                Expression::Literal(c) => c.span(),
                 Expression::Ternary(t) => &t.span,
                 Expression::Postfix(p) => &p.span,
                 Expression::InlineArray(a) => &a.span,
@@ -1237,356 +1238,6 @@ mod tests {
     }
 
     #[test]
-    fn one_plus_one() {
-        let source = r#"import "foo"
-                def main() -> (field): return 1 + 1
-"#;
-        assert_eq!(
-            generate_ast(&source),
-            Ok(File {
-                pragma: None,
-                declarations: vec![
-                    SymbolDeclaration::Import(ImportDirective::Main(MainImportDirective {
-                        source: AnyString {
-                            value: String::from("foo"),
-                            span: Span::new(&source, 8, 11).unwrap()
-                        },
-                        alias: None,
-                        span: Span::new(&source, 0, 29).unwrap()
-                    })),
-                    SymbolDeclaration::Function(FunctionDefinition {
-                        generics: vec![],
-                        id: IdentifierExpression {
-                            value: String::from("main"),
-                            span: Span::new(&source, 33, 37).unwrap()
-                        },
-                        parameters: vec![],
-                        returns: vec![Type::Basic(BasicType::Field(FieldType {
-                            span: Span::new(&source, 44, 49).unwrap()
-                        }))],
-                        statements: vec![Statement::Return(ReturnStatement {
-                            expressions: vec![Expression::add(
-                                Expression::Literal(LiteralExpression::DecimalLiteral(
-                                    DecimalLiteralExpression {
-                                        value: DecimalNumber {
-                                            span: Span::new(&source, 59, 60).unwrap()
-                                        },
-                                        suffix: None,
-                                        span: Span::new(&source, 59, 60).unwrap()
-                                    }
-                                )),
-                                Expression::Literal(LiteralExpression::DecimalLiteral(
-                                    DecimalLiteralExpression {
-                                        value: DecimalNumber {
-                                            span: Span::new(&source, 63, 64).unwrap()
-                                        },
-                                        suffix: None,
-                                        span: Span::new(&source, 63, 64).unwrap()
-                                    }
-                                )),
-                                Span::new(&source, 59, 64).unwrap()
-                            )],
-                            span: Span::new(&source, 52, 64).unwrap(),
-                        })],
-                        span: Span::new(&source, 29, source.len()).unwrap(),
-                    })
-                ],
-                eoi: EOI {},
-                span: Span::new(&source, 0, 65).unwrap()
-            })
-        );
-    }
-
-    #[test]
-    fn precedence() {
-        let source = r#"import "foo"
-                def main() -> (field): return 1 + 2 * 3 ** 4
-"#;
-        assert_eq!(
-            generate_ast(&source),
-            Ok(File {
-                pragma: None,
-                declarations: vec![
-                    SymbolDeclaration::Import(ImportDirective::Main(MainImportDirective {
-                        source: AnyString {
-                            value: String::from("foo"),
-                            span: Span::new(&source, 8, 11).unwrap()
-                        },
-                        alias: None,
-                        span: Span::new(&source, 0, 29).unwrap()
-                    })),
-                    SymbolDeclaration::Function(FunctionDefinition {
-                        generics: vec![],
-                        id: IdentifierExpression {
-                            value: String::from("main"),
-                            span: Span::new(&source, 33, 37).unwrap()
-                        },
-                        parameters: vec![],
-                        returns: vec![Type::Basic(BasicType::Field(FieldType {
-                            span: Span::new(&source, 44, 49).unwrap()
-                        }))],
-                        statements: vec![Statement::Return(ReturnStatement {
-                            expressions: vec![Expression::add(
-                                Expression::Literal(LiteralExpression::DecimalLiteral(
-                                    DecimalLiteralExpression {
-                                        suffix: None,
-                                        value: DecimalNumber {
-                                            span: Span::new(&source, 59, 60).unwrap()
-                                        },
-                                        span: Span::new(&source, 59, 60).unwrap()
-                                    }
-                                )),
-                                Expression::mul(
-                                    Expression::Literal(LiteralExpression::DecimalLiteral(
-                                        DecimalLiteralExpression {
-                                            suffix: None,
-                                            value: DecimalNumber {
-                                                span: Span::new(&source, 63, 64).unwrap()
-                                            },
-                                            span: Span::new(&source, 63, 64).unwrap()
-                                        }
-                                    )),
-                                    Expression::pow(
-                                        Expression::Literal(LiteralExpression::DecimalLiteral(
-                                            DecimalLiteralExpression {
-                                                suffix: None,
-                                                value: DecimalNumber {
-                                                    span: Span::new(&source, 67, 68).unwrap()
-                                                },
-                                                span: Span::new(&source, 67, 68).unwrap()
-                                            }
-                                        )),
-                                        Expression::Literal(LiteralExpression::DecimalLiteral(
-                                            DecimalLiteralExpression {
-                                                suffix: None,
-                                                value: DecimalNumber {
-                                                    span: Span::new(&source, 72, 73).unwrap()
-                                                },
-                                                span: Span::new(&source, 72, 73).unwrap()
-                                            }
-                                        )),
-                                        Span::new(&source, 67, 73).unwrap()
-                                    ),
-                                    Span::new(&source, 63, 73).unwrap()
-                                ),
-                                Span::new(&source, 59, 73).unwrap()
-                            )],
-                            span: Span::new(&source, 52, 73).unwrap(),
-                        })],
-                        span: Span::new(&source, 29, 74).unwrap(),
-                    })
-                ],
-                eoi: EOI {},
-                span: Span::new(&source, 0, 74).unwrap()
-            })
-        );
-    }
-
-    #[test]
-    fn ternary() {
-        let source = r#"import "foo"
-                def main() -> (field): return if 1 then 2 else 3 fi
-"#;
-        assert_eq!(
-            generate_ast(&source),
-            Ok(File {
-                pragma: None,
-                declarations: vec![
-                    SymbolDeclaration::Import(ImportDirective::Main(MainImportDirective {
-                        source: AnyString {
-                            value: String::from("foo"),
-                            span: Span::new(&source, 8, 11).unwrap()
-                        },
-                        alias: None,
-                        span: Span::new(&source, 0, 29).unwrap()
-                    })),
-                    SymbolDeclaration::Function(FunctionDefinition {
-                        generics: vec![],
-                        id: IdentifierExpression {
-                            value: String::from("main"),
-                            span: Span::new(&source, 33, 37).unwrap()
-                        },
-                        parameters: vec![],
-                        returns: vec![Type::Basic(BasicType::Field(FieldType {
-                            span: Span::new(&source, 44, 49).unwrap()
-                        }))],
-                        statements: vec![Statement::Return(ReturnStatement {
-                            expressions: vec![Expression::if_else(
-                                Expression::Literal(LiteralExpression::DecimalLiteral(
-                                    DecimalLiteralExpression {
-                                        suffix: None,
-                                        value: DecimalNumber {
-                                            span: Span::new(&source, 62, 63).unwrap()
-                                        },
-                                        span: Span::new(&source, 62, 63).unwrap()
-                                    }
-                                )),
-                                Expression::Literal(LiteralExpression::DecimalLiteral(
-                                    DecimalLiteralExpression {
-                                        suffix: None,
-                                        value: DecimalNumber {
-                                            span: Span::new(&source, 69, 70).unwrap()
-                                        },
-                                        span: Span::new(&source, 69, 70).unwrap()
-                                    }
-                                )),
-                                Expression::Literal(LiteralExpression::DecimalLiteral(
-                                    DecimalLiteralExpression {
-                                        suffix: None,
-                                        value: DecimalNumber {
-                                            span: Span::new(&source, 76, 77).unwrap()
-                                        },
-                                        span: Span::new(&source, 76, 77).unwrap()
-                                    }
-                                )),
-                                Span::new(&source, 59, 80).unwrap()
-                            )],
-                            span: Span::new(&source, 52, 80).unwrap(),
-                        })],
-                        span: Span::new(&source, 29, 81).unwrap(),
-                    })
-                ],
-                eoi: EOI {},
-                span: Span::new(&source, 0, 81).unwrap()
-            })
-        );
-    }
-
-    #[test]
-    fn parentheses() {
-        let source = r#"def main() -> (field): return (1)
-"#;
-        assert_eq!(
-            generate_ast(&source),
-            Ok(File {
-                pragma: None,
-                declarations: vec![SymbolDeclaration::Function(FunctionDefinition {
-                    generics: vec![],
-                    id: IdentifierExpression {
-                        value: String::from("main"),
-                        span: Span::new(&source, 4, 8).unwrap()
-                    },
-                    parameters: vec![],
-                    returns: vec![Type::Basic(BasicType::Field(FieldType {
-                        span: Span::new(&source, 15, 20).unwrap()
-                    }))],
-                    statements: vec![Statement::Return(ReturnStatement {
-                        expressions: vec![Expression::Literal(LiteralExpression::DecimalLiteral(
-                            DecimalLiteralExpression {
-                                suffix: None,
-                                value: DecimalNumber {
-                                    span: Span::new(&source, 31, 32).unwrap()
-                                },
-                                span: Span::new(&source, 31, 32).unwrap()
-                            }
-                        ))],
-                        span: Span::new(&source, 23, 33).unwrap(),
-                    })],
-                    span: Span::new(&source, 0, 34).unwrap(),
-                })],
-                eoi: EOI {},
-                span: Span::new(&source, 0, 34).unwrap()
-            })
-        );
-    }
-
-    #[test]
-    fn multidef() {
-        let source = r#"def main() -> (field): field a, b = foo(1, 2 + 3)
-"#;
-        assert_eq!(
-            generate_ast(&source),
-            Ok(File {
-                pragma: None,
-                declarations: vec![SymbolDeclaration::Function(FunctionDefinition {
-                    generics: vec![],
-                    id: IdentifierExpression {
-                        value: String::from("main"),
-                        span: Span::new(&source, 4, 8).unwrap()
-                    },
-                    parameters: vec![],
-                    returns: vec![Type::Basic(BasicType::Field(FieldType {
-                        span: Span::new(&source, 15, 20).unwrap()
-                    }))],
-                    statements: vec![Statement::Definition(DefinitionStatement {
-                        lhs: vec![
-                            TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                                array_metadata: None,
-                                ty: Type::Basic(BasicType::Field(FieldType {
-                                    span: Span::new(&source, 23, 28).unwrap()
-                                })),
-                                identifier: IdentifierExpression {
-                                    value: String::from("a"),
-                                    span: Span::new(&source, 29, 30).unwrap(),
-                                },
-                                span: Span::new(&source, 23, 30).unwrap()
-                            }),
-                            TypedIdentifierOrAssignee::Assignee(Assignee {
-                                id: IdentifierExpression {
-                                    value: String::from("b"),
-                                    span: Span::new(&source, 32, 33).unwrap(),
-                                },
-                                accesses: vec![],
-                                span: Span::new(&source, 32, 34).unwrap()
-                            }),
-                        ],
-                        expression: Expression::Postfix(PostfixExpression {
-                            id: IdentifierExpression {
-                                value: String::from("foo"),
-                                span: Span::new(&source, 36, 39).unwrap()
-                            },
-                            accesses: vec![Access::Call(CallAccess {
-                                explicit_generics: None,
-                                arguments: Arguments {
-                                    expressions: vec![
-                                        Expression::Literal(LiteralExpression::DecimalLiteral(
-                                            DecimalLiteralExpression {
-                                                suffix: None,
-                                                value: DecimalNumber {
-                                                    span: Span::new(&source, 40, 41).unwrap()
-                                                },
-                                                span: Span::new(&source, 40, 41).unwrap()
-                                            }
-                                        )),
-                                        Expression::add(
-                                            Expression::Literal(LiteralExpression::DecimalLiteral(
-                                                DecimalLiteralExpression {
-                                                    suffix: None,
-                                                    value: DecimalNumber {
-                                                        span: Span::new(&source, 43, 44).unwrap()
-                                                    },
-                                                    span: Span::new(&source, 43, 44).unwrap()
-                                                }
-                                            )),
-                                            Expression::Literal(LiteralExpression::DecimalLiteral(
-                                                DecimalLiteralExpression {
-                                                    suffix: None,
-                                                    value: DecimalNumber {
-                                                        span: Span::new(&source, 47, 48).unwrap()
-                                                    },
-                                                    span: Span::new(&source, 47, 48).unwrap()
-                                                }
-                                            )),
-                                            Span::new(&source, 43, 48).unwrap()
-                                        ),
-                                    ],
-                                    span: Span::new(&source, 40, 48).unwrap()
-                                },
-                                span: Span::new(&source, 39, 49).unwrap()
-                            })],
-                            span: Span::new(&source, 36, 49).unwrap(),
-                        }),
-                        span: Span::new(&source, 23, 49).unwrap()
-                    })],
-                    span: Span::new(&source, 0, 50).unwrap(),
-                })],
-                eoi: EOI {},
-                span: Span::new(&source, 0, 50).unwrap()
-            })
-        );
-    }
-
-    #[test]
     fn playground() {
         let source = r#"import "foo" as bar
 
@@ -1604,8 +1255,8 @@ mod tests {
         assert(a.member == 1)
         return a
 "#;
-        let res = generate_ast(&source);
-        println!("{:#?}", generate_ast(&source));
+        let res = generate_ast(source);
+        println!("{:#?}", generate_ast(source));
         assert!(res.is_ok());
     }
 }

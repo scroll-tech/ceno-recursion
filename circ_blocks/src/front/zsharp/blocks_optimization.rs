@@ -3,19 +3,19 @@
 // PUSH is not equivalent to a change in scope. Instead of popping out the last state,
 // PUSH should result in the union of the last two states.
 
-use std::collections::VecDeque;
-use zokrates_pest_ast::*;
 use crate::front::zsharp::blocks::*;
-use std::collections::{BTreeMap, BTreeSet};
 use crate::front::zsharp::Ty;
 use itertools::Itertools;
 use std::cmp::max;
+use std::collections::VecDeque;
+use std::collections::{BTreeMap, BTreeSet};
 use std::iter::FromIterator;
+use zokrates_pest_ast::*;
 
 use crate::front::zsharp::ZGen;
+use crate::front::zsharp::{cfg, ZSharp};
 use crate::front::Computations;
 use crate::target::r1cs::trans::to_r1cs;
-use crate::front::zsharp::{cfg, ZSharp};
 
 const MAX_BLOCK_SIZE: usize = 32768;
 const CFG_VERBOSE: bool = false;
@@ -85,11 +85,11 @@ fn print_cfg(
 }
 
 fn print_bls(bls: &Vec<Block>, entry_bl: &usize) {
-    println!("Entry block: {entry_bl}");  
+    println!("Entry block: {entry_bl}");
     for b in bls {
         b.pretty();
         println!("");
-    }    
+    }
 }
 
 // --
@@ -114,7 +114,9 @@ fn rp_find_val(bc: &BlockContent) -> Option<usize> {
         if let TypedIdentifierOrAssignee::TypedIdentifier(ty) = &d.lhs[0] {
             if is_rp(&ty.identifier.value).is_some() {
                 if let Expression::Literal(LiteralExpression::DecimalLiteral(dle)) = &d.expression {
-                    let tmp_bl: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: rp@ is assigned to a non-constant value");
+                    let tmp_bl: usize = dle.value.value.trim().parse().expect(
+                        "Dead Block Elimination failed: rp@ is assigned to a non-constant value",
+                    );
                     return Some(tmp_bl);
                 } else {
                     panic!("Dead Block Elimination failed: rp@ is assigned to a non-constant value")
@@ -124,7 +126,9 @@ fn rp_find_val(bc: &BlockContent) -> Option<usize> {
         if let TypedIdentifierOrAssignee::Assignee(a) = &d.lhs[0] {
             if is_rp(&a.id.value).is_some() {
                 if let Expression::Literal(LiteralExpression::DecimalLiteral(dle)) = &d.expression {
-                    let tmp_bl: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: rp@ is assigned to a non-constant value");
+                    let tmp_bl: usize = dle.value.value.trim().parse().expect(
+                        "Dead Block Elimination failed: rp@ is assigned to a non-constant value",
+                    );
                     return Some(tmp_bl);
                 } else {
                     panic!("Dead Block Elimination failed: rp@ is assigned to a non-constant value")
@@ -137,7 +141,10 @@ fn rp_find_val(bc: &BlockContent) -> Option<usize> {
 
 // If bc is a statement of form rp@ = old_val and old_val is a key in val_map,
 // replace it with rp@ = val_map[val]
-pub fn rp_replacement_stmt(bc: BlockContent, val_map: BTreeMap<usize, usize>) -> Option<BlockContent> {
+pub fn rp_replacement_stmt(
+    bc: BlockContent,
+    val_map: BTreeMap<usize, usize>,
+) -> Option<BlockContent> {
     if let BlockContent::Stmt(Statement::Definition(d)) = bc {
         let mut var_is_rp = false;
         let mut rp_var = "".to_string(); // the actual name: rp@.<f_name>
@@ -158,28 +165,32 @@ pub fn rp_replacement_stmt(bc: BlockContent, val_map: BTreeMap<usize, usize>) ->
                 let tmp_bl: usize = dle.value.value.trim().parse().unwrap();
                 if let Some(new_bl) = val_map.get(&tmp_bl) {
                     let new_rp_stmt = Statement::Definition(DefinitionStatement {
-                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                            array_metadata: None,
-                            ty: Type::Basic(BasicType::Field(FieldType {
-                                span: Span::new("", 0, 0).unwrap()
-                            })),
-                            identifier: IdentifierExpression {
-                                value: rp_var,
-                                span: Span::new("", 0, 0).unwrap()
+                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(
+                            TypedIdentifier {
+                                array_metadata: None,
+                                ty: Type::Basic(BasicType::Field(FieldType {
+                                    span: Span::new("", 0, 0).unwrap(),
+                                })),
+                                identifier: IdentifierExpression {
+                                    value: rp_var,
+                                    span: Span::new("", 0, 0).unwrap(),
+                                },
+                                span: Span::new("", 0, 0).unwrap(),
                             },
-                            span: Span::new("", 0, 0).unwrap()
-                        })],
-                        expression: Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                            value: DecimalNumber {
-                                value: new_bl.to_string(),
-                                span: Span::new("", 0, 0).unwrap()
+                        )],
+                        expression: Expression::Literal(LiteralExpression::DecimalLiteral(
+                            DecimalLiteralExpression {
+                                value: DecimalNumber {
+                                    value: new_bl.to_string(),
+                                    span: Span::new("", 0, 0).unwrap(),
+                                },
+                                suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                    span: Span::new("", 0, 0).unwrap(),
+                                })),
+                                span: Span::new("", 0, 0).unwrap(),
                             },
-                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                                span: Span::new("", 0, 0).unwrap()
-                            })),
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
+                        )),
+                        span: Span::new("", 0, 0).unwrap(),
                     });
                     return Some(BlockContent::Stmt(new_rp_stmt));
                 }
@@ -200,25 +211,34 @@ fn bl_trans_find_val(e: &Expression) -> Vec<NextBlock> {
         }
         Expression::Literal(le) => {
             if let LiteralExpression::DecimalLiteral(dle) = le {
-                let val: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: rp@ is assigned to a non-constant value");
+                let val: usize = dle.value.value.trim().parse().expect(
+                    "Dead Block Elimination failed: rp@ is assigned to a non-constant value",
+                );
                 return vec![NextBlock::Label(val)];
-            } else { panic!("Unexpected value in Block Transition") }
+            } else {
+                panic!("Unexpected value in Block Transition")
+            }
         }
         Expression::Identifier(ie) => {
             if let Some(f_name) = is_rp(&ie.value) {
-                return vec![NextBlock::Rp(f_name)]
+                return vec![NextBlock::Rp(f_name)];
             } else {
                 panic!("Unexpected variable in Block Transition")
             }
         }
-        _ => { panic!("Unexpected expression in Block Transition") }
+        _ => {
+            panic!("Unexpected expression in Block Transition")
+        }
     }
 }
 
 // Given an expression consisted of only ternary, literals, and identifiers,
 // Replace all literal values according to label_map
 // Skip all rp@ or other references to variables
-pub fn bl_trans_map<'ast>(e: &Expression<'ast>, label_map: &BTreeMap<usize, usize>) -> Expression<'ast> {
+pub fn bl_trans_map<'ast>(
+    e: &Expression<'ast>,
+    label_map: &BTreeMap<usize, usize>,
+) -> Expression<'ast> {
     match e {
         Expression::Ternary(te) => {
             let new_second = bl_trans_map(&te.second, label_map);
@@ -230,27 +250,39 @@ pub fn bl_trans_map<'ast>(e: &Expression<'ast>, label_map: &BTreeMap<usize, usiz
                     first: Box::new(*te.first.clone()),
                     second: Box::new(new_second),
                     third: Box::new(new_third),
-                    span: e.span().clone()
+                    span: e.span().clone(),
                 });
             }
         }
         Expression::Literal(le) => {
             if let LiteralExpression::DecimalLiteral(dle) = le {
-                let val: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: rp@ is assigned to a non-constant value");
-                return bl_coda(NextBlock::Label(*label_map.get(&val).or(Some(&val)).unwrap()));
-            } else { panic!("Unexpected value in Block Transition") }
+                let val: usize = dle.value.value.trim().parse().expect(
+                    "Dead Block Elimination failed: rp@ is assigned to a non-constant value",
+                );
+                return bl_coda(NextBlock::Label(
+                    *label_map.get(&val).or(Some(&val)).unwrap(),
+                ));
+            } else {
+                panic!("Unexpected value in Block Transition")
+            }
         }
         Expression::Identifier(_) => {
             return e.clone();
         }
-        _ => { panic!("Unexpected expression in Block Transition") }
+        _ => {
+            panic!("Unexpected expression in Block Transition")
+        }
     }
 }
 
 // Given an expression consisted of only ternary, literals, and identifiers,
 // Replace all occurrences of old_val to new_val, which is an expression
 // I don't think we can combine bl_trans_map and bl_trans_replace together efficiently.
-fn bl_trans_replace<'ast>(e: &Expression<'ast>, old_val: usize, new_val: &Expression<'ast>) -> Expression<'ast> {
+fn bl_trans_replace<'ast>(
+    e: &Expression<'ast>,
+    old_val: usize,
+    new_val: &Expression<'ast>,
+) -> Expression<'ast> {
     match e {
         Expression::Ternary(te) => {
             let new_second = bl_trans_replace(&te.second, old_val, new_val);
@@ -262,77 +294,32 @@ fn bl_trans_replace<'ast>(e: &Expression<'ast>, old_val: usize, new_val: &Expres
                     first: Box::new(*te.first.clone()),
                     second: Box::new(new_second),
                     third: Box::new(new_third),
-                    span: e.span().clone()
+                    span: e.span().clone(),
                 });
             }
         }
         Expression::Literal(le) => {
             if let LiteralExpression::DecimalLiteral(dle) = le {
-                let val: usize = dle.value.value.trim().parse().expect("Dead Block Elimination failed: rp@ is assigned to a non-constant value");
+                let val: usize = dle.value.value.trim().parse().expect(
+                    "Dead Block Elimination failed: rp@ is assigned to a non-constant value",
+                );
                 if val == old_val {
                     return new_val.clone();
                 } else {
                     return e.clone();
                 }
-            } else { panic!("Unexpected value in Block Transition") }
+            } else {
+                panic!("Unexpected value in Block Transition")
+            }
         }
         Expression::Identifier(_) => {
             return e.clone();
         }
-        _ => { panic!("Unexpected expression in Block Transition") }
-    }
-}
-
-/*
-// Sort functions in topological order
-fn top_sort_helper(
-    cur_name: &str,
-    call_graph: &BTreeMap<String, BTreeSet<String>>,
-    mut visited: BTreeMap<String, bool>,
-    mut chain: Vec<String>
-) -> (Vec<String>, BTreeMap<String, bool>) {
-    visited.insert(cur_name.to_string(), true);
-    for s in call_graph.get(cur_name).unwrap() {
-        if !visited.get(s).unwrap() {
-            (chain, visited) = top_sort_helper(s, call_graph, visited, chain);
+        _ => {
+            panic!("Unexpected expression in Block Transition")
         }
     }
-    chain.insert(0, cur_name.to_string());
-    return (chain, visited);
 }
-
-fn fn_top_sort(
-    bls: &Vec<Block>,
-    successor: &Vec<BTreeSet<usize>>,
-    successor_fn: &Vec<BTreeSet<usize>>,
-) -> Vec<String> {
-    // First construct function call graph
-    let mut fn_call_graph: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    // Initialize every function to NOT VISITED
-    let mut visited = BTreeMap::new();
-    fn_call_graph.insert("main".to_string(), BTreeSet::new());
-    for cur_bl in 0..bls.len() {
-        let b = &bls[cur_bl];
-        let caller_name = b.fn_name.to_string();
-        if !visited.contains_key(&caller_name) {
-            visited.insert(caller_name.to_string(), false);
-            fn_call_graph.insert(caller_name.to_string(), BTreeSet::new());
-        }
-        // if cur_bl is a caller of a function, add the call to call graph
-        if successor_fn[cur_bl].len() != 0 && successor_fn[cur_bl] != successor[cur_bl] {
-            assert_eq!(successor[cur_bl].len(), 1);
-            assert_eq!(successor_fn[cur_bl].len(), 1);
-            let callee_name = bls[Vec::from_iter(successor[cur_bl].clone())[0]].fn_name.to_string();
-
-            let mut callee_list = fn_call_graph.get(&caller_name).unwrap().clone();
-            callee_list.insert(callee_name);
-            fn_call_graph.insert(caller_name, callee_list);
-        }
-    }
-    // Next perform top sort using call graph
-    top_sort_helper("main", &fn_call_graph, visited, Vec::new()).0
-}
-*/
 
 // Given an expression, find all variables it references
 fn expr_find_val(e: &Expression) -> BTreeSet<String> {
@@ -414,39 +401,32 @@ fn stmt_find_val(s: &Statement) -> (BTreeSet<String>, BTreeSet<String>) {
         Statement::Assertion(a) => (BTreeSet::new(), expr_find_val(&a.expression)),
         Statement::Conditional(_c) => {
             panic!("Blocks should not contain conditional statements.")
-            /*
-            // KILL is empty
-            // GEN is the union of the two branches
-            // Iterate through if branch
-            let mut if_gen_set = BTreeSet::new();
-            for s in c.ifbranch.iter().rev() {
-                let (kill, gen) = stmt_find_val(&s);
-                if_gen_set = la_kill(if_gen_set, &kill);
-                if_gen_set = la_gen(if_gen_set, &gen);
-            }
-            let mut else_gen_set = BTreeSet::new();
-            for s in c.elsebranch.iter().rev() {
-                let (kill, gen) = stmt_find_val(&s);
-                else_gen_set = la_kill(else_gen_set, &kill);
-                else_gen_set = la_gen(else_gen_set, &gen);
-            }
-            let mut gen_set = BTreeSet::new();
-            gen_set.extend(if_gen_set);
-            gen_set.extend(else_gen_set);
-            gen_set.extend(expr_find_val(&c.condition));
-            (BTreeSet::new(), gen_set)
-            */
         }
-        Statement::Iteration(_) => { panic!("Blocks should not contain iteration statements.") }
-        Statement::WhileLoop(_) => { panic!("Blocks should not contain while loop statements.") }
-        Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
-        Statement::Witness(_) => { panic!("Witness statements unsupported.") }
-        Statement::ArrayDecl(_) => { panic!("Blocks should not contain array declaration statements.") }
+        Statement::Iteration(_) => {
+            panic!("Blocks should not contain iteration statements.")
+        }
+        Statement::WhileLoop(_) => {
+            panic!("Blocks should not contain while loop statements.")
+        }
+        Statement::CondStore(_) => {
+            panic!("Blocks should not contain conditional store statements.")
+        }
+        Statement::Witness(_) => {
+            panic!("Witness statements unsupported.")
+        }
+        Statement::ArrayDecl(_) => {
+            panic!("Blocks should not contain array declaration statements.")
+        }
     }
 }
 
 // Given an expression, replace all variables of old_f_name with new_f_name, plus scope_diff offset in scope
-fn expr_replace_fn<'ast>(e: &Expression<'ast>, old_f_name: &String, new_f_name: &String, scope_diff: usize) -> Expression<'ast> {
+fn expr_replace_fn<'ast>(
+    e: &Expression<'ast>,
+    old_f_name: &String,
+    new_f_name: &String,
+    scope_diff: usize,
+) -> Expression<'ast> {
     match e {
         Expression::Ternary(t) => {
             let new_first = expr_replace_fn(&t.first, old_f_name, new_f_name, scope_diff);
@@ -456,7 +436,7 @@ fn expr_replace_fn<'ast>(e: &Expression<'ast>, old_f_name: &String, new_f_name: 
                 first: Box::new(new_first),
                 second: Box::new(new_second),
                 third: Box::new(new_third),
-                span: Span::new("", 0, 0).unwrap()
+                span: Span::new("", 0, 0).unwrap(),
             })
         }
         Expression::Binary(b) => {
@@ -466,7 +446,7 @@ fn expr_replace_fn<'ast>(e: &Expression<'ast>, old_f_name: &String, new_f_name: 
                 op: b.op.clone(),
                 left: Box::new(new_left),
                 right: Box::new(new_right),
-                span: Span::new("", 0, 0).unwrap()
+                span: Span::new("", 0, 0).unwrap(),
             })
         }
         Expression::Unary(u) => {
@@ -474,9 +454,9 @@ fn expr_replace_fn<'ast>(e: &Expression<'ast>, old_f_name: &String, new_f_name: 
             Expression::Unary(UnaryExpression {
                 op: u.op.clone(),
                 expression: Box::new(new_expr),
-                span: Span::new("", 0, 0).unwrap()
+                span: Span::new("", 0, 0).unwrap(),
             })
-        },
+        }
         Expression::Postfix(p) => {
             // Identifier
             let new_id = var_fn_merge(&p.id.value, old_f_name, new_f_name, scope_diff);
@@ -488,7 +468,7 @@ fn expr_replace_fn<'ast>(e: &Expression<'ast>, old_f_name: &String, new_f_name: 
                         let new_expr = expr_replace_fn(e, old_f_name, new_f_name, scope_diff);
                         new_accesses.push(Access::Select(ArrayAccess {
                             expression: RangeOrExpression::Expression(new_expr),
-                            span: Span::new("", 0, 0).unwrap()
+                            span: Span::new("", 0, 0).unwrap(),
                         }))
                     } else {
                         panic!("Range access not supported.")
@@ -500,18 +480,16 @@ fn expr_replace_fn<'ast>(e: &Expression<'ast>, old_f_name: &String, new_f_name: 
             Expression::Postfix(PostfixExpression {
                 id: IdentifierExpression {
                     value: new_id,
-                    span: Span::new("", 0, 0).unwrap()
+                    span: Span::new("", 0, 0).unwrap(),
                 },
                 accesses: new_accesses,
-                span: Span::new("", 0, 0).unwrap()
+                span: Span::new("", 0, 0).unwrap(),
             })
         }
-        Expression::Identifier(i) => {
-            Expression::Identifier(IdentifierExpression {
-                value: var_fn_merge(&i.value, old_f_name, new_f_name, scope_diff),
-                span: Span::new("", 0, 0).unwrap()
-            })
-        }
+        Expression::Identifier(i) => Expression::Identifier(IdentifierExpression {
+            value: var_fn_merge(&i.value, old_f_name, new_f_name, scope_diff),
+            span: Span::new("", 0, 0).unwrap(),
+        }),
         Expression::Literal(_) => e.clone(),
         _ => {
             panic!("Unsupported Expression.");
@@ -520,7 +498,12 @@ fn expr_replace_fn<'ast>(e: &Expression<'ast>, old_f_name: &String, new_f_name: 
 }
 
 // Given a statement, replace all variables of old_f_name with new_f_name, plus scope_diff offset in scope
-fn stmt_replace_fn<'ast>(s: &Statement<'ast>, old_f_name: &String, new_f_name: &String, scope_diff: usize) -> Statement<'ast> {
+fn stmt_replace_fn<'ast>(
+    s: &Statement<'ast>,
+    old_f_name: &String,
+    new_f_name: &String,
+    scope_diff: usize,
+) -> Statement<'ast> {
     match s {
         Statement::Return(_) => {
             panic!("Blocks should not contain return statements.")
@@ -535,10 +518,11 @@ fn stmt_replace_fn<'ast>(s: &Statement<'ast>, old_f_name: &String, new_f_name: &
                         for aa in &p.accesses {
                             if let AssigneeAccess::Select(a) = aa {
                                 if let RangeOrExpression::Expression(e) = &a.expression {
-                                    let new_expr = expr_replace_fn(e, old_f_name, new_f_name, scope_diff);
+                                    let new_expr =
+                                        expr_replace_fn(e, old_f_name, new_f_name, scope_diff);
                                     new_accesses.push(AssigneeAccess::Select(ArrayAccess {
                                         expression: RangeOrExpression::Expression(new_expr),
-                                        span: Span::new("", 0, 0).unwrap()
+                                        span: Span::new("", 0, 0).unwrap(),
                                     }))
                                 } else {
                                     panic!("Range access not supported.")
@@ -550,30 +534,35 @@ fn stmt_replace_fn<'ast>(s: &Statement<'ast>, old_f_name: &String, new_f_name: &
                         new_lhs.push(TypedIdentifierOrAssignee::Assignee(Assignee {
                             id: IdentifierExpression {
                                 value: new_id,
-                                span: Span::new("", 0, 0).unwrap()
+                                span: Span::new("", 0, 0).unwrap(),
                             },
                             accesses: new_accesses,
-                            span: Span::new("", 0, 0).unwrap()
+                            span: Span::new("", 0, 0).unwrap(),
                         }));
                     }
-                    TypedIdentifierOrAssignee::TypedIdentifier(ti) => {
-                        new_lhs.push(TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
+                    TypedIdentifierOrAssignee::TypedIdentifier(ti) => new_lhs.push(
+                        TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
                             array_metadata: ti.array_metadata.clone(),
                             ty: ti.ty.clone(),
                             identifier: IdentifierExpression {
-                                value: var_fn_merge(&ti.identifier.value, old_f_name, new_f_name, scope_diff),
-                                span: Span::new("", 0, 0).unwrap()
+                                value: var_fn_merge(
+                                    &ti.identifier.value,
+                                    old_f_name,
+                                    new_f_name,
+                                    scope_diff,
+                                ),
+                                span: Span::new("", 0, 0).unwrap(),
                             },
-                            span: Span::new("", 0, 0).unwrap()
-                        }))
-                    }
+                            span: Span::new("", 0, 0).unwrap(),
+                        }),
+                    ),
                 }
             }
             let new_expr = expr_replace_fn(&d.expression, old_f_name, new_f_name, scope_diff);
             Statement::Definition(DefinitionStatement {
                 lhs: new_lhs,
                 expression: new_expr,
-                span: Span::new("", 0, 0).unwrap()
+                span: Span::new("", 0, 0).unwrap(),
             })
         }
         Statement::Assertion(a) => {
@@ -581,15 +570,27 @@ fn stmt_replace_fn<'ast>(s: &Statement<'ast>, old_f_name: &String, new_f_name: &
             Statement::Assertion(AssertionStatement {
                 expression: new_expr,
                 message: a.message.clone(),
-                span: Span::new("", 0, 0).unwrap()
+                span: Span::new("", 0, 0).unwrap(),
             })
-        },
-        Statement::Conditional(_c) => { panic!("Blocks should not contain conditional statements.") }
-        Statement::Iteration(_) => { panic!("Blocks should not contain iteration statements.") }
-        Statement::WhileLoop(_) => { panic!("Blocks should not contain while loop statements.") }
-        Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
-        Statement::Witness(_) => { panic!("Witness statements unsupported.") }
-        Statement::ArrayDecl(_) => { panic!("Blocks should not contain array declaration statements.") }
+        }
+        Statement::Conditional(_c) => {
+            panic!("Blocks should not contain conditional statements.")
+        }
+        Statement::Iteration(_) => {
+            panic!("Blocks should not contain iteration statements.")
+        }
+        Statement::WhileLoop(_) => {
+            panic!("Blocks should not contain while loop statements.")
+        }
+        Statement::CondStore(_) => {
+            panic!("Blocks should not contain conditional store statements.")
+        }
+        Statement::Witness(_) => {
+            panic!("Witness statements unsupported.")
+        }
+        Statement::ArrayDecl(_) => {
+            panic!("Blocks should not contain array declaration statements.")
+        }
     }
 }
 
@@ -647,19 +648,13 @@ fn is_bp_update(s: &Statement) -> bool {
 
 // Liveness analysis
 // GEN all variables in gen
-fn la_gen(
-    state: &mut BTreeSet<String>,
-    gen: &BTreeSet<String>
-) {
+fn la_gen(state: &mut BTreeSet<String>, gen: &BTreeSet<String>) {
     // Add all gens to state
     state.extend(gen.clone());
 }
 
 // KILL all variables in kill
-fn la_kill(
-    state: &mut BTreeSet<String>,
-    kill: &BTreeSet<String>
-) {
+fn la_kill(state: &mut BTreeSet<String>, kill: &BTreeSet<String>) {
     // Remove all kills to state
     for v in kill {
         state.remove(v);
@@ -667,10 +662,7 @@ fn la_kill(
 }
 
 // Decide if var is alive in the current scope given state
-fn is_alive(
-    state: &BTreeSet<String>,
-    var: &String
-) -> bool {
+fn is_alive(state: &BTreeSet<String>, var: &String) -> bool {
     state.get(var) != None
 }
 
@@ -686,7 +678,9 @@ fn var_fn_merge(
     let parts = var.split(".").collect::<Vec<&str>>();
     // Parts should either have length 1 (reserved), 2 (%RET), or 4 (others)
     match parts.len() {
-        1 => { return var.to_string(); },
+        1 => {
+            return var.to_string();
+        }
         2 => {
             if parts[1] == old_f_name {
                 // %RET is still %RET, no need to change that
@@ -716,19 +710,23 @@ fn var_fn_merge(
                 return var.to_string();
             }
         }
-        _ => { panic!("Cannot parse variable: {}", var) }
+        _ => {
+            panic!("Cannot parse variable: {}", var)
+        }
     }
 }
 
 // Join for block merge
-fn bm_join(
-    state: Option<usize>,
-    other: usize
-) -> Option<usize> {
+fn bm_join(state: Option<usize>, other: usize) -> Option<usize> {
     if let Some(cur_state) = state {
-        if cur_state != other { Some(0) }
-        else { Some(other) }
-    } else { Some(other) }
+        if cur_state != other {
+            Some(0)
+        } else {
+            Some(other)
+        }
+    } else {
+        Some(other)
+    }
 }
 
 // Convert a terminator into a list of instructions
@@ -748,10 +746,26 @@ fn term_to_instr<'ast>(
     // Any reference to rp@ should result in the termination of the conversion
     match term {
         Expression::Ternary(t) => {
-            let (mut left_instr, left_cons_count, left_ro_count, left_vm_count, left_repeat) = 
-                term_to_instr(bls, &t.second, instr_list, cons_count_list, ro_count_list, vm_count_list, cur_bl);
-            let (mut right_instr, right_cons_count, right_ro_count, right_vm_count, right_repeat) = 
-                term_to_instr(bls, &t.third, instr_list, cons_count_list, ro_count_list, vm_count_list, cur_bl);
+            let (mut left_instr, left_cons_count, left_ro_count, left_vm_count, left_repeat) =
+                term_to_instr(
+                    bls,
+                    &t.second,
+                    instr_list,
+                    cons_count_list,
+                    ro_count_list,
+                    vm_count_list,
+                    cur_bl,
+                );
+            let (mut right_instr, right_cons_count, right_ro_count, right_vm_count, right_repeat) =
+                term_to_instr(
+                    bls,
+                    &t.third,
+                    instr_list,
+                    cons_count_list,
+                    ro_count_list,
+                    vm_count_list,
+                    cur_bl,
+                );
 
             // Assert that no witness statements are within branches as that would be confusing
             for i in left_instr.iter().chain(right_instr.iter()) {
@@ -772,29 +786,37 @@ fn term_to_instr<'ast>(
 
             // Insert dummy loads on branches if vm_count does not match
             if left_ro_count < right_ro_count {
-                left_instr.extend(vec![BlockContent::DummyLoad(true); right_ro_count - left_ro_count]);
+                left_instr.extend(vec![
+                    BlockContent::DummyLoad(true);
+                    right_ro_count - left_ro_count
+                ]);
             }
             if left_vm_count < right_vm_count {
-                left_instr.extend(vec![BlockContent::DummyLoad(false); right_vm_count - left_vm_count]);
+                left_instr.extend(vec![
+                    BlockContent::DummyLoad(false);
+                    right_vm_count - left_vm_count
+                ]);
             }
             if right_ro_count < left_ro_count {
-                right_instr.extend(vec![BlockContent::DummyLoad(true); left_ro_count - right_ro_count]);
+                right_instr.extend(vec![
+                    BlockContent::DummyLoad(true);
+                    left_ro_count - right_ro_count
+                ]);
             }
             if right_vm_count < left_vm_count {
-                right_instr.extend(vec![BlockContent::DummyLoad(false); left_vm_count - right_vm_count]);
+                right_instr.extend(vec![
+                    BlockContent::DummyLoad(false);
+                    left_vm_count - right_vm_count
+                ]);
             }
-            let branch_inst = BlockContent::Branch((
-                *t.first.clone(),
-                left_instr,
-                right_instr
-            ));
+            let branch_inst = BlockContent::Branch((*t.first.clone(), left_instr, right_instr));
 
             (
-                vec![branch_inst; left_repeat], 
-                max(left_cons_count, right_cons_count) * left_repeat, 
-                max(left_ro_count, right_ro_count) * left_repeat, 
-                max(left_vm_count, right_vm_count) * left_repeat, 
-                1
+                vec![branch_inst; left_repeat],
+                max(left_cons_count, right_cons_count) * left_repeat,
+                max(left_ro_count, right_ro_count) * left_repeat,
+                max(left_vm_count, right_vm_count) * left_repeat,
+                1,
             )
         }
         Expression::Literal(le) => {
@@ -805,7 +827,13 @@ fn term_to_instr<'ast>(
                 if next_scope > cur_scope {
                     // Copy from instr_list only if scope of next_bl is higher than cur_scope
                     // DO NOT unroll the loops here. We need to unroll with the condition
-                    (instr_list[next_bl].clone(), cons_count_list[next_bl], ro_count_list[next_bl], vm_count_list[next_bl], bls[next_bl].fn_num_exec_bound / bls[cur_bl].fn_num_exec_bound)
+                    (
+                        instr_list[next_bl].clone(),
+                        cons_count_list[next_bl],
+                        ro_count_list[next_bl],
+                        vm_count_list[next_bl],
+                        bls[next_bl].fn_num_exec_bound / bls[cur_bl].fn_num_exec_bound,
+                    )
                 } else {
                     (Vec::new(), 0, 0, 0, 1)
                 }
@@ -816,7 +844,9 @@ fn term_to_instr<'ast>(
         Expression::Identifier(_) => {
             panic!("Terminator to instruction failed: cannot merge blocks terminating in rp@")
         }
-        _ => { panic!("Terminator to instruction failed: terminator must be ternary, literal, or rp@") }
+        _ => {
+            panic!("Terminator to instruction failed: terminator must be ternary, literal, or rp@")
+        }
     }
 }
 
@@ -853,8 +883,8 @@ fn new_witness_map() -> BTreeMap<String, usize> {
 // otherwise, update X to %<reg_size> and add X to reg_map
 // Returns the new statement and new reg_map
 fn var_to_reg_stmt<'ast>(
-    s: &Statement<'ast>, 
-    mut reg_map: BTreeMap<String, usize>, 
+    s: &Statement<'ast>,
+    mut reg_map: BTreeMap<String, usize>,
 ) -> (Statement<'ast>, BTreeMap<String, usize>) {
     match s {
         Statement::Return(_) => {
@@ -866,39 +896,19 @@ fn var_to_reg_stmt<'ast>(
             let new_stmt = AssertionStatement {
                 expression: new_expr,
                 message: a.message.clone(),
-                span: a.span
+                span: a.span,
             };
             (Statement::Assertion(new_stmt), reg_map)
         }
         Statement::Conditional(_c) => {
             panic!("Blocks should not contain conditional statements.")
-            /*
-            let new_cond: Expression;
-            (new_cond, reg_map) = var_to_reg_expr(&c.condition, reg_map);
-            let mut new_ifbranch = Vec::new();
-            for s in &c.ifbranch {
-                let new_stmt: Statement;
-                (new_stmt, reg_map) = var_to_reg_stmt(s, reg_map);
-                new_ifbranch.push(new_stmt);
-            }
-            let mut new_elsebranch = Vec::new();
-            for s in &c.elsebranch {
-                let new_stmt: Statement;
-                (new_stmt, reg_map) = var_to_reg_stmt(s, reg_map);
-                new_elsebranch.push(new_stmt);
-            }
-            let new_stmt = ConditionalStatement {
-                condition: new_cond,
-                ifbranch: new_ifbranch,
-                dummy: Vec::new(),
-                elsebranch: new_elsebranch,
-                span: Span::new("", 0, 0).unwrap()
-            };
-            (Statement::Conditional(new_stmt), reg_map)
-            */
         }
-        Statement::Iteration(_) => { panic!("Blocks should not contain iteration statements.") }
-        Statement::WhileLoop(_) => { panic!("Blocks should not contain while loop statements.") }
+        Statement::Iteration(_) => {
+            panic!("Blocks should not contain iteration statements.")
+        }
+        Statement::WhileLoop(_) => {
+            panic!("Blocks should not contain while loop statements.")
+        }
         Statement::Definition(d) => {
             let mut new_lhs: Vec<TypedIdentifierOrAssignee> = Vec::new();
             for l in &d.lhs {
@@ -906,12 +916,14 @@ fn var_to_reg_stmt<'ast>(
                     TypedIdentifierOrAssignee::TypedIdentifier(tid) => {
                         let new_id_expr: IdentifierExpression;
                         (new_id_expr, reg_map) = var_to_reg_id_expr(&tid.identifier, reg_map);
-                        new_lhs.push(TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier{
-                            array_metadata: None,
-                            ty: tid.ty.clone(),
-                            identifier: new_id_expr,
-                            span: tid.span
-                        }));
+                        new_lhs.push(TypedIdentifierOrAssignee::TypedIdentifier(
+                            TypedIdentifier {
+                                array_metadata: None,
+                                ty: tid.ty.clone(),
+                                identifier: new_id_expr,
+                                span: tid.span,
+                            },
+                        ));
                     }
                     TypedIdentifierOrAssignee::Assignee(p) => {
                         let new_id_expr: IdentifierExpression;
@@ -924,7 +936,7 @@ fn var_to_reg_stmt<'ast>(
                                     (new_expr, reg_map) = var_to_reg_expr(&e, reg_map);
                                     new_accesses.push(AssigneeAccess::Select(ArrayAccess {
                                         expression: RangeOrExpression::Expression(new_expr),
-                                        span: a.span
+                                        span: a.span,
                                     }))
                                 } else {
                                     panic!("Range access not supported.")
@@ -933,10 +945,10 @@ fn var_to_reg_stmt<'ast>(
                                 panic!("Unsupported membership access.")
                             }
                         }
-                        new_lhs.push(TypedIdentifierOrAssignee::Assignee(Assignee{
+                        new_lhs.push(TypedIdentifierOrAssignee::Assignee(Assignee {
                             id: new_id_expr,
                             accesses: new_accesses,
-                            span: p.span
+                            span: p.span,
                         }));
                     }
                 }
@@ -946,13 +958,19 @@ fn var_to_reg_stmt<'ast>(
             let new_stmt = DefinitionStatement {
                 lhs: new_lhs,
                 expression: new_expr,
-                span: d.span
+                span: d.span,
             };
             (Statement::Definition(new_stmt), reg_map)
         }
-        Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
-        Statement::Witness(_) => { panic!("Witness statements unsupported.") }
-        Statement::ArrayDecl(_) => { panic!("Blocks should not contain array declaration statements.") }
+        Statement::CondStore(_) => {
+            panic!("Blocks should not contain conditional store statements.")
+        }
+        Statement::Witness(_) => {
+            panic!("Witness statements unsupported.")
+        }
+        Statement::ArrayDecl(_) => {
+            panic!("Blocks should not contain array declaration statements.")
+        }
     }
 }
 
@@ -961,8 +979,8 @@ fn var_to_reg_stmt<'ast>(
 // otherwise, update X to %<reg_size> and add X to reg_map
 // Returns the new expression and new reg_map
 fn var_to_reg_expr<'ast>(
-    e: &Expression<'ast>, 
-    mut reg_map: BTreeMap<String, usize>, 
+    e: &Expression<'ast>,
+    mut reg_map: BTreeMap<String, usize>,
 ) -> (Expression<'ast>, BTreeMap<String, usize>) {
     match e {
         Expression::Ternary(t) => {
@@ -972,33 +990,42 @@ fn var_to_reg_expr<'ast>(
             (new_first, reg_map) = var_to_reg_expr(&t.first, reg_map);
             (new_second, reg_map) = var_to_reg_expr(&t.second, reg_map);
             (new_third, reg_map) = var_to_reg_expr(&t.third, reg_map);
-            return (Expression::Ternary(TernaryExpression {
-                first: Box::new(new_first),
-                second: Box::new(new_second),
-                third: Box::new(new_third),
-                span: t.span
-            }), reg_map);
+            return (
+                Expression::Ternary(TernaryExpression {
+                    first: Box::new(new_first),
+                    second: Box::new(new_second),
+                    third: Box::new(new_third),
+                    span: t.span,
+                }),
+                reg_map,
+            );
         }
         Expression::Binary(b) => {
             let new_left: Expression;
             let new_right: Expression;
             (new_left, reg_map) = var_to_reg_expr(&b.left, reg_map);
             (new_right, reg_map) = var_to_reg_expr(&b.right, reg_map);
-            return (Expression::Binary(BinaryExpression {
-                op: b.op.clone(),
-                left: Box::new(new_left),
-                right: Box::new(new_right),
-                span: b.span
-            }), reg_map);
+            return (
+                Expression::Binary(BinaryExpression {
+                    op: b.op.clone(),
+                    left: Box::new(new_left),
+                    right: Box::new(new_right),
+                    span: b.span,
+                }),
+                reg_map,
+            );
         }
         Expression::Unary(u) => {
             let new_expr: Expression;
             (new_expr, reg_map) = var_to_reg_expr(&u.expression, reg_map);
-            return (Expression::Unary(UnaryExpression {
-                op: u.op.clone(),
-                expression: Box::new(new_expr),
-                span: u.span
-            }), reg_map);
+            return (
+                Expression::Unary(UnaryExpression {
+                    op: u.op.clone(),
+                    expression: Box::new(new_expr),
+                    span: u.span,
+                }),
+                reg_map,
+            );
         }
         Expression::Postfix(p) => {
             let mut new_accesses = Vec::new();
@@ -1009,7 +1036,7 @@ fn var_to_reg_expr<'ast>(
                         (new_expr, reg_map) = var_to_reg_expr(&e, reg_map);
                         new_accesses.push(Access::Select(ArrayAccess {
                             expression: RangeOrExpression::Expression(new_expr),
-                            span: a.span
+                            span: a.span,
                         }));
                     } else {
                         panic!("Range access not supported.")
@@ -1020,11 +1047,14 @@ fn var_to_reg_expr<'ast>(
             }
             let new_id_expr: IdentifierExpression;
             (new_id_expr, reg_map) = var_to_reg_id_expr(&p.id, reg_map);
-            return (Expression::Postfix(PostfixExpression {
-                id: new_id_expr,
-                accesses: new_accesses,
-                span: p.span
-            }), reg_map);
+            return (
+                Expression::Postfix(PostfixExpression {
+                    id: new_id_expr,
+                    accesses: new_accesses,
+                    span: p.span,
+                }),
+                reg_map,
+            );
         }
         Expression::Identifier(i) => {
             let new_id_expr: IdentifierExpression;
@@ -1041,15 +1071,18 @@ fn var_to_reg_expr<'ast>(
 }
 
 fn var_to_reg_id_expr<'ast>(
-    ie: &IdentifierExpression<'ast>, 
+    ie: &IdentifierExpression<'ast>,
     mut reg_map: BTreeMap<String, usize>,
 ) -> (IdentifierExpression<'ast>, BTreeMap<String, usize>) {
     let var_name: String;
     (var_name, reg_map, _) = var_name_to_reg_id_expr::<0>(ie.value.to_string(), reg_map);
-    (IdentifierExpression {
-        value: var_name,
-        span: ie.span
-    }, reg_map)
+    (
+        IdentifierExpression {
+            value: var_name,
+            span: ie.span,
+        },
+        reg_map,
+    )
 }
 
 // MODE: 0 - WITNESS, 1 - INPUT, 2 - OUTPUT
@@ -1058,7 +1091,7 @@ fn var_name_to_reg_id_expr<const MODE: usize>(
     mut reg_map: BTreeMap<String, usize>,
 ) -> (String, BTreeMap<String, usize>, usize) {
     let reg_size = reg_map.len();
-    
+
     if !reg_map.contains_key(&var_name) {
         reg_map.insert(var_name.clone(), reg_size);
     }
@@ -1068,7 +1101,7 @@ fn var_name_to_reg_id_expr<const MODE: usize>(
     match MODE {
         0 => (format!("%w{}", reg_label), reg_map, reg_label),
         1 => (format!("%i{:06}", reg_label), reg_map, reg_label),
-        _ => (format!("%o{:06}", reg_label), reg_map, reg_label)
+        _ => (format!("%o{:06}", reg_label), reg_map, reg_label),
     }
 }
 
@@ -1076,7 +1109,7 @@ fn var_name_to_reg_id_expr<const MODE: usize>(
 // If in a branch, convert every TyDef into Assg and record declared variables in gen_map_branch
 fn tydef_to_assignee_stmt<'ast, const IN_BRANCH: bool>(
     s: &Statement<'ast>,
-    mut gen_set: BTreeSet<String>, 
+    mut gen_set: BTreeSet<String>,
 ) -> (Statement<'ast>, BTreeSet<String>, BTreeMap<String, Ty>) {
     let mut gen_map_branch = BTreeMap::new();
     match s {
@@ -1084,9 +1117,15 @@ fn tydef_to_assignee_stmt<'ast, const IN_BRANCH: bool>(
             panic!("Blocks should not contain return statements.");
         }
         Statement::Assertion(_) => (s.clone(), gen_set, gen_map_branch),
-        Statement::Conditional(_c) => { panic!("Blocks should not contain conditional statements.") }
-        Statement::Iteration(_) => { panic!("Blocks should not contain iteration statements.") }
-        Statement::WhileLoop(_) => { panic!("Blocks should not contain while loop statements.") }
+        Statement::Conditional(_c) => {
+            panic!("Blocks should not contain conditional statements.")
+        }
+        Statement::Iteration(_) => {
+            panic!("Blocks should not contain iteration statements.")
+        }
+        Statement::WhileLoop(_) => {
+            panic!("Blocks should not contain while loop statements.")
+        }
         Statement::Definition(d) => {
             let mut new_lhs: Vec<TypedIdentifierOrAssignee> = Vec::new();
             for l in &d.lhs {
@@ -1099,21 +1138,21 @@ fn tydef_to_assignee_stmt<'ast, const IN_BRANCH: bool>(
                             new_lhs.push(TypedIdentifierOrAssignee::Assignee(Assignee {
                                 id: IdentifierExpression {
                                     value: v,
-                                    span: Span::new("", 0, 0).unwrap()
+                                    span: Span::new("", 0, 0).unwrap(),
                                 },
                                 accesses: Vec::new(),
-                                span: Span::new("", 0, 0).unwrap()
+                                span: Span::new("", 0, 0).unwrap(),
                             }));
-                        } 
+                        }
                         // Variable has not been declared, in a branch
                         else if IN_BRANCH {
                             new_lhs.push(TypedIdentifierOrAssignee::Assignee(Assignee {
                                 id: IdentifierExpression {
                                     value: v.clone(),
-                                    span: Span::new("", 0, 0).unwrap()
+                                    span: Span::new("", 0, 0).unwrap(),
                                 },
                                 accesses: Vec::new(),
-                                span: Span::new("", 0, 0).unwrap()
+                                span: Span::new("", 0, 0).unwrap(),
                             }));
                             gen_set.insert(v.clone());
                             gen_map_branch.insert(v, ty);
@@ -1124,20 +1163,28 @@ fn tydef_to_assignee_stmt<'ast, const IN_BRANCH: bool>(
                             gen_set.insert(v);
                         }
                     }
-                    TypedIdentifierOrAssignee::Assignee(_) => { new_lhs.push(l.clone()); }
+                    TypedIdentifierOrAssignee::Assignee(_) => {
+                        new_lhs.push(l.clone());
+                    }
                 }
             }
             // Reconstruct d as an assignee
             let s = Statement::Definition(DefinitionStatement {
                 lhs: new_lhs,
                 expression: d.expression.clone(),
-                span: Span::new("", 0, 0).unwrap()
+                span: Span::new("", 0, 0).unwrap(),
             });
             (s, gen_set, gen_map_branch)
         }
-        Statement::CondStore(_) => { panic!("Blocks should not contain conditional store statements.") }
-        Statement::Witness(_) => { panic!("Witness statements unsupported.") }
-        Statement::ArrayDecl(_) => { panic!("Blocks should not contain array declaration statements.") }
+        Statement::CondStore(_) => {
+            panic!("Blocks should not contain conditional store statements.")
+        }
+        Statement::Witness(_) => {
+            panic!("Witness statements unsupported.")
+        }
+        Statement::ArrayDecl(_) => {
+            panic!("Blocks should not contain array declaration statements.")
+        }
     }
 }
 
@@ -1151,18 +1198,24 @@ fn la_inst<'ast>(
     mut state: BTreeSet<String>,
     // One live variable set per each function call trace, expressed as a BTreeMap
     mut state_per_call_trace: BTreeMap<Vec<usize>, BTreeSet<String>>,
-    inst: &Vec<BlockContent<'ast>>
-) -> (BTreeSet<String>, BTreeMap<Vec<usize>, BTreeSet<String>>, Vec<BlockContent<'ast>>) {
+    inst: &Vec<BlockContent<'ast>>,
+) -> (
+    BTreeSet<String>,
+    BTreeMap<Vec<usize>, BTreeSet<String>>,
+    Vec<BlockContent<'ast>>,
+) {
     let mut new_instructions = Vec::new();
     for i in inst.iter().rev() {
         match i {
             BlockContent::Witness((var, ty, _)) => {
                 // All witness statements need to be kept to tell the prover which witnesses are dead
                 if is_alive(&state, var) {
-                    new_instructions.insert(0, BlockContent::Witness((var.clone(), ty.clone(), true)));
+                    new_instructions
+                        .insert(0, BlockContent::Witness((var.clone(), ty.clone(), true)));
                     state.remove(var);
                 } else {
-                    new_instructions.insert(0, BlockContent::Witness((var.clone(), ty.clone(), false)));
+                    new_instructions
+                        .insert(0, BlockContent::Witness((var.clone(), ty.clone(), false)));
                 }
             }
             BlockContent::MemPush((var, _, _)) => {
@@ -1190,46 +1243,46 @@ fn la_inst<'ast>(
             // If there is an array initialization, then the array is dead but %AS is alive
             BlockContent::ArrayInit((arr, _, len, read_only)) => {
                 // if is_alive(&state, arr) {
-                    new_instructions.insert(0, i.clone());
-                    let gen = expr_find_val(&len);
-                    la_gen(&mut state, &gen);
-                    state.remove(arr);
+                new_instructions.insert(0, i.clone());
+                let gen = expr_find_val(&len);
+                la_gen(&mut state, &gen);
+                state.remove(arr);
+                if *read_only {
+                    state.insert("%SP".to_string());
+                } else {
+                    state.insert("%AS".to_string());
+                }
+                for (_, s) in state_per_call_trace.iter_mut() {
+                    la_gen(s, &gen);
+                    s.remove(arr);
                     if *read_only {
-                        state.insert("%SP".to_string());
+                        s.insert("%SP".to_string());
                     } else {
-                        state.insert("%AS".to_string());
+                        s.insert("%AS".to_string());
                     }
-                    for (_, s) in state_per_call_trace.iter_mut() {
-                        la_gen(s, &gen);
-                        s.remove(arr);
-                        if *read_only {
-                            s.insert("%SP".to_string());
-                        } else {
-                            s.insert("%AS".to_string());
-                        }
-                    }
+                }
                 // }
             }
             // If there is a store, then keep the statement if array is alive
             BlockContent::Store((val_expr, _, arr, id_expr, _, read_only)) => {
                 // if is_alive(&state, arr) {
-                    new_instructions.insert(0, i.clone());
-                    state.insert(arr.to_string());
-                    let val_gen = expr_find_val(val_expr);
-                    la_gen(&mut state, &val_gen);
-                    let id_gen = expr_find_val(id_expr);
-                    la_gen(&mut state, &id_gen);
+                new_instructions.insert(0, i.clone());
+                state.insert(arr.to_string());
+                let val_gen = expr_find_val(val_expr);
+                la_gen(&mut state, &val_gen);
+                let id_gen = expr_find_val(id_expr);
+                la_gen(&mut state, &id_gen);
+                if !*read_only {
+                    state.insert("%TS".to_string());
+                }
+                for (_, s) in state_per_call_trace.iter_mut() {
+                    s.insert(arr.to_string());
+                    la_gen(s, &val_gen);
+                    la_gen(s, &id_gen);
                     if !*read_only {
-                        state.insert("%TS".to_string());
+                        s.insert("%TS".to_string());
                     }
-                    for (_, s) in state_per_call_trace.iter_mut() {
-                        s.insert(arr.to_string());
-                        la_gen(s, &val_gen);
-                        la_gen(s, &id_gen);
-                        if !*read_only {
-                            s.insert("%TS".to_string());
-                        }
-                    }
+                }
                 // }
             }
             // If there is a load, then keep the statement if val is alive
@@ -1267,14 +1320,25 @@ fn la_inst<'ast>(
             }
             BlockContent::Branch((cond, if_inst, else_inst)) => {
                 // Liveness of branches
-                let (mut new_if_state, mut new_if_state_per_call_trace, new_if_inst) = 
+                let (mut new_if_state, mut new_if_state_per_call_trace, new_if_inst) =
                     la_inst(state.clone(), state_per_call_trace.clone(), if_inst);
-                let (new_else_state, new_else_state_per_call_trace, new_else_inst) = 
+                let (new_else_state, new_else_state_per_call_trace, new_else_inst) =
                     la_inst(state.clone(), state_per_call_trace.clone(), else_inst);
                 new_if_state.extend(new_else_state);
-                assert_eq!(new_if_state_per_call_trace.len(), new_else_state_per_call_trace.len());
+                assert_eq!(
+                    new_if_state_per_call_trace.len(),
+                    new_else_state_per_call_trace.len()
+                );
                 for (entry_point, _) in new_if_state_per_call_trace.clone() {
-                    new_if_state_per_call_trace.get_mut(&entry_point).unwrap().extend(new_else_state_per_call_trace.get(&entry_point).unwrap().clone());
+                    new_if_state_per_call_trace
+                        .get_mut(&entry_point)
+                        .unwrap()
+                        .extend(
+                            new_else_state_per_call_trace
+                                .get(&entry_point)
+                                .unwrap()
+                                .clone(),
+                        );
                 }
                 state = new_if_state;
                 state_per_call_trace = new_if_state_per_call_trace;
@@ -1286,7 +1350,10 @@ fn la_inst<'ast>(
                 }
                 // Branch is dead if both branches are empty
                 if new_if_inst.len() > 0 || new_else_inst.len() > 0 {
-                    new_instructions.insert(0, BlockContent::Branch((cond.clone(), new_if_inst, new_else_inst)));
+                    new_instructions.insert(
+                        0,
+                        BlockContent::Branch((cond.clone(), new_if_inst, new_else_inst)),
+                    );
                 }
             }
             BlockContent::Stmt(s) => {
@@ -1312,7 +1379,7 @@ fn la_inst<'ast>(
 // Typing
 fn ty_inst<'ast>(
     mut state: BTreeMap<String, Ty>,
-    inst: &Vec<BlockContent<'ast>>
+    inst: &Vec<BlockContent<'ast>>,
 ) -> BTreeMap<String, Ty> {
     for i in inst.iter().rev() {
         match i {
@@ -1365,30 +1432,63 @@ fn fm_inst<'ast, const IS_CALLER: bool>(
         match i {
             BlockContent::Witness((var, ty, alive)) => {
                 let new_var = var_fn_merge(var, old_f_name, new_f_name, scope_diff);
-                new_instr.insert(0, BlockContent::Witness((new_var, ty.clone(), alive.clone())));
+                new_instr.insert(
+                    0,
+                    BlockContent::Witness((new_var, ty.clone(), alive.clone())),
+                );
             }
             BlockContent::MemPush((name, ty, offset)) => {
-                new_instr.insert(0, BlockContent::MemPush((var_fn_merge(name, old_f_name, new_f_name, scope_diff), ty.clone(), *offset)));
+                new_instr.insert(
+                    0,
+                    BlockContent::MemPush((
+                        var_fn_merge(name, old_f_name, new_f_name, scope_diff),
+                        ty.clone(),
+                        *offset,
+                    )),
+                );
             }
             BlockContent::MemPop((id, ty, offset)) => {
-                new_instr.insert(0, BlockContent::MemPop((var_fn_merge(id, old_f_name, new_f_name, scope_diff), ty.clone(), *offset)));
+                new_instr.insert(
+                    0,
+                    BlockContent::MemPop((
+                        var_fn_merge(id, old_f_name, new_f_name, scope_diff),
+                        ty.clone(),
+                        *offset,
+                    )),
+                );
             }
             BlockContent::ArrayInit((arr, ty, expr, ro)) => {
                 let new_arr = var_fn_merge(arr, old_f_name, new_f_name, scope_diff);
                 let new_expr = expr_replace_fn(expr, old_f_name, new_f_name, scope_diff);
-                new_instr.insert(0, BlockContent::ArrayInit((new_arr, ty.clone(), new_expr, *ro)));
+                new_instr.insert(
+                    0,
+                    BlockContent::ArrayInit((new_arr, ty.clone(), new_expr, *ro)),
+                );
             }
             BlockContent::Store((val_expr, ty, arr, id_expr, init, ro)) => {
                 let new_val_expr = expr_replace_fn(val_expr, old_f_name, new_f_name, scope_diff);
                 let new_arr = var_fn_merge(arr, old_f_name, new_f_name, scope_diff);
                 let new_id_expr = expr_replace_fn(id_expr, old_f_name, new_f_name, scope_diff);
-                new_instr.insert(0, BlockContent::Store((new_val_expr, ty.clone(), new_arr, new_id_expr, *init, *ro)));
+                new_instr.insert(
+                    0,
+                    BlockContent::Store((
+                        new_val_expr,
+                        ty.clone(),
+                        new_arr,
+                        new_id_expr,
+                        *init,
+                        *ro,
+                    )),
+                );
             }
             BlockContent::Load((val, ty, arr, id_expr, ro)) => {
                 let new_val = var_fn_merge(val, old_f_name, new_f_name, scope_diff);
                 let new_arr = var_fn_merge(arr, old_f_name, new_f_name, scope_diff);
                 let new_id_expr = expr_replace_fn(id_expr, old_f_name, new_f_name, scope_diff);
-                new_instr.insert(0, BlockContent::Load((new_val, ty.clone(), new_arr, new_id_expr, *ro)));
+                new_instr.insert(
+                    0,
+                    BlockContent::Load((new_val, ty.clone(), new_arr, new_id_expr, *ro)),
+                );
             }
             BlockContent::DummyLoad(ro) => {
                 new_instr.insert(0, BlockContent::DummyLoad(*ro));
@@ -1396,12 +1496,19 @@ fn fm_inst<'ast, const IS_CALLER: bool>(
             BlockContent::Branch((cond, if_inst, else_inst)) => {
                 let new_cond = expr_replace_fn(cond, old_f_name, new_f_name, scope_diff);
                 let new_if_inst = fm_inst::<IS_CALLER>(if_inst, old_f_name, new_f_name, scope_diff);
-                let new_else_inst = fm_inst::<IS_CALLER>(else_inst, old_f_name, new_f_name, scope_diff);
-                new_instr.insert(0, BlockContent::Branch((new_cond, new_if_inst, new_else_inst)));
+                let new_else_inst =
+                    fm_inst::<IS_CALLER>(else_inst, old_f_name, new_f_name, scope_diff);
+                new_instr.insert(
+                    0,
+                    BlockContent::Branch((new_cond, new_if_inst, new_else_inst)),
+                );
             }
             BlockContent::Stmt(s) => {
                 if !IS_CALLER || rp_find_val(i).is_none() {
-                    new_instr.insert(0, BlockContent::Stmt(stmt_replace_fn(s, old_f_name, new_f_name, scope_diff)));
+                    new_instr.insert(
+                        0,
+                        BlockContent::Stmt(stmt_replace_fn(s, old_f_name, new_f_name, scope_diff)),
+                    );
                 }
             }
         }
@@ -1419,25 +1526,38 @@ fn vtr_inst<'ast>(
         match s {
             BlockContent::Witness((var, ty, alive)) => {
                 let new_var_name: String;
-                (new_var_name, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
-                new_instr.push(BlockContent::Witness((new_var_name, ty.clone(), alive.clone())));
+                (new_var_name, witness_map, _) =
+                    var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
+                new_instr.push(BlockContent::Witness((
+                    new_var_name,
+                    ty.clone(),
+                    alive.clone(),
+                )));
             }
             BlockContent::MemPush((var, ty, offset)) => {
                 let new_var: String;
-                (new_var, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
+                (new_var, witness_map, _) =
+                    var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
                 new_instr.push(BlockContent::MemPush((new_var, ty.clone(), *offset)));
             }
             BlockContent::MemPop((var, ty, offset)) => {
                 let new_var: String;
-                (new_var, witness_map, _) = var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
+                (new_var, witness_map, _) =
+                    var_name_to_reg_id_expr::<0>(var.to_string(), witness_map);
                 new_instr.push(BlockContent::MemPop((new_var, ty.clone(), *offset)));
             }
             BlockContent::ArrayInit((arr, ty, size_expr, ro)) => {
                 let new_arr_name: String;
-                (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
+                (new_arr_name, witness_map, _) =
+                    var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
                 let new_size_expr: Expression;
                 (new_size_expr, witness_map) = var_to_reg_expr(&size_expr, witness_map);
-                new_instr.push(BlockContent::ArrayInit((new_arr_name, ty.clone(), new_size_expr, *ro)));
+                new_instr.push(BlockContent::ArrayInit((
+                    new_arr_name,
+                    ty.clone(),
+                    new_size_expr,
+                    *ro,
+                )));
             }
             BlockContent::Store((val_expr, ty, arr, id_expr, init, ro)) => {
                 let new_val_expr: Expression;
@@ -1445,17 +1565,33 @@ fn vtr_inst<'ast>(
                 let new_arr_name: String;
                 (new_val_expr, witness_map) = var_to_reg_expr(&val_expr, witness_map);
                 (new_id_expr, witness_map) = var_to_reg_expr(&id_expr, witness_map);
-                (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
-                new_instr.push(BlockContent::Store((new_val_expr, ty.clone(), new_arr_name, new_id_expr, *init, *ro)))
+                (new_arr_name, witness_map, _) =
+                    var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
+                new_instr.push(BlockContent::Store((
+                    new_val_expr,
+                    ty.clone(),
+                    new_arr_name,
+                    new_id_expr,
+                    *init,
+                    *ro,
+                )))
             }
             BlockContent::Load((val, ty, arr, id_expr, ro)) => {
                 let new_val: String;
                 let new_id_expr: Expression;
                 let new_arr_name: String;
-                (new_val, witness_map, _) = var_name_to_reg_id_expr::<0>(val.to_string(), witness_map);
+                (new_val, witness_map, _) =
+                    var_name_to_reg_id_expr::<0>(val.to_string(), witness_map);
                 (new_id_expr, witness_map) = var_to_reg_expr(&id_expr, witness_map);
-                (new_arr_name, witness_map, _) = var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
-                new_instr.push(BlockContent::Load((new_val, ty.clone(), new_arr_name, new_id_expr, *ro)))
+                (new_arr_name, witness_map, _) =
+                    var_name_to_reg_id_expr::<0>(arr.to_string(), witness_map);
+                new_instr.push(BlockContent::Load((
+                    new_val,
+                    ty.clone(),
+                    new_arr_name,
+                    new_id_expr,
+                    *ro,
+                )))
             }
             BlockContent::DummyLoad(ro) => {
                 new_instr.push(BlockContent::DummyLoad(*ro));
@@ -1484,7 +1620,11 @@ fn vtr_inst<'ast>(
 fn tta_inst<'ast, const IN_BRANCH: bool>(
     mut gen_set: BTreeSet<String>,
     inst: &Vec<BlockContent<'ast>>,
-) -> (BTreeSet<String>, BTreeMap<String, Ty>, Vec<BlockContent<'ast>>) {
+) -> (
+    BTreeSet<String>,
+    BTreeMap<String, Ty>,
+    Vec<BlockContent<'ast>>,
+) {
     let mut new_instr = Vec::new();
     let mut gen_map_branch = BTreeMap::new();
     // Process instructions
@@ -1498,8 +1638,10 @@ fn tta_inst<'ast, const IN_BRANCH: bool>(
                 gen_map_branch.extend(new_map);
             }
             BlockContent::Branch((cond, if_inst, else_inst)) => {
-                let (mut gen_if_set, new_if_map, new_if_inst) = tta_inst::<true>(gen_set.clone(), &if_inst);
-                let (gen_else_set, new_else_map, new_else_inst) = tta_inst::<true>(gen_set, &else_inst);
+                let (mut gen_if_set, new_if_map, new_if_inst) =
+                    tta_inst::<true>(gen_set.clone(), &if_inst);
+                let (gen_else_set, new_else_map, new_else_inst) =
+                    tta_inst::<true>(gen_set, &else_inst);
                 gen_if_set.extend(gen_else_set);
                 gen_set = gen_if_set;
 
@@ -1512,18 +1654,22 @@ fn tta_inst<'ast, const IN_BRANCH: bool>(
                     }
                     gen_map_branch = BTreeMap::new();
                 }
-                new_instr.push(BlockContent::Branch((cond.clone(), new_if_inst, new_else_inst)));
+                new_instr.push(BlockContent::Branch((
+                    cond.clone(),
+                    new_if_inst,
+                    new_else_inst,
+                )));
             }
-            _ => { new_instr.push(i.clone()); }
+            _ => {
+                new_instr.push(i.clone());
+            }
         }
     }
     (gen_set, gen_map_branch, new_instr)
 }
 
 // Block Memory Counter
-fn bmc_inst<'ast>(
-    inst: &Vec<BlockContent<'ast>>,
-) -> (usize, usize, Vec<bool>) {
+fn bmc_inst<'ast>(inst: &Vec<BlockContent<'ast>>) -> (usize, usize, Vec<bool>) {
     let mut phy_mem_accesses_count = 0;
     let mut vir_mem_accesses_count = 0;
     // List of bools of whether each vm variable is alive, useful for branch merge
@@ -1568,30 +1714,11 @@ fn bmc_inst<'ast>(
                     vm_liveness.extend(vec![true, true, true, true]);
                 }
             }
-            /*
-            BlockContent::Load(_) => {
-                vir_mem_accesses_count += 1;
-                //                      phy_addr  vir_addr  data      ls        ts
-                vm_liveness.extend(vec![false,    true,     true,     true,     true]);
-            }
-            // Store includes init, invalidate, & store
-            BlockContent::Store((_, _, _, _, init)) => {
-                if *init {
-                    vir_mem_accesses_count += 1;
-                    //                      phy_addr  vir_addr  data      ls        ts
-                    vm_liveness.extend(vec![true,     true,     true,     true,     true]);
-                } else {
-                    vir_mem_accesses_count += 3;
-                    //                      phy_addr  vir_addr  data      ls        ts
-                    vm_liveness.extend(vec![true,     true,     false,    true,     true,    // retrieval
-                                            true,     true,     false,    true,     true,    // invalidation
-                                            true,     true,     true,     true,     true,]); // allocation
-                }
-            }
-            */
             BlockContent::Branch((_, if_inst, else_inst)) => {
-                let (if_phy_mem_accesses_count, if_vir_mem_accesses_count, if_vm_liveness) = bmc_inst(&if_inst);
-                let (else_phy_mem_accesses_count, else_vir_mem_accesses_count, else_vm_liveness) = bmc_inst(&else_inst);
+                let (if_phy_mem_accesses_count, if_vir_mem_accesses_count, if_vm_liveness) =
+                    bmc_inst(&if_inst);
+                let (else_phy_mem_accesses_count, else_vir_mem_accesses_count, else_vm_liveness) =
+                    bmc_inst(&else_inst);
                 // Through dummy loads, ro ops of both branches should be the same
                 assert_eq!(if_phy_mem_accesses_count, else_phy_mem_accesses_count);
                 // Through dummy loads, mem ops of both branches should be the same
@@ -1613,7 +1740,7 @@ struct VarSpillInfo {
     var_name: String,
     fn_name: String,
     scope: usize,
-    version: usize
+    version: usize,
 }
 
 impl VarSpillInfo {
@@ -1621,20 +1748,30 @@ impl VarSpillInfo {
         let var_segs = var.split('.').collect::<Vec<&str>>();
         let var_name = var_segs[0].to_string();
         let fn_name = var_segs[1].to_string();
-        let scope: usize = if var_segs.len() < 3 { 0 } else { var_segs[2].to_string().parse().unwrap() };
-        let version: usize = if var_segs.len() < 4 { 0 } else { var_segs[3].to_string().parse().unwrap() };
-    
+        let scope: usize = if var_segs.len() < 3 {
+            0
+        } else {
+            var_segs[2].to_string().parse().unwrap()
+        };
+        let version: usize = if var_segs.len() < 4 {
+            0
+        } else {
+            var_segs[3].to_string().parse().unwrap()
+        };
+
         VarSpillInfo {
             var_name,
             fn_name,
             scope,
-            version
+            version,
         }
     }
 
     // a.x is directly below a.y if y = x + 1
     fn directly_below(&self, other: &VarSpillInfo) -> bool {
-        self.var_name == other.var_name && self.fn_name == other.fn_name && self.scope + 1 == other.scope
+        self.var_name == other.var_name
+            && self.fn_name == other.fn_name
+            && self.scope + 1 == other.scope
     }
 }
 
@@ -1661,18 +1798,26 @@ impl<'ast> ZGen<'ast> {
         if !no_opt {
             // Construct CFG
             let (
-                successor, 
-                predecessor, 
-                exit_bls, 
-                entry_bls_fn, 
-                successor_fn, 
-                predecessor_fn, 
+                successor,
+                predecessor,
+                exit_bls,
+                entry_bls_fn,
+                successor_fn,
+                predecessor_fn,
                 exit_bls_fn,
                 _,
-                _
+                _,
             ) = self.construct_flow_graph(&bls, entry_bl);
             if VERBOSE && CFG_VERBOSE {
-                print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+                print_cfg(
+                    &successor,
+                    &predecessor,
+                    &exit_bls,
+                    &entry_bls_fn,
+                    &successor_fn,
+                    &predecessor_fn,
+                    &exit_bls_fn,
+                );
             }
             // Func Merge
             bls = self.func_merge(bls, &predecessor, successor_fn, entry_bls_fn, exit_bls_fn);
@@ -1682,19 +1827,10 @@ impl<'ast> ZGen<'ast> {
             }
 
             // Reconstruct CFG
-            let (
-                successor, 
-                predecessor, 
-                exit_bls, 
-                _, 
-                _, 
-                predecessor_fn, 
-                _,
-                _,
-                _
-            ) = self.construct_flow_graph(&bls, entry_bl);
+            let (successor, predecessor, exit_bls, _, _, predecessor_fn, _, _, _) =
+                self.construct_flow_graph(&bls, entry_bl);
             // Liveness
-            bls = self.liveness_analysis(bls, &successor, &predecessor,  &predecessor_fn, &exit_bls);
+            bls = self.liveness_analysis(bls, &successor, &predecessor, &predecessor_fn, &exit_bls);
             // DBE
             (bls, entry_bl, _) = self.dead_block_elimination(bls, entry_bl, predecessor);
             if VERBOSE {
@@ -1704,43 +1840,76 @@ impl<'ast> ZGen<'ast> {
 
             // Reconstruct CFG
             let (
-                successor, 
-                predecessor, 
-                exit_bls, 
-                entry_bls_fn, 
-                successor_fn, 
-                predecessor_fn, 
+                successor,
+                predecessor,
+                exit_bls,
+                entry_bls_fn,
+                successor_fn,
+                predecessor_fn,
                 exit_bls_fn,
                 _,
-                call_exit_entry_map
+                call_exit_entry_map,
             ) = self.construct_flow_graph(&bls, entry_bl);
             if VERBOSE && CFG_VERBOSE {
-                print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+                print_cfg(
+                    &successor,
+                    &predecessor,
+                    &exit_bls,
+                    &entry_bls_fn,
+                    &successor_fn,
+                    &predecessor_fn,
+                    &exit_bls_fn,
+                );
             }
 
             // Set Input Output
-            (bls, _) = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, &entry_bls_fn, &exit_bls_fn, &call_exit_entry_map, inputs.clone());
+            (bls, _) = self.set_input_output(
+                bls,
+                &successor,
+                &predecessor,
+                &predecessor_fn,
+                &entry_bl,
+                &exit_bls,
+                &entry_bls_fn,
+                &exit_bls_fn,
+                &call_exit_entry_map,
+                inputs.clone(),
+            );
             if VERBOSE {
                 println!("\n\n--\nSet Input Output before Spilling:");
                 print_bls(&bls, &entry_bl);
             }
 
             // Resolve block merge
-            bls = self.resolve_block_merge(bls, &successor, &successor_fn, &predecessor_fn, &exit_bls_fn);
+            bls = self.resolve_block_merge(
+                bls,
+                &successor,
+                &successor_fn,
+                &predecessor_fn,
+                &exit_bls_fn,
+            );
             // Reconstruct CFG
             let (
-                successor, 
-                predecessor, 
-                exit_bls, 
-                entry_bls_fn, 
-                successor_fn, 
-                predecessor_fn, 
+                successor,
+                predecessor,
+                exit_bls,
+                entry_bls_fn,
+                successor_fn,
+                predecessor_fn,
                 exit_bls_fn,
                 _,
-                _
+                _,
             ) = self.construct_flow_graph(&bls, entry_bl);
             if VERBOSE && CFG_VERBOSE {
-                print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+                print_cfg(
+                    &successor,
+                    &predecessor,
+                    &exit_bls,
+                    &entry_bls_fn,
+                    &successor_fn,
+                    &predecessor_fn,
+                    &exit_bls_fn,
+                );
             }
             // DBE
             (bls, entry_bl, _) = self.dead_block_elimination(bls, entry_bl, predecessor);
@@ -1751,18 +1920,26 @@ impl<'ast> ZGen<'ast> {
 
             // Reconstruct CFG
             let (
-                successor, 
-                predecessor, 
-                exit_bls, 
-                entry_bls_fn, 
-                successor_fn, 
-                predecessor_fn, 
+                successor,
+                predecessor,
+                exit_bls,
+                entry_bls_fn,
+                successor_fn,
+                predecessor_fn,
                 exit_bls_fn,
                 _,
-                _
+                _,
             ) = self.construct_flow_graph(&bls, entry_bl);
             if VERBOSE && CFG_VERBOSE {
-                print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+                print_cfg(
+                    &successor,
+                    &predecessor,
+                    &exit_bls,
+                    &entry_bls_fn,
+                    &successor_fn,
+                    &predecessor_fn,
+                    &exit_bls_fn,
+                );
             }
 
             // Spilling
@@ -1770,7 +1947,16 @@ impl<'ast> ZGen<'ast> {
             // Note that this value is not the final io_size as it does not include any reserved registers
             let tmp_io_size = self.get_max_io_size(&bls, &inputs);
             // Perform spilling
-            bls = self.resolve_spilling(bls, tmp_io_size, &predecessor, &successor, entry_bl, &entry_bls_fn, &predecessor_fn, &successor_fn);
+            bls = self.resolve_spilling(
+                bls,
+                tmp_io_size,
+                &predecessor,
+                &successor,
+                entry_bl,
+                &entry_bls_fn,
+                &predecessor_fn,
+                &successor_fn,
+            );
             if VERBOSE {
                 println!("\n\n--\nSpilling:");
                 print_bls(&bls, &entry_bl);
@@ -1779,24 +1965,39 @@ impl<'ast> ZGen<'ast> {
 
         // Construct CFG
         let (
-            successor, 
-            mut predecessor, 
-            exit_bls, 
-            entry_bls_fn, 
-            successor_fn, 
-            predecessor_fn, 
+            successor,
+            mut predecessor,
+            exit_bls,
+            entry_bls_fn,
+            successor_fn,
+            predecessor_fn,
             exit_bls_fn,
             _,
-            _
+            _,
         ) = self.construct_flow_graph(&bls, entry_bl);
         if VERBOSE && CFG_VERBOSE {
-            print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+            print_cfg(
+                &successor,
+                &predecessor,
+                &exit_bls,
+                &entry_bls_fn,
+                &successor_fn,
+                &predecessor_fn,
+                &exit_bls_fn,
+            );
         }
 
         // Liveness, mainly to remove %BP
-        bls = self.liveness_analysis(bls, &successor, &predecessor,  &predecessor_fn, &exit_bls);
+        bls = self.liveness_analysis(bls, &successor, &predecessor, &predecessor_fn, &exit_bls);
         // EBE
-        (_, predecessor, bls) = self.empty_block_elimination(bls, exit_bls, successor, predecessor, &entry_bls_fn, &exit_bls_fn);
+        (_, predecessor, bls) = self.empty_block_elimination(
+            bls,
+            exit_bls,
+            successor,
+            predecessor,
+            &entry_bls_fn,
+            &exit_bls_fn,
+        );
         // DBE
         (bls, entry_bl, _) = self.dead_block_elimination(bls, entry_bl, predecessor);
         if VERBOSE {
@@ -1806,23 +2007,42 @@ impl<'ast> ZGen<'ast> {
 
         // Construct CFG again after DBE
         let (
-            successor, 
-            predecessor, 
-            exit_bls, 
-            entry_bls_fn, 
-            successor_fn, 
-            predecessor_fn, 
+            successor,
+            predecessor,
+            exit_bls,
+            entry_bls_fn,
+            successor_fn,
+            predecessor_fn,
             exit_bls_fn,
             _,
-            call_exit_entry_map
+            call_exit_entry_map,
         ) = self.construct_flow_graph(&bls, entry_bl);
         if VERBOSE && CFG_VERBOSE {
-            print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+            print_cfg(
+                &successor,
+                &predecessor,
+                &exit_bls,
+                &entry_bls_fn,
+                &successor_fn,
+                &predecessor_fn,
+                &exit_bls_fn,
+            );
         }
 
         // Set I/O again after optimizations
         let input_liveness: Vec<bool>;
-        (bls, input_liveness) = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, &entry_bls_fn, &exit_bls_fn, &call_exit_entry_map, inputs.clone());
+        (bls, input_liveness) = self.set_input_output(
+            bls,
+            &successor,
+            &predecessor,
+            &predecessor_fn,
+            &entry_bl,
+            &exit_bls,
+            &entry_bls_fn,
+            &exit_bls_fn,
+            &call_exit_entry_map,
+            inputs.clone(),
+        );
         if VERBOSE {
             println!("\n\n--\nSet Input Output after Spilling:");
             print_bls(&bls, &entry_bl);
@@ -1840,21 +2060,26 @@ impl<'ast> ZGen<'ast> {
         mut rp_successor: Vec<BTreeSet<usize>>,
         mut successor_fn: Vec<BTreeSet<usize>>,
         mut visited: Vec<bool>,
-        mut next_bls: VecDeque<usize>
-    ) -> (Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, Vec<bool>, VecDeque<usize>) {
-
+        mut next_bls: VecDeque<usize>,
+    ) -> (
+        Vec<BTreeSet<usize>>,
+        Vec<BTreeSet<usize>>,
+        Vec<BTreeSet<usize>>,
+        Vec<bool>,
+        VecDeque<usize>,
+    ) {
         match next_bl {
             NextBlock::Label(tmp_bl) => {
                 // If RP is set, only add RP to successor_fn of cur_bl
                 if rp_slot == 0 || IS_RP {
                     successor_fn[cur_bl].insert(*tmp_bl);
                 }
-                
+
                 // Add next_bl to successor of cur_bl if not RP
                 if !IS_RP {
                     successor[cur_bl].insert(*tmp_bl);
                 }
-                
+
                 let old_rp_successor = rp_successor[*tmp_bl].clone();
                 // If rp_slot is not 0, append rp_slot to rp_successor of tmp_bl
                 // unless we are dealing with the RP block.
@@ -1867,7 +2092,7 @@ impl<'ast> ZGen<'ast> {
                     // No function call
                     for i in rp_successor[cur_bl].clone().iter() {
                         rp_successor[*tmp_bl].insert(i.clone());
-                    }     
+                    }
                 }
 
                 // If next_bl is not visited or if rp_successor of tmp_bl changes,
@@ -1896,10 +2121,20 @@ impl<'ast> ZGen<'ast> {
     fn construct_flow_graph(
         &self,
         bls: &Vec<Block>,
-        entry_bl: usize
-    ) -> (Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, BTreeSet<usize>, BTreeSet<usize>, Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, BTreeSet<usize>, BTreeMap<usize, usize>, BTreeMap<usize, usize>) {
+        entry_bl: usize,
+    ) -> (
+        Vec<BTreeSet<usize>>,
+        Vec<BTreeSet<usize>>,
+        BTreeSet<usize>,
+        BTreeSet<usize>,
+        Vec<BTreeSet<usize>>,
+        Vec<BTreeSet<usize>>,
+        BTreeSet<usize>,
+        BTreeMap<usize, usize>,
+        BTreeMap<usize, usize>,
+    ) {
         let bl_size = bls.len();
-        
+
         // list of all blocks that ends with ProgTerm
         let mut exit_bls: BTreeSet<usize> = BTreeSet::new();
 
@@ -1908,7 +2143,7 @@ impl<'ast> ZGen<'ast> {
         entry_bl_fn.insert(entry_bl);
         // list of all blocks that ends with ProgTerm or Rp
         let mut exit_bls_fn: BTreeSet<usize> = BTreeSet::new();
-        
+
         // Start from entry_bl, do a BFS, add all blocks in its terminator to its successor
         // When we reach a function call (i.e., rp@ is set), add rp@ to the callee's rp_successor
         // Propagate rp_successor until we reach an rp() terminator, at that point, append rp_successor to successor
@@ -1938,7 +2173,7 @@ impl<'ast> ZGen<'ast> {
             // By definition, rp@ cannot be 0
             // There shouldn't be multiple rp@'s, but if there is, we only care about the last one
             let mut rp_slot = 0;
-            
+
             for i in 0..bls[cur_bl].instructions.len() {
                 if let Some(tmp_bl) = rp_find_val(&bls[cur_bl].instructions[i]) {
                     rp_slot = tmp_bl;
@@ -1947,8 +2182,17 @@ impl<'ast> ZGen<'ast> {
 
             // Process RP block
             if rp_slot != 0 {
-                (successor, rp_successor, successor_fn, visited, next_bls) = 
-                    self.flow_graph_transition::<true>(cur_bl, &NextBlock::Label(rp_slot), rp_slot, successor, rp_successor, successor_fn, visited, next_bls);
+                (successor, rp_successor, successor_fn, visited, next_bls) = self
+                    .flow_graph_transition::<true>(
+                        cur_bl,
+                        &NextBlock::Label(rp_slot),
+                        rp_slot,
+                        successor,
+                        rp_successor,
+                        successor_fn,
+                        visited,
+                        next_bls,
+                    );
                 call_entry_exit_map.insert(cur_bl, rp_slot);
                 call_exit_entry_map.insert(rp_slot, cur_bl);
             }
@@ -1959,8 +2203,17 @@ impl<'ast> ZGen<'ast> {
                 BlockTerminator::Transition(e) => {
                     let branches = bl_trans_find_val(&e);
                     for b in &branches {
-                        (successor, rp_successor, successor_fn, visited, next_bls) = 
-                            self.flow_graph_transition::<false>(cur_bl, b, rp_slot, successor, rp_successor, successor_fn, visited, next_bls);
+                        (successor, rp_successor, successor_fn, visited, next_bls) = self
+                            .flow_graph_transition::<false>(
+                                cur_bl,
+                                b,
+                                rp_slot,
+                                successor,
+                                rp_successor,
+                                successor_fn,
+                                visited,
+                                next_bls,
+                            );
                     }
                     // if rp@ is set, the next block must be a function entrance
                     if rp_slot != 0 {
@@ -1971,7 +2224,6 @@ impl<'ast> ZGen<'ast> {
                                 panic!("Blocks {} invokes function calls and cannot terminate to rp@ block.", cur_bl)
                             }
                         }
-
                     }
                     // If block terminates to rp@, add it to exit_bls_fn
                     for b in branches {
@@ -1980,8 +2232,10 @@ impl<'ast> ZGen<'ast> {
                         }
                     }
                 }
-                BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-                BlockTerminator::ProgTerm => { 
+                BlockTerminator::FuncCall(_) => {
+                    panic!("Blocks pending optimization should not have FuncCall as terminator.")
+                }
+                BlockTerminator::ProgTerm => {
                     exit_bls.insert(cur_bl);
                     exit_bls_fn.insert(cur_bl);
                 }
@@ -1996,7 +2250,17 @@ impl<'ast> ZGen<'ast> {
                 predecessor_fn[*j].insert(i);
             }
         }
-        return (successor, predecessor, exit_bls, entry_bl_fn, successor_fn, predecessor_fn, exit_bls_fn, call_entry_exit_map, call_exit_entry_map);
+        return (
+            successor,
+            predecessor,
+            exit_bls,
+            entry_bl_fn,
+            successor_fn,
+            predecessor_fn,
+            exit_bls_fn,
+            call_entry_exit_map,
+            call_exit_entry_map,
+        );
     }
 
     // Standard Liveness Analysis
@@ -2026,12 +2290,12 @@ impl<'ast> ZGen<'ast> {
         // MEET is union, so IN and OUT are Empty Set
         let mut bl_in: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
         let mut bl_out: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
-        
+
         // Can this ever happen?
-        if exit_bls.is_empty() { 
+        if exit_bls.is_empty() {
             panic!("The program has no exit block!");
         }
-        
+
         // Start from exit block
         let mut next_bls: VecDeque<usize> = VecDeque::new();
         for eb in exit_bls {
@@ -2053,15 +2317,20 @@ impl<'ast> ZGen<'ast> {
 
             // Only analyze if never visited before or OUT changes
             if !visited[cur_bl] || state != bl_out[cur_bl] {
-                
                 bl_out[cur_bl] = state.clone();
                 visited[cur_bl] = true;
 
                 // KILL and GEN within the terminator
                 match &bls[cur_bl].terminator {
-                    BlockTerminator::Transition(e) => { state.extend(expr_find_val(&e)); }
-                    BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-                    BlockTerminator::ProgTerm => {}            
+                    BlockTerminator::Transition(e) => {
+                        state.extend(expr_find_val(&e));
+                    }
+                    BlockTerminator::FuncCall(_) => {
+                        panic!(
+                            "Blocks pending optimization should not have FuncCall as terminator."
+                        )
+                    }
+                    BlockTerminator::ProgTerm => {}
                 }
 
                 // KILL and GEN within the block
@@ -2074,7 +2343,7 @@ impl<'ast> ZGen<'ast> {
                 for tmp_bl in &predecessor[cur_bl] {
                     next_bls.push_back(*tmp_bl);
                 }
-                for tmp_bl in &predecessor_fn[cur_bl]{
+                for tmp_bl in &predecessor_fn[cur_bl] {
                     if !predecessor[cur_bl].contains(tmp_bl) {
                         next_bls.push_back(*tmp_bl);
                     }
@@ -2098,30 +2367,36 @@ impl<'ast> ZGen<'ast> {
 
             // Only visit each block once
             if !visited[cur_bl] {
-
                 visited[cur_bl] = true;
                 let new_instructions: Vec<BlockContent>;
 
                 // KILL and GEN within the terminator
                 match &bls[cur_bl].terminator {
-                    BlockTerminator::Transition(e) => { state.extend(expr_find_val(&e)); }
-                    BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-                    BlockTerminator::ProgTerm => {}            
+                    BlockTerminator::Transition(e) => {
+                        state.extend(expr_find_val(&e));
+                    }
+                    BlockTerminator::FuncCall(_) => {
+                        panic!(
+                            "Blocks pending optimization should not have FuncCall as terminator."
+                        )
+                    }
+                    BlockTerminator::ProgTerm => {}
                 }
 
-                (_, _, new_instructions) = la_inst(state, BTreeMap::new(), &bls[cur_bl].instructions);
+                (_, _, new_instructions) =
+                    la_inst(state, BTreeMap::new(), &bls[cur_bl].instructions);
                 bls[cur_bl].instructions = new_instructions;
 
                 // Block Transition
                 for tmp_bl in &predecessor[cur_bl] {
                     next_bls.push_back(*tmp_bl);
                 }
-                for tmp_bl in &predecessor_fn[cur_bl]{
+                for tmp_bl in &predecessor_fn[cur_bl] {
                     if !predecessor[cur_bl].contains(tmp_bl) {
                         next_bls.push_back(*tmp_bl);
                     }
                 }
-            }    
+            }
         }
 
         return bls;
@@ -2155,10 +2430,11 @@ impl<'ast> ZGen<'ast> {
                 // Update CFG
                 successor_fn[caller] = BTreeSet::from([callee]);
                 entry_bls_fn.remove(&callee);
-                
+
                 // Merge callee with caller
                 // First on caller (to deal with call parameters)
-                bls[caller].instructions = fm_inst::<true>(&bls[caller].instructions, callee_fn, caller_fn, scope_diff);
+                bls[caller].instructions =
+                    fm_inst::<true>(&bls[caller].instructions, callee_fn, caller_fn, scope_diff);
                 // Then on callee
                 let mut visited: Vec<bool> = vec![false; bls.len()];
                 let mut next_bls: VecDeque<usize> = VecDeque::new();
@@ -2172,10 +2448,17 @@ impl<'ast> ZGen<'ast> {
                         bls[cur_bl].fn_name = caller_fn.clone();
                         bls[cur_bl].scope += scope_diff;
                         bls[cur_bl].fn_num_exec_bound *= num_exec_factor;
-                        bls[cur_bl].instructions = fm_inst::<false>(&bls[cur_bl].instructions, callee_fn, caller_fn, scope_diff);
+                        bls[cur_bl].instructions = fm_inst::<false>(
+                            &bls[cur_bl].instructions,
+                            callee_fn,
+                            caller_fn,
+                            scope_diff,
+                        );
                         // Update terminator
                         if let BlockTerminator::Transition(e) = &bls[cur_bl].terminator {
-                            bls[cur_bl].terminator = BlockTerminator::Transition(expr_replace_fn(e, callee_fn, caller_fn, scope_diff));
+                            bls[cur_bl].terminator = BlockTerminator::Transition(expr_replace_fn(
+                                e, callee_fn, caller_fn, scope_diff,
+                            ));
                         } else {
                             unreachable!();
                         }
@@ -2187,18 +2470,26 @@ impl<'ast> ZGen<'ast> {
                             assert_eq!(successor_fn[cur_bl].len(), 0);
                             successor_fn[cur_bl] = BTreeSet::from([caller_exit]);
                             // Assert terminator is rp@ and replace it with caller_exit
-                            if let BlockTerminator::Transition(Expression::Identifier(ie)) = &bls[cur_bl].terminator {
+                            if let BlockTerminator::Transition(Expression::Identifier(ie)) =
+                                &bls[cur_bl].terminator
+                            {
                                 assert!(is_rp(&ie.value).is_some());
-                                bls[cur_bl].terminator = BlockTerminator::Transition(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                                    value: DecimalNumber {
-                                        value: format!("{}", caller_exit),
-                                        span: Span::new("", 0, 0).unwrap()
-                                    },
-                                    suffix: Some(ty_to_dec_suffix(&Type::Basic(BasicType::Field(FieldType {
-                                        span: Span::new("", 0, 0).unwrap()
-                                    })))),
-                                    span: Span::new("", 0, 0).unwrap()
-                                })))
+                                bls[cur_bl].terminator = BlockTerminator::Transition(
+                                    Expression::Literal(LiteralExpression::DecimalLiteral(
+                                        DecimalLiteralExpression {
+                                            value: DecimalNumber {
+                                                value: format!("{}", caller_exit),
+                                                span: Span::new("", 0, 0).unwrap(),
+                                            },
+                                            suffix: Some(ty_to_dec_suffix(&Type::Basic(
+                                                BasicType::Field(FieldType {
+                                                    span: Span::new("", 0, 0).unwrap(),
+                                                }),
+                                            ))),
+                                            span: Span::new("", 0, 0).unwrap(),
+                                        },
+                                    )),
+                                )
                             } else {
                                 unreachable!();
                             }
@@ -2210,7 +2501,12 @@ impl<'ast> ZGen<'ast> {
                     }
                 }
                 // Finally on caller_exit
-                bls[caller_exit].instructions = fm_inst::<false>(&bls[caller_exit].instructions, callee_fn, caller_fn, scope_diff);
+                bls[caller_exit].instructions = fm_inst::<false>(
+                    &bls[caller_exit].instructions,
+                    callee_fn,
+                    caller_fn,
+                    scope_diff,
+                );
             }
         }
 
@@ -2231,7 +2527,7 @@ impl<'ast> ZGen<'ast> {
         entry_bls_fn: &BTreeSet<usize>,
         exit_bls_fn: &BTreeSet<usize>,
         call_exit_entry_map: &BTreeMap<usize, usize>,
-        inputs: Vec<(String, Ty)>
+        inputs: Vec<(String, Ty)>,
     ) -> (Vec<Block<'ast>>, Vec<bool>) {
         // Liveness
         let mut visited: Vec<bool> = vec![false; bls.len()];
@@ -2239,14 +2535,16 @@ impl<'ast> ZGen<'ast> {
         let mut bl_in: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
         let mut bl_out: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
         // Program states per function call trace, if exist
-        let mut bl_in_per_call_trace: Vec<BTreeMap<Vec<usize>, BTreeSet<String>>> = vec![BTreeMap::new(); bls.len()];
-        let mut bl_out_per_call_trace: Vec<BTreeMap<Vec<usize>, BTreeSet<String>>> = vec![BTreeMap::new(); bls.len()];
-        
+        let mut bl_in_per_call_trace: Vec<BTreeMap<Vec<usize>, BTreeSet<String>>> =
+            vec![BTreeMap::new(); bls.len()];
+        let mut bl_out_per_call_trace: Vec<BTreeMap<Vec<usize>, BTreeSet<String>>> =
+            vec![BTreeMap::new(); bls.len()];
+
         // Can this ever happen?
-        if exit_bls.is_empty() { 
+        if exit_bls.is_empty() {
             panic!("The program has no exit block!");
         }
-        
+
         // Start from exit block
         let mut next_bls: VecDeque<usize> = VecDeque::new();
         for eb in exit_bls {
@@ -2275,7 +2573,10 @@ impl<'ast> ZGen<'ast> {
                     for (trace, s_state) in bl_in_per_call_trace[*s].clone() {
                         let new_trace = [trace, vec![*entry_bl]].concat();
                         if state_per_trace.contains_key(&new_trace) {
-                            state_per_trace.get_mut(&new_trace).unwrap().extend(s_state.clone());
+                            state_per_trace
+                                .get_mut(&new_trace)
+                                .unwrap()
+                                .extend(s_state.clone());
                         } else {
                             state_per_trace.insert(new_trace, s_state.clone());
                         }
@@ -2289,7 +2590,10 @@ impl<'ast> ZGen<'ast> {
                             state.extend(s_state.clone());
                             let new_trace = trace[..trace.len() - 1].to_vec();
                             if state_per_trace.contains_key(&new_trace) {
-                                state_per_trace.get_mut(&new_trace).unwrap().extend(s_state.clone());
+                                state_per_trace
+                                    .get_mut(&new_trace)
+                                    .unwrap()
+                                    .extend(s_state.clone());
                             } else {
                                 state_per_trace.insert(new_trace, s_state.clone());
                             }
@@ -2300,7 +2604,10 @@ impl<'ast> ZGen<'ast> {
                     state.extend(bl_in[*s].clone());
                     for (trace, s_state) in bl_in_per_call_trace[*s].clone() {
                         if state_per_trace.contains_key(&trace) {
-                            state_per_trace.get_mut(&trace).unwrap().extend(s_state.clone());
+                            state_per_trace
+                                .get_mut(&trace)
+                                .unwrap()
+                                .extend(s_state.clone());
                         } else {
                             state_per_trace.insert(trace, s_state.clone());
                         }
@@ -2309,25 +2616,33 @@ impl<'ast> ZGen<'ast> {
             }
 
             // Only analyze if never visited before or OUT changes
-            if !visited[cur_bl] || state != bl_out[cur_bl] || state_per_trace != bl_out_per_call_trace[cur_bl] {
+            if !visited[cur_bl]
+                || state != bl_out[cur_bl]
+                || state_per_trace != bl_out_per_call_trace[cur_bl]
+            {
                 bl_out[cur_bl] = state.clone();
                 bl_out_per_call_trace[cur_bl] = state_per_trace.clone();
                 visited[cur_bl] = true;
 
                 // KILL and GEN within the terminator
                 match &bls[cur_bl].terminator {
-                    BlockTerminator::Transition(e) => { 
-                        state.extend(expr_find_val(&e)); 
+                    BlockTerminator::Transition(e) => {
+                        state.extend(expr_find_val(&e));
                         for (_, s) in state_per_trace.iter_mut() {
-                            s.extend(expr_find_val(&e)); 
+                            s.extend(expr_find_val(&e));
                         }
                     }
-                    BlockTerminator::FuncCall(_) => { panic!("Blocks pending optimization should not have FuncCall as terminator.") }
-                    BlockTerminator::ProgTerm => {}            
+                    BlockTerminator::FuncCall(_) => {
+                        panic!(
+                            "Blocks pending optimization should not have FuncCall as terminator."
+                        )
+                    }
+                    BlockTerminator::ProgTerm => {}
                 }
 
                 // KILL and GEN within the block
-                (state, state_per_trace, _) = la_inst(state, state_per_trace, &bls[cur_bl].instructions);
+                (state, state_per_trace, _) =
+                    la_inst(state, state_per_trace, &bls[cur_bl].instructions);
 
                 bl_in[cur_bl] = state;
                 bl_in_per_call_trace[cur_bl] = state_per_trace.clone();
@@ -2336,7 +2651,7 @@ impl<'ast> ZGen<'ast> {
                 for tmp_bl in &predecessor[cur_bl] {
                     next_bls.push_back(*tmp_bl);
                 }
-                for tmp_bl in &predecessor_fn[cur_bl]{
+                for tmp_bl in &predecessor_fn[cur_bl] {
                     if !predecessor[cur_bl].contains(tmp_bl) {
                         next_bls.push_back(*tmp_bl);
                     }
@@ -2356,7 +2671,7 @@ impl<'ast> ZGen<'ast> {
         // MEET is union, so IN and OUT are Empty Set
         let mut bl_in: Vec<BTreeMap<String, Ty>> = vec![BTreeMap::new(); bls.len()];
         let mut bl_out: Vec<BTreeMap<String, Ty>> = vec![BTreeMap::new(); bls.len()];
-        
+
         // Start from entry block
         let mut next_bls: VecDeque<usize> = VecDeque::new();
         next_bls.push_back(*entry_bl);
@@ -2387,7 +2702,6 @@ impl<'ast> ZGen<'ast> {
 
             // Only analyze if never visited before or OUT changes
             if !visited[cur_bl] || state != bl_in[cur_bl] {
-                
                 bl_in[cur_bl] = state.clone();
                 visited[cur_bl] = true;
 
@@ -2402,7 +2716,7 @@ impl<'ast> ZGen<'ast> {
                 for tmp_bl in &successor[cur_bl] {
                     next_bls.push_back(*tmp_bl);
                 }
-            }    
+            }
         }
 
         let ty_map_in = bl_in;
@@ -2433,7 +2747,9 @@ impl<'ast> ZGen<'ast> {
             if input_lst[*entry_bl].contains(name) {
                 input_liveness.push(true);
                 if let Some(ty) = ty_map_in[*entry_bl].get(name) {
-                    bls[*entry_bl].inputs.push((name.to_string(), Some(ty.clone())));
+                    bls[*entry_bl]
+                        .inputs
+                        .push((name.to_string(), Some(ty.clone())));
                 }
             } else {
                 input_liveness.push(false);
@@ -2444,10 +2760,7 @@ impl<'ast> ZGen<'ast> {
     }
 
     // Count number of constraints for a block
-    fn bl_count_num_cons(
-        &self,
-        bl: &Block<'ast>
-    ) -> usize {
+    fn bl_count_num_cons(&self, bl: &Block<'ast>) -> usize {
         let block_name = &format!("Pseudo_Block_{}", bl.name);
         self.circ_init_block(block_name);
         self.bl_to_circ::<true>(bl, block_name);
@@ -2457,7 +2770,7 @@ impl<'ast> ZGen<'ast> {
 
         if let Some(c) = cs.comps.get(block_name) {
             let mut r1cs = to_r1cs(c, cfg());
-    
+
             // Remove the last constraint because it is about the return value
             r1cs.constraints.pop();
 
@@ -2474,7 +2787,7 @@ impl<'ast> ZGen<'ast> {
         successor: &Vec<BTreeSet<usize>>,
         successor_fn: &Vec<BTreeSet<usize>>,
         predecessor_fn: &Vec<BTreeSet<usize>>,
-        exit_bls_fn: &BTreeSet<usize>
+        exit_bls_fn: &BTreeSet<usize>,
     ) -> Vec<Block<'ast>> {
         // STEP 1: Obtain number of constraints for all blocks
         let mut bl_num_cons = Vec::new();
@@ -2488,7 +2801,10 @@ impl<'ast> ZGen<'ast> {
             bls[i].num_cons = bl_num_cons[i];
         }
         // Maximum # of constraints is max(MAX_BLOCK_SIZE, bl_num_cons.max().next_power_of_two())
-        let max_num_cons = max(MAX_BLOCK_SIZE, bl_num_cons.iter().max().unwrap().next_power_of_two());
+        let max_num_cons = max(
+            MAX_BLOCK_SIZE,
+            bl_num_cons.iter().max().unwrap().next_power_of_two(),
+        );
 
         // STEP 2: Backward analysis within each function
         // For each block, if there exists a potential merge component, record the size of constraints of that component
@@ -2545,7 +2861,10 @@ impl<'ast> ZGen<'ast> {
                     }
                 }
             }
-            let scope_state: Vec<usize> = scope_state.iter().map(|i| if let Some(state) = i { *state } else { 0 }).collect();
+            let scope_state: Vec<usize> = scope_state
+                .iter()
+                .map(|i| if let Some(state) = i { *state } else { 0 })
+                .collect();
             // Compute count && agg_count
             // Count is undefined if a component does not exist
             // Initialize agg_count to the number of constraints of itself
@@ -2558,8 +2877,11 @@ impl<'ast> ZGen<'ast> {
                     let succ_scope = bls[*succ].scope;
                     if succ_scope > cur_scope {
                         // Add num_iteration * count
-                        count_state += bls[*succ].fn_num_exec_bound / bls[cur_bl].fn_num_exec_bound * agg_count_list[*succ];
-                        agg_count_state += bls[*succ].fn_num_exec_bound / bls[cur_bl].fn_num_exec_bound * agg_count_list[*succ];
+                        count_state += bls[*succ].fn_num_exec_bound / bls[cur_bl].fn_num_exec_bound
+                            * agg_count_list[*succ];
+                        agg_count_state += bls[*succ].fn_num_exec_bound
+                            / bls[cur_bl].fn_num_exec_bound
+                            * agg_count_list[*succ];
                     }
                 }
                 // Add count of scope_state[cur_scope]
@@ -2567,12 +2889,18 @@ impl<'ast> ZGen<'ast> {
                 agg_count_state += agg_count_list[scope_state[cur_scope]];
             }
 
-            if !visited[cur_bl] || scope_state != scope_list[cur_bl] || count_state != count_list[cur_bl] || agg_count_state != agg_count_list[cur_bl] {
+            if !visited[cur_bl]
+                || scope_state != scope_list[cur_bl]
+                || count_state != count_list[cur_bl]
+                || agg_count_state != agg_count_list[cur_bl]
+            {
                 visited[cur_bl] = true;
                 // Update scope_head
                 let scope_tail = scope_state[cur_scope];
                 if scope_tail != 0 {
-                    assert!(scope_head_list[scope_tail] == cur_bl || scope_head_list[scope_tail] == 0);
+                    assert!(
+                        scope_head_list[scope_tail] == cur_bl || scope_head_list[scope_tail] == 0
+                    );
                     scope_head_list[scope_tail] = cur_bl;
                 }
                 // Update scope, count, & agg_count
@@ -2608,7 +2936,7 @@ impl<'ast> ZGen<'ast> {
                     let comp_tail = scope_list[comp_head][comp_scope];
 
                     // Backward analysis starting from comp_tail
-                    // STATE is 
+                    // STATE is
                     // 1. a list of instructions of all merged blocks of the current scope
                     // 2. number of read-only ops of all merged blocks of the current scope
                     // 3. number of vm ops of all merged blocks of the current scope
@@ -2632,10 +2960,23 @@ impl<'ast> ZGen<'ast> {
                         let mut ro_count_state = bls[cur_bl].num_ro_ops;
                         let mut vm_count_state = bls[cur_bl].num_vm_ops;
                         // Instructions of successors & next block in scope, if not comp_tail
-                        if cur_bl != comp_tail {                  
+                        if cur_bl != comp_tail {
                             if let BlockTerminator::Transition(t) = &bls[cur_bl].terminator {
-                                let (merged_instr, merged_cons_count, merged_ro_count, merged_vm_count, _) = 
-                                    term_to_instr(&bls, t, &instr_list, &cons_count_list, &ro_count_list, &vm_count_list, cur_bl);
+                                let (
+                                    merged_instr,
+                                    merged_cons_count,
+                                    merged_ro_count,
+                                    merged_vm_count,
+                                    _,
+                                ) = term_to_instr(
+                                    &bls,
+                                    t,
+                                    &instr_list,
+                                    &cons_count_list,
+                                    &ro_count_list,
+                                    &vm_count_list,
+                                    cur_bl,
+                                );
                                 instr_state.extend(merged_instr);
                                 cons_count_state += merged_cons_count;
                                 ro_count_state += merged_ro_count;
@@ -2673,7 +3014,11 @@ impl<'ast> ZGen<'ast> {
 
                     // Recompute num_cons, scope, & count for comp_head & comp_tail
                     bl_num_cons[comp_head] = count_list[comp_head];
-                    count_list[comp_head] = if count_list[comp_tail] == 0 { 0 } else { bl_num_cons[comp_head] + count_list[comp_tail] - bl_num_cons[comp_tail] };
+                    count_list[comp_head] = if count_list[comp_tail] == 0 {
+                        0
+                    } else {
+                        bl_num_cons[comp_head] + count_list[comp_tail] - bl_num_cons[comp_tail]
+                    };
                     scope_list[comp_head] = scope_list[comp_tail].clone();
                     count_list[comp_tail] = 0;
 
@@ -2736,7 +3081,11 @@ impl<'ast> ZGen<'ast> {
                     input_count += 1;
                 }
             }
-            spill_size.push(if input_count > io_size { input_count - io_size } else { 0 });
+            spill_size.push(if input_count > io_size {
+                input_count - io_size
+            } else {
+                0
+            });
         }
 
         // Forward Analysis to determine the effectiveness of spilling each candidate
@@ -2747,20 +3096,22 @@ impl<'ast> ZGen<'ast> {
         // GEN: Whenever a variable is defined or function is called
         //      If the variable or function shadows a variable in block output, and the variable is not out-of-scope, update STACK and OOS
         // KILL: Whenever a shadower is out of scope, update STACK and OOP
-        
+
         // OOS is a set of all local variables out of scope
         let mut oos_in: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
         let mut oos_out: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
         // STACK is (shadower, candidate, pop_function, pop_scope).
         // When the current scope is (pop_function, pop_scope), need to pop the spill
-        let mut stack_in: Vec<BTreeSet<(String, String, String, usize)>> = vec![BTreeSet::new(); bls.len()];
-        let mut stack_out: Vec<BTreeSet<(String, String, String, usize)>> = vec![BTreeSet::new(); bls.len()];
+        let mut stack_in: Vec<BTreeSet<(String, String, String, usize)>> =
+            vec![BTreeSet::new(); bls.len()];
+        let mut stack_out: Vec<BTreeSet<(String, String, String, usize)>> =
+            vec![BTreeSet::new(); bls.len()];
         let mut visited = vec![false; bls.len()];
         let mut next_bls: VecDeque<usize> = VecDeque::new();
         next_bls.push_back(entry_bl);
         while !next_bls.is_empty() {
             let cur_bl = next_bls.pop_front().unwrap();
-            
+
             // JOIN of OOS
             let mut oos = {
                 let mut oos = BTreeSet::new();
@@ -2815,41 +3166,65 @@ impl<'ast> ZGen<'ast> {
                             // GEN describes all newly defined variables
                             let (gen, _) = stmt_find_val(stmt);
                             for shadower in &gen {
-                                let shadower_alive = bls[cur_bl].outputs.iter().fold(false, |a, b| a || &b.0 == shadower);
+                                let shadower_alive = bls[cur_bl]
+                                    .outputs
+                                    .iter()
+                                    .fold(false, |a, b| a || &b.0 == shadower);
                                 // Proceed if the shadower lives till the end of the block
                                 if shadower_alive && shadower.chars().next().unwrap() != '%' {
                                     let shadower_vsi = VarSpillInfo::new(shadower.to_string());
                                     // Iterate through outputs of cur_bl (live variables)
                                     for (candidate, _) in &bls[cur_bl].outputs {
                                         // Proceed if in scope
-                                        if candidate.chars().next().unwrap() != '%' && !oos.contains(candidate) {
+                                        if candidate.chars().next().unwrap() != '%'
+                                            && !oos.contains(candidate)
+                                        {
                                             // Proceed if there is shadowing
-                                            if VarSpillInfo::new(candidate.to_string()).directly_below(&shadower_vsi) {
+                                            if VarSpillInfo::new(candidate.to_string())
+                                                .directly_below(&shadower_vsi)
+                                            {
                                                 // GEN
                                                 oos.insert(candidate.to_string());
                                                 // pop_scope is current scope - 1
-                                                stack.insert((shadower.to_string(), candidate.to_string(), bls[cur_bl].fn_name.to_string(), bls[cur_bl].scope - 1));
+                                                stack.insert((
+                                                    shadower.to_string(),
+                                                    candidate.to_string(),
+                                                    bls[cur_bl].fn_name.to_string(),
+                                                    bls[cur_bl].scope - 1,
+                                                ));
                                             }
                                         }
                                     }
                                 }
                             }
-                        },
+                        }
                         BlockContent::Witness((shadower, _, _)) => {
-                            let shadower_alive = bls[cur_bl].outputs.iter().fold(false, |a, b| a || &b.0 == shadower);
+                            let shadower_alive = bls[cur_bl]
+                                .outputs
+                                .iter()
+                                .fold(false, |a, b| a || &b.0 == shadower);
                             // Proceed if the shadower lives till the end of the block
                             if shadower_alive && shadower.chars().next().unwrap() != '%' {
                                 let shadower_vsi = VarSpillInfo::new(shadower.to_string());
                                 // Iterate through outputs of cur_bl (live variables)
                                 for (candidate, _) in &bls[cur_bl].outputs {
                                     // Proceed if in scope
-                                    if candidate.chars().next().unwrap() != '%' && !oos.contains(candidate) {
+                                    if candidate.chars().next().unwrap() != '%'
+                                        && !oos.contains(candidate)
+                                    {
                                         // Proceed if there is shadowing
-                                        if VarSpillInfo::new(candidate.to_string()).directly_below(&shadower_vsi) {
+                                        if VarSpillInfo::new(candidate.to_string())
+                                            .directly_below(&shadower_vsi)
+                                        {
                                             // GEN
                                             oos.insert(candidate.to_string());
                                             // pop_scope is current scope - 1
-                                            stack.insert((shadower.to_string(), candidate.to_string(), bls[cur_bl].fn_name.to_string(), bls[cur_bl].scope - 1));
+                                            stack.insert((
+                                                shadower.to_string(),
+                                                candidate.to_string(),
+                                                bls[cur_bl].fn_name.to_string(),
+                                                bls[cur_bl].scope - 1,
+                                            ));
                                         }
                                     }
                                 }
@@ -2863,8 +3238,14 @@ impl<'ast> ZGen<'ast> {
                 // First assert on CFG shape: all fn_successors can only have one scope other than the scope of cur_bl
                 let mut succ_scope = bls[cur_bl].scope;
                 for succ in &successor_fn[cur_bl] {
-                    assert!(bls[*succ].scope == bls[cur_bl].scope || bls[*succ].scope == succ_scope || succ_scope == bls[cur_bl].scope);
-                    if succ_scope != bls[*succ].scope { succ_scope = bls[*succ].scope };
+                    assert!(
+                        bls[*succ].scope == bls[cur_bl].scope
+                            || bls[*succ].scope == succ_scope
+                            || succ_scope == bls[cur_bl].scope
+                    );
+                    if succ_scope != bls[*succ].scope {
+                        succ_scope = bls[*succ].scope
+                    };
                 }
                 // If there is a scope change in fn_successor, pop out all candidates that are no longer spilled
                 if succ_scope < bls[cur_bl].scope {
@@ -2888,17 +3269,23 @@ impl<'ast> ZGen<'ast> {
                         if candidate.chars().next().unwrap() != '%' {
                             // Only if in scope
                             if !oos.contains(candidate) {
-                                if &VarSpillInfo::new(candidate.to_string()).fn_name == caller_name {
+                                if &VarSpillInfo::new(candidate.to_string()).fn_name == caller_name
+                                {
                                     // GEN
                                     oos.insert(candidate.to_string());
                                     // pop_scope is current scope
-                                    stack.insert((callee_name.to_string(), candidate.to_string(), caller_name.to_string(), bls[cur_bl].scope));
+                                    stack.insert((
+                                        callee_name.to_string(),
+                                        candidate.to_string(),
+                                        caller_name.to_string(),
+                                        bls[cur_bl].scope,
+                                    ));
                                 }
                             }
                         }
                     }
                 }
-                
+
                 oos_out[cur_bl] = oos.clone();
                 stack_out[cur_bl] = stack.clone();
                 for succ in &successor[cur_bl] {
@@ -2936,7 +3323,11 @@ impl<'ast> ZGen<'ast> {
             // Pick the #0 candidate
             let ((shadower, var, _, _), _) = &scores[0];
             // Add the candidate to spills
-            let mut vars = if let Some(vars) = spills.get(shadower) { vars.clone() } else { BTreeSet::new() };
+            let mut vars = if let Some(vars) = spills.get(shadower) {
+                vars.clone()
+            } else {
+                BTreeSet::new()
+            };
             vars.insert(var.to_string());
             spills.insert(shadower.to_string(), vars);
             // Remove the candidate from stack_in
@@ -2961,13 +3352,16 @@ impl<'ast> ZGen<'ast> {
             entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%BP", &Ty::Field)));
         }
         // If %TS is alive, initialize %TS
-        if bls[entry_bl].outputs.contains(&("%TS".to_string(), Some(Ty::Field))) {
+        if bls[entry_bl]
+            .outputs
+            .contains(&("%TS".to_string(), Some(Ty::Field)))
+        {
             entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%TS", &Ty::Field)));
         }
         // If %AS is alive, initialize %AS
         // XXX: %AS is now a program input
         // if bls[entry_bl].outputs.contains(&("%AS".to_string(), Some(Ty::Field))) {
-            // entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS", &Ty::Field)));
+        // entry_bl_instructions.push(BlockContent::Stmt(bl_gen_init_stmt("%AS", &Ty::Field)));
         // }
         bls[entry_bl].instructions = entry_bl_instructions;
 
@@ -2975,22 +3369,24 @@ impl<'ast> ZGen<'ast> {
         // STATE, GEN, KILL follows above
         // %BP = %SP
         let bp_update_stmt = Statement::Definition(DefinitionStatement {
-            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                array_metadata: None,
-                ty: Type::Basic(BasicType::Field(FieldType {
-                    span: Span::new("", 0, 0).unwrap()
-                })),
-                identifier: IdentifierExpression {
-                    value: "%BP".to_string(),
-                    span: Span::new("", 0, 0).unwrap()
+            lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(
+                TypedIdentifier {
+                    array_metadata: None,
+                    ty: Type::Basic(BasicType::Field(FieldType {
+                        span: Span::new("", 0, 0).unwrap(),
+                    })),
+                    identifier: IdentifierExpression {
+                        value: "%BP".to_string(),
+                        span: Span::new("", 0, 0).unwrap(),
+                    },
+                    span: Span::new("", 0, 0).unwrap(),
                 },
-                span: Span::new("", 0, 0).unwrap()
-            })],
+            )],
             expression: Expression::Identifier(IdentifierExpression {
                 value: "%SP".to_string(),
-                span: Span::new("", 0, 0).unwrap()
+                span: Span::new("", 0, 0).unwrap(),
             }),
-            span: Span::new("", 0, 0).unwrap()
+            span: Span::new("", 0, 0).unwrap(),
         });
         // OOS: Out-of-Scope
         let mut oos_in: Vec<BTreeSet<String>> = vec![BTreeSet::new(); bls.len()];
@@ -3020,7 +3416,15 @@ impl<'ast> ZGen<'ast> {
                     }
                     if stack.len() == 0 && stack_out[*p].len() != 0 {
                         // fill stack up to cur_scope
-                        stack = (0..cur_scope + 1).map(|i| if stack_out[*p].len() > i { stack_out[*p][i].clone() } else { Vec::new() }).collect();
+                        stack = (0..cur_scope + 1)
+                            .map(|i| {
+                                if stack_out[*p].len() > i {
+                                    stack_out[*p][i].clone()
+                                } else {
+                                    Vec::new()
+                                }
+                            })
+                            .collect();
                     }
 
                     assert!(oos_out[*p].len() == 0 || oos == oos_out[*p]);
@@ -3053,7 +3457,11 @@ impl<'ast> ZGen<'ast> {
                 while stack.len() > bls[cur_bl].scope {
                     let mut sp_offset = stack[stack.len() - 1].len() - 1;
                     for (var, ty) in stack[stack.len() - 1].iter().rev() {
-                        new_instructions.push(BlockContent::MemPop((var.to_string(), ty.clone(), sp_offset)));
+                        new_instructions.push(BlockContent::MemPop((
+                            var.to_string(),
+                            ty.clone(),
+                            sp_offset,
+                        )));
                         sp_offset -= 1;
                         oos.remove(var);
                     }
@@ -3070,18 +3478,31 @@ impl<'ast> ZGen<'ast> {
                             // GEN describes all newly defined variables
                             let (gen, _) = stmt_find_val(stmt);
                             for shadower in &gen {
-                                let shadower_alive = bls[cur_bl].outputs.iter().fold(false, |a, b| a || &b.0 == shadower);
+                                let shadower_alive = bls[cur_bl]
+                                    .outputs
+                                    .iter()
+                                    .fold(false, |a, b| a || &b.0 == shadower);
                                 // Proceed if the shadower live till the end of the block
                                 if shadower_alive && shadower.chars().next().unwrap() != '%' {
                                     // Check if any variables need to be spilled
                                     if let Some(vars) = spills.get(shadower) {
                                         for var in vars {
                                             if !oos.contains(var) {
-                                                let var_type: Option<Ty> = bls[cur_bl].outputs.iter().fold(None, |a, b| if &b.0 == var { b.1.clone() } else { a });
+                                                let var_type: Option<Ty> = bls[cur_bl]
+                                                    .outputs
+                                                    .iter()
+                                                    .fold(None, |a, b| {
+                                                        if &b.0 == var {
+                                                            b.1.clone()
+                                                        } else {
+                                                            a
+                                                        }
+                                                    });
                                                 if let Some(var_ty) = var_type {
                                                     // GEN
                                                     oos.insert(var.to_string());
-                                                    push_list.push((var.to_string(), var_ty.clone()));
+                                                    push_list
+                                                        .push((var.to_string(), var_ty.clone()));
                                                 }
                                             }
                                         }
@@ -3091,17 +3512,27 @@ impl<'ast> ZGen<'ast> {
                             if !is_sp_push(&stmt) && !is_bp_update(&stmt) {
                                 new_instructions.push(i.clone());
                             }
-                        },
+                        }
                         // Witness stmt can also cause shadowing
                         BlockContent::Witness((shadower, _, _)) => {
-                            let shadower_alive = bls[cur_bl].outputs.iter().fold(false, |a, b| a || &b.0 == shadower);
+                            let shadower_alive = bls[cur_bl]
+                                .outputs
+                                .iter()
+                                .fold(false, |a, b| a || &b.0 == shadower);
                             // Proceed if the shadower live till the end of the block
                             if shadower_alive && shadower.chars().next().unwrap() != '%' {
                                 // Check if any variables need to be spilled
                                 if let Some(vars) = spills.get(shadower) {
                                     for var in vars {
                                         if !oos.contains(var) {
-                                            let var_type: Option<Ty> = bls[cur_bl].outputs.iter().fold(None, |a, b| if &b.0 == var { b.1.clone() } else { a });
+                                            let var_type: Option<Ty> =
+                                                bls[cur_bl].outputs.iter().fold(None, |a, b| {
+                                                    if &b.0 == var {
+                                                        b.1.clone()
+                                                    } else {
+                                                        a
+                                                    }
+                                                });
                                             if let Some(var_ty) = var_type {
                                                 // GEN
                                                 oos.insert(var.to_string());
@@ -3113,9 +3544,15 @@ impl<'ast> ZGen<'ast> {
                             }
                             new_instructions.push(i.clone());
                         }
-                        BlockContent::MemPush(_) | BlockContent::MemPop(_) | BlockContent::DummyLoad(_) => { unreachable!() }
+                        BlockContent::MemPush(_)
+                        | BlockContent::MemPop(_)
+                        | BlockContent::DummyLoad(_) => {
+                            unreachable!()
+                        }
                         // Note: all GENs within branches will be out of scope by the end of the block, no need to process
-                        _ => { new_instructions.push(i.clone()); }
+                        _ => {
+                            new_instructions.push(i.clone());
+                        }
                     }
                 }
 
@@ -3131,7 +3568,11 @@ impl<'ast> ZGen<'ast> {
                     while stack.len() > succ_scope {
                         let mut sp_offset = stack[stack.len() - 1].len() - 1;
                         for (var, ty) in stack[stack.len() - 1].iter().rev() {
-                            new_instructions.push(BlockContent::MemPop((var.to_string(), ty.clone(), sp_offset)));
+                            new_instructions.push(BlockContent::MemPop((
+                                var.to_string(),
+                                ty.clone(),
+                                sp_offset,
+                            )));
                             sp_offset -= 1;
                         }
                         stack.pop();
@@ -3142,18 +3583,30 @@ impl<'ast> ZGen<'ast> {
                 if push_list.len() > 0 {
                     let mut sp_offset = 0;
                     // %PHY[%SP + 0] = %BP
-                    new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));
+                    new_instructions.push(BlockContent::MemPush((
+                        "%BP".to_string(),
+                        Ty::Field,
+                        sp_offset,
+                    )));
                     // %BP = %SP
                     new_instructions.push(BlockContent::Stmt(bp_update_stmt.clone()));
                     stack[cur_frame].push(("%BP".to_string(), Ty::Field));
                     sp_offset += 1;
                     for (var, ty) in push_list.into_iter() {
-                        new_instructions.push(BlockContent::MemPush((var.to_string(), ty.clone(), sp_offset)));
+                        new_instructions.push(BlockContent::MemPush((
+                            var.to_string(),
+                            ty.clone(),
+                            sp_offset,
+                        )));
                         stack[cur_frame].push((var, ty));
                         sp_offset += 1;
                     }
                     // %SP = %SP + ?
-                    new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset, &Ty::Field)));   
+                    new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt(
+                        "%SP",
+                        sp_offset,
+                        &Ty::Field,
+                    )));
                 }
 
                 // If there is a function call, push all live & in-scope candidates onto stack
@@ -3165,7 +3618,7 @@ impl<'ast> ZGen<'ast> {
 
                     // the last instruction is rp@ = ?, which should appear after scope change
                     let rp_update_inst = new_instructions.pop().unwrap();
-                    let mut sp_offset = 0;                         
+                    let mut sp_offset = 0;
 
                     let callee = Vec::from_iter(successor[cur_bl].clone())[0];
                     let callee_name = &bls[callee].fn_name;
@@ -3173,21 +3626,33 @@ impl<'ast> ZGen<'ast> {
                     if let Some(vars) = spills.get(callee_name) {
                         for var in vars {
                             if !oos.contains(var) {
-                                let var_type: Option<Ty> = bls[cur_bl].outputs.iter().fold(None, |a, b| if &b.0 == var { b.1.clone() } else { a });
+                                let var_type: Option<Ty> = bls[cur_bl]
+                                    .outputs
+                                    .iter()
+                                    .fold(None, |a, b| if &b.0 == var { b.1.clone() } else { a });
                                 if let Some(var_ty) = var_type {
                                     // GEN
                                     oos.insert(var.to_string());
 
                                     if sp_offset == 0 {
                                         // %PHY[%SP + 0] = %BP
-                                        new_instructions.push(BlockContent::MemPush(("%BP".to_string(), Ty::Field, sp_offset)));
+                                        new_instructions.push(BlockContent::MemPush((
+                                            "%BP".to_string(),
+                                            Ty::Field,
+                                            sp_offset,
+                                        )));
                                         // %BP = %SP
-                                        new_instructions.push(BlockContent::Stmt(bp_update_stmt.clone()));
+                                        new_instructions
+                                            .push(BlockContent::Stmt(bp_update_stmt.clone()));
                                         stack[cur_frame].push(("%BP".to_string(), Ty::Field));
                                         sp_offset += 1;
                                     }
                                     // %PHY[%SP + ?] = Var
-                                    new_instructions.push(BlockContent::MemPush((var.to_string(), var_ty.clone(), sp_offset)));
+                                    new_instructions.push(BlockContent::MemPush((
+                                        var.to_string(),
+                                        var_ty.clone(),
+                                        sp_offset,
+                                    )));
                                     stack[cur_frame].push((var.to_string(), var_ty.clone()));
                                     sp_offset += 1;
                                 }
@@ -3198,10 +3663,13 @@ impl<'ast> ZGen<'ast> {
                     new_instructions.push(rp_update_inst);
                     // %SP = %SP + ?
                     if sp_offset > 0 {
-                        new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt("%SP", sp_offset, &Ty::Field)));                        
+                        new_instructions.push(BlockContent::Stmt(bl_gen_increment_stmt(
+                            "%SP",
+                            sp_offset,
+                            &Ty::Field,
+                        )));
                     }
                 }
-
 
                 bls[cur_bl].instructions = new_instructions;
                 oos_out[cur_bl] = oos.clone();
@@ -3231,19 +3699,18 @@ impl<'ast> ZGen<'ast> {
         mut successor: Vec<BTreeSet<usize>>,
         mut predecessor: Vec<BTreeSet<usize>>,
         entry_bls_fn: &BTreeSet<usize>,
-        exit_bls_fn: &BTreeSet<usize>
+        exit_bls_fn: &BTreeSet<usize>,
     ) -> (Vec<BTreeSet<usize>>, Vec<BTreeSet<usize>>, Vec<Block<'ast>>) {
-
         let mut visited: Vec<bool> = Vec::new();
         for _ in 0..bls.len() {
             visited.push(false);
         }
-        
+
         // Can this ever happen?
         if exit_bls.is_empty() {
             panic!("The program has no exit block!");
         }
-        
+
         // Start from exit block
         let mut next_bls: VecDeque<usize> = VecDeque::new();
         for eb in exit_bls {
@@ -3255,18 +3722,18 @@ impl<'ast> ZGen<'ast> {
             visited[cur_bl] = true;
 
             // If the block only has one successor and the successor only has one predecessor
-            // AND the transition does not involve function calls / returns, 
+            // AND the transition does not involve function calls / returns,
             // AND the merged block size (num cons) does not exceed MAX_BLOCK_SIZE,
             // merge the two blocks
             if !exit_bls_fn.contains(&cur_bl) && successor[cur_bl].len() == 1 {
                 let s = Vec::from_iter(successor[cur_bl].clone())[0];
-                if !entry_bls_fn.contains(&s) && 
-                    predecessor[s].len() == 1// &&
-                    // (
-                        // bls[cur_bl].num_cons + bls[s].num_cons > MAX_BLOCK_SIZE || // Limit the size of the merged block
-                        // bls[cur_bl].num_cons * 4 < bls[s].num_cons || // But also allow merges between a large block and a small one
-                        // bls[s].num_cons * 4 < bls[cur_bl].num_cons
-                    // )
+                if !entry_bls_fn.contains(&s) && predecessor[s].len() == 1
+                // &&
+                // (
+                // bls[cur_bl].num_cons + bls[s].num_cons > MAX_BLOCK_SIZE || // Limit the size of the merged block
+                // bls[cur_bl].num_cons * 4 < bls[s].num_cons || // But also allow merges between a large block and a small one
+                // bls[s].num_cons * 4 < bls[cur_bl].num_cons
+                // )
                 {
                     // Append s to cur_bl
                     let s_inst = bls[s].clone();
@@ -3318,10 +3785,10 @@ impl<'ast> ZGen<'ast> {
         &self,
         bls: Vec<Block<'ast>>,
         entry_bl: usize,
-        predecessor: Vec<BTreeSet<usize>>
-    ) -> (Vec<Block<'ast>>, usize, BTreeMap<usize, usize>) {      
+        predecessor: Vec<BTreeSet<usize>>,
+    ) -> (Vec<Block<'ast>>, usize, BTreeMap<usize, usize>) {
         let old_size = bls.len();
-        
+
         // Initialize map from old label of blocks to new labels
         let mut label_map = BTreeMap::new();
         // Initialize a new list of blocks
@@ -3343,7 +3810,6 @@ impl<'ast> ZGen<'ast> {
 
         // Iterate through all new blocks again, update rp@ and Block Terminator
         for cur_bl in 0..new_size {
-
             // If we encounter any rp@ = <counter>, update <counter> to label_map[<counter>]
             for i in 0..new_bls[cur_bl].instructions.len() {
                 let bc = new_bls[cur_bl].instructions[i].clone();
@@ -3351,10 +3817,11 @@ impl<'ast> ZGen<'ast> {
                     let _ = std::mem::replace(&mut new_bls[cur_bl].instructions[i], new_bc);
                 }
             }
-            
+
             // Update the terminator of each blocks using label_map
             if let BlockTerminator::Transition(e) = &new_bls[cur_bl].terminator {
-                new_bls[cur_bl].terminator = BlockTerminator::Transition(bl_trans_map(e, &label_map))
+                new_bls[cur_bl].terminator =
+                    BlockTerminator::Transition(bl_trans_map(e, &label_map))
             }
         }
         return (new_bls, new_entry_bl, label_map);
@@ -3371,40 +3838,45 @@ impl<'ast> ZGen<'ast> {
     pub fn process_block<const VERBOSE: bool, const MODE: usize>(
         &self,
         bls: Vec<Block<'ast>>,
-        entry_bl: usize
-    ) -> (Vec<Block<'ast>>, usize, usize, usize, Vec<(Vec<usize>, Vec<usize>)>, Vec<(usize, usize)>, Vec<Vec<usize>>) {
+        entry_bl: usize,
+    ) -> (
+        Vec<Block<'ast>>,
+        usize,
+        usize,
+        usize,
+        Vec<(Vec<usize>, Vec<usize>)>,
+        Vec<(usize, usize)>,
+        Vec<Vec<usize>>,
+    ) {
         println!("\n\n--\nPost-Processing:");
         // Construct a new CFG for the program
         // Note that this is the CFG after DBE, and might be different from the previous CFG
         let (
-            successor, 
-            predecessor, 
-            exit_bls, 
-            entry_bls_fn, 
-            successor_fn, 
-            predecessor_fn, 
+            successor,
+            predecessor,
+            exit_bls,
+            entry_bls_fn,
+            successor_fn,
+            predecessor_fn,
             exit_bls_fn,
             _,
-            _
+            _,
         ) = self.construct_flow_graph(&bls, entry_bl);
         if VERBOSE && CFG_VERBOSE {
-            print_cfg(&successor, &predecessor, &exit_bls, &entry_bls_fn, &successor_fn, &predecessor_fn, &exit_bls_fn);
+            print_cfg(
+                &successor,
+                &predecessor,
+                &exit_bls,
+                &entry_bls_fn,
+                &successor_fn,
+                &predecessor_fn,
+                &exit_bls_fn,
+            );
         }
-
-        /*
-        // Perform topological sort on functions
-        let sorted_fns = fn_top_sort(&bls, &successor, &successor_fn);
-        if VERBOSE {
-            print!("FN TOP SORT: {}", sorted_fns[0]);
-            for i in 1..sorted_fns.len() {
-                print!(" -> {}", sorted_fns[i]);
-            }
-            println!();
-        }
-        */
 
         // VtR
-        let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) = self.var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl);
+        let (bls, transition_map_list, io_size, witness_map, witness_size, live_io) =
+            self.var_to_reg::<MODE>(bls, &predecessor, &successor, entry_bl);
         if VERBOSE {
             println!("\n\n--\nVar -> Reg:");
             println!("Var -> IO map:");
@@ -3429,7 +3901,15 @@ impl<'ast> ZGen<'ast> {
         let (num_mem_accesses, live_vm) = self.get_blocks_memory_info(&bls);
 
         print_bls(&bls, &entry_bl);
-        (bls, entry_bl, io_size, witness_size, live_io, num_mem_accesses, live_vm)
+        (
+            bls,
+            entry_bl,
+            io_size,
+            witness_size,
+            live_io,
+            num_mem_accesses,
+            live_vm,
+        )
     }
 
     // Convert all mentionings of variables to registers
@@ -3451,7 +3931,7 @@ impl<'ast> ZGen<'ast> {
     // 3. If an io variable is marked "alive" at the block entrance, and is never referenced or changed,
     //    insert an "output == input" assertion
     //
-    // Finally, write down labels of all live inputs and outputs, 
+    // Finally, write down labels of all live inputs and outputs,
     // No control flow, iterate over blocks directly
     // Returns the new blocks, register map, and # of registers used
     //
@@ -3463,8 +3943,15 @@ impl<'ast> ZGen<'ast> {
         mut bls: Vec<Block<'ast>>,
         predecessor: &Vec<BTreeSet<usize>>,
         successor: &Vec<BTreeSet<usize>>,
-        entry_bl: usize
-    ) -> (Vec<Block<'ast>>, Vec<BTreeMap<String, usize>>, usize, BTreeMap<String, usize>, usize, Vec<(Vec<usize>, Vec<usize>)>) {    
+        entry_bl: usize,
+    ) -> (
+        Vec<Block<'ast>>,
+        Vec<BTreeMap<String, usize>>,
+        usize,
+        BTreeMap<String, usize>,
+        usize,
+        Vec<(Vec<usize>, Vec<usize>)>,
+    ) {
         // reg_map is consisted of two Var -> Reg Maps: TRANSITION_MAP_LIST & WITNESS_MAP
         // TRANSITION_MAP_LIST is a list of maps corresponding to each transition state
         // Reserve registers 0 - 7 for %V, %BN, %RET, %TS, %AS, %RP, %SP, and %BP
@@ -3509,7 +3996,8 @@ impl<'ast> ZGen<'ast> {
                         if bl_out[cur_bl] == None {
                             // Add outputs to io_map
                             for (v, _) in &bls[cur_bl].outputs {
-                                (_, io_map, _) = var_name_to_reg_id_expr::<2>(v.to_string(), io_map);
+                                (_, io_map, _) =
+                                    var_name_to_reg_id_expr::<2>(v.to_string(), io_map);
                             }
                             // Update bl_out
                             bl_out[cur_bl] = Some(trans_size);
@@ -3524,7 +4012,8 @@ impl<'ast> ZGen<'ast> {
                         if bl_in[cur_bl] == None {
                             // Add inputs to io_map
                             for (v, _) in &bls[cur_bl].inputs {
-                                (_, io_map, _) = var_name_to_reg_id_expr::<1>(v.to_string(), io_map);
+                                (_, io_map, _) =
+                                    var_name_to_reg_id_expr::<1>(v.to_string(), io_map);
                             }
                             // Update bl_in
                             bl_in[cur_bl] = Some(trans_size);
@@ -3549,7 +4038,7 @@ impl<'ast> ZGen<'ast> {
             assert!(bl_in[i] != None);
             assert!(bl_out[i] != None);
         }
-        
+
         // --
         // WITNESS_MAP is one single map to describe all block witnesses
         // Reserve registers 0 - 5 for %RET, %TS, %AS, %RP, %SP, and %BP
@@ -3561,7 +4050,7 @@ impl<'ast> ZGen<'ast> {
         // Expression for block number check
         let bn_id = Expression::Identifier(IdentifierExpression {
             value: format!("%i{:06}", 1),
-            span: Span::new("", 0, 0).unwrap()
+            span: Span::new("", 0, 0).unwrap(),
         });
         for i in 0..bls.len() {
             assert_eq!(i, bls[i].name);
@@ -3578,22 +4067,24 @@ impl<'ast> ZGen<'ast> {
             let block_num_check_expr = Expression::Binary(BinaryExpression {
                 op: BinaryOperator::Eq,
                 left: Box::new(bn_id.clone()),
-                right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                    value: DecimalNumber {
-                        value: i.to_string(),
-                        span: Span::new("", 0, 0).unwrap()
+                right: Box::new(Expression::Literal(LiteralExpression::DecimalLiteral(
+                    DecimalLiteralExpression {
+                        value: DecimalNumber {
+                            value: i.to_string(),
+                            span: Span::new("", 0, 0).unwrap(),
+                        },
+                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                            span: Span::new("", 0, 0).unwrap(),
+                        })),
+                        span: Span::new("", 0, 0).unwrap(),
                     },
-                    suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                        span: Span::new("", 0, 0).unwrap()
-                    })),
-                    span: Span::new("", 0, 0).unwrap()
-                }))),
-                span: Span::new("", 0, 0).unwrap()
+                ))),
+                span: Span::new("", 0, 0).unwrap(),
             });
             let block_num_check_stmt = Statement::Assertion(AssertionStatement {
                 expression: block_num_check_expr,
                 message: None,
-                span: Span::new("", 0, 0).unwrap()
+                span: Span::new("", 0, 0).unwrap(),
             });
             new_instr.push(BlockContent::Stmt(block_num_check_stmt));
 
@@ -3604,33 +4095,43 @@ impl<'ast> ZGen<'ast> {
                 // if name is %RET.<f_name> (and not %RET^X), then input_name is set to %RET
                 let input_name = {
                     let name_no_suffix = name.split(".").next().unwrap_or("");
-                    if name_no_suffix == "%RET" { name_no_suffix } else { name }
+                    if name_no_suffix == "%RET" {
+                        name_no_suffix
+                    } else {
+                        name
+                    }
                 };
                 let new_input_name: String;
                 let live_input_label: usize;
-                (new_input_name, _, live_input_label) = var_name_to_reg_id_expr::<1>(input_name.to_string(), io_map.clone());
+                (new_input_name, _, live_input_label) =
+                    var_name_to_reg_id_expr::<1>(input_name.to_string(), io_map.clone());
                 new_inputs.push((new_input_name.to_string(), ty.clone()));
                 live_io[i].0.push(live_input_label);
                 let new_witness_name: String;
-                (new_witness_name, witness_map, _) = var_name_to_reg_id_expr::<0>(name.to_string(), witness_map);
+                (new_witness_name, witness_map, _) =
+                    var_name_to_reg_id_expr::<0>(name.to_string(), witness_map);
                 // For each input, assign a witness to its value
                 let witness_assign_stmt = DefinitionStatement {
-                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                        array_metadata: None,
-                        ty: ty_to_type(&ty.clone().unwrap()).unwrap(),
-                        identifier: IdentifierExpression {
-                            value: new_witness_name,
-                            span: Span::new("", 0, 0).unwrap()
+                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(
+                        TypedIdentifier {
+                            array_metadata: None,
+                            ty: ty_to_type(&ty.clone().unwrap()).unwrap(),
+                            identifier: IdentifierExpression {
+                                value: new_witness_name,
+                                span: Span::new("", 0, 0).unwrap(),
+                            },
+                            span: Span::new("", 0, 0).unwrap(),
                         },
-                        span: Span::new("", 0, 0).unwrap()
-                    })],
+                    )],
                     expression: Expression::Identifier(IdentifierExpression {
                         value: new_input_name,
-                        span: Span::new("", 0, 0).unwrap()
+                        span: Span::new("", 0, 0).unwrap(),
                     }),
-                    span: Span::new("", 0, 0).unwrap()
+                    span: Span::new("", 0, 0).unwrap(),
                 };
-                new_instr.push(BlockContent::Stmt(Statement::Definition(witness_assign_stmt)));
+                new_instr.push(BlockContent::Stmt(Statement::Definition(
+                    witness_assign_stmt,
+                )));
             }
             bls[i].inputs = new_inputs;
 
@@ -3647,15 +4148,21 @@ impl<'ast> ZGen<'ast> {
                 // if name is %RET.<f_name> (and not %RET^X), then input_name is set to %RET
                 let output_name = {
                     let name_no_suffix = name.split(".").next().unwrap_or("");
-                    if name_no_suffix == "%RET" { name_no_suffix } else { name }
+                    if name_no_suffix == "%RET" {
+                        name_no_suffix
+                    } else {
+                        name
+                    }
                 };
                 let new_output_name: String;
                 let live_output_label: usize;
-                (new_output_name, _, live_output_label) = var_name_to_reg_id_expr::<2>(output_name.to_string(), io_map.clone());
+                (new_output_name, _, live_output_label) =
+                    var_name_to_reg_id_expr::<2>(output_name.to_string(), io_map.clone());
                 new_outputs.push((new_output_name.to_string(), ty.clone()));
                 live_io[i].1.push(live_output_label);
                 let new_witness_name: String;
-                (new_witness_name, witness_map, _) = var_name_to_reg_id_expr::<0>(name.to_string(), witness_map);
+                (new_witness_name, witness_map, _) =
+                    var_name_to_reg_id_expr::<0>(name.to_string(), witness_map);
 
                 if MODE == 0 {
                     // For each output, assert that it is equal to the corresponding witness
@@ -3664,37 +4171,41 @@ impl<'ast> ZGen<'ast> {
                             op: BinaryOperator::Eq,
                             left: Box::new(Expression::Identifier(IdentifierExpression {
                                 value: new_output_name,
-                                span: Span::new("", 0, 0).unwrap()
+                                span: Span::new("", 0, 0).unwrap(),
                             })),
                             right: Box::new(Expression::Identifier(IdentifierExpression {
                                 value: new_witness_name,
-                                span: Span::new("", 0, 0).unwrap()
+                                span: Span::new("", 0, 0).unwrap(),
                             })),
-                            span: Span::new("", 0, 0).unwrap()
+                            span: Span::new("", 0, 0).unwrap(),
                         }),
                         message: None,
-                        span: Span::new("", 0, 0).unwrap()
+                        span: Span::new("", 0, 0).unwrap(),
                     };
                     new_instr.push(BlockContent::Stmt(Statement::Assertion(output_check_stmt)));
                 } else {
                     // For each output, assign it to the value of the corresponding witness
                     let output_assign_stmt = DefinitionStatement {
-                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                            array_metadata: None,
-                            ty: ty_to_type(&ty.clone().unwrap()).unwrap(),
-                            identifier: IdentifierExpression {
-                                value: new_output_name,
-                                span: Span::new("", 0, 0).unwrap()
+                        lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(
+                            TypedIdentifier {
+                                array_metadata: None,
+                                ty: ty_to_type(&ty.clone().unwrap()).unwrap(),
+                                identifier: IdentifierExpression {
+                                    value: new_output_name,
+                                    span: Span::new("", 0, 0).unwrap(),
+                                },
+                                span: Span::new("", 0, 0).unwrap(),
                             },
-                            span: Span::new("", 0, 0).unwrap()
-                        })],
+                        )],
                         expression: Expression::Identifier(IdentifierExpression {
                             value: new_witness_name,
-                            span: Span::new("", 0, 0).unwrap()
+                            span: Span::new("", 0, 0).unwrap(),
                         }),
-                        span: Span::new("", 0, 0).unwrap()
+                        span: Span::new("", 0, 0).unwrap(),
                     };
-                    new_instr.push(BlockContent::Stmt(Statement::Definition(output_assign_stmt)));
+                    new_instr.push(BlockContent::Stmt(Statement::Definition(
+                        output_assign_stmt,
+                    )));
                 }
             }
             bls[i].outputs = new_outputs;
@@ -3707,16 +4218,18 @@ impl<'ast> ZGen<'ast> {
                     bls[i].terminator = BlockTerminator::Transition(new_expr.clone());
                 } else {
                     // If it is the end of the program, assign %BN to be bls.len()
-                    new_expr = Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                        value: DecimalNumber {
-                            value: bls.len().to_string(),
-                            span: Span::new("", 0, 0).unwrap()
+                    new_expr = Expression::Literal(LiteralExpression::DecimalLiteral(
+                        DecimalLiteralExpression {
+                            value: DecimalNumber {
+                                value: bls.len().to_string(),
+                                span: Span::new("", 0, 0).unwrap(),
+                            },
+                            suffix: Some(DecimalSuffix::Field(FieldSuffix {
+                                span: Span::new("", 0, 0).unwrap(),
+                            })),
+                            span: Span::new("", 0, 0).unwrap(),
                         },
-                        suffix: Some(DecimalSuffix::Field(FieldSuffix {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        span: Span::new("", 0, 0).unwrap()
-                    }));
+                    ));
                 };
                 new_expr
             };
@@ -3726,32 +4239,38 @@ impl<'ast> ZGen<'ast> {
                         op: BinaryOperator::Eq,
                         left: Box::new(Expression::Identifier(IdentifierExpression {
                             value: format!("%o{:06}", 1),
-                            span: Span::new("", 0, 0).unwrap()
+                            span: Span::new("", 0, 0).unwrap(),
                         })),
                         right: Box::new(new_expr.clone()),
-                        span: Span::new("", 0, 0).unwrap()
+                        span: Span::new("", 0, 0).unwrap(),
                     }),
                     message: None,
-                    span: Span::new("", 0, 0).unwrap()
+                    span: Span::new("", 0, 0).unwrap(),
                 };
-                new_instr.push(BlockContent::Stmt(Statement::Assertion(output_block_check_stmt)));
+                new_instr.push(BlockContent::Stmt(Statement::Assertion(
+                    output_block_check_stmt,
+                )));
             } else {
                 let output_block_assign_stmt = DefinitionStatement {
-                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(TypedIdentifier {
-                        array_metadata: None,
-                        ty: Type::Basic(BasicType::Field(FieldType {
-                            span: Span::new("", 0, 0).unwrap()
-                        })),
-                        identifier: IdentifierExpression {
-                            value: format!("%o{:06}", 1),
-                            span: Span::new("", 0, 0).unwrap()
+                    lhs: vec![TypedIdentifierOrAssignee::TypedIdentifier(
+                        TypedIdentifier {
+                            array_metadata: None,
+                            ty: Type::Basic(BasicType::Field(FieldType {
+                                span: Span::new("", 0, 0).unwrap(),
+                            })),
+                            identifier: IdentifierExpression {
+                                value: format!("%o{:06}", 1),
+                                span: Span::new("", 0, 0).unwrap(),
+                            },
+                            span: Span::new("", 0, 0).unwrap(),
                         },
-                        span: Span::new("", 0, 0).unwrap()
-                    })],
+                    )],
                     expression: new_expr.clone(),
-                    span: Span::new("", 0, 0).unwrap()
+                    span: Span::new("", 0, 0).unwrap(),
                 };
-                new_instr.push(BlockContent::Stmt(Statement::Definition(output_block_assign_stmt)));
+                new_instr.push(BlockContent::Stmt(Statement::Definition(
+                    output_block_assign_stmt,
+                )));
             }
             bls[i].instructions = new_instr;
 
@@ -3765,7 +4284,14 @@ impl<'ast> ZGen<'ast> {
             panic!("Register assignment failed: number of i/o variables cannot exceed 999999!")
         }
         let witness_size = witness_map.len();
-        (bls, transition_map_list, max_io_size, witness_map, witness_size, live_io)
+        (
+            bls,
+            transition_map_list,
+            max_io_size,
+            witness_map,
+            witness_size,
+            live_io,
+        )
     }
 
     // Revert typed identifiers back to assignees to avoid scoping confusion when translating to IR
@@ -3775,10 +4301,7 @@ impl<'ast> ZGen<'ast> {
     // tydef_to_assignee takes in two modes:
     //  MODE = 0 - Verification Mode, output registers are witnesses and checked using assertion
     //  MODE = 1 - Compute Mode, output registers are assigned and not checked
-    fn tydef_to_assignee<const MODE: usize>(
-        &self,
-        mut bls: Vec<Block<'ast>>,
-    ) -> Vec<Block<'ast>> {
+    fn tydef_to_assignee<const MODE: usize>(&self, mut bls: Vec<Block<'ast>>) -> Vec<Block<'ast>> {
         for i in 0..bls.len() {
             // gen_set - all defined variables
             let mut gen_set = BTreeSet::new();
@@ -3806,17 +4329,15 @@ impl<'ast> ZGen<'ast> {
     // 1. # of (physical (scoping) memory, virtual memory accesses) accesses for each block
     // 2. Liveness of each virtual memory variable
     //    * We need all variables present for permutation check, but some are not referenced in the constraints and will be killed in R1CS
-    //    * For every _live_ virtual memory variable, record its overall ordering in all virtual memory variables 
-    fn get_blocks_memory_info(
-        &self,
-        bls: &Vec<Block>,
-    ) -> (Vec<(usize, usize)>, Vec<Vec<usize>>) {
+    //    * For every _live_ virtual memory variable, record its overall ordering in all virtual memory variables
+    fn get_blocks_memory_info(&self, bls: &Vec<Block>) -> (Vec<(usize, usize)>, Vec<Vec<usize>>) {
         // Number of memory accesses per block
         let mut num_mem_accesses = Vec::new();
         // Map of each _live_ vm variables to its overall ordering
         let mut live_vm_list = Vec::new();
         for b in bls {
-            let (phy_mem_accesses_count, vir_mem_accesses_count, vm_liveness) = bmc_inst(&b.instructions);
+            let (phy_mem_accesses_count, vir_mem_accesses_count, vm_liveness) =
+                bmc_inst(&b.instructions);
             num_mem_accesses.push((phy_mem_accesses_count, vir_mem_accesses_count));
             let mut live_vm = Vec::new();
             for i in 0..vm_liveness.len() {
@@ -3840,7 +4361,7 @@ impl<'ast> ZGen<'ast> {
         exit_bls_fn: &BTreeSet<usize>,
         successor_fn: &Vec<BTreeSet<usize>>,
         predecessor_fn: &Vec<BTreeSet<usize>>,
-        sorted_fns: &Vec<String>
+        sorted_fns: &Vec<String>,
     ) -> (usize, usize) {
         // Static bound on number of block executions & memory accesses
         let (total_num_proofs_bound, total_num_mem_accesses_bound) = {
@@ -3881,10 +4402,12 @@ impl<'ast> ZGen<'ast> {
                     let cur_bl = next_bls.pop_front().unwrap();
 
                     let mut max_successor_num_proofs = bls[cur_bl].fn_num_exec_bound;
-                    let mut max_successor_num_mem_accesses = bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
+                    let mut max_successor_num_mem_accesses =
+                        bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
 
                     // if cur_bl is the exit block of a function, do not reason about successors
-                    if successor_fn[cur_bl].len() == 0 {} 
+                    if successor_fn[cur_bl].len() == 0 {
+                    }
                     // if cur_bl is a caller of a function, need to process both the function head block and the return block
                     else if successor_fn[cur_bl] != successor[cur_bl] {
                         assert_eq!(successor[cur_bl].len(), 1);
@@ -3892,19 +4415,25 @@ impl<'ast> ZGen<'ast> {
                         let func_header = Vec::from_iter(successor[cur_bl].clone())[0];
                         let return_bl = Vec::from_iter(successor_fn[cur_bl].clone())[0];
                         assert!(total_num_proofs[func_header] != 0);
-                        max_successor_num_proofs += bls[cur_bl].fn_num_exec_bound * total_num_proofs[func_header] + total_num_proofs[return_bl];
-                        max_successor_num_mem_accesses += bls[cur_bl].fn_num_exec_bound * total_num_mem_accesses[func_header] + total_num_mem_accesses[return_bl];
+                        max_successor_num_proofs += bls[cur_bl].fn_num_exec_bound
+                            * total_num_proofs[func_header]
+                            + total_num_proofs[return_bl];
+                        max_successor_num_mem_accesses += bls[cur_bl].fn_num_exec_bound
+                            * total_num_mem_accesses[func_header]
+                            + total_num_mem_accesses[return_bl];
                     }
                     // otherwise, process all the successors
                     else {
                         for succ in &successor_fn_no_loop[cur_bl] {
                             // num_proofs
-                            let succ_num_proofs = total_num_proofs[*succ] + bls[cur_bl].fn_num_exec_bound;
+                            let succ_num_proofs =
+                                total_num_proofs[*succ] + bls[cur_bl].fn_num_exec_bound;
                             if max_successor_num_proofs < succ_num_proofs {
                                 max_successor_num_proofs = succ_num_proofs;
                             }
                             // num_mem_accesses
-                            let succ_num_mem_accesses = total_num_mem_accesses[*succ] + bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
+                            let succ_num_mem_accesses = total_num_mem_accesses[*succ]
+                                + bls[cur_bl].fn_num_exec_bound * num_mem_accesses[cur_bl];
                             if max_successor_num_mem_accesses < succ_num_mem_accesses {
                                 max_successor_num_mem_accesses = succ_num_mem_accesses;
                             }
@@ -3912,7 +4441,9 @@ impl<'ast> ZGen<'ast> {
                     }
 
                     // If any value changes, process all non-loop predecessors
-                    if max_successor_num_proofs != total_num_proofs[cur_bl] || max_successor_num_mem_accesses != total_num_mem_accesses[cur_bl] {
+                    if max_successor_num_proofs != total_num_proofs[cur_bl]
+                        || max_successor_num_mem_accesses != total_num_mem_accesses[cur_bl]
+                    {
                         for pred in &predecessor_fn_no_loop[cur_bl] {
                             if !next_bls.contains(pred) {
                                 next_bls.push_back(*pred);

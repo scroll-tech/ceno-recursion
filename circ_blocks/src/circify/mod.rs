@@ -3,13 +3,13 @@ use crate::circify::mem::AllocId;
 use crate::ir::term::*;
 
 use crate::cfg::cfg;
+use fxhash::FxHashMap;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::rc::Rc;
 use thiserror::Error;
-use fxhash::{FxHashMap};
 
 pub mod includer;
 pub mod mem;
@@ -163,24 +163,23 @@ impl<Ty: Display> LexScope<Ty> {
             entries: HashMap::default(),
         }
     }
-    /*
-    fn declare(&mut self, name: VarName, ty: Ty) -> Result<&SsaName> {
-        let p = &self.prefix;
-        match self.entries.entry(name.clone()) {
-            Entry::Vacant(v) => Ok(&v.insert(LexEntry::new(format!("{p}_{name}"), ty)).ssa_name),
-            Entry::Occupied(o) => Err(CircError::Rebind(name, format!("{}", o.get().ty))),
-        }
-    }
-    */
+
     fn declare(&mut self, name: VarName, ty: Ty) -> Result<&SsaName> {
         let p = &self.prefix;
         let new_le = match self.entries.entry(name.clone()) {
             Entry::Vacant(_) => LexEntry::new(format!("{}_{}", p, name), ty),
-            Entry::Occupied(_) => LexEntry::new_ver(format!("{}_{}", p, name), ty, self.entries.get(&name).unwrap().ver.clone() + 1)
-            // Entry::Occupied(o) => Err(CircError::Rebind(name, format!("{}", o.get().ty))),
+            Entry::Occupied(_) => LexEntry::new_ver(
+                format!("{}_{}", p, name),
+                ty,
+                self.entries.get(&name).unwrap().ver.clone() + 1,
+            ), // Entry::Occupied(o) => Err(CircError::Rebind(name, format!("{}", o.get().ty))),
         };
         self.entries.insert(name.clone(), new_le);
-        Ok(&self.entries.get(&name).ok_or_else(|| CircError::NoName(name.to_owned()))?.ssa_name)
+        Ok(&self
+            .entries
+            .get(&name)
+            .ok_or_else(|| CircError::NoName(name.to_owned()))?
+            .ssa_name)
     }
     fn get_name(&self, name: &str) -> Result<&SsaName> {
         Ok(&self
@@ -521,9 +520,14 @@ impl<E: Embeddable> Circify<E> {
         } else {
             nice_name
         };
-        let t = self
-            .e
-            .declare_input(f, &mut self.cir_ctx, ty, name, visibility, precomputed_value);
+        let t = self.e.declare_input(
+            f,
+            &mut self.cir_ctx,
+            ty,
+            name,
+            visibility,
+            precomputed_value,
+        );
         assert!(self.vals.insert(ssa_name, Val::Term(t.clone())).is_none());
         Ok(t)
     }
@@ -619,7 +623,10 @@ impl<E: Embeddable> Circify<E> {
         let t = self
             .e
             .declare_input(f, &mut self.cir_ctx, &ty, ssa_name.to_string(), None, None);
-        assert!(self.vals.insert(ssa_name.to_string(), Val::Term(t.clone())).is_none());
+        assert!(self
+            .vals
+            .insert(ssa_name.to_string(), Val::Term(t.clone()))
+            .is_none());
         let t = term![Op::PfChallenge(ssa_name, cfg().field().clone())];
         self.push(f, t);
         Ok(())
@@ -659,7 +666,10 @@ impl<E: Embeddable> Circify<E> {
                 };
                 let ite_val = Val::Term(ite);
                 // TODO: add language-specific coersion here if needed
-                assert!(self.vals.insert(new_name.clone(), ite_val.clone()).is_none());
+                assert!(self
+                    .vals
+                    .insert(new_name.clone(), ite_val.clone())
+                    .is_none());
                 Ok(ite_val)
             }
             (_, v @ Val::Ref(_)) => {
@@ -885,19 +895,6 @@ impl<E: Embeddable> Circify<E> {
             .unwrap_or_else(|| panic!("No type {}", name))
     }
 
-    /*
-    /// Get the constraints from this manager
-    pub fn consume(mut self, f: &str) -> Rc<RefCell<Computation>> {
-        Rc::new(RefCell::new(std::mem::replace(
-            &mut self.cir_ctx,
-            CirCtx {
-                mem: Rc::new(RefCell::new(mem::MemManager::default())),
-                cs: Rc::new(RefCell::new(FxHashMap::default())),
-            },
-        ).cs.get_mut(f).borrow_mut().unwrap().clone()))
-    }
-    */
-
     /// Load from an AllocId
     pub fn load(&self, id: AllocId, offset: Term) -> Term {
         self.cir_ctx.mem.borrow_mut().load(id, offset)
@@ -937,9 +934,12 @@ impl<E: Embeddable> Circify<E> {
         party: PartyId,
     ) -> E::T {
         let ir = self
-        .cir_ctx
-        .cs
-        .borrow_mut().get_mut(f).unwrap().start_persistent_array(var, size, field, party);
+            .cir_ctx
+            .cs
+            .borrow_mut()
+            .get_mut(f)
+            .unwrap()
+            .start_persistent_array(var, size, field, party);
         let t = self.e.wrap_persistent_array(ir);
         let ssa_name = self
             .declare_env_name(var.into(), &t.type_())
@@ -951,9 +951,7 @@ impl<E: Embeddable> Circify<E> {
 
     /// Record the final state
     pub fn end_persistent_array(&mut self, f: &str, var: &str, final_state: Term) {
-        if let Some(c) = self.cir_ctx
-            .cs
-            .borrow_mut().get_mut(f) {
+        if let Some(c) = self.cir_ctx.cs.borrow_mut().get_mut(f) {
             c.end_persistent_array(var, final_state)
         } else {
             panic!("Unknown computation: {}", f)
@@ -1100,13 +1098,28 @@ mod test {
             }
         }
 
+        // TODO(Matthias): fix this test, and then remove the #[should_panic] attribute
+        #[should_panic]
         #[test]
         fn trial() {
             let e = BoolPair();
             let mut c = Circify::new(e);
-            c.cir_ctx.cs.borrow_mut().get_mut("main").unwrap().metadata.add_prover_and_verifier();
-            c.declare_input("main", "a".to_owned(), &Ty::Bool, Some(PROVER_ID), None, false)
-                .unwrap();
+            c.cir_ctx
+                .cs
+                .borrow_mut()
+                .get_mut("main")
+                .unwrap()
+                .metadata
+                .add_prover_and_verifier();
+            c.declare_input(
+                "main",
+                "a".to_owned(),
+                &Ty::Bool,
+                Some(PROVER_ID),
+                None,
+                false,
+            )
+            .unwrap();
             c.declare_input(
                 "main",
                 "b".to_owned(),

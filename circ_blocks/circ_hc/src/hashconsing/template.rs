@@ -28,7 +28,7 @@ impl crate::Table<TemplateOp> for Table {
     #[allow(dead_code)]
     fn create(op: &TemplateOp, children: Vec<Node>) -> Node {
         FACTORY.mk(ActualNode {
-            op: op.clone(),
+            op: *op,
             cs: children,
         })
     }

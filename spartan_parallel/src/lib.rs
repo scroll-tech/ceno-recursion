@@ -46,6 +46,7 @@ use std::{
 use dense_mlpoly::{DensePolynomial, PolyEvalProof};
 use errors::{ProofVerifyError, R1CSError};
 use instance::Instance;
+use instance::Instance;
 use itertools::Itertools;
 use math::Math;
 use merlin::Transcript;
@@ -109,7 +110,7 @@ impl<S: SpartanExtensionField> Assignment<S> {
   }
 
   /// Write the assignment into a file
-  pub fn write(&self, mut f: &File) -> std::io::Result<()> {
+  pub fn write(&self, f: &File) -> std::io::Result<()> {
     for assg in &self.assignment {
       write_bytes(&mut f, &assg.to_bytes())?;
     }
@@ -126,7 +127,7 @@ fn write_bytes(mut f: &File, bytes: &[u8; 32]) -> std::io::Result<()> {
   for i in 0..size {
     write!(&mut f, "{} ", bytes[i])?;
   }
-  writeln!(&mut f, "")?;
+  writeln!(&mut f)?;
   Ok(())
 }
 
@@ -196,7 +197,7 @@ impl<S: SpartanExtensionField> IOProofs<S> {
     let mut live_input = Vec::new();
     for i in 0..input_liveness.len() {
       if input_liveness[i] {
-        live_input.push(input[i].clone());
+        live_input.push(input[i]);
       }
     }
     input_indices = input_indices[..live_input.len()].to_vec();
@@ -208,7 +209,9 @@ impl<S: SpartanExtensionField> IOProofs<S> {
       [
         vec![
           0,                                                                             // input valid
+          0,                                                                             // input valid
           output_exec_num * num_ios, // output valid
+          2,                         // input block num
           2,                         // input block num
           output_exec_num * num_ios + 2 + (num_inputs_unpadded - 1), // output block num
           output_exec_num * num_ios + 2 + (num_inputs_unpadded - 1) + output_offset - 1, // output correctness
@@ -267,6 +270,9 @@ impl<S: SpartanExtensionField> IOProofs<S> {
     let mut input_indices: Vec<usize> = (0..input_liveness.len() - 2)
       .map(|i| 2 + input_offset + i)
       .collect();
+    let mut input_indices: Vec<usize> = (0..input_liveness.len() - 2)
+      .map(|i| 2 + input_offset + i)
+      .collect();
     if input_liveness[1] {
       // %AS is alive, add entry 5
       input_indices.insert(0, 5);
@@ -279,13 +285,13 @@ impl<S: SpartanExtensionField> IOProofs<S> {
     let mut live_input = Vec::new();
     for i in 0..input_liveness.len() {
       if input_liveness[i] {
-        live_input.push(input[i].clone());
+        live_input.push(input[i]);
       }
     }
     input_indices = input_indices[..live_input.len()].to_vec();
 
     // batch verify all proofs
-    let _ = PolyEvalProof::verify_plain_batched_points(
+    PolyEvalProof::verify_plain_batched_points(
       &self.proofs,
       transcript,
       [
@@ -495,7 +501,7 @@ impl<S: SpartanExtensionField> ProverWitnessSecInfo<S> {
       merged_num_inputs.push(components[next_component].num_inputs[pointers[next_component]]);
       merged_w_mat.push(components[next_component].w_mat[pointers[next_component]].clone());
       merged_poly_w.push(components[next_component].poly_w[pointers[next_component]].clone());
-      pointers[next_component] = pointers[next_component] + 1;
+      pointers[next_component] += 1;
     }
 
     (
@@ -589,6 +595,7 @@ impl VerifierWitnessSecInfo {
         num_proofs: merged_num_proofs,
       },
       inst_map,
+      inst_map,
     )
   }
 }
@@ -625,6 +632,7 @@ struct InstanceSortHelper {
 }
 impl InstanceSortHelper {
   fn new(num_exec: usize, index: usize) -> InstanceSortHelper {
+    InstanceSortHelper { num_exec, index }
     InstanceSortHelper { num_exec, index }
   }
 }
@@ -1063,6 +1071,11 @@ impl<S: SpartanExtensionField> SNARK<S> {
     } else {
       total_num_init_phy_mem_accesses.next_power_of_two()
     };
+    let total_num_init_phy_mem_accesses = if total_num_init_phy_mem_accesses == 0 {
+      0
+    } else {
+      total_num_init_phy_mem_accesses.next_power_of_two()
+    };
     if total_num_init_vir_mem_accesses > 0 {
       let dummy_addr = vec![S::field_zero(); INIT_VIR_MEM_WIDTH];
       init_vir_mems_list.extend(vec![
@@ -1071,6 +1084,11 @@ impl<S: SpartanExtensionField> SNARK<S> {
           - total_num_init_vir_mem_accesses
       ]);
     }
+    let total_num_init_vir_mem_accesses = if total_num_init_vir_mem_accesses == 0 {
+      0
+    } else {
+      total_num_init_vir_mem_accesses.next_power_of_two()
+    };
     let total_num_init_vir_mem_accesses = if total_num_init_vir_mem_accesses == 0 {
       0
     } else {
@@ -1085,6 +1103,11 @@ impl<S: SpartanExtensionField> SNARK<S> {
           - total_num_phy_mem_accesses
       ]);
     }
+    let total_num_phy_mem_accesses = if total_num_phy_mem_accesses == 0 {
+      0
+    } else {
+      total_num_phy_mem_accesses.next_power_of_two()
+    };
     let total_num_phy_mem_accesses = if total_num_phy_mem_accesses == 0 {
       0
     } else {
@@ -1110,7 +1133,13 @@ impl<S: SpartanExtensionField> SNARK<S> {
     } else {
       total_num_vir_mem_accesses.next_power_of_two()
     };
+    let total_num_vir_mem_accesses = if total_num_vir_mem_accesses == 0 {
+      0
+    } else {
+      total_num_vir_mem_accesses.next_power_of_two()
+    };
     let block_num_proofs = &block_num_proofs;
+
 
     // --
     // PAIRWISE SORT
@@ -1290,6 +1319,12 @@ impl<S: SpartanExtensionField> SNARK<S> {
               .next_power_of_two()
           })
           .collect();
+        let block_w2_size_list: Vec<usize> = (0..block_num_instances)
+          .map(|i| {
+            (2 * num_inputs_unpadded + 2 * block_num_phy_ops[i] + 4 * block_num_vir_ops[i])
+              .next_power_of_two()
+          })
+          .collect();
 
         // PHY_MEM
         // w2 is (MR, MC, MR, MC, MR, MC, ...)
@@ -1305,6 +1340,14 @@ impl<S: SpartanExtensionField> SNARK<S> {
         let V_VD = |b: usize, i: usize| 2 * block_num_phy_ops[b] + 4 * i + 1;
         let V_VL = |b: usize, i: usize| 2 * block_num_phy_ops[b] + 4 * i + 2;
         let V_VT = |b: usize, i: usize| 2 * block_num_phy_ops[b] + 4 * i + 3;
+        let V_VMR1 =
+          |b: usize, i: usize| 2 * num_inputs_unpadded + 2 * block_num_phy_ops[b] + 4 * i;
+        let V_VMR2 =
+          |b: usize, i: usize| 2 * num_inputs_unpadded + 2 * block_num_phy_ops[b] + 4 * i + 1;
+        let V_VMR3 =
+          |b: usize, i: usize| 2 * num_inputs_unpadded + 2 * block_num_phy_ops[b] + 4 * i + 2;
+        let V_VMC =
+          |b: usize, i: usize| 2 * num_inputs_unpadded + 2 * block_num_phy_ops[b] + 4 * i + 3;
         let V_VMR1 =
           |b: usize, i: usize| 2 * num_inputs_unpadded + 2 * block_num_phy_ops[b] + 4 * i;
         let V_VMR2 =
@@ -1367,8 +1410,20 @@ impl<S: SpartanExtensionField> SNARK<S> {
               };
               block_w2[p][q][V_PMC(i)] = t
                 * (comb_tau - block_vars_mat[p][q][io_width + V_PA(i)] - block_w2[p][q][V_PMR(i)]);
+              let t = if i == 0 {
+                V_CNST
+              } else {
+                block_w2[p][q][V_PMC(i - 1)]
+              };
+              block_w2[p][q][V_PMC(i)] = t
+                * (comb_tau - block_vars_mat[p][q][io_width + V_PA(i)] - block_w2[p][q][V_PMR(i)]);
             }
             // Compute x
+            let px = if block_num_phy_ops[p] == 0 {
+              V_CNST
+            } else {
+              block_w2[p][q][V_PMC(block_num_phy_ops[p] - 1)]
+            };
             let px = if block_num_phy_ops[p] == 0 {
               V_CNST
             } else {
@@ -1391,7 +1446,11 @@ impl<S: SpartanExtensionField> SNARK<S> {
               // VMR2 = r^2 * VL
               block_w2[p][q][V_VMR2(p, i)] =
                 comb_r * comb_r * block_vars_mat[p][q][io_width + V_VL(p, i)];
+              block_w2[p][q][V_VMR2(p, i)] =
+                comb_r * comb_r * block_vars_mat[p][q][io_width + V_VL(p, i)];
               // VMR1 = r^3 * VT
+              block_w2[p][q][V_VMR3(p, i)] =
+                comb_r * comb_r * comb_r * block_vars_mat[p][q][io_width + V_VT(p, i)];
               block_w2[p][q][V_VMR3(p, i)] =
                 comb_r * comb_r * comb_r * block_vars_mat[p][q][io_width + V_VT(p, i)];
               // VMC = (1 or VMC[i-1]) * (tau - VA - VMR1 - VMR2 - VMR3)
@@ -1406,8 +1465,24 @@ impl<S: SpartanExtensionField> SNARK<S> {
                   - block_w2[p][q][V_VMR1(p, i)]
                   - block_w2[p][q][V_VMR2(p, i)]
                   - block_w2[p][q][V_VMR3(p, i)]);
+              let t = if i == 0 {
+                V_CNST
+              } else {
+                block_w2[p][q][V_VMC(p, i - 1)]
+              };
+              block_w2[p][q][V_VMC(p, i)] = t
+                * (comb_tau
+                  - block_vars_mat[p][q][io_width + V_VA(p, i)]
+                  - block_w2[p][q][V_VMR1(p, i)]
+                  - block_w2[p][q][V_VMR2(p, i)]
+                  - block_w2[p][q][V_VMR3(p, i)]);
             }
             // Compute x
+            let vx = if block_num_vir_ops[p] == 0 {
+              V_CNST
+            } else {
+              block_w2[p][q][V_VMC(p, block_num_vir_ops[p] - 1)]
+            };
             let vx = if block_num_vir_ops[p] == 0 {
               V_CNST
             } else {
@@ -1547,12 +1622,14 @@ impl<S: SpartanExtensionField> SNARK<S> {
       );
     timer_sec_gen.stop();
 
+
     // Virtual Memory-as-a-whole
     let timer_sec_gen = Timer::new("vir_mem_addr_witness_gen");
     let (vir_mem_addr_w2_prover, vir_mem_addr_w3_prover, vir_mem_addr_w3_shifted_prover) = {
       if total_num_vir_mem_accesses > 0 {
         // vir_mem_addr_w2 is (I, O, ZO, r * data, r^2 * ls, r^3 * ts)
         // where ZO = 0,
+
 
         let mut vir_mem_addr_w2 = Vec::new();
         for q in 0..total_num_vir_mem_accesses {
@@ -1576,6 +1653,12 @@ impl<S: SpartanExtensionField> SNARK<S> {
               - vir_mem_addr_w2[q][3]
               - vir_mem_addr_w2[q][4]
               - vir_mem_addr_w2[q][5]);
+          vir_mem_addr_w3[q][1] = addr_vir_mems_list[q][0]
+            * (comb_tau
+              - addr_vir_mems_list[q][2]
+              - vir_mem_addr_w2[q][3]
+              - vir_mem_addr_w2[q][4]
+              - vir_mem_addr_w2[q][5]);
           // pi and D
           if q != total_num_vir_mem_accesses - 1 {
             vir_mem_addr_w3[q][3] = vir_mem_addr_w3[q][1]
@@ -1584,6 +1667,12 @@ impl<S: SpartanExtensionField> SNARK<S> {
             vir_mem_addr_w3[q][3] = vir_mem_addr_w3[q][1];
           }
           vir_mem_addr_w3[q][2] = vir_mem_addr_w3[q][0] * vir_mem_addr_w3[q][3];
+          vir_mem_addr_w3[q][4] = addr_vir_mems_list[q][0]
+            * (addr_vir_mems_list[q][0]
+              + addr_vir_mems_list[q][2]
+              + vir_mem_addr_w2[q][3]
+              + vir_mem_addr_w2[q][4]
+              + vir_mem_addr_w2[q][5]);
           vir_mem_addr_w3[q][4] = addr_vir_mems_list[q][0]
             * (addr_vir_mems_list[q][0]
               + addr_vir_mems_list[q][2]
@@ -1846,6 +1935,13 @@ impl<S: SpartanExtensionField> SNARK<S> {
       &block_w3_prover,
       &block_w3_shifted_prover,
     ];
+    let block_wit_secs = vec![
+      &block_vars_prover,
+      &perm_w0_prover,
+      &block_w2_prover,
+      &block_w3_prover,
+      &block_w3_shifted_prover,
+    ];
     let (block_r1cs_sat_proof, block_challenges) = {
       let (proof, block_challenges) = {
         R1CSProof::prove(
@@ -1904,11 +2000,21 @@ impl<S: SpartanExtensionField> SNARK<S> {
           let proof_encoded: Vec<u8> = bincode::serialize(&proof).unwrap();
           Timer::print(&format!("len_r1cs_eval_proof {:?}", proof_encoded.len()));
 
+
           r1cs_eval_proof_list.push(proof);
         }
         r1cs_eval_proof_list
       };
 
+      (
+        [
+          inst_evals_bound_rp.0,
+          inst_evals_bound_rp.1,
+          inst_evals_bound_rp.2,
+        ],
+        inst_evals_list,
+        r1cs_eval_proof_list,
+      )
       (
         [
           inst_evals_bound_rp.0,
@@ -1968,6 +2074,11 @@ impl<S: SpartanExtensionField> SNARK<S> {
             &pairwise_shifted_prover,
             &addr_ts_bits_prover,
           ],
+          vec![
+            &pairwise_prover,
+            &pairwise_shifted_prover,
+            &addr_ts_bits_prover,
+          ],
           &pairwise_check_inst.inst,
           transcript,
           &mut random_tape,
@@ -1986,12 +2097,20 @@ impl<S: SpartanExtensionField> SNARK<S> {
       pairwise_check_inst_evals_list,
       pairwise_check_r1cs_eval_proof,
     ) = {
+    let (
+      pairwise_check_inst_evals_bound_rp,
+      pairwise_check_inst_evals_list,
+      pairwise_check_r1cs_eval_proof,
+    ) = {
       let [rp, _, rx, ry] = pairwise_check_challenges;
       let timer_eval = Timer::new("eval_sparse_polys");
 
       // Per instance evaluation is unsorted
       let inst_evals_list = pairwise_check_inst_unsorted.inst.multi_evaluate(&rx, &ry);
       // RP-bound evaluation is sorted
+      let (_, inst_evals_bound_rp) = pairwise_check_inst
+        .inst
+        .multi_evaluate_bound_rp(&rp, &rx, &ry);
       let (_, inst_evals_bound_rp) = pairwise_check_inst
         .inst
         .multi_evaluate_bound_rp(&rp, &rx, &ry);
@@ -2030,6 +2149,15 @@ impl<S: SpartanExtensionField> SNARK<S> {
         inst_evals_list,
         r1cs_eval_proof,
       )
+      (
+        [
+          inst_evals_bound_rp.0,
+          inst_evals_bound_rp.1,
+          inst_evals_bound_rp.2,
+        ],
+        inst_evals_list,
+        r1cs_eval_proof,
+      )
     };
     // Correctness of the shift will be handled in SHIFT_PROOFS
     timer_proof.stop();
@@ -2055,8 +2183,18 @@ impl<S: SpartanExtensionField> SNARK<S> {
       &init_vir_mems_prover,
       &addr_phy_mems_prover,
       &addr_vir_mems_prover,
+      &exec_inputs_prover,
+      &init_phy_mems_prover,
+      &init_vir_mems_prover,
+      &addr_phy_mems_prover,
+      &addr_vir_mems_prover,
     ]);
     let (perm_root_w2_prover, _) = ProverWitnessSecInfo::merge(vec![
+      &perm_exec_w2_prover,
+      &init_phy_mem_w2_prover,
+      &init_vir_mem_w2_prover,
+      &phy_mem_addr_w2_prover,
+      &vir_mem_addr_w2_prover,
       &perm_exec_w2_prover,
       &init_phy_mem_w2_prover,
       &init_vir_mem_w2_prover,
@@ -2069,6 +2207,11 @@ impl<S: SpartanExtensionField> SNARK<S> {
       &init_vir_mem_w3_prover,
       &phy_mem_addr_w3_prover,
       &vir_mem_addr_w3_prover,
+      &perm_exec_w3_prover,
+      &init_phy_mem_w3_prover,
+      &init_vir_mem_w3_prover,
+      &phy_mem_addr_w3_prover,
+      &vir_mem_addr_w3_prover,
     ]);
     let (perm_root_w3_shifted_prover, _) = ProverWitnessSecInfo::merge(vec![
       &perm_exec_w3_shifted_prover,
@@ -2076,8 +2219,15 @@ impl<S: SpartanExtensionField> SNARK<S> {
       &init_vir_mem_w3_shifted_prover,
       &phy_mem_addr_w3_shifted_prover,
       &vir_mem_addr_w3_shifted_prover,
+      &perm_exec_w3_shifted_prover,
+      &init_phy_mem_w3_shifted_prover,
+      &init_vir_mem_w3_shifted_prover,
+      &phy_mem_addr_w3_shifted_prover,
+      &vir_mem_addr_w3_shifted_prover,
     ]);
     let perm_root_num_instances = perm_root_w1_prover.w_mat.len();
+    let perm_root_num_proofs: Vec<usize> =
+      perm_root_w1_prover.w_mat.iter().map(|i| i.len()).collect();
     let perm_root_num_proofs: Vec<usize> =
       perm_root_w1_prover.w_mat.iter().map(|i| i.len()).collect();
     let (perm_root_r1cs_sat_proof, perm_root_challenges) = {
@@ -2088,6 +2238,13 @@ impl<S: SpartanExtensionField> SNARK<S> {
           &perm_root_num_proofs,
           num_ios,
           &vec![num_ios; perm_root_num_instances],
+          vec![
+            &perm_w0_prover,
+            &perm_root_w1_prover,
+            &perm_root_w2_prover,
+            &perm_root_w3_prover,
+            &perm_root_w3_shifted_prover,
+          ],
           vec![
             &perm_w0_prover,
             &perm_root_w1_prover,
@@ -2138,6 +2295,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
         proof
       };
 
+
       (inst_evals, r1cs_eval_proof)
     };
     timer_proof.stop();
@@ -2150,6 +2308,12 @@ impl<S: SpartanExtensionField> SNARK<S> {
     let (perm_poly_poly_list, proof_eval_perm_poly_prod_list) = {
       let (perm_poly_w3_prover, inst_map) = {
         let mut components = vec![
+          &perm_exec_w3_prover,
+          &init_phy_mem_w3_prover,
+          &init_vir_mem_w3_prover,
+          &phy_mem_addr_w3_prover,
+          &vir_mem_addr_w3_prover,
+          &block_w3_prover,
           &perm_exec_w3_prover,
           &init_phy_mem_w3_prover,
           &init_vir_mem_w3_prover,
@@ -2263,7 +2427,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
         shifted_polys.push(&vir_mem_addr_w3_shifted_prover.poly_w[0]);
         header_len_list.push(6);
       }
-      let shift_proof = ShiftProofs::prove(
+
+      ShiftProofs::prove(
         orig_polys,
         shifted_polys,
         header_len_list,
@@ -2294,6 +2459,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       output_exec_num,
       transcript,
       &mut random_tape,
+      &mut random_tape,
     );
     timer_proof.stop();
 
@@ -2318,6 +2484,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       proof_eval_perm_poly_prod_list,
 
       shift_proof,
+      io_proof,
       io_proof,
     }
   }
@@ -2377,6 +2544,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
       bincode::serialize(&perm_root_comm).unwrap().len();
     // bincode::serialize(&perm_root_gens).unwrap().len();
     let meta_size =
+    // bincode::serialize(&perm_root_gens).unwrap().len();
+    let meta_size =
       // usize
       19 * std::mem::size_of::<usize>() +
       // Vec<usize> or Vec<Vec<usize>>
@@ -2388,6 +2557,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
       // Other vectors
       bincode::serialize(input).unwrap().len() +
       bincode::serialize(output).unwrap().len();
+    // Everything else
+    // bincode::serialize(vars_gens).unwrap().len();
     // Everything else
     // bincode::serialize(vars_gens).unwrap().len();
 
@@ -2514,6 +2685,12 @@ impl<S: SpartanExtensionField> SNARK<S> {
       perm_root_comm
         .comm
         .append_to_transcript(b"perm_comm", transcript);
+      pairwise_check_comm
+        .comm
+        .append_to_transcript(b"pairwise_comm", transcript);
+      perm_root_comm
+        .comm
+        .append_to_transcript(b"perm_comm", transcript);
 
       // Commit io
       S::append_field_to_transcript(b"input_block_num", transcript, input_block_num);
@@ -2529,6 +2706,9 @@ impl<S: SpartanExtensionField> SNARK<S> {
     // --
     // Block_num_instance is the number of non-zero entries in block_num_proofs
     let timer_sort = Timer::new("block_sort");
+    let block_num_instances = block_num_proofs
+      .iter()
+      .fold(0, |i, j| if *j > 0 { i + 1 } else { i });
     let block_num_instances = block_num_proofs
       .iter()
       .fold(0, |i, j| if *j > 0 { i + 1 } else { i });
@@ -2548,6 +2728,15 @@ impl<S: SpartanExtensionField> SNARK<S> {
     let mut block_num_proofs: Vec<usize> = inst_sorter.iter().map(|i| i.num_exec).collect();
     // index[i] = j => the original jth entry should now be at the ith position
     let block_index: Vec<usize> = inst_sorter.iter().map(|i| i.index).collect();
+    let block_num_vars: Vec<usize> = (0..block_num_instances)
+      .map(|i| block_num_vars[block_index[i]])
+      .collect();
+    let block_num_phy_ops: Vec<usize> = (0..block_num_instances)
+      .map(|i| block_num_phy_ops[block_index[i]])
+      .collect();
+    let block_num_vir_ops: Vec<usize> = (0..block_num_instances)
+      .map(|i| block_num_vir_ops[block_index[i]])
+      .collect();
     let block_num_vars: Vec<usize> = (0..block_num_instances)
       .map(|i| block_num_vars[block_index[i]])
       .collect();
@@ -2589,7 +2778,33 @@ impl<S: SpartanExtensionField> SNARK<S> {
       total_num_vir_mem_accesses.next_power_of_two()
     };
 
+    let total_num_init_phy_mem_accesses = if total_num_init_phy_mem_accesses == 0 {
+      0
+    } else {
+      total_num_init_phy_mem_accesses.next_power_of_two()
+    };
+    let total_num_init_vir_mem_accesses = if total_num_init_vir_mem_accesses == 0 {
+      0
+    } else {
+      total_num_init_vir_mem_accesses.next_power_of_two()
+    };
+    let total_num_phy_mem_accesses = if total_num_phy_mem_accesses == 0 {
+      0
+    } else {
+      total_num_phy_mem_accesses.next_power_of_two()
+    };
+    let total_num_vir_mem_accesses = if total_num_vir_mem_accesses == 0 {
+      0
+    } else {
+      total_num_vir_mem_accesses.next_power_of_two()
+    };
+
     // Pad num_proofs with 1 until the next power of 2
+    block_num_proofs.extend(vec![
+      1;
+      block_num_instances.next_power_of_two()
+        - block_num_instances
+    ]);
     block_num_proofs.extend(vec![
       1;
       block_num_instances.next_power_of_two()
@@ -2608,6 +2823,9 @@ impl<S: SpartanExtensionField> SNARK<S> {
     // Sort from high -> low
     inst_sorter.sort_by(|a, b| b.cmp(a));
 
+    let pairwise_num_instances = 1
+      + if total_num_phy_mem_accesses > 0 { 1 } else { 0 }
+      + if total_num_vir_mem_accesses > 0 { 1 } else { 0 };
     let pairwise_num_instances = 1
       + if total_num_phy_mem_accesses > 0 { 1 } else { 0 }
       + if total_num_vir_mem_accesses > 0 { 1 } else { 0 };
@@ -3023,12 +3241,20 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let timer_sat_proof = Timer::new("Perm Root Sat");
       let (perm_root_w1_verifier, _) = VerifierWitnessSecInfo::merge(vec![
         &exec_inputs_verifier,
+        &exec_inputs_verifier,
         &init_phy_mems_verifier,
         &init_vir_mems_verifier,
         &addr_phy_mems_verifier,
         &addr_vir_mems_verifier,
+        &addr_phy_mems_verifier,
+        &addr_vir_mems_verifier,
       ]);
       let (perm_root_w2_verifier, _) = VerifierWitnessSecInfo::merge(vec![
+        &perm_exec_w2_verifier,
+        &init_phy_mem_w2_verifier,
+        &init_vir_mem_w2_verifier,
+        &phy_mem_addr_w2_verifier,
+        &vir_mem_addr_w2_verifier,
         &perm_exec_w2_verifier,
         &init_phy_mem_w2_verifier,
         &init_vir_mem_w2_verifier,
@@ -3041,11 +3267,20 @@ impl<S: SpartanExtensionField> SNARK<S> {
         &init_vir_mem_w3_verifier,
         &phy_mem_addr_w3_verifier,
         &vir_mem_addr_w3_verifier,
+        &perm_exec_w3_verifier,
+        &init_phy_mem_w3_verifier,
+        &init_vir_mem_w3_verifier,
+        &phy_mem_addr_w3_verifier,
+        &vir_mem_addr_w3_verifier,
       ]);
       let (perm_root_w3_shifted_verifier, _) = VerifierWitnessSecInfo::merge(vec![
         &perm_exec_w3_shifted_verifier,
         &init_phy_mem_w3_shifted_verifier,
+        &perm_exec_w3_shifted_verifier,
+        &init_phy_mem_w3_shifted_verifier,
         &init_vir_mem_w3_shifted_verifier,
+        &phy_mem_addr_w3_shifted_verifier,
+        &vir_mem_addr_w3_shifted_verifier,
         &phy_mem_addr_w3_shifted_verifier,
         &vir_mem_addr_w3_shifted_verifier,
       ]);
@@ -3056,6 +3291,13 @@ impl<S: SpartanExtensionField> SNARK<S> {
         perm_size,
         &perm_root_num_proofs,
         num_ios,
+        vec![
+          &perm_w0_verifier,
+          &perm_root_w1_verifier,
+          &perm_root_w2_verifier,
+          &perm_root_w3_verifier,
+          &perm_root_w3_shifted_verifier,
+        ],
         vec![
           &perm_w0_verifier,
           &perm_root_w1_verifier,
@@ -3194,6 +3436,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
               vir_mem_block_poly_bound_tau =
                 vir_mem_block_poly_bound_tau * self.perm_poly_poly_list[p];
             }
+          }
           }
           7 => {
             vir_mem_block_poly_bound_tau =

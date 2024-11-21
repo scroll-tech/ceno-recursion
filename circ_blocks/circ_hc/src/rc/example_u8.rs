@@ -137,7 +137,7 @@ impl<'a> std::fmt::Debug for TableDebug<'a> {
 impl std::fmt::Debug for Manager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Manager")
-            .field("table", &TableDebug(&*self.table.borrow()))
+            .field("table", &TableDebug(&self.table.borrow()))
             .field("next_id", &self.next_id.get())
             .finish()
     }
@@ -157,7 +157,7 @@ impl Manager {
     fn create(&self, op: &u8, children: Vec<Node>) -> Node {
         let mut table = self.table.borrow_mut();
         let data = Rc::new(NodeData {
-            op: op.clone(),
+            op: *op,
             cs: children.into(),
         });
 

@@ -14,6 +14,7 @@ use itertools::izip;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
+use std::cmp::min;
 
 const MODE_P: usize = 1;
 const MODE_Q: usize = 2;

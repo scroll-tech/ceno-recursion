@@ -1,14 +1,19 @@
-use serde::{Serialize, Deserialize};
-use std::ops::{Neg, Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
-use ff::{derive::subtle::{Choice, ConditionallySelectable, ConstantTimeEq}, Field};
+use ff::{
+    derive::subtle::{Choice, ConditionallySelectable, ConstantTimeEq},
+    Field,
+};
 use rand::RngCore;
+use serde::{Deserialize, Serialize};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use crate::ff_field::FGoldilocks;
 use ff::derive::subtle::CtOption;
 use rug::Integer;
 
 /// Degree 2 FGoldilocks extension field mod x^2 - 7
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash,
+)]
 pub struct FGoldilocksExt2(pub [FGoldilocks; 2]);
 
 impl FGoldilocksExt2 {
@@ -99,7 +104,7 @@ impl Mul<i64> for FGoldilocksExt2 {
 
     #[inline]
     fn mul(self, rhs: i64) -> Self::Output {
-        &self * &FGoldilocks::from(rhs)
+        self * FGoldilocks::from(rhs)
     }
 }
 impl MulAssign<&FGoldilocks> for FGoldilocksExt2 {
@@ -310,19 +315,19 @@ impl<'a> Mul<&'a FGoldilocksExt2> for FGoldilocksExt2 {
 
     #[inline]
     fn mul(self, rhs: &'a FGoldilocksExt2) -> Self::Output {
-        mul_internal(&self, &rhs)
+        mul_internal(&self, rhs)
     }
 }
 impl MulAssign for FGoldilocksExt2 {
     #[inline]
     fn mul_assign(&mut self, rhs: Self) {
-        *self = mul_internal(&self, &rhs);
+        *self = mul_internal(self, &rhs);
     }
 }
 impl<'a> MulAssign<&'a FGoldilocksExt2> for FGoldilocksExt2 {
     #[inline]
     fn mul_assign(&mut self, rhs: &'a FGoldilocksExt2) {
-        *self = mul_internal(&self, &rhs);
+        *self = mul_internal(self, rhs);
     }
 }
 

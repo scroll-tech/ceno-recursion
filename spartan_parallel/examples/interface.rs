@@ -4,10 +4,12 @@
 use std::io::{BufRead, Read};
 use std::{default, env};
 use std::{fs::File, io::BufReader};
+use std::{fs::File, io::BufReader};
 
 use libspartan::scalar::{Scalar, SpartanExtensionField};
 use libspartan::{instance::Instance, InputsAssignment, MemsAssignment, VarsAssignment, SNARK};
 use merlin::Transcript;
+use serde::{Deserialize, Serialize};
 use serde::{Deserialize, Serialize};
 use std::time::*;
 
@@ -24,6 +26,13 @@ struct CompileTimeKnowledge {
   block_num_vir_ops: Vec<usize>,
   max_ts_width: usize,
 
+  args: Vec<
+    Vec<(
+      Vec<(usize, [u8; 32])>,
+      Vec<(usize, [u8; 32])>,
+      Vec<(usize, [u8; 32])>,
+    )>,
+  >,
   args: Vec<
     Vec<(
       Vec<(usize, [u8; 32])>,
@@ -48,119 +57,6 @@ impl CompileTimeKnowledge {
     f.read_to_end(&mut content).unwrap();
     bincode::deserialize(&content).unwrap()
   }
-
-  /* Archived & Outdated
-  fn read_from_file(benchmark_name: String) -> std::io::Result<CompileTimeKnowledge> {
-    let file_name = format!("../zok_tests/constraints/{}.ctk", benchmark_name);
-    let f = File::open(file_name)?;
-    let mut reader = BufReader::new(f);
-    let mut buffer = String::new();
-
-    let (block_num_instances, num_vars, num_inputs_unpadded, num_vars_per_block, block_num_phy_ops, block_num_vir_ops, max_ts_width) = {
-      reader.read_line(&mut buffer)?;
-      let block_num_instances = buffer.trim().parse::<usize>().unwrap();
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      let num_vars = buffer.trim().parse::<usize>().unwrap();
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      let num_inputs_unpadded = buffer.trim().parse::<usize>().unwrap();
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      let num_vars_per_block: Vec<usize> = string_to_vec(buffer.clone());
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      let block_num_phy_ops: Vec<usize> = string_to_vec(buffer.clone());
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      let block_num_vir_ops: Vec<usize> = string_to_vec(buffer.clone());
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      let max_ts_width = buffer.trim().parse::<usize>().unwrap();
-      (block_num_instances, num_vars, num_inputs_unpadded, num_vars_per_block, block_num_phy_ops, block_num_vir_ops, max_ts_width)
-    };
-
-    let mut args = vec![Vec::new(); block_num_instances];
-    let mut inst_counter: usize = 0;
-    let mut cons_counter: usize = 0;
-    buffer.clear();
-    reader.read_line(&mut buffer)?;
-    assert_eq!(buffer, "INST 0\n".to_string());
-    buffer.clear();
-    reader.read_line(&mut buffer)?;
-    assert_eq!(buffer, format!("A\n"));
-    args[inst_counter].push((Vec::new(), Vec::new(), Vec::new()));
-    // Use mat to indicate which matrix we are dealing with
-    // 0 - A; 1 - B; 2 - C
-    let mut mat = 0;
-    buffer.clear();
-    reader.read_line(&mut buffer)?;
-    while buffer != format!("INST_END\n") {
-      if buffer == format!("INST {}\n", inst_counter + 1) {
-        inst_counter += 1;
-        buffer.clear();
-        reader.read_line(&mut buffer)?;
-        assert_eq!(buffer, format!("A\n"));
-        args[inst_counter].push((Vec::new(), Vec::new(), Vec::new()));
-        cons_counter = 0;
-        mat = 0;
-      } else if buffer == format!("A\n") {
-        args[inst_counter].push((Vec::new(), Vec::new(), Vec::new()));
-        cons_counter += 1;
-        mat = 0;
-      } else if buffer == format!("B\n") {
-        mat = 1;
-      } else if buffer == format!("C\n") {
-        mat = 2;
-      } else {
-        // Must be a line of a single number denoting variable and a [u8; 32] denoting the coefficient
-        let var = buffer.trim().parse::<usize>().unwrap();
-        buffer.clear();
-        reader.read_line(&mut buffer)?;
-        let val = string_to_bytes(buffer.clone());
-        match mat {
-          0 => { args[inst_counter][cons_counter].0.push((var, val)); }
-          1 => { args[inst_counter][cons_counter].1.push((var, val)); }
-          2 => { args[inst_counter][cons_counter].2.push((var, val)); }
-          _ => { panic!("Invalid matrix: {}", mat) }
-        }
-      }
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-    }
-    buffer.clear();
-    reader.read_line(&mut buffer)?;
-    let func_input_width = buffer.trim().parse::<usize>().unwrap();
-    buffer.clear();
-    reader.read_line(&mut buffer)?;
-    let input_offset = buffer.trim().parse::<usize>().unwrap();
-    buffer.clear();
-    reader.read_line(&mut buffer)?;
-    let input_block_num = buffer.trim().parse::<usize>().unwrap();
-    buffer.clear();
-    reader.read_line(&mut buffer)?;
-    let output_offset = buffer.trim().parse::<usize>().unwrap();
-    buffer.clear();
-    reader.read_line(&mut buffer)?;
-    let output_block_num = buffer.trim().parse::<usize>().unwrap();
-
-    Ok(CompileTimeKnowledge {
-      block_num_instances,
-      num_vars,
-      num_inputs_unpadded,
-      num_vars_per_block,
-      block_num_phy_ops,
-      block_num_vir_ops,
-      max_ts_width,
-      args,
-      func_input_width,
-      input_offset,
-      input_block_num,
-      output_offset,
-      output_block_num
-    })
-  }
-  */
 }
 
 // Everything provided by the prover
@@ -197,232 +93,6 @@ impl<S: SpartanExtensionField + for<'de> serde::de::Deserialize<'de>> RunTimeKno
     f.read_to_end(&mut content).unwrap();
     bincode::deserialize(&content).unwrap()
   }
-
-  /* Archived
-  fn read_from_file(benchmark_name: String) -> std::io::Result<RunTimeKnowledge> {
-    let file_name = format!("../zok_tests/inputs/{}.rtk", benchmark_name);
-    let f = File::open(file_name)?;
-    let mut reader = BufReader::new(f);
-    let mut buffer = String::new();
-
-    let (block_max_num_proofs, block_num_proofs, consis_num_proofs, total_num_init_mem_accesses, total_num_phy_mem_accesses, total_num_vir_mem_accesses) = {
-      reader.read_line(&mut buffer)?;
-      let block_max_num_proofs = buffer.trim().parse::<usize>().unwrap();
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      let block_num_proofs = string_to_vec(buffer.clone());
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      let consis_num_proofs = buffer.trim().parse::<usize>().unwrap();
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      let total_num_init_mem_accesses = buffer.trim().parse::<usize>().unwrap();
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      let total_num_phy_mem_accesses = buffer.trim().parse::<usize>().unwrap();
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      let total_num_vir_mem_accesses = buffer.trim().parse::<usize>().unwrap();
-      (block_max_num_proofs, block_num_proofs, consis_num_proofs, total_num_init_mem_accesses, total_num_phy_mem_accesses, total_num_vir_mem_accesses)
-    };
-
-    let block_vars_matrix: Vec<Vec<VarsAssignment>> = {
-      let mut block_vars_matrix = vec![Vec::new()];
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      assert_eq!(buffer, "BLOCK_VARS\n".to_string());
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      assert_eq!(buffer, "BLOCK 0\n".to_string());
-
-      let mut block_counter = 0;
-      let mut exec_counter = 0;
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      while buffer != "EXEC_INPUTS\n".to_string() {
-        if buffer == format!("BLOCK {}\n", block_counter + 1) {
-          block_counter += 1;
-          exec_counter = 0;
-          block_vars_matrix.push(Vec::new());
-        } else if buffer == format!("EXEC 0\n") {
-          block_vars_matrix[block_counter].push(Vec::new());
-        } else if buffer == format!("EXEC {}\n", exec_counter + 1) {
-          block_vars_matrix[block_counter].push(Vec::new());
-          exec_counter += 1;
-        } else {
-          block_vars_matrix[block_counter][exec_counter].push(string_to_bytes(buffer.clone()));
-        }
-        buffer.clear();
-        reader.read_line(&mut buffer)?;
-      }
-      block_vars_matrix.iter().map(|i| i.iter().map(|j| VarsAssignment::new(j).unwrap()).collect()).collect()
-    };
-
-    let exec_inputs: Vec<InputsAssignment> = {
-      let mut exec_inputs = vec![Vec::new()];
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      assert_eq!(buffer, "EXEC 0\n".to_string());
-
-      let mut exec_counter = 0;
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      while buffer != "INIT_MEMS\n".to_string() {
-        if buffer == format!("EXEC {}\n", exec_counter + 1) {
-          exec_inputs.push(Vec::new());
-          exec_counter += 1;
-        } else {
-          exec_inputs[exec_counter].push(string_to_bytes(buffer.clone()));
-        }
-        buffer.clear();
-        reader.read_line(&mut buffer)?;
-      }
-
-      exec_inputs.iter().map(|i| InputsAssignment::new(i).unwrap()).collect()
-    };
-
-    let init_mems_list: Vec<MemsAssignment> = {
-      let mut init_mems_list = vec![Vec::new()];
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-
-      let mut access_counter = 0;
-      while buffer != "ADDR_PHY_MEMS\n".to_string() {
-        if buffer == format!("ACCESS {}\n", access_counter + 1) {
-          access_counter += 1;
-          init_mems_list.push(Vec::new());
-        } else if buffer == format!("ACCESS 0\n") {
-        } else {
-          init_mems_list[access_counter].push(string_to_bytes(buffer.clone()));
-        }
-        buffer.clear();
-        reader.read_line(&mut buffer)?;
-      }
-      init_mems_list.iter().map(|i| InputsAssignment::new(i).unwrap()).collect()
-    };
-
-    let addr_phy_mems_list: Vec<MemsAssignment> = {
-      let mut addr_phy_mems_list = vec![Vec::new()];
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-
-      let mut access_counter = 0;
-      while buffer != "ADDR_VIR_MEMS\n".to_string() {
-        if buffer == format!("ACCESS {}\n", access_counter + 1) {
-          access_counter += 1;
-          addr_phy_mems_list.push(Vec::new());
-        } else if buffer == format!("ACCESS 0\n") {
-        } else {
-          addr_phy_mems_list[access_counter].push(string_to_bytes(buffer.clone()));
-        }
-        buffer.clear();
-        reader.read_line(&mut buffer)?;
-      }
-      addr_phy_mems_list.iter().map(|i| InputsAssignment::new(i).unwrap()).collect()
-    };
-
-    let addr_vir_mems_list: Vec<MemsAssignment> = {
-      let mut addr_vir_mems_list = vec![Vec::new()];
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-
-      let mut access_counter = 0;
-      while buffer != "ADDR_VM_BITS\n".to_string() {
-        if buffer == format!("ACCESS {}\n", access_counter + 1) {
-          access_counter += 1;
-          addr_vir_mems_list.push(Vec::new());
-        } else if buffer == format!("ACCESS 0\n") {
-        } else {
-          addr_vir_mems_list[access_counter].push(string_to_bytes(buffer.clone()));
-        }
-        buffer.clear();
-        reader.read_line(&mut buffer)?;
-      }
-      addr_vir_mems_list.iter().map(|i| InputsAssignment::new(i).unwrap()).collect()
-    };
-
-    let addr_ts_bits_list: Vec<MemsAssignment> = {
-      let mut addr_ts_bits_list = vec![Vec::new()];
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-
-      let mut access_counter = 0;
-      while buffer != "INPUTS\n".to_string() {
-        if buffer == format!("ACCESS {}\n", access_counter + 1) {
-          access_counter += 1;
-          addr_ts_bits_list.push(Vec::new());
-        } else if buffer == format!("ACCESS 0\n") {
-        } else {
-          addr_ts_bits_list[access_counter].push(string_to_bytes(buffer.clone()));
-        }
-        buffer.clear();
-        reader.read_line(&mut buffer)?;
-      }
-      addr_ts_bits_list.iter().map(|i| InputsAssignment::new(i).unwrap()).collect()
-    };
-
-    let func_inputs = {
-      let mut func_inputs = Vec::new();
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      while buffer != "INPUT_MEMS\n".to_string() {
-        func_inputs.push(string_to_bytes(buffer.clone()));
-        buffer.clear();
-        reader.read_line(&mut buffer)?;
-      }
-      func_inputs
-    };
-
-    let input_mem = {
-      let mut input_mem = Vec::new();
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      while buffer != "OUTPUTS\n".to_string() {
-        input_mem.push(string_to_bytes(buffer.clone()));
-        buffer.clear();
-        reader.read_line(&mut buffer)?;
-      }
-      input_mem
-    };
-
-    let func_outputs = {
-      let mut func_outputs = Vec::new();
-      buffer.clear();
-      reader.read_line(&mut buffer)?;
-      while buffer != "OUTPUTS_END\n".to_string() {
-        func_outputs.push(string_to_bytes(buffer.clone()));
-        buffer.clear();
-        reader.read_line(&mut buffer)?;
-      }
-      func_outputs
-    };
-
-    buffer.clear();
-    reader.read_line(&mut buffer)?;
-    let output_exec_num = buffer.trim().parse::<usize>().unwrap();
-
-    Ok(RunTimeKnowledge {
-      block_max_num_proofs,
-      block_num_proofs,
-      consis_num_proofs,
-      total_num_init_mem_accesses,
-      total_num_phy_mem_accesses,
-      total_num_vir_mem_accesses,
-
-      block_vars_matrix,
-      exec_inputs,
-      init_mems_list,
-      addr_phy_mems_list,
-      addr_vir_mems_list,
-      addr_ts_bits_list,
-
-      input: func_inputs,
-      input_mem,
-      output: func_outputs[0],
-      output_exec_num
-    })
-  }
-  */
 }
 
 fn main() {

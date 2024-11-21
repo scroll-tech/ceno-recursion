@@ -31,7 +31,7 @@ It seems clear from the shortcoming of approach #2 that we should start by think
 > **Note**: one might be tempted to run DFS on the CFG to remove backedges. However, this is both incorrect and unnecessary. Incorrect because under different traverse rules, backedges might not be equal to the returning edge in a loop. Unnecessary because the way blocks are generated ensures that returning edge in a loop always start from a block with a higher label to one with a lower label.
 
 Wait, but what about function calls? Recall that how we bound the number of executions of each block is: `number of executions within the function * number of executions of the function`. However, number of executions of the function itself can be subject to the branching problem. Furthermore, even the most precise function execution bound is not good enough. To illustrate, consider the following case:
-> There are two functions A and B. In the if branch, A is executed 3 times while B is executed 5 times. In the else branch, A is executed 5 times and B is executed 3 times.  
+> There are two functions A and B. In the if branch, A is executed 3 times while B is executed 5 times. In the else branch, A is executed 5 times and B is executed 3 times.
 Both A and B have execution bound as 5, but in no case would both functions be executed 5 times.
 
 Note that this is not an issue for individual blocks, because the lack of `jump` statements ensures that no block will be executed in both an if branch and an else branch.
@@ -43,8 +43,8 @@ To take function calls into consideration, we revise the above approach:
 * Starting from the function on top of the top sort:
   * Similar as the DP algorithm described in Approach #3, start from the function exit block and process in reverse order:
     * For every block, only record the maximum number of block executions until _the end of the function_.
-    * For any caller block to another function, by definition of top sort, that function must have already been processed. The maximum number of block execution `M_b` is given by  
-      `M_b = M_h * E_b + M_r`  
+    * For any caller block to another function, by definition of top sort, that function must have already been processed. The maximum number of block execution `M_b` is given by
+      `M_b = M_h * E_b + M_r`
       where `M_h` is the maximum number of block execution at the callee function header, `E_b` is the number of executions of the caller, and `M_r` is the maximum number of block execution at the return block of the function.
   * Only process its predecessors **in the function** if values of the block have been changed. If the block is only reachable from another function, process the caller block of that function.
   * Once a function is processed, obtain the total number of proofs during one execution of the function at the function entry block.

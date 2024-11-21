@@ -30,7 +30,7 @@ Concrete:
   1. model a term IR, with functional arrays (like ours!).
   2. model a RAM-augmented term IR, with conditional stores and reads
   3. write a converter
-  4. prove that it works 
+  4. prove that it works
 
 Vague:
 [ ] FE analysis infrastructure

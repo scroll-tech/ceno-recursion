@@ -14,7 +14,7 @@ struct VPAuxInfo {
 
 struct SumCheckSubClaim {
     field[0] point
-    field expected_evaluation    
+    field expected_evaluation
 }
 
 struct SumcheckIOPVerifierState {

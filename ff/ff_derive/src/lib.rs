@@ -232,11 +232,7 @@ fn validate_struct(ast: &syn::DeriveInput, limbs: usize) -> Option<proc_macro2::
 
     // The array's element type should be `u64`.
     if match arr.elem.as_ref() {
-        syn::Type::Path(path) => path
-            .path
-            .get_ident()
-            .map(|x| x.to_string() != "u64")
-            .unwrap_or(true),
+        syn::Type::Path(path) => path.path.get_ident().map(|x| *x != "u64").unwrap_or(true),
         _ => true,
     } {
         return Some(
@@ -257,8 +253,8 @@ fn validate_struct(ast: &syn::DeriveInput, limbs: usize) -> Option<proc_macro2::
         syn::Expr::Group(expr_group) => match &*expr_group.expr {
             syn::Expr::Lit(expr_lit) => Some(&expr_lit.lit),
             _ => None,
-        }
-        _ => None
+        },
+        _ => None,
     };
     let lit_int = match match expr_lit {
         Some(syn::Lit::Int(lit_int)) => Some(lit_int),
@@ -490,8 +486,8 @@ fn prime_field_constants_and_sqrt(
 
     // Compute 2^s root of unity given the generator
     let root_of_unity =
-        biguint_to_u64_vec((exp(generator.clone(), &t, &modulus) * &r) % modulus, limbs);
-    let generator = biguint_to_u64_vec((generator.clone() * &r) % modulus, limbs);
+        biguint_to_u64_vec((exp(generator.clone(), &t, modulus) * &r) % modulus, limbs);
+    let generator = biguint_to_u64_vec((generator * &r) % modulus, limbs);
 
     let sqrt_impl =
         if (modulus % BigUint::from_str("4").unwrap()) == BigUint::from_str("3").unwrap() {
@@ -569,14 +565,16 @@ fn prime_field_constants_and_sqrt(
                 )
             }
         } else if (modulus % BigUint::from_str("8").unwrap()) == BigUint::from_str("5").unwrap() {
-            // Additional chain for (q + 3) // 8  
+            // Additional chain for (q + 3) // 8
             let mod_plus_3_over_8 = pow_fixed::generate(
                 &quote! {self},
                 (modulus + BigUint::from_str("3").unwrap()) >> 3,
             );
             let field_name = name;
             // sqrt(-1)
-            let sqrt_minus_1 = (modulus - BigUint::from_str("1").unwrap()).sqrt().to_string();
+            let sqrt_minus_1 = (modulus - BigUint::from_str("1").unwrap())
+                .sqrt()
+                .to_string();
             quote! {
                 use ::ff::derive::subtle::{ConditionallySelectable, ConstantTimeEq};
                 let c1 = #field_name::from_str_vartime(#sqrt_minus_1).unwrap();
@@ -594,7 +592,7 @@ fn prime_field_constants_and_sqrt(
             }
         } else {
             syn::Error::new_spanned(
-                &name,
+                name,
                 "ff_derive can't generate a square root function for this field.",
             )
             .to_compile_error()

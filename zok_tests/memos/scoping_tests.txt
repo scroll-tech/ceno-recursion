@@ -9,7 +9,7 @@ Case 1: No Function Call
     def main() -> u32:
         u32 a = 5
         u32 b = 4
-        for u32 i in 0..4 do    
+        for u32 i in 0..4 do
             a = a + 1
             u32 a = 60
             for u32 j in 0..5 do
@@ -25,7 +25,7 @@ Strategy 1 - Rename all variables
     def main() -> u32:
         u32 a1 = 5
         u32 b = 4
-        for u32 i in 0..4 do    
+        for u32 i in 0..4 do
             a1 = a1 + 1
             u32 a2 = 60
             for u32 j in 0..5 do
@@ -35,14 +35,14 @@ Strategy 1 - Rename all variables
         endfor
         a1 = a1 + 10
         ret = a1 + b
-    
+
     # of states: 5
     # of identifiers: 5 (a1, a2, a3, b, ret)
     # of additional operations: 0
 
     Strategy:
         1. Keep track of all known identifiers.
-        2. When reach a duplicated identifier, 
+        2. When reach a duplicated identifier,
             rename all its occurences in the remaining of the current scope.
 
 Strategy 2 - Use Physical Memory as stack
@@ -50,7 +50,7 @@ Strategy 2 - Use Physical Memory as stack
     def main() -> u32:
         u32 a = 5
         u32 b = 4
-        for u32 i in 0..4 do    
+        for u32 i in 0..4 do
             a = a + 1
             STORE(a, 0)
             u32 a = 60
@@ -72,15 +72,15 @@ Strategy 2 - Use Physical Memory as stack
     Strategy:
         1. Keep track of all known identifiers.
         2. Initialize a stack pointer (sp) to 0, which points to physical memory.
-        3. When reach a duplicated identifier, 
-            STORE its value into addr sp, 
+        3. When reach a duplicated identifier,
+            STORE its value into addr sp,
             add a LOAD at the end of the current scope, and
             increment sp by 1. (sp never decrements).
-    
+
     Note:
         1. LOAD and STORE on line 51 and 53 are unnecessary, one may attempt to instead rename "a" on line 52
             However, one should be clever about not to cause a gap in the physical memory.
-    
+
 --
 Case 2: Non-Generic Function Call
 
@@ -91,7 +91,7 @@ Case 2: Non-Generic Function Call
     def main() -> u32:
         u32 a = 5
         u32 b = 4
-        for u32 i in 0..4 do    
+        for u32 i in 0..4 do
             a = a + 1
             a = add_five(a)
             for u32 j in 0..5 do
@@ -111,7 +111,7 @@ Strategy 1 - Rename all variables
     def main() -> u32:
         u32 main@a1 = 5
         u32 main@b = 4
-        for u32 i in 0..4 do    
+        for u32 i in 0..4 do
             main@a1 = main@a1 + 1
             add_five@a = main@a1
             call add_five
@@ -123,11 +123,11 @@ Strategy 1 - Rename all variables
         endfor
         main@a1 = main@a1 + 10
         main@ret = main@a1 + main@b
-    
+
     # of states: 7
     # of identifiers: 7 (main: a1, a2, b, ret; add_five: a, b, ret)
     # of additional operations: 2 Reg Ops
-    
+
     Strategy:
     1. Append function names before all local variables.
     2. Apply Case 1 Strategy 1.
@@ -143,7 +143,7 @@ Strategy 2 - Use Physical Memory as stack
     def main() -> u32:
         u32 a = 5
         u32 b = 4
-        for u32 i in 0..4 do    
+        for u32 i in 0..4 do
             a = a + 1
             STORE(a, 0)
             call add_five(a)
@@ -166,13 +166,13 @@ Strategy 2 - Use Physical Memory as stack
     Strategy:
         1. Keep track of all known identifiers.
         2. Initialize a stack pointer (sp) to 0, which points to physical memory.
-        3. When reach a duplicated identifier, 
-            STORE its value into addr sp, 
+        3. When reach a duplicated identifier,
+            STORE its value into addr sp,
             add a LOAD at the end of the current scope, and
             increment sp by 1. (sp never decrements).
         4. When we reach a function call, read all PARAMETERS of the function. If any parameter uses an identifier
             currently in use, STORE that parameter and LOAD it BEFORE processing the function return value.
-    
+
     Note:
         None of the Mem Ops here are actually necessary. Line 133 / 136 and line 148 / 150 follow the same argument
         as in Case 1 Strategy 2. Line 145 can be avoided because a is immediately reassigned, and thus line 143 is
@@ -192,7 +192,7 @@ Case 3: Generic Function Call
         u32 a = 5
         u32 b = 4
         b = mult::<6>(b)
-        for u32 i in 0..4 do    
+        for u32 i in 0..4 do
             a = a + 1
             a = mult::<4>(a)
             for u32 j in 0..5 do
@@ -236,7 +236,7 @@ Case 4: Putting Them All Together
         field[3] a = [0, 1, 2]
         field b = sum(a)
         field c = 0
-        for u32 i in 0..4 do    
+        for u32 i in 0..4 do
             b = b + 1
             for u32 j in 0..5 do
                 field[4] c = [0, 1, 2, 3]
@@ -265,7 +265,7 @@ Step 1: Handle variable scoping
         LOAD_P(a, 0)
         field b = ret
         field c = 0
-        for u32 i in 0..4 do    
+        for u32 i in 0..4 do
             b = b + 1
             for u32 j in 0..5 do
                 STORE_P(c, 1)
@@ -307,7 +307,7 @@ Step 2: Translate array accesses
         LOAD_P(a, 0)
         field b = ret
         field c = 0
-        for u32 i in 0..4 do    
+        for u32 i in 0..4 do
             b = b + 1
             for u32 j in 0..5 do
                 STORE_P(c, 1)
@@ -340,7 +340,7 @@ Step 3: Flatten the loops
         STORE_P(i, 4)
         i = 0
         if i < N goto l5 else goto l6
-        l5: 
+        l5:
             res = res + a[i]
             i = i + 1
             if i < N goto l5 else goto l6

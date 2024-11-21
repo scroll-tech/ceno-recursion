@@ -28,8 +28,8 @@ Work in progress
 * Please review `zok_format.md` first, especially the `.input` and `.witness` section.
 * Clone or switch to the custom branch `https://github.com/scroll-tech/ceno/tree/kunming/recursive_verifier`.
 * Navigate to `ceno/ceno_zkvm` and run the benchmark: `RAYON_NUM_THREADS=1 cargo run --example riscv_opcodes` (might not work with multicore)
-* For every benchmark, copy lines below `INPUT:` to `zok_tests/benchmarks/ceno_demo/tower_verifier.input`  
-and lines below `WITNESS:` to `zok_tests/benchmarks/ceno_demo/tower_verifier.witness`,  
+* For every benchmark, copy lines below `INPUT:` to `zok_tests/benchmarks/ceno_demo/tower_verifier.input`
+and lines below `WITNESS:` to `zok_tests/benchmarks/ceno_demo/tower_verifier.witness`,
 don't forget the `END` at the end of each file
 * Run the ceno verifier: `bash encode_ceno.sh`
 * I know this is looks stupid, I'm trying to come up with a better solution.
@@ -37,8 +37,16 @@ don't forget the `END` at the end of each file
 ## Other compilation flags and functionalities
 Many flags are WIP. For temporary hacks, alter the code directly and recompile through `bash setup.sh`
 
-#### Verbose outputs for 
+#### Verbose outputs for
 
 #### Working with a different field
 
 #### Verify circuit using `spartan_parallel` (only supported in Curve25519)
+
+# Continuous Integration
+
+At the moment we only have a [simple CI](.github/workflows/) that checks formatting and `cargo check` and runs [setup.sh](setup.sh) and [encode_ceno.sh](encode_ceno.sh).
+
+TODO:
+- [ ] run tests in CI, too.  (That means we need to fix our tests.)
+- [ ] reorganise the code, so that we only need a single `carge check` or `cargo test` instead of having to run that in a dozen different directories.

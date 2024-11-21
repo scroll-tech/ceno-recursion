@@ -73,11 +73,11 @@ impl<S: SpartanExtensionField> Instance<S> {
             return Err(R1CSError::InvalidIndex);
           }
 
-          // col must be smaller than num_vars
-          if col >= num_vars {
-            println!("COL: {}, NUM_VARS: {}", col, num_vars);
-            return Err(R1CSError::InvalidIndex);
-          }
+        // col must be smaller than num_vars
+        if col >= num_vars {
+          println!("COL: {}, NUM_VARS: {}", col, num_vars);
+          return Err(R1CSError::InvalidIndex);
+        }
 
           let val = S::from_bytes(&val_bytes);
           if val.is_some().unwrap_u8() == 1 {
@@ -101,8 +101,8 @@ impl<S: SpartanExtensionField> Instance<S> {
           }
         }
 
-        Ok(mat)
-      };
+      Ok(mat)
+    };
 
     let mut A_scalar_list = Vec::new();
     let mut B_scalar_list = Vec::new();
@@ -347,6 +347,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         let mut B: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut C: Vec<(usize, usize, [u8; 32])> = Vec::new();
 
+
         // constraints for correctness
         for i in 0..arg.len() {
           tmp_nnz_A += arg[i].0.len();
@@ -495,6 +496,14 @@ impl<S: SpartanExtensionField> Instance<S> {
           C,
           counter,
           // Incorporate Px directly into Pd
+          vec![if num_phy_ops[b] == 0 {
+            (V_cnst, 1)
+          } else {
+            (V_PMC(num_phy_ops[b] - 1), 1)
+          }],
+          vec![(V_Psp, 1), (V_cnst, 1), (V_sv, -1)],
+          vec![(V_Pd, 1)],
+        );
           vec![if num_phy_ops[b] == 0 {
             (V_cnst, 1)
           } else {
@@ -1176,6 +1185,9 @@ impl<S: SpartanExtensionField> Instance<S> {
           (0..num_inputs_unpadded - 1)
             .map(|i| (V_output_dot_prod(i), 1))
             .collect(),
+          (0..num_inputs_unpadded - 1)
+            .map(|i| (V_output_dot_prod(i), 1))
+            .collect(),
         );
         constraint_count += 1;
         // I = v * (v + i0 + r * i1 + r^2 * i2 + ...)
@@ -1507,22 +1519,4 @@ impl<S: SpartanExtensionField> Instance<S> {
         .is_sat(&padded_vars.assignment, &inputs.assignment),
     )
   }
-  */
-
-  /*
-  /// Constructs a new synthetic R1CS `Instance` and an associated satisfying assignment
-  pub fn produce_synthetic_r1cs(
-    num_cons: usize,
-    num_vars: usize,
-    num_inputs: usize,
-  ) -> (Instance, VarsAssignment, InputsAssignment) {
-    let (inst, vars, inputs) = R1CSInstance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
-    let digest = inst.get_digest();
-    (
-      Instance { inst, digest },
-      VarsAssignment { assignment: vars },
-      InputsAssignment { assignment: inputs },
-    )
-  }
-  */
 }

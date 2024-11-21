@@ -1,47 +1,64 @@
-use zokrates_pest_ast::*;
 use crate::front::zsharp::blocks::BlockContent;
+use zokrates_pest_ast::*;
 
 pub fn pretty_block_content(indent: usize, bc: &BlockContent) {
     for _ in 0..indent * 4 {
         print!(" ");
     }
     match bc {
-        BlockContent ::Witness((val, ty, alive)) => {
+        BlockContent::Witness((val, ty, alive)) => {
             print!("witness {ty} {val}");
-            if !alive { print!(", dead"); }
+            if !alive {
+                print!(", dead");
+            }
             println!("");
         }
-        BlockContent::MemPush((val, ty, offset)) => { println!("%PHY[%SP + {offset}] = {} <{ty}>", pretty_name(val)) }
-        BlockContent::MemPop((val, ty, offset)) => { println!("{ty} {} = %PHY[%BP + {offset}]", pretty_name(val)) }
+        BlockContent::MemPush((val, ty, offset)) => {
+            println!("%PHY[%SP + {offset}] = {} <{ty}>", pretty_name(val))
+        }
+        BlockContent::MemPop((val, ty, offset)) => {
+            println!("{ty} {} = %PHY[%BP + {offset}]", pretty_name(val))
+        }
         BlockContent::ArrayInit((arr, ty, size_expr, ro)) => {
             print!("{ty}[");
-            pretty_expr::<false>(&size_expr); 
+            pretty_expr::<false>(&size_expr);
             print!("] {arr}");
-            if *ro { print!(", ro"); }
+            if *ro {
+                print!(", ro");
+            }
             println!("");
         }
-        BlockContent::Store((val, ty, arr, id, init, ro)) => { 
-            print!("{arr}["); 
-            pretty_expr::<false>(&id); print!("] = "); 
-            pretty_expr::<false>(&val); 
+        BlockContent::Store((val, ty, arr, id, init, ro)) => {
+            print!("{arr}[");
+            pretty_expr::<false>(&id);
+            print!("] = ");
+            pretty_expr::<false>(&val);
             print!(" <{ty}>");
-            if *init { print!(", init"); }
-            if *ro { print!(", ro"); }
-            println!(); 
+            if *init {
+                print!(", init");
+            }
+            if *ro {
+                print!(", ro");
+            }
+            println!();
         }
-        BlockContent::Load((val, ty, arr, id, ro)) => { 
-            print!("{ty} {} = {arr}[", pretty_name(val)); 
-            pretty_expr::<false>(&id); 
+        BlockContent::Load((val, ty, arr, id, ro)) => {
+            print!("{ty} {} = {arr}[", pretty_name(val));
+            pretty_expr::<false>(&id);
             print!("]");
-            if *ro { print!(", ro"); }
+            if *ro {
+                print!(", ro");
+            }
             println!("");
         }
         BlockContent::DummyLoad(ro) => {
             print!("Dummy Load");
-            if *ro { print!(", ro"); }
+            if *ro {
+                print!(", ro");
+            }
             println!("");
         }
-        BlockContent::Branch((cond, if_insts, else_insts)) => { 
+        BlockContent::Branch((cond, if_insts, else_insts)) => {
             print!("if ");
             pretty_expr::<false>(cond);
             println!(":");
@@ -57,8 +74,10 @@ pub fn pretty_block_content(indent: usize, bc: &BlockContent) {
                     pretty_block_content(indent + 1, i);
                 }
             }
-         }
-        BlockContent::Stmt(s) => { pretty_stmt(0, &s); }
+        }
+        BlockContent::Stmt(s) => {
+            pretty_stmt(0, &s);
+        }
     }
 }
 
@@ -67,15 +86,33 @@ pub fn pretty_stmt(indent: usize, s: &Statement) {
         print!(" ");
     }
     match s {
-        Statement::Return(r) => { pretty_ret_stmt(r); }
-        Statement::Definition(d) => { pretty_def_stmt(d); }
-        Statement::Assertion(a) => { pretty_ass_stmt(a); }
-        Statement::Iteration(i) => { pretty_ite_stmt(indent, i); }
-        Statement::WhileLoop(w) => { pretty_while_stmt(indent, w); }
-        Statement::Conditional(c) => { pretty_cond_stmt(indent, c); }
-        Statement::CondStore(_) => { panic!("Conditional store statements not supported.") }
-        Statement::Witness(_) => { panic!("Witness statements unsupported.") }
-        Statement::ArrayDecl(a) => { pretty_arr_decl_stmt(a); }
+        Statement::Return(r) => {
+            pretty_ret_stmt(r);
+        }
+        Statement::Definition(d) => {
+            pretty_def_stmt(d);
+        }
+        Statement::Assertion(a) => {
+            pretty_ass_stmt(a);
+        }
+        Statement::Iteration(i) => {
+            pretty_ite_stmt(indent, i);
+        }
+        Statement::WhileLoop(w) => {
+            pretty_while_stmt(indent, w);
+        }
+        Statement::Conditional(c) => {
+            pretty_cond_stmt(indent, c);
+        }
+        Statement::CondStore(_) => {
+            panic!("Conditional store statements not supported.")
+        }
+        Statement::Witness(_) => {
+            panic!("Witness statements unsupported.")
+        }
+        Statement::ArrayDecl(a) => {
+            pretty_arr_decl_stmt(a);
+        }
     }
 }
 
@@ -99,14 +136,18 @@ fn pretty_def_stmt(d: &DefinitionStatement) {
                 }
             }
         }
-        TypedIdentifierOrAssignee::TypedIdentifier(ti) => pretty_typed_ident(&ti)
+        TypedIdentifierOrAssignee::TypedIdentifier(ti) => pretty_typed_ident(&ti),
     }
     for l in &d.lhs[1..] {
         print!(", ");
         match l {
-            TypedIdentifierOrAssignee::Assignee(a) => { pretty_ident_expr(&a.id); }
-            TypedIdentifierOrAssignee::TypedIdentifier(ti) => { pretty_typed_ident(&ti); }
-        }        
+            TypedIdentifierOrAssignee::Assignee(a) => {
+                pretty_ident_expr(&a.id);
+            }
+            TypedIdentifierOrAssignee::TypedIdentifier(ti) => {
+                pretty_typed_ident(&ti);
+            }
+        }
     }
     print!(" = ");
     pretty_expr::<false>(&d.expression);
@@ -174,14 +215,30 @@ fn pretty_typed_ident(ti: &TypedIdentifier) {
 
 fn pretty_type(ty: &Type) {
     match ty {
-        Type::Basic(BasicType::Field(_)) => { print!("field"); }
-        Type::Basic(BasicType::Boolean(_)) => { print!("bool"); }
-        Type::Basic(BasicType::U8(_)) => { print!("u8"); }
-        Type::Basic(BasicType::U16(_)) => { print!("u16"); }
-        Type::Basic(BasicType::U32(_)) => { print!("u32"); }
-        Type::Basic(BasicType::U64(_)) => { print!("u64"); }
-        Type::Struct(_) => { print!("struct"); }
-        Type::Array(_) => { print!("array"); }
+        Type::Basic(BasicType::Field(_)) => {
+            print!("field");
+        }
+        Type::Basic(BasicType::Boolean(_)) => {
+            print!("bool");
+        }
+        Type::Basic(BasicType::U8(_)) => {
+            print!("u8");
+        }
+        Type::Basic(BasicType::U16(_)) => {
+            print!("u16");
+        }
+        Type::Basic(BasicType::U32(_)) => {
+            print!("u32");
+        }
+        Type::Basic(BasicType::U64(_)) => {
+            print!("u64");
+        }
+        Type::Struct(_) => {
+            print!("struct");
+        }
+        Type::Array(_) => {
+            print!("array");
+        }
     }
 }
 
@@ -245,7 +302,9 @@ fn pretty_ident_expr(i: &IdentifierExpression) {
 pub fn pretty_name(name: &str) -> String {
     // Strip the 0s from the name
     let mut name = name.to_string();
-    while name.len() > 3 && name.chars().collect::<Vec<char>>()[2] == '0' { name.remove(2); }
+    while name.len() > 3 && name.chars().collect::<Vec<char>>()[2] == '0' {
+        name.remove(2);
+    }
     match name.as_str() {
         "%i0" => "%0(V)",
         "%i1" => "%i1(BN)",
@@ -265,8 +324,9 @@ pub fn pretty_name(name: &str) -> String {
         "%w2" => "%w2(AS)",
         "%w3" => "%w3(SP)",
         "%w4" => "%w4(BP)",
-        _ => name.as_str()
-    }.to_string()
+        _ => name.as_str(),
+    }
+    .to_string()
 }
 
 fn get_un_op(op: &UnaryOperator) -> &str {
@@ -281,25 +341,25 @@ fn get_un_op(op: &UnaryOperator) -> &str {
 
 fn get_bin_op(op: &BinaryOperator) -> &str {
     match op {
-        BinaryOperator::BitXor => { "^" }
-        BinaryOperator::BitAnd => { "&" }
-        BinaryOperator::BitOr => { "|" }
-        BinaryOperator::RightShift => { ">>" }
-        BinaryOperator::LeftShift => { "<<" }
-        BinaryOperator::Or => { "||" }
-        BinaryOperator::And => { "&&" }
-        BinaryOperator::Add => { "+" }
-        BinaryOperator::Sub => { "-" }
-        BinaryOperator::Mul => { "*" }
-        BinaryOperator::Div => { "/" }
-        BinaryOperator::Rem => { "%" }
-        BinaryOperator::Eq => { "==" }
-        BinaryOperator::NotEq => { "!=" }
-        BinaryOperator::Lt => { "<" }
-        BinaryOperator::Gt => { ">" }
-        BinaryOperator::Lte => { "<=" }
-        BinaryOperator::Gte => { ">=" }
-        BinaryOperator::Pow => { "**" }
+        BinaryOperator::BitXor => "^",
+        BinaryOperator::BitAnd => "&",
+        BinaryOperator::BitOr => "|",
+        BinaryOperator::RightShift => ">>",
+        BinaryOperator::LeftShift => "<<",
+        BinaryOperator::Or => "||",
+        BinaryOperator::And => "&&",
+        BinaryOperator::Add => "+",
+        BinaryOperator::Sub => "-",
+        BinaryOperator::Mul => "*",
+        BinaryOperator::Div => "/",
+        BinaryOperator::Rem => "%",
+        BinaryOperator::Eq => "==",
+        BinaryOperator::NotEq => "!=",
+        BinaryOperator::Lt => "<",
+        BinaryOperator::Gt => ">",
+        BinaryOperator::Lte => "<=",
+        BinaryOperator::Gte => ">=",
+        BinaryOperator::Pow => "**",
     }
 }
 
@@ -309,26 +369,44 @@ fn pretty_literal<const IS_BLK: bool>(l: &LiteralExpression) {
             print!("{}", d.value.value);
             if !IS_BLK {
                 match d.suffix {
-                    Some(DecimalSuffix::U8(_)) => { print!(" <U8>") }
-                    Some(DecimalSuffix::U16(_)) => { print!(" <U16>") }
-                    Some(DecimalSuffix::U32(_)) => { print!(" <U32>") }
-                    Some(DecimalSuffix::U64(_)) => { print!(" <U64>") }
-                    Some(DecimalSuffix::Field(_)) => { print!(" <Field>") }
-                    _ => { print!(" <Undef>") }
+                    Some(DecimalSuffix::U8(_)) => {
+                        print!(" <U8>")
+                    }
+                    Some(DecimalSuffix::U16(_)) => {
+                        print!(" <U16>")
+                    }
+                    Some(DecimalSuffix::U32(_)) => {
+                        print!(" <U32>")
+                    }
+                    Some(DecimalSuffix::U64(_)) => {
+                        print!(" <U64>")
+                    }
+                    Some(DecimalSuffix::Field(_)) => {
+                        print!(" <Field>")
+                    }
+                    _ => {
+                        print!(" <Undef>")
+                    }
                 }
             }
         }
         LiteralExpression::BooleanLiteral(b) => {
             print!("{}", b.value)
         }
-        LiteralExpression::HexLiteral(h) => {
-            match &h.value {
-                HexNumberExpression::U8(u) => { print!("{} <U8>", u.value) }
-                HexNumberExpression::U16(u) => { print!("{} <U16>", u.value) }
-                HexNumberExpression::U32(u) => { print!("{} <U32>", u.value) }
-                HexNumberExpression::U64(u) => { print!("{} <U64>", u.value) }
+        LiteralExpression::HexLiteral(h) => match &h.value {
+            HexNumberExpression::U8(u) => {
+                print!("{} <U8>", u.value)
             }
-        }
+            HexNumberExpression::U16(u) => {
+                print!("{} <U16>", u.value)
+            }
+            HexNumberExpression::U32(u) => {
+                print!("{} <U32>", u.value)
+            }
+            HexNumberExpression::U64(u) => {
+                print!("{} <U64>", u.value)
+            }
+        },
     }
 }
 
@@ -336,7 +414,7 @@ fn pretty_arrayaccess(a: &ArrayAccess) {
     print!("[");
     match &a.expression {
         RangeOrExpression::Expression(e) => pretty_expr::<false>(&e),
-        _ => print!("range")
+        _ => print!("range"),
     }
     print!("]");
 }

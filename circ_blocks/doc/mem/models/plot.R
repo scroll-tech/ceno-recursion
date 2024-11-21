@@ -1,6 +1,6 @@
 library(tidyverse)
 d <- read_csv("data.csv")
-with_norm_cost <- d %>% 
+with_norm_cost <- d %>%
   left_join(d %>%
               filter(name == "gcd_uniq") %>%
               mutate(norm_cost = cost) %>%

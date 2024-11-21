@@ -324,7 +324,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
     cl.bound_poly_vars_rw(r_w);
     cl.bound_poly_vars_rq(r_q);
     cl.bound_poly_vars_rp(r_p);
-    return cl.index(0, 0, 0, 0);
+    cl.index(0, 0, 0, 0)
   }
 
   // Convert to a (p, q_rev, x_rev) regular dense poly of form (p, q, x)

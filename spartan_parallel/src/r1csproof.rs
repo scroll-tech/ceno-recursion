@@ -161,7 +161,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     assert!(inst.get_num_instances() == 1 || inst.get_num_instances() == num_instances);
 
     // Assert num_witness_secs is valid
-    assert!(num_witness_secs >= 1 && num_witness_secs <= 16);
+    assert!((1..=16).contains(&num_witness_secs));
     for w in &witness_secs {
       // assert size of w_mat
       assert!(w.w_mat.len() == 1 || w.w_mat.len() == num_instances);
@@ -240,7 +240,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       num_rounds_x,
       num_rounds_q,
       num_rounds_p,
-      &num_proofs,
+      num_proofs,
       &block_num_cons,
       &mut poly_tau_p,
       &mut poly_tau_q,
@@ -459,6 +459,8 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
         } else {
           eval_vars_at_ry_list[i]
             .push(eval_vars_at_ry * ry_factors[num_rounds_y - w.num_inputs[p].log_2()]);
+          eval_vars_at_ry_list[i]
+            .push(eval_vars_at_ry * ry_factors[num_rounds_y - w.num_inputs[p].log_2()]);
         }
       }
     }
@@ -481,6 +483,13 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     // So we need to multiply each entry by (1 - rq0)(1 - rq1)
     let mut eval_vars_comb_list = Vec::new();
     for p in 0..num_instances {
+      let wit_sec_p = |i: usize| {
+        if witness_secs[i].w_mat.len() == 1 {
+          0
+        } else {
+          p
+        }
+      };
       let wit_sec_p = |i: usize| {
         if witness_secs[i].w_mat.len() == 1 {
           0
@@ -559,6 +568,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
         proof_eval_vars_at_ry_list,
       },
       [rp, rq_rev, rx, [rw, ry].concat()],
+      [rp, rq_rev, rx, [rw, ry].concat()],
     )
   }
 
@@ -593,7 +603,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let num_witness_secs = witness_secs.len();
 
     // Assert num_witness_secs is valid
-    assert!(num_witness_secs >= 1 && num_witness_secs <= 16);
+    assert!((1..=16).contains(&num_witness_secs));
 
     let (num_rounds_p, num_rounds_q, num_rounds_x, num_rounds_w, num_rounds_y) = (
       num_instances.next_power_of_two().log_2(),

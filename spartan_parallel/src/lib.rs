@@ -7,7 +7,6 @@
 
 extern crate byteorder;
 extern crate core;
-extern crate curve25519_dalek;
 extern crate digest;
 extern crate merlin;
 extern crate rand;
@@ -2667,7 +2666,6 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let six_b = vec![S::field_one(), S::field_one(), S::field_zero()];
       let r_list: Vec<&Vec<S>> = inst_map.iter().map(|i| if *i == vm_bl_id { &six_b } else if *i == pm_bl_id { &four_b } else { &two_b }).collect();
       PolyEvalProof::verify_plain_batched_instances(
-        &self.proof_eval_perm_poly_prod_list,
         transcript,
         r_list,
         &self.perm_poly_poly_list,

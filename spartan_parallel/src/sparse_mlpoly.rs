@@ -390,23 +390,6 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
       .collect::<Vec<S>>()
   }
 
-  pub fn multiply_vec(&self, num_rows: usize, num_cols: usize, z: &[S]) -> Vec<S> {
-    assert_eq!(z.len(), num_cols);
-
-    (0..self.M.len())
-      .map(|i| {
-        let row = self.M[i].row;
-        let col = self.M[i].col;
-        let val = &self.M[i].val;
-        assert!(col < num_cols);
-        (row, *val * z[col])
-      })
-      .fold(vec![S::field_zero(); num_rows], |mut Mz, (r, v)| {
-        Mz[r] = Mz[r] + v;
-        Mz
-      })
-  }
-
   // Z is consisted of vector segments
   // Z[i] contains entries i * max_num_cols ~ i * max_num_cols + num_cols
   pub fn multiply_vec_disjoint_rounds(
@@ -1475,53 +1458,6 @@ impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
       nz,
       transcript,
     )
-  }
-}
-
-pub struct SparsePolyEntry<S: SpartanExtensionField> {
-  pub idx: usize,
-  pub val: S,
-}
-
-impl<S: SpartanExtensionField> SparsePolyEntry<S> {
-  pub fn new(idx: usize, val: S) -> Self {
-    SparsePolyEntry { idx, val }
-  }
-}
-
-pub struct SparsePolynomial<S: SpartanExtensionField> {
-  num_vars: usize,
-  Z: Vec<SparsePolyEntry<S>>,
-}
-
-impl<S: SpartanExtensionField> SparsePolynomial<S> {
-  pub fn new(num_vars: usize, Z: Vec<SparsePolyEntry<S>>) -> Self {
-    SparsePolynomial { num_vars, Z }
-  }
-
-  fn compute_chi(a: &[bool], r: &[S]) -> S {
-    assert_eq!(a.len(), r.len());
-    let mut chi_i = S::field_one();
-    for j in 0..r.len() {
-      if a[j] {
-        chi_i = chi_i * r[j];
-      } else {
-        chi_i = chi_i * (S::field_one() - r[j]);
-      }
-    }
-    chi_i
-  }
-
-  // Takes O(n log n). TODO: do this in O(n) where n is the number of entries in Z
-  pub fn evaluate(&self, r: &[S]) -> S {
-    assert_eq!(self.num_vars, r.len());
-
-    (0..self.Z.len())
-      .map(|i| {
-        let bits = self.Z[i].idx.get_bits(r.len());
-        SparsePolynomial::compute_chi(&bits, r) * self.Z[i].val
-      })
-      .sum()
   }
 }
 

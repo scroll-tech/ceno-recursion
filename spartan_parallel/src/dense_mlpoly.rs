@@ -11,9 +11,6 @@ use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[cfg(feature = "multicore")]
-use rayon::prelude::*;
-
 #[derive(Debug, Clone)]
 pub struct DensePolynomial<S: SpartanExtensionField> {
   num_vars: usize, // the number of variables in the multilinear polynomial
@@ -54,30 +51,6 @@ impl<S: SpartanExtensionField> EqPolynomial<S> {
         let scalar = evals[i / 2];
         evals[i] = scalar * self.r[j];
         evals[i - 1] = scalar - evals[i];
-      }
-    }
-    evals
-  }
-
-  // Only bound Eq on the first self.r.len() of the total_len variables
-  pub fn evals_front(&self, total_len: usize) -> Vec<S> {
-    let ell = self.r.len();
-
-    let mut evals: Vec<S> = vec![S::field_one(); total_len.pow2()];
-    let base_size = (total_len - ell).pow2();
-    let mut size = base_size;
-    for j in 0..ell {
-      // in each iteration, we double the size of chis
-      size *= 2;
-      for i in (0..size).rev().step_by(base_size * 2) {
-        // copy each element from the prior iteration twice
-        let scalar = evals[i / 2];
-        let high = scalar * self.r[j];
-        let low = scalar - high;
-        for k in 0..base_size {
-          evals[i - k] = high;
-          evals[i - base_size - k] = low;
-        }
       }
     }
     evals
@@ -368,15 +341,6 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     PolyEvalProof { proof }
   }
 
-  pub fn verify(
-    &self,
-    _transcript: &mut Transcript,
-    _r: &[S], // point at which the polynomial is evaluated
-  ) -> Result<(), ProofVerifyError> {
-    // TODO: Alternative PCS Verification
-    Ok(())
-  }
-
   pub fn verify_plain(
     &self,
     _transcript: &mut Transcript,
@@ -627,7 +591,6 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   }
 
   pub fn verify_plain_batched_instances(
-    proof_list: &Vec<PolyEvalProof<S>>,
     transcript: &mut Transcript,
     r_list: Vec<&Vec<S>>,       // point at which the polynomial is evaluated
     Zr_list: &Vec<S>,           // commitment to \widetilde{Z}(r) of each instance
@@ -638,15 +601,10 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
       PolyEvalProof::<S>::protocol_name(),
     );
 
-    // We need one proof per poly size + L size
-    let mut index_map: HashMap<(usize, Vec<S>), usize> = HashMap::new();
     let mut Zc_list = Vec::new();
     let mut L_list: Vec<Vec<S>> = Vec::new();
     let mut R_list: Vec<Vec<S>> = Vec::new();
 
-    // generate coefficient for RLC
-    let c_base = transcript.challenge_scalar(b"challenge_c");
-    let mut c = S::field_one();
     let zero = S::field_zero();
 
     for i in 0..r_list.len() {
@@ -666,16 +624,10 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
         let eq = EqPolynomial::new(r);
         eq.compute_factored_evals()
       };
-
-      if let Some(index) = index_map.get(&(num_vars, R.clone())) {
-        c = c * c_base;
-        Zc_list[*index] = Zc_list[*index] + c * Zr_list[i];
-      } else {
-        Zc_list.push(Zr_list[i]);
-        // compute a weighted sum of commitments and L
-        L_list.push(L);
-        R_list.push(R);
-      }
+      Zc_list.push(Zr_list[i]);
+      // compute a weighted sum of commitments and L
+      L_list.push(L);
+      R_list.push(R);
     }
 
     Ok(())
@@ -787,7 +739,6 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   }
 
   pub fn verify_batched_instances_disjoint_rounds(
-    proof_list: &Vec<PolyEvalProof<S>>,
     num_proofs_list: &Vec<usize>,
     num_inputs_list: &Vec<usize>,
     transcript: &mut Transcript,
@@ -800,7 +751,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     );
 
     // We need one proof per poly size
-    let mut index_map: HashMap<(usize, usize), usize> = HashMap::new();
+    let index_map: HashMap<(usize, usize), usize> = HashMap::new();
     let mut L_list = Vec::new();
     let mut R_list = Vec::new();
 
@@ -968,8 +919,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 
     for i in 0..poly_size.len() {
       let num_vars = poly_size[i].next_power_of_two().log_2();
-      let L = if let Some(L) = L_map.get(&num_vars) {
-        L
+      if let Some(_) = L_map.get(&num_vars) {
       } else {
         let (left_num_vars, right_num_vars) = EqPolynomial::<S>::compute_factored_lens(num_vars);
         let L_size = left_num_vars.pow2();
@@ -983,8 +933,8 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
           l_base = l_base * r_base;
         }
         L_map.insert(num_vars, L.clone());
-        L_map.get(&num_vars).unwrap()
-      };
+        L_map.get(&num_vars).unwrap();
+      }
 
       c = c * c_base;
     }

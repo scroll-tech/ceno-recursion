@@ -1,51 +1,35 @@
-use super::scalar::Scalar;
+use super::scalar::SpartanExtensionField;
 use merlin::Transcript;
 
-pub trait ProofTranscript {
+pub trait ProofTranscript<S: SpartanExtensionField> {
   fn append_protocol_name(&mut self, protocol_name: &'static [u8]);
-  fn append_scalar(&mut self, label: &'static [u8], scalar: &Scalar);
-  fn challenge_scalar(&mut self, label: &'static [u8]) -> Scalar;
-  fn challenge_vector(&mut self, label: &'static [u8], len: usize) -> Vec<Scalar>;
+  fn append_scalar(&mut self, label: &'static [u8], scalar: &S);
+  fn challenge_scalar(&mut self, label: &'static [u8]) -> S;
+  fn challenge_vector(&mut self, label: &'static [u8], len: usize) -> Vec<S>;
 }
 
-impl ProofTranscript for Transcript {
+impl<S: SpartanExtensionField> ProofTranscript<S> for Transcript {
   fn append_protocol_name(&mut self, protocol_name: &'static [u8]) {
     self.append_message(b"protocol-name", protocol_name);
   }
 
-  fn append_scalar(&mut self, label: &'static [u8], scalar: &Scalar) {
+  fn append_scalar(&mut self, label: &'static [u8], scalar: &S) {
     self.append_message(label, &scalar.to_bytes());
   }
 
-  fn challenge_scalar(&mut self, label: &'static [u8]) -> Scalar {
+  fn challenge_scalar(&mut self, label: &'static [u8]) -> S {
     let mut buf = [0u8; 64];
     self.challenge_bytes(label, &mut buf);
-    Scalar::from_bytes_wide(&buf)
+    S::from_bytes_wide(&buf)
   }
 
-  fn challenge_vector(&mut self, label: &'static [u8], len: usize) -> Vec<Scalar> {
+  fn challenge_vector(&mut self, label: &'static [u8], len: usize) -> Vec<S> {
     (0..len)
       .map(|_i| self.challenge_scalar(label))
-      .collect::<Vec<Scalar>>()
+      .collect::<Vec<S>>()
   }
 }
 
 pub trait AppendToTranscript {
   fn append_to_transcript(&self, label: &'static [u8], transcript: &mut Transcript);
-}
-
-impl AppendToTranscript for Scalar {
-  fn append_to_transcript(&self, label: &'static [u8], transcript: &mut Transcript) {
-    transcript.append_scalar(label, self);
-  }
-}
-
-impl AppendToTranscript for [Scalar] {
-  fn append_to_transcript(&self, label: &'static [u8], transcript: &mut Transcript) {
-    transcript.append_message(label, b"begin_append_vector");
-    for item in self {
-      transcript.append_scalar(label, item);
-    }
-    transcript.append_message(label, b"end_append_vector");
-  }
 }

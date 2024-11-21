@@ -2,12 +2,12 @@
 #![allow(clippy::type_complexity)]
 use crate::custom_dense_mlpoly::DensePolynomialPqx;
 use crate::math::Math;
+use crate::scalar::SpartanExtensionField;
 
 use super::dense_mlpoly::DensePolynomial;
 use super::errors::ProofVerifyError;
 use super::nizk::DotProductProof;
 use super::random::RandomTape;
-use super::scalar::Scalar;
 use super::transcript::{AppendToTranscript, ProofTranscript};
 use super::unipoly::{CompressedUniPoly, UniPoly};
 use std::cmp::min;
@@ -15,31 +15,30 @@ use itertools::izip;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
-const ZERO: Scalar = Scalar::zero();
 const MODE_P: usize = 1;
 const MODE_Q: usize = 2;
 const MODE_W: usize = 3;
 const MODE_X: usize = 4;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct SumcheckInstanceProof {
-  compressed_polys: Vec<CompressedUniPoly>,
+pub struct SumcheckInstanceProof<S: SpartanExtensionField> {
+  compressed_polys: Vec<CompressedUniPoly<S>>,
 }
 
-impl SumcheckInstanceProof {
-  pub fn new(compressed_polys: Vec<CompressedUniPoly>) -> SumcheckInstanceProof {
+impl<S:SpartanExtensionField> SumcheckInstanceProof<S> {
+  pub fn new(compressed_polys: Vec<CompressedUniPoly<S>>) -> SumcheckInstanceProof<S> {
     SumcheckInstanceProof { compressed_polys }
   }
 
   pub fn verify(
     &self,
-    claim: Scalar,
+    claim: S,
     num_rounds: usize,
     degree_bound: usize,
     transcript: &mut Transcript,
-  ) -> Result<(Scalar, Vec<Scalar>), ProofVerifyError> {
+  ) -> Result<(S, Vec<S>), ProofVerifyError> {
     let mut e = claim;
-    let mut r: Vec<Scalar> = Vec::new();
+    let mut r: Vec<S> = Vec::new();
 
     // verify that there is a univariate polynomial for each round
     assert_eq!(self.compressed_polys.len(), num_rounds);
@@ -69,13 +68,13 @@ impl SumcheckInstanceProof {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ZKSumcheckInstanceProof {
-  proofs: Vec<DotProductProof>,
+pub struct ZKSumcheckInstanceProof<S: SpartanExtensionField> {
+  proofs: Vec<DotProductProof<S>>,
 }
 
-impl ZKSumcheckInstanceProof {
+impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
   pub fn new(
-    proofs: Vec<DotProductProof>,
+    proofs: Vec<DotProductProof<S>>,
   ) -> Self {
     ZKSumcheckInstanceProof {
       proofs,
@@ -87,8 +86,8 @@ impl ZKSumcheckInstanceProof {
     num_rounds: usize,
     _degree_bound: usize,
     transcript: &mut Transcript,
-  ) -> Result<Vec<Scalar>, ProofVerifyError> {
-    let mut r: Vec<Scalar> = Vec::new();
+  ) -> Result<Vec<S>, ProofVerifyError> {
+    let mut r: Vec<S> = Vec::new();
 
     for _i in 0..num_rounds {
       // derive the verifier's challenge for the next round
@@ -101,37 +100,37 @@ impl ZKSumcheckInstanceProof {
   }
 }
 
-impl SumcheckInstanceProof {
+impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
   pub fn prove_cubic<F>(
-    claim: &Scalar,
+    claim: &S,
     num_rounds: usize,
-    poly_A: &mut DensePolynomial,
-    poly_B: &mut DensePolynomial,
-    poly_C: &mut DensePolynomial,
+    poly_A: &mut DensePolynomial<S>,
+    poly_B: &mut DensePolynomial<S>,
+    poly_C: &mut DensePolynomial<S>,
     comb_func: F,
     transcript: &mut Transcript,
-  ) -> (Self, Vec<Scalar>, Vec<Scalar>)
+  ) -> (Self, Vec<S>, Vec<S>)
   where
-    F: Fn(&Scalar, &Scalar, &Scalar) -> Scalar,
+    F: Fn(&S, &S, &S) -> S,
   {
     let mut e = *claim;
-    let mut r: Vec<Scalar> = Vec::new();
-    let mut cubic_polys: Vec<CompressedUniPoly> = Vec::new();
+    let mut r: Vec<S> = Vec::new();
+    let mut cubic_polys: Vec<CompressedUniPoly<S>> = Vec::new();
     for _j in 0..num_rounds {
-      let mut eval_point_0 = ZERO;
-      let mut eval_point_2 = ZERO;
-      let mut eval_point_3 = ZERO;
+      let mut eval_point_0 = S::field_zero();
+      let mut eval_point_2 = S::field_zero();
+      let mut eval_point_3 = S::field_zero();
 
       let len = poly_A.len() / 2;
       for i in 0..len {
         // eval 0: bound_func is A(low)
-        eval_point_0 += comb_func(&poly_A[i], &poly_B[i], &poly_C[i]);
+        eval_point_0 = eval_point_0 + comb_func(&poly_A[i], &poly_B[i], &poly_C[i]);
 
         // eval 2: bound_func is -A(low) + 2*A(high)
         let poly_A_bound_point = poly_A[len + i] + poly_A[len + i] - poly_A[i];
         let poly_B_bound_point = poly_B[len + i] + poly_B[len + i] - poly_B[i];
         let poly_C_bound_point = poly_C[len + i] + poly_C[len + i] - poly_C[i];
-        eval_point_2 += comb_func(
+        eval_point_2 = eval_point_2 + comb_func(
           &poly_A_bound_point,
           &poly_B_bound_point,
           &poly_C_bound_point,
@@ -142,7 +141,7 @@ impl SumcheckInstanceProof {
         let poly_B_bound_point = poly_B_bound_point + poly_B[len + i] - poly_B[i];
         let poly_C_bound_point = poly_C_bound_point + poly_C[len + i] - poly_C[i];
 
-        eval_point_3 += comb_func(
+        eval_point_3 = eval_point_3 + comb_func(
           &poly_A_bound_point,
           &poly_B_bound_point,
           &poly_C_bound_point,
@@ -174,56 +173,56 @@ impl SumcheckInstanceProof {
   }
 
   pub fn prove_cubic_batched<F>(
-    claim: &Scalar,
+    claim: &S,
     num_rounds: usize,
     poly_vec_par: (
-      &mut Vec<&mut DensePolynomial>,
-      &mut Vec<&mut DensePolynomial>,
-      &mut DensePolynomial,
+      &mut Vec<&mut DensePolynomial<S>>,
+      &mut Vec<&mut DensePolynomial<S>>,
+      &mut DensePolynomial<S>,
     ),
     poly_vec_seq: (
-      &mut Vec<&mut DensePolynomial>,
-      &mut Vec<&mut DensePolynomial>,
-      &mut Vec<&mut DensePolynomial>,
+      &mut Vec<&mut DensePolynomial<S>>,
+      &mut Vec<&mut DensePolynomial<S>>,
+      &mut Vec<&mut DensePolynomial<S>>,
     ),
-    coeffs: &[Scalar],
+    coeffs: &[S],
     comb_func: F,
     transcript: &mut Transcript,
   ) -> (
     Self,
-    Vec<Scalar>,
-    (Vec<Scalar>, Vec<Scalar>, Scalar),
-    (Vec<Scalar>, Vec<Scalar>, Vec<Scalar>),
+    Vec<S>,
+    (Vec<S>, Vec<S>, S),
+    (Vec<S>, Vec<S>, Vec<S>),
   )
   where
-    F: Fn(&Scalar, &Scalar, &Scalar) -> Scalar,
+    F: Fn(&S, &S, &S) -> S,
   {
     let (poly_A_vec_par, poly_B_vec_par, poly_C_par) = poly_vec_par;
     let (poly_A_vec_seq, poly_B_vec_seq, poly_C_vec_seq) = poly_vec_seq;
 
     //let (poly_A_vec_seq, poly_B_vec_seq, poly_C_vec_seq) = poly_vec_seq;
     let mut e = *claim;
-    let mut r: Vec<Scalar> = Vec::new();
-    let mut cubic_polys: Vec<CompressedUniPoly> = Vec::new();
+    let mut r: Vec<S> = Vec::new();
+    let mut cubic_polys: Vec<CompressedUniPoly<S>> = Vec::new();
 
     for _j in 0..num_rounds {
-      let mut evals: Vec<(Scalar, Scalar, Scalar)> = Vec::new();
+      let mut evals: Vec<(S, S, S)> = Vec::new();
 
       for (poly_A, poly_B) in poly_A_vec_par.iter().zip(poly_B_vec_par.iter()) {
-        let mut eval_point_0 = ZERO;
-        let mut eval_point_2 = ZERO;
-        let mut eval_point_3 = ZERO;
+        let mut eval_point_0 = S::field_zero();
+        let mut eval_point_2 = S::field_zero();
+        let mut eval_point_3 = S::field_zero();
 
         let len = poly_A.len() / 2;
         for i in 0..len {
           // eval 0: bound_func is A(low)
-          eval_point_0 += comb_func(&poly_A[i], &poly_B[i], &poly_C_par[i]);
+          eval_point_0 = eval_point_0 + comb_func(&poly_A[i], &poly_B[i], &poly_C_par[i]);
 
           // eval 2: bound_func is -A(low) + 2*A(high)
           let poly_A_bound_point = poly_A[len + i] + poly_A[len + i] - poly_A[i];
           let poly_B_bound_point = poly_B[len + i] + poly_B[len + i] - poly_B[i];
           let poly_C_bound_point = poly_C_par[len + i] + poly_C_par[len + i] - poly_C_par[i];
-          eval_point_2 += comb_func(
+          eval_point_2 = eval_point_2 + comb_func(
             &poly_A_bound_point,
             &poly_B_bound_point,
             &poly_C_bound_point,
@@ -234,7 +233,7 @@ impl SumcheckInstanceProof {
           let poly_B_bound_point = poly_B_bound_point + poly_B[len + i] - poly_B[i];
           let poly_C_bound_point = poly_C_bound_point + poly_C_par[len + i] - poly_C_par[i];
 
-          eval_point_3 += comb_func(
+          eval_point_3 = eval_point_3 + comb_func(
             &poly_A_bound_point,
             &poly_B_bound_point,
             &poly_C_bound_point,
@@ -249,18 +248,18 @@ impl SumcheckInstanceProof {
         poly_B_vec_seq.iter(),
         poly_C_vec_seq.iter()
       ) {
-        let mut eval_point_0 = ZERO;
-        let mut eval_point_2 = ZERO;
-        let mut eval_point_3 = ZERO;
+        let mut eval_point_0 = S::field_zero();
+        let mut eval_point_2 = S::field_zero();
+        let mut eval_point_3 = S::field_zero();
         let len = poly_A.len() / 2;
         for i in 0..len {
           // eval 0: bound_func is A(low)
-          eval_point_0 += comb_func(&poly_A[i], &poly_B[i], &poly_C[i]);
+          eval_point_0 = eval_point_0 + comb_func(&poly_A[i], &poly_B[i], &poly_C[i]);
           // eval 2: bound_func is -A(low) + 2*A(high)
           let poly_A_bound_point = poly_A[len + i] + poly_A[len + i] - poly_A[i];
           let poly_B_bound_point = poly_B[len + i] + poly_B[len + i] - poly_B[i];
           let poly_C_bound_point = poly_C[len + i] + poly_C[len + i] - poly_C[i];
-          eval_point_2 += comb_func(
+          eval_point_2 = eval_point_2 + comb_func(
             &poly_A_bound_point,
             &poly_B_bound_point,
             &poly_C_bound_point,
@@ -269,7 +268,7 @@ impl SumcheckInstanceProof {
           let poly_A_bound_point = poly_A_bound_point + poly_A[len + i] - poly_A[i];
           let poly_B_bound_point = poly_B_bound_point + poly_B[len + i] - poly_B[i];
           let poly_C_bound_point = poly_C_bound_point + poly_C[len + i] - poly_C[i];
-          eval_point_3 += comb_func(
+          eval_point_3 = eval_point_3 + comb_func(
             &poly_A_bound_point,
             &poly_B_bound_point,
             &poly_C_bound_point,
@@ -346,10 +345,10 @@ impl SumcheckInstanceProof {
   }
 }
 
-impl ZKSumcheckInstanceProof {
+impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
   pub fn prove_cubic_disjoint_rounds<F>(
-    claim: &Scalar,
-    blind_claim: &Scalar,
+    claim: &S,
+    blind_claim: &S,
     num_rounds: usize,
     num_rounds_y_max: usize,
     num_rounds_w: usize,
@@ -357,15 +356,15 @@ impl ZKSumcheckInstanceProof {
     single_inst: bool, // indicates whether poly_B only has one instance
     num_witness_secs: usize,
     mut num_inputs: Vec<usize>,
-    poly_A: &mut DensePolynomial,
-    poly_B: &mut DensePolynomialPqx,
-    poly_C: &mut DensePolynomialPqx,
+    poly_A: &mut DensePolynomial<S>,
+    poly_B: &mut DensePolynomialPqx<S>,
+    poly_C: &mut DensePolynomialPqx<S>,
     comb_func: F,
     transcript: &mut Transcript,
-    random_tape: &mut RandomTape,
-  ) -> (Self, Vec<Scalar>, Vec<Scalar>, Scalar)
+    random_tape: &mut RandomTape<S>,
+  ) -> (Self, Vec<S>, Vec<S>, S)
   where
-    F: Fn(&Scalar, &Scalar, &Scalar) -> Scalar,
+    F: Fn(&S, &S, &S) -> S,
   {
     // NOTE: if single_inst, number of instances in poly_B is 1, might not match with instance_len!
     // NOTE: num_proofs must be 1!
@@ -380,8 +379,8 @@ impl ZKSumcheckInstanceProof {
 
     let mut claim_per_round = *claim;
 
-    let mut r: Vec<Scalar> = Vec::new();
-    let mut proofs: Vec<DotProductProof> = Vec::new();
+    let mut r: Vec<S> = Vec::new();
+    let mut proofs: Vec<DotProductProof<S>> = Vec::new();
 
     let mut inputs_len = num_rounds_y_max.pow2();
     let mut witness_secs_len = num_rounds_w.pow2();
@@ -419,9 +418,9 @@ impl ZKSumcheckInstanceProof {
       else { instance_len /= 2 };
 
       let poly = {
-        let mut eval_point_0 = ZERO;
-        let mut eval_point_2 = ZERO;
-        let mut eval_point_3 = ZERO;
+        let mut eval_point_0 = S::field_zero();
+        let mut eval_point_2 = S::field_zero();
+        let mut eval_point_3 = S::field_zero();
 
         // We are guaranteed initially instance_len < num_inputs.len() < instance_len x 2
         // So min(instance_len, num_proofs.len()) suffices
@@ -442,13 +441,13 @@ impl ZKSumcheckInstanceProof {
               };
 
               // eval 0: bound_func is A(low)
-              eval_point_0 += comb_func(&poly_A_index_p_w_y, &poly_B.index(p_inst, 0, w, y), &poly_C.index(p, 0, w, y)); // Az[0, x, x, x, ...]
+              eval_point_0 = eval_point_0 + comb_func(&poly_A_index_p_w_y, &poly_B.index(p_inst, 0, w, y), &poly_C.index(p, 0, w, y)); // Az[0, x, x, x, ...]
 
               // eval 2: bound_func is -A(low) + 2*A(high)
               let poly_A_bound_point = poly_A_index_high_p_w_y + poly_A_index_high_p_w_y - poly_A_index_p_w_y;
               let poly_B_bound_point = poly_B.index_high(p_inst, 0, w, y, mode) + poly_B.index_high(p_inst, 0, w, y, mode) - poly_B.index(p_inst, 0, w, y); // Az[2, x, x, ...]
               let poly_C_bound_point = poly_C.index_high(p, 0, w, y, mode) + poly_C.index_high(p, 0, w, y, mode) - poly_C.index(p, 0, w, y);
-              eval_point_2 += comb_func(
+              eval_point_2 = eval_point_2 + comb_func(
                 &poly_A_bound_point,
                 &poly_B_bound_point,
                 &poly_C_bound_point,
@@ -458,7 +457,7 @@ impl ZKSumcheckInstanceProof {
               let poly_A_bound_point = poly_A_bound_point + poly_A_index_high_p_w_y - poly_A_index_p_w_y;
               let poly_B_bound_point = poly_B_bound_point + poly_B.index_high(p_inst, 0, w, y, mode) - poly_B.index(p_inst, 0, w, y); // Az[3, x, x, ...]
               let poly_C_bound_point = poly_C_bound_point + poly_C.index_high(p, 0, w, y, mode) - poly_C.index(p, 0, w, y);
-              eval_point_3 += comb_func(
+              eval_point_3 = eval_point_3 + comb_func(
                 &poly_A_bound_point,
                 &poly_B_bound_point,
                 &poly_C_bound_point,
@@ -504,7 +503,7 @@ impl ZKSumcheckInstanceProof {
         // for efficiency we batch them using random weights
 
         // produce two weights
-        let w = transcript.challenge_vector(b"combine_two_claims_to_one", 2);
+        let w: Vec<S> = transcript.challenge_vector(b"combine_two_claims_to_one", 2);
 
         // compute a weighted sum of the RHS
         let target = w[0] * claim_per_round + w[1] * eval;
@@ -518,20 +517,20 @@ impl ZKSumcheckInstanceProof {
 
           let blind_eval = &blinds_evals[j];
 
-          w[0] * blind_sc + w[1] * blind_eval
+          w[0] * *blind_sc + w[1] * *blind_eval
         };
 
         let a = {
           // the vector to use to decommit for sum-check test
           let a_sc = {
-            let mut a = vec![Scalar::one(); poly.degree() + 1];
-            a[0] += Scalar::one();
+            let mut a = vec![S::field_one(); poly.degree() + 1];
+            a[0] = a[0] + S::field_one();
             a
           };
 
           // the vector to use to decommit for evaluation
           let a_eval = {
-            let mut a = vec![Scalar::one(); poly.degree() + 1];
+            let mut a = vec![S::field_one(); poly.degree() + 1];
             for j in 1..a.len() {
               a[j] = a[j - 1] * r_j;
             }
@@ -542,7 +541,7 @@ impl ZKSumcheckInstanceProof {
           assert_eq!(a_sc.len(), a_eval.len());
           (0..a_sc.len())
             .map(|i| w[0] * a_sc[i] + w[1] * a_eval[i])
-            .collect::<Vec<Scalar>>()
+            .collect::<Vec<S>>()
         };
 
         let proof = DotProductProof::prove(
@@ -572,26 +571,26 @@ impl ZKSumcheckInstanceProof {
   }
 
   pub fn prove_cubic_with_additive_term_disjoint_rounds<F>(
-    claim: &Scalar,
-    blind_claim: &Scalar,
+    claim: &S,
+    blind_claim: &S,
     num_rounds: usize,
     num_rounds_x_max: usize,
     num_rounds_q_max: usize,
     num_rounds_p: usize,
     mut num_proofs: Vec<usize>,
     mut num_cons: Vec<usize>,
-    poly_Ap: &mut DensePolynomial,
-    poly_Aq: &mut DensePolynomial,
-    poly_Ax: &mut DensePolynomial,
-    poly_B: &mut DensePolynomialPqx,
-    poly_C: &mut DensePolynomialPqx,
-    poly_D: &mut DensePolynomialPqx,
+    poly_Ap: &mut DensePolynomial<S>,
+    poly_Aq: &mut DensePolynomial<S>,
+    poly_Ax: &mut DensePolynomial<S>,
+    poly_B: &mut DensePolynomialPqx<S>,
+    poly_C: &mut DensePolynomialPqx<S>,
+    poly_D: &mut DensePolynomialPqx<S>,
     comb_func: F,
     transcript: &mut Transcript,
-    random_tape: &mut RandomTape,
-  ) -> (Self, Vec<Scalar>, Vec<Scalar>, Scalar)
+    random_tape: &mut RandomTape<S>,
+  ) -> (Self, Vec<S>, Vec<S>, S)
   where
-    F: Fn(&Scalar, &Scalar, &Scalar, &Scalar) -> Scalar,
+    F: Fn(&S, &S, &S, &S) -> S,
   {
     // Note: num_witness_secs must be 1!
     // We perform sumcheck in x -> q_rev -> p order, but all polynomials have parameters (p, q, x)
@@ -610,8 +609,8 @@ impl ZKSumcheckInstanceProof {
 
     let mut claim_per_round = *claim;
 
-    let mut r: Vec<Scalar> = Vec::new();
-    let mut proofs: Vec<DotProductProof> = Vec::new();
+    let mut r: Vec<S> = Vec::new();
+    let mut proofs: Vec<DotProductProof<S>> = Vec::new();
 
     let mut cons_len = num_rounds_x_max.pow2();
     let mut proof_len = num_rounds_q_max.pow2();
@@ -653,9 +652,9 @@ impl ZKSumcheckInstanceProof {
       else { instance_len /= 2 };
 
       let poly = {
-        let mut eval_point_0 = ZERO;
-        let mut eval_point_2 = ZERO;
-        let mut eval_point_3 = ZERO;
+        let mut eval_point_0 = S::field_zero();
+        let mut eval_point_2 = S::field_zero();
+        let mut eval_point_3 = S::field_zero();
 
         // We are guaranteed initially instance_len < num_proofs.len() < instance_len x 2
         // So min(instance_len, num_proofs.len()) suffices
@@ -679,14 +678,14 @@ impl ZKSumcheckInstanceProof {
               };
 
               // eval 0: bound_func is A(low)
-              eval_point_0 += comb_func(&poly_A_index_p_q_x, &poly_B.index(p, q, 0, x), &poly_C.index(p, q, 0, x), &poly_D.index(p, q, 0, x)); // Az[0, x, x, x, ...]
+              eval_point_0 = eval_point_0 + comb_func(&poly_A_index_p_q_x, &poly_B.index(p, q, 0, x), &poly_C.index(p, q, 0, x), &poly_D.index(p, q, 0, x)); // Az[0, x, x, x, ...]
 
               // eval 2: bound_func is -A(low) + 2*A(high)
               let poly_A_bound_point = poly_A_index_high_p_q_x + poly_A_index_high_p_q_x - poly_A_index_p_q_x;
               let poly_B_bound_point = poly_B.index_high(p, q, 0, x, mode) + poly_B.index_high(p, q, 0, x, mode) - poly_B.index(p, q, 0, x); // Az[2, x, x, ...]
               let poly_C_bound_point = poly_C.index_high(p, q, 0, x, mode) + poly_C.index_high(p, q, 0, x, mode) - poly_C.index(p, q, 0, x);
               let poly_D_bound_point = poly_D.index_high(p, q, 0, x, mode) + poly_D.index_high(p, q, 0, x, mode) - poly_D.index(p, q, 0, x);
-              eval_point_2 += comb_func(
+              eval_point_2 = eval_point_2 + comb_func(
                 &poly_A_bound_point,
                 &poly_B_bound_point,
                 &poly_C_bound_point,
@@ -698,7 +697,7 @@ impl ZKSumcheckInstanceProof {
               let poly_B_bound_point = poly_B_bound_point + poly_B.index_high(p, q, 0, x, mode) - poly_B.index(p, q, 0, x); // Az[3, x, x, ...]
               let poly_C_bound_point = poly_C_bound_point + poly_C.index_high(p, q, 0, x, mode) - poly_C.index(p, q, 0, x);
               let poly_D_bound_point = poly_D_bound_point + poly_D.index_high(p, q, 0, x, mode) - poly_D.index(p, q, 0, x);
-              eval_point_3 += comb_func(
+              eval_point_3 = eval_point_3 + comb_func(
                 &poly_A_bound_point,
                 &poly_B_bound_point,
                 &poly_C_bound_point,
@@ -742,7 +741,7 @@ impl ZKSumcheckInstanceProof {
         // for efficiency we batch them using random weights
 
         // produce two weights
-        let w = transcript.challenge_vector(b"combine_two_claims_to_one", 2);
+        let w: Vec<S> = transcript.challenge_vector(b"combine_two_claims_to_one", 2);
 
         // compute a weighted sum of the RHS
         let target = w[0] * claim_per_round + w[1] * eval;
@@ -756,20 +755,20 @@ impl ZKSumcheckInstanceProof {
 
           let blind_eval = &blinds_evals[j];
 
-          w[0] * blind_sc + w[1] * blind_eval
+          w[0] * *blind_sc + w[1] * *blind_eval
         };
 
         let a = {
           // the vector to use to decommit for sum-check test
           let a_sc = {
-            let mut a = vec![Scalar::one(); poly.degree() + 1];
-            a[0] += Scalar::one();
+            let mut a = vec![S::field_one(); poly.degree() + 1];
+            a[0] = a[0] + S::field_one();
             a
           };
 
           // the vector to use to decommit for evaluation
           let a_eval = {
-            let mut a = vec![Scalar::one(); poly.degree() + 1];
+            let mut a = vec![S::field_one(); poly.degree() + 1];
             for j in 1..a.len() {
               a[j] = a[j - 1] * r_j;
             }
@@ -780,7 +779,7 @@ impl ZKSumcheckInstanceProof {
           assert_eq!(a_sc.len(), a_eval.len());
           (0..a_sc.len())
             .map(|i| w[0] * a_sc[i] + w[1] * a_eval[i])
-            .collect::<Vec<Scalar>>()
+            .collect::<Vec<S>>()
         };
 
         let proof = DotProductProof::prove(

@@ -5,6 +5,7 @@ use std::{fs::File, io::BufReader};
 use std::io::{BufRead, Read};
 use std::{default, env};
 
+use libspartan::scalar::{Scalar, SpartanExtensionField};
 use libspartan::{
   instance::Instance,
   VarsAssignment, SNARK, InputsAssignment, MemsAssignment
@@ -161,7 +162,7 @@ impl CompileTimeKnowledge {
 
 // Everything provided by the prover
 #[derive(Serialize, Deserialize)]
-struct RunTimeKnowledge {
+struct RunTimeKnowledge<S: SpartanExtensionField> {
   block_max_num_proofs: usize,
   block_num_proofs: Vec<usize>,
   consis_num_proofs: usize,
@@ -170,13 +171,13 @@ struct RunTimeKnowledge {
   total_num_phy_mem_accesses: usize,
   total_num_vir_mem_accesses: usize,
 
-  block_vars_matrix: Vec<Vec<VarsAssignment>>,
-  exec_inputs: Vec<InputsAssignment>,
-  init_phy_mems_list: Vec<MemsAssignment>,
-  init_vir_mems_list: Vec<MemsAssignment>,
-  addr_phy_mems_list: Vec<MemsAssignment>,
-  addr_vir_mems_list: Vec<MemsAssignment>,
-  addr_ts_bits_list: Vec<MemsAssignment>,
+  block_vars_matrix: Vec<Vec<VarsAssignment<S>>>,
+  exec_inputs: Vec<InputsAssignment<S>>,
+  init_phy_mems_list: Vec<MemsAssignment<S>>,
+  init_vir_mems_list: Vec<MemsAssignment<S>>,
+  addr_phy_mems_list: Vec<MemsAssignment<S>>,
+  addr_vir_mems_list: Vec<MemsAssignment<S>>,
+  addr_ts_bits_list: Vec<MemsAssignment<S>>,
 
   input: Vec<[u8; 32]>,
   input_stack: Vec<[u8; 32]>,
@@ -185,8 +186,8 @@ struct RunTimeKnowledge {
   output_exec_num: usize
 }
 
-impl RunTimeKnowledge {
-  fn deserialize_from_file(benchmark_name: String) -> RunTimeKnowledge {
+impl<S: SpartanExtensionField + for<'de> serde::de::Deserialize<'de>> RunTimeKnowledge<S> {
+  fn deserialize_from_file(benchmark_name: String) -> RunTimeKnowledge<S> {
     let file_name = format!("../zok_tests/inputs/{}_bin.rtk", benchmark_name);
     let mut f = File::open(file_name).unwrap();
     let mut content: Vec<u8> = Vec::new();
@@ -426,7 +427,7 @@ fn main() {
   // let ctk = CompileTimeKnowledge::read_from_file(benchmark_name.to_string()).unwrap();
   let ctk = CompileTimeKnowledge::deserialize_from_file(benchmark_name.to_string());
   // let rtk = RunTimeKnowledge::read_from_file(benchmark_name.to_string()).unwrap();
-  let rtk = RunTimeKnowledge::deserialize_from_file(benchmark_name.to_string());
+  let rtk: RunTimeKnowledge<Scalar> = RunTimeKnowledge::deserialize_from_file(benchmark_name.to_string());
 
   // --
   // INSTANCE PREPROCESSING

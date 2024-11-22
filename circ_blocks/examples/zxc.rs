@@ -4,9 +4,6 @@ const PRINT_PROOF: bool = false;
 const INLINE_SPARTAN_PROOF: bool = false;
 const TOTAL_NUM_VARS_BOUND: usize = 100000000;
 
-use core::cmp::min;
-use libspartan::scalar::{Scalar, SpartanExtensionField};
-use rug::Integer;
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
 use circ::ir::opt::{opt, Opt};
@@ -14,6 +11,9 @@ use circ::target::r1cs::trans::to_r1cs;
 use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
 use circ::target::r1cs::ProverData;
 use circ::target::r1cs::{Lc, VarType};
+use core::cmp::min;
+use libspartan::scalar::{Scalar, SpartanExtensionField};
+use rug::Integer;
 
 use std::fs::{create_dir_all, File};
 use std::io::{BufRead, BufReader, Write};
@@ -23,16 +23,16 @@ use circ::cfg::{
     clap::{self, Parser, ValueEnum},
     CircOpt,
 };
-use std::path::PathBuf;
-use std::path::Path;
 use core::cmp::Ordering;
+use std::path::Path;
+use std::path::PathBuf;
 
-use std::time::*;
-use serde::{Serialize, Deserialize};
 use libspartan::{
-    instance::Instance, 
-    Assignment, VarsAssignment, SNARK, InputsAssignment, MemsAssignment};
+    instance::Instance, Assignment, InputsAssignment, MemsAssignment, VarsAssignment, SNARK,
+};
 use merlin::Transcript;
+use serde::{Deserialize, Serialize};
+use std::time::*;
 use std::time::*;
 
 // How many reserved variables (EXCLUDING V) are in front of the actual input / output?
@@ -360,7 +360,7 @@ struct RunTimeKnowledge<S: SpartanExtensionField> {
     total_num_init_vir_mem_accesses: usize,
     total_num_phy_mem_accesses: usize,
     total_num_vir_mem_accesses: usize,
-  
+
     block_vars_matrix: Vec<Vec<VarsAssignment<S>>>,
     exec_inputs: Vec<InputsAssignment<S>>,
     // Initial memory state, in (addr, val, ls = STORE, ts = 0) pair, sorted by appearance in program input (the same as address order)
@@ -369,7 +369,7 @@ struct RunTimeKnowledge<S: SpartanExtensionField> {
     addr_phy_mems_list: Vec<MemsAssignment<S>>,
     addr_vir_mems_list: Vec<MemsAssignment<S>>,
     addr_ts_bits_list: Vec<MemsAssignment<S>>,
-  
+
     input: Vec<[u8; 32]>,
     input_stack: Vec<[u8; 32]>,
     input_mem: Vec<[u8; 32]>,
@@ -1267,22 +1267,25 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
     }
 }
 
-fn run_spartan_proof<S: SpartanExtensionField>(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge<S>) {
-  // --
-  // INSTANCE PREPROCESSING
-  // --
-  println!("Preprocessing instances...");
-  let preprocess_start = Instant::now();
-  let block_num_instances_bound = ctk.block_num_instances;
-  let num_vars = ctk.num_vars;
-  // num_inputs_unpadded is the actual size of the input
-  let num_inputs_unpadded = ctk.num_inputs_unpadded;
-  // num_ios is the width used by all input related computations
-  let num_ios = (num_inputs_unpadded * 2).next_power_of_two();
-  let block_num_phy_ops = ctk.block_num_phy_ops;
-  let block_num_vir_ops = ctk.block_num_vir_ops;
-  let max_block_num_phy_ops = *block_num_phy_ops.iter().max().unwrap();
-  let max_block_num_vir_ops = *block_num_vir_ops.iter().max().unwrap();
+fn run_spartan_proof<S: SpartanExtensionField>(
+    ctk: CompileTimeKnowledge,
+    rtk: RunTimeKnowledge<S>,
+) {
+    // --
+    // INSTANCE PREPROCESSING
+    // --
+    println!("Preprocessing instances...");
+    let preprocess_start = Instant::now();
+    let block_num_instances_bound = ctk.block_num_instances;
+    let num_vars = ctk.num_vars;
+    // num_inputs_unpadded is the actual size of the input
+    let num_inputs_unpadded = ctk.num_inputs_unpadded;
+    // num_ios is the width used by all input related computations
+    let num_ios = (num_inputs_unpadded * 2).next_power_of_two();
+    let block_num_phy_ops = ctk.block_num_phy_ops;
+    let block_num_vir_ops = ctk.block_num_vir_ops;
+    let max_block_num_phy_ops = *block_num_phy_ops.iter().max().unwrap();
+    let max_block_num_vir_ops = *block_num_vir_ops.iter().max().unwrap();
 
     let mem_addr_ts_bits_size = (2 + ctk.max_ts_width).next_power_of_two();
 
@@ -1336,18 +1339,18 @@ fn run_spartan_proof<S: SpartanExtensionField>(ctk: CompileTimeKnowledge, rtk: R
         );
     println!("Finished Perm");
 
-  // --
-  // COMMITMENT PREPROCESSING
-  // --
-  println!("Comitting Circuits...");
-  // block_comm_map records the sparse_polys committed in each commitment
-  // Note that A, B, C are committed separately, so sparse_poly[3*i+2] corresponds to poly C of instance i
-  let (block_comm_map, block_comm_list, block_decomm_list) = SNARK::multi_encode(&block_inst);
-  println!("Finished Block");
-  let (pairwise_check_comm, pairwise_check_decomm) = SNARK::encode(&pairwise_check_inst);
-  println!("Finished Pairwise");
-  let (perm_root_comm, perm_root_decomm) = SNARK::encode(&perm_root_inst);
-  println!("Finished Perm");
+    // --
+    // COMMITMENT PREPROCESSING
+    // --
+    println!("Comitting Circuits...");
+    // block_comm_map records the sparse_polys committed in each commitment
+    // Note that A, B, C are committed separately, so sparse_poly[3*i+2] corresponds to poly C of instance i
+    let (block_comm_map, block_comm_list, block_decomm_list) = SNARK::multi_encode(&block_inst);
+    println!("Finished Block");
+    let (pairwise_check_comm, pairwise_check_decomm) = SNARK::encode(&pairwise_check_inst);
+    println!("Finished Pairwise");
+    let (perm_root_comm, perm_root_decomm) = SNARK::encode(&perm_root_inst);
+    println!("Finished Perm");
 
     // --
     // WITNESS PREPROCESSING
@@ -1360,110 +1363,101 @@ fn run_spartan_proof<S: SpartanExtensionField>(ctk: CompileTimeKnowledge, rtk: R
     let preprocess_time = preprocess_start.elapsed();
     println!("Preprocess time: {}ms", preprocess_time.as_millis());
 
-  println!("Running the proof...");
-  // produce a proof of satisfiability
-  let mut prover_transcript = Transcript::new(b"snark_example");
-  let proof = SNARK::prove(
-    ctk.input_block_num,
-    ctk.output_block_num,
-    &ctk.input_liveness,
-    ctk.func_input_width,
-    ctk.input_offset,
-    ctk.output_offset,
-    &rtk.input,
-    &rtk.output,
-    rtk.output_exec_num,
-    
-    num_vars,
-    num_ios,
-    max_block_num_phy_ops,
-    &block_num_phy_ops,
-    max_block_num_vir_ops,
-    &block_num_vir_ops,
-    mem_addr_ts_bits_size,
-    num_inputs_unpadded,
-    &ctk.num_vars_per_block,
+    println!("Running the proof...");
+    // produce a proof of satisfiability
+    let mut prover_transcript = Transcript::new(b"snark_example");
+    let proof = SNARK::prove(
+        ctk.input_block_num,
+        ctk.output_block_num,
+        &ctk.input_liveness,
+        ctk.func_input_width,
+        ctk.input_offset,
+        ctk.output_offset,
+        &rtk.input,
+        &rtk.output,
+        rtk.output_exec_num,
+        num_vars,
+        num_ios,
+        max_block_num_phy_ops,
+        &block_num_phy_ops,
+        max_block_num_vir_ops,
+        &block_num_vir_ops,
+        mem_addr_ts_bits_size,
+        num_inputs_unpadded,
+        &ctk.num_vars_per_block,
+        block_num_instances_bound,
+        rtk.block_max_num_proofs,
+        &block_num_proofs,
+        &mut block_inst,
+        &block_comm_map,
+        &block_comm_list,
+        &block_decomm_list,
+        rtk.consis_num_proofs,
+        rtk.total_num_init_phy_mem_accesses,
+        rtk.total_num_init_vir_mem_accesses,
+        rtk.total_num_phy_mem_accesses,
+        rtk.total_num_vir_mem_accesses,
+        &mut pairwise_check_inst,
+        &pairwise_check_comm,
+        &pairwise_check_decomm,
+        block_vars_matrix,
+        rtk.exec_inputs,
+        rtk.init_phy_mems_list,
+        rtk.init_vir_mems_list,
+        rtk.addr_phy_mems_list,
+        rtk.addr_vir_mems_list,
+        rtk.addr_ts_bits_list,
+        &perm_root_inst,
+        &perm_root_comm,
+        &perm_root_decomm,
+        &mut prover_transcript,
+    );
 
-    block_num_instances_bound,
-    rtk.block_max_num_proofs,
-    &block_num_proofs,
-    &mut block_inst,
-    &block_comm_map,
-    &block_comm_list,
-    &block_decomm_list,
-    
-    rtk.consis_num_proofs,
-    rtk.total_num_init_phy_mem_accesses,
-    rtk.total_num_init_vir_mem_accesses,
-    rtk.total_num_phy_mem_accesses,
-    rtk.total_num_vir_mem_accesses,
-    &mut pairwise_check_inst,
-    &pairwise_check_comm,
-    &pairwise_check_decomm,
-
-    block_vars_matrix,
-    rtk.exec_inputs,
-    rtk.init_phy_mems_list,
-    rtk.init_vir_mems_list,
-    rtk.addr_phy_mems_list,
-    rtk.addr_vir_mems_list,
-    rtk.addr_ts_bits_list,
-
-    &perm_root_inst,
-    &perm_root_comm,
-    &perm_root_decomm,
-
-    &mut prover_transcript,
-  );
-
-  println!("Verifying the proof...");
-  // verify the proof of satisfiability
-  let mut verifier_transcript = Transcript::new(b"snark_example");
-  assert!(proof.verify(
-    ctk.input_block_num,
-    ctk.output_block_num,
-    &ctk.input_liveness,
-    ctk.func_input_width,
-    ctk.input_offset,
-    ctk.output_offset,
-    &rtk.input,
-    &rtk.input_stack,
-    &rtk.input_mem,
-    &rtk.output,
-    rtk.output_exec_num,
-
-    num_vars,
-    num_ios,
-    max_block_num_phy_ops,
-    &block_num_phy_ops,
-    max_block_num_vir_ops,
-    &block_num_vir_ops,
-    mem_addr_ts_bits_size,
-    num_inputs_unpadded,
-    &ctk.num_vars_per_block,
-    
-    block_num_instances_bound, 
-    rtk.block_max_num_proofs, 
-    &block_num_proofs, 
-    block_num_cons,
-    &block_comm_map,
-    &block_comm_list,
-
-    rtk.consis_num_proofs, 
-    rtk.total_num_init_phy_mem_accesses,
-    rtk.total_num_init_vir_mem_accesses,
-    rtk.total_num_phy_mem_accesses,
-    rtk.total_num_vir_mem_accesses,
-    pairwise_check_num_cons,
-    &pairwise_check_comm,
-
-    perm_root_num_cons,
-    &perm_root_comm,
-
-    &mut verifier_transcript
-  ).is_ok());
-  println!("proof verification successful!");
-}  
+    println!("Verifying the proof...");
+    // verify the proof of satisfiability
+    let mut verifier_transcript = Transcript::new(b"snark_example");
+    assert!(proof
+        .verify(
+            ctk.input_block_num,
+            ctk.output_block_num,
+            &ctk.input_liveness,
+            ctk.func_input_width,
+            ctk.input_offset,
+            ctk.output_offset,
+            &rtk.input,
+            &rtk.input_stack,
+            &rtk.input_mem,
+            &rtk.output,
+            rtk.output_exec_num,
+            num_vars,
+            num_ios,
+            max_block_num_phy_ops,
+            &block_num_phy_ops,
+            max_block_num_vir_ops,
+            &block_num_vir_ops,
+            mem_addr_ts_bits_size,
+            num_inputs_unpadded,
+            &ctk.num_vars_per_block,
+            block_num_instances_bound,
+            rtk.block_max_num_proofs,
+            &block_num_proofs,
+            block_num_cons,
+            &block_comm_map,
+            &block_comm_list,
+            rtk.consis_num_proofs,
+            rtk.total_num_init_phy_mem_accesses,
+            rtk.total_num_init_vir_mem_accesses,
+            rtk.total_num_phy_mem_accesses,
+            rtk.total_num_vir_mem_accesses,
+            pairwise_check_num_cons,
+            &pairwise_check_comm,
+            perm_root_num_cons,
+            &perm_root_comm,
+            &mut verifier_transcript
+        )
+        .is_ok());
+    println!("proof verification successful!");
+}
 
 fn main() {
     env_logger::Builder::from_default_env()
@@ -1576,11 +1570,11 @@ fn main() {
     // Generate Witnesses
     // --
     let rtk = get_run_time_knowledge::<false, Scalar>(
-        path.clone(), 
-        &options, 
-        entry_regs, 
-        entry_stacks, 
-        entry_arrays, 
+        path.clone(),
+        &options,
+        entry_regs,
+        entry_stacks,
+        entry_arrays,
         entry_witnesses,
         &ctk,
         live_io_size,

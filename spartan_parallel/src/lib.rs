@@ -858,32 +858,32 @@ impl<S: SpartanExtensionField> SNARK<S> {
     // unwrap the assignments
     let mut block_vars_mat = block_vars_mat
       .into_iter()
-      .map(|a| a.into_iter().map(|v| v.assignment).collect_vec())
-      .collect_vec();
+      .map(|a| a.into_iter().map(|v| v.assignment).collect::<Vec<Vec<S>>>())
+      .collect::<Vec<Vec<Vec<S>>>>();
     let mut exec_inputs_list = exec_inputs_list
       .into_iter()
       .map(|v| v.assignment)
-      .collect_vec();
+      .collect::<Vec<Vec<S>>>();
     let mut init_phy_mems_list = init_phy_mems_list
       .into_iter()
       .map(|v| v.assignment)
-      .collect_vec();
+      .collect::<Vec<Vec<S>>>();
     let mut init_vir_mems_list = init_vir_mems_list
       .into_iter()
       .map(|v| v.assignment)
-      .collect_vec();
+      .collect::<Vec<Vec<S>>>();
     let mut addr_phy_mems_list = addr_phy_mems_list
       .into_iter()
       .map(|v| v.assignment)
-      .collect_vec();
+      .collect::<Vec<Vec<S>>>();
     let mut addr_vir_mems_list = addr_vir_mems_list
       .into_iter()
       .map(|v| v.assignment)
-      .collect_vec();
+      .collect::<Vec<Vec<S>>>();
     let mut addr_ts_bits_list = addr_ts_bits_list
       .into_iter()
       .map(|v| v.assignment)
-      .collect_vec();
+      .collect::<Vec<Vec<S>>>();
 
     // --
     // INSTANCE COMMITMENTS

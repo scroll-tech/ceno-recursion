@@ -288,6 +288,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
+name = "ceno-goldilocks"
+version = "0.1.0"
+source = "git+https://github.com/scroll-tech/ceno-Goldilocks.git?branch=fix/crate-ready#9853bc49cc26879cdbbefdb35e1b76c69ba35c04"
+dependencies = [
+ "ff 0.13.0",
+ "halo2curves",
+ "itertools 0.12.1",
+ "rand_core 0.6.4",
+ "serde",
+ "subtle",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -308,7 +321,7 @@ dependencies = [
  "circ_waksman",
  "curve25519-dalek 4.1.3",
  "env_logger 0.11.5",
- "ff",
+ "ff 0.12.2",
  "from-pest",
  "fxhash",
  "gmp-mpfr-sys",
@@ -999,9 +1012,9 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.13.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
 dependencies = [
  "either",
 ]
@@ -1032,6 +1045,9 @@ name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
+dependencies = [
+ "spin",
+]
 
 [[package]]
 name = "libc"
@@ -1678,8 +1694,9 @@ dependencies = [
  "colored",
  "curve25519-dalek 4.1.3",
  "digest 0.10.7",
+ "ff 0.13.0",
  "flate2",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "merlin",
  "rand 0.8.5",
  "rayon",
@@ -1691,9 +1708,9 @@ dependencies = [
 
 [[package]]
 name = "spin"
-version = "0.5.2"
+version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
+checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 
 [[package]]
 name = "static_assertions"

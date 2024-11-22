@@ -252,7 +252,6 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
       }
     }
 
-
     (
       DensePolynomialPqx::new_rev(
         &Az,
@@ -275,45 +274,6 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
         num_cons.clone(),
         max_num_cons,
       ),
-    )
-  }
-
-  /*
-  // Multiply one instance by a list of inputs
-  // Length of each input might be smaller than the length of the instance,
-  // in that case need to append the result by 0
-  pub fn multiply_vec_single(
-    &self,
-    num_instances: usize,
-    num_proofs: &Vec<usize>,
-    max_num_proofs_bound: usize,
-    max_num_proofs: usize,
-    num_rows: usize,
-    num_cols: usize,
-    z_list: &Vec<Vec<Scalar>>,
-  ) -> (DensePolynomialPqx, DensePolynomialPqx, DensePolynomialPqx) {
-    assert!(max_num_proofs <= max_num_proofs_bound);
-    assert!(max_num_proofs_bound * num_rows <= self.num_cons);
-    assert!(max_num_proofs_bound * num_cols <= self.num_vars);
-
-    let mut Az = Vec::new();
-    let mut Bz = Vec::new();
-    let mut Cz = Vec::new();
-
-    // Non-zero instances
-    for p in 0..num_instances {
-      let z = &z_list[p];
-      assert!(num_proofs[p] <= max_num_proofs);
-      // Each returns a num_proofs[p] * num_rows matrix
-      Az.push(self.A_list[0].multiply_vec_pad(max_num_proofs_bound, num_proofs[p], num_rows, num_cols, z));
-      Bz.push(self.B_list[0].multiply_vec_pad(max_num_proofs_bound, num_proofs[p], num_rows, num_cols, z));
-      Cz.push(self.C_list[0].multiply_vec_pad(max_num_proofs_bound, num_proofs[p], num_rows, num_cols, z));
-    }
-
-    (
-      DensePolynomialPqx::new_rev(&Az, num_proofs, max_num_proofs),
-      DensePolynomialPqx::new_rev(&Bz, num_proofs, max_num_proofs),
-      DensePolynomialPqx::new_rev(&Cz, num_proofs, max_num_proofs)
     )
   }
 
@@ -371,11 +331,7 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     num_cols: &Vec<usize>,
     evals: &[S],
     // Output in p, q, w, i format, where q section has length 1
-  ) -> (
-    Vec<Vec<Vec<Vec<S>>>>,
-    Vec<Vec<Vec<Vec<S>>>>,
-    Vec<Vec<Vec<Vec<S>>>>,
-  ) {
+  ) -> (Vec<Vec<Vec<Vec<S>>>>, Vec<Vec<Vec<Vec<S>>>>, Vec<Vec<Vec<Vec<S>>>>) {
     assert!(self.num_instances == 1 || self.num_instances == num_instances);
     assert_eq!(num_rows, &self.num_cons);
     assert_eq!(num_segs.next_power_of_two() * max_num_cols, self.num_vars);
@@ -385,48 +341,9 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     let mut evals_C_list = Vec::new();
     // Length of output follows self.num_instances NOT num_instances!!!
     for p in 0..self.num_instances {
-      let evals_A = self.A_list[p].compute_eval_table_sparse_disjoint_rounds(
-        evals,
-        num_rows[p],
-        num_segs,
-        max_num_cols,
-        num_cols[p],
-      );
-      let evals_B = self.B_list[p].compute_eval_table_sparse_disjoint_rounds(
-        evals,
-        num_rows[p],
-        num_segs,
-        max_num_cols,
-        num_cols[p],
-      );
-      let evals_C = self.C_list[p].compute_eval_table_sparse_disjoint_rounds(
-        evals,
-        num_rows[p],
-        num_segs,
-        max_num_cols,
-        num_cols[p],
-      );
-      let evals_A = self.A_list[p].compute_eval_table_sparse_disjoint_rounds(
-        evals,
-        num_rows[p],
-        num_segs,
-        max_num_cols,
-        num_cols[p],
-      );
-      let evals_B = self.B_list[p].compute_eval_table_sparse_disjoint_rounds(
-        evals,
-        num_rows[p],
-        num_segs,
-        max_num_cols,
-        num_cols[p],
-      );
-      let evals_C = self.C_list[p].compute_eval_table_sparse_disjoint_rounds(
-        evals,
-        num_rows[p],
-        num_segs,
-        max_num_cols,
-        num_cols[p],
-      );
+      let evals_A = self.A_list[p].compute_eval_table_sparse_disjoint_rounds(evals, num_rows[p], num_segs, max_num_cols, num_cols[p]);
+      let evals_B = self.B_list[p].compute_eval_table_sparse_disjoint_rounds(evals, num_rows[p], num_segs, max_num_cols, num_cols[p]);
+      let evals_C = self.C_list[p].compute_eval_table_sparse_disjoint_rounds(evals, num_rows[p], num_segs, max_num_cols, num_cols[p]);
       evals_A_list.push(vec![evals_A]);
       evals_B_list.push(vec![evals_B]);
       evals_C_list.push(vec![evals_C]);
@@ -435,78 +352,20 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     (evals_A_list, evals_B_list, evals_C_list)
   }
 
-  /*
-  // Only compute the first max_num_proofs / max_num_proofs_bound entries
-  // num_cols is already num_vars * max_num_proofs / max_num_proofs_bound
-  pub fn compute_eval_table_sparse_single(
-    &self,
-    num_instances: usize,
-    max_num_proofs: usize,
-    max_num_proofs_bound: usize,
-    num_rows: usize,
-    num_cols: usize,
-    evals: &[Scalar],
-  ) -> (Vec<Scalar>, Vec<Scalar>, Vec<Scalar>) {
-    assert!(self.num_instances == 1 || self.num_instances == num_instances);
-    assert_eq!(num_rows, self.num_cons);
-    assert!(num_cols <= self.num_vars * max_num_proofs / max_num_proofs_bound);
-
-    let mut evals_A_list = Vec::new();
-    let mut evals_B_list = Vec::new();
-    let mut evals_C_list = Vec::new();
-
-    // If num_instances is 1, copy it for num_instances.next_power_of_two()
-    if self.num_instances == 1 {
-      let evals_A = self.A_list[0].compute_eval_table_sparse_single(evals, max_num_proofs, max_num_proofs_bound, num_rows, num_cols);
-      let evals_B = self.B_list[0].compute_eval_table_sparse_single(evals, max_num_proofs, max_num_proofs_bound, num_rows, num_cols);
-      let evals_C = self.C_list[0].compute_eval_table_sparse_single(evals, max_num_proofs, max_num_proofs_bound, num_rows, num_cols);
-      evals_A_list = vec![evals_A; num_instances.next_power_of_two()].concat();
-      evals_B_list = vec![evals_B; num_instances.next_power_of_two()].concat();
-      evals_C_list = vec![evals_C; num_instances.next_power_of_two()].concat();
-    } else {
-      // Non-zero instances
-      for p in 0..num_instances {
-        let evals_A = self.A_list[p].compute_eval_table_sparse_single(evals, max_num_proofs, max_num_proofs_bound, num_rows, num_cols);
-        let evals_B = self.B_list[p].compute_eval_table_sparse_single(evals, max_num_proofs, max_num_proofs_bound, num_rows, num_cols);
-        let evals_C = self.C_list[p].compute_eval_table_sparse_single(evals, max_num_proofs, max_num_proofs_bound, num_rows, num_cols);
-        evals_A_list.extend(evals_A);
-        evals_B_list.extend(evals_B);
-        evals_C_list.extend(evals_C);
-      }
-      // Zero instances
-      for _ in num_instances..num_instances.next_power_of_two() {
-        evals_A_list.extend(vec![Scalar::zero(); num_cols]);
-        evals_B_list.extend(vec![Scalar::zero(); num_cols]);
-        evals_C_list.extend(vec![Scalar::zero(); num_cols]);
-      }
-    }
-
-    (evals_A_list, evals_B_list, evals_C_list)
-  }
-  */
-
   pub fn multi_evaluate(&self, rx: &[S], ry: &[S]) -> Vec<S> {
     let mut eval_list = Vec::new();
     // Evaluate each individual poly on [rx, ry]
     for i in 0..self.num_instances {
-      let evals = SparseMatPolynomial::multi_evaluate(
-        &[&self.A_list[i], &self.B_list[i], &self.C_list[i]],
-        rx,
-        ry,
-      );
+      let evals = SparseMatPolynomial::multi_evaluate(&[&self.A_list[i], &self.B_list[i], &self.C_list[i]], rx, ry);
       eval_list.extend(evals.clone());
     }
     eval_list
   }
 
-  pub fn multi_evaluate_bound_rp(
-    &self,
-    rp: &[S],
-    rx: &[S],
-    ry: &[S],
-  ) -> (
-    Vec<S>,    // Concatenation of each individual block
-    (S, S, S), // Combined, bound to rp
+  pub fn multi_evaluate_bound_rp(&self, rp: &[S], rx: &[S], ry: &[S]) -> 
+  (
+    Vec<S>,                // Concatenation of each individual block
+    (S, S, S)    // Combined, bound to rp
   ) {
     let mut a_evals = Vec::new();
     let mut b_evals = Vec::new();
@@ -514,11 +373,7 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     let mut eval_list = Vec::new();
     // Evaluate each individual poly on [rx, ry]
     for i in 0..self.num_instances {
-      let evals = SparseMatPolynomial::multi_evaluate(
-        &[&self.A_list[i], &self.B_list[i], &self.C_list[i]],
-        rx,
-        ry,
-      );
+      let evals = SparseMatPolynomial::multi_evaluate(&[&self.A_list[i], &self.B_list[i], &self.C_list[i]], rx, ry);
       eval_list.extend(evals.clone());
       a_evals.push(evals[0]);
       b_evals.push(evals[1]);
@@ -537,11 +392,7 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
   pub fn evaluate(&self, rx: &[S], ry: &[S]) -> (S, S, S) {
     assert_eq!(self.num_instances, 1);
 
-    let evals = SparseMatPolynomial::multi_evaluate(
-      &[&self.A_list[0], &self.B_list[0], &self.C_list[0]],
-      rx,
-      ry,
-    );
+    let evals = SparseMatPolynomial::multi_evaluate(&[&self.A_list[0], &self.B_list[0], &self.C_list[0]], rx, ry);
     (evals[0], evals[1], evals[2])
   }
 
@@ -553,16 +404,10 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     while base < val {
       base *= 8;
     }
-    base
+    return base;
   }
 
-  pub fn multi_commit(
-    &self,
-  ) -> (
-    Vec<Vec<usize>>,
-    Vec<R1CSCommitment<S>>,
-    Vec<R1CSDecommitment<S>>,
-  ) {
+  pub fn multi_commit(&self) -> (Vec<Vec<usize>>, Vec<R1CSCommitment<S>>, Vec<R1CSDecommitment<S>>) {
     let mut nnz_size: HashMap<usize, usize> = HashMap::new();
     let mut label_map: Vec<Vec<usize>> = Vec::new();
     let mut sparse_polys_list: Vec<Vec<&SparseMatPolynomial<S>>> = Vec::new();
@@ -611,7 +456,7 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
         num_cons: self.num_instances * self.max_num_cons,
         num_vars: self.num_vars,
         comm,
-      };
+      };    
       let r1cs_decomm = R1CSDecommitment { dense };
 
       r1cs_comm_list.push(r1cs_comm);
@@ -658,8 +503,14 @@ impl<S: SpartanExtensionField> R1CSEvalProof<S> {
     random_tape: &mut RandomTape<S>,
   ) -> R1CSEvalProof<S> {
     let timer = Timer::new("R1CSEvalProof::prove");
-    let proof =
-      SparseMatPolyEvalProof::prove(&decomm.dense, rx, ry, evals, transcript, random_tape);
+    let proof = SparseMatPolyEvalProof::prove(
+      &decomm.dense,
+      rx,
+      ry,
+      evals,
+      transcript,
+      random_tape,
+    );
     timer.stop();
 
     R1CSEvalProof { proof }
@@ -673,6 +524,12 @@ impl<S: SpartanExtensionField> R1CSEvalProof<S> {
     evals: &Vec<S>,
     transcript: &mut Transcript,
   ) -> Result<(), ProofVerifyError> {
-    self.proof.verify(&comm.comm, rx, ry, evals, transcript)
+    self.proof.verify(
+      &comm.comm,
+      rx,
+      ry,
+      evals,
+      transcript,
+    )
   }
 }

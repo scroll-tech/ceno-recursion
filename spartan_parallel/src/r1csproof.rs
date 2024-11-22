@@ -568,7 +568,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
         proof_eval_vars_at_ry_list,
       },
       [rp, rq_rev, rx, [rw, ry].concat()],
-      [rp, rq_rev, rx, [rw, ry].concat()],
     )
   }
 

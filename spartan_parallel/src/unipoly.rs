@@ -122,8 +122,8 @@ mod tests {
   fn test_from_evals_quad() {
     // polynomial is 2x^2 + 3x + 1
     let e0 = Scalar::one();
-    let e1 = (6_usize).to_scalar();
-    let e2 = (15_usize).to_scalar();
+    let e1 = Scalar::from(6u64);
+    let e2 = Scalar::from(15u64);
     let evals = vec![e0, e1, e2];
     let poly = UniPoly::from_evals(&evals);
 
@@ -131,8 +131,8 @@ mod tests {
     assert_eq!(poly.eval_at_one(), e1);
     assert_eq!(poly.coeffs.len(), 3);
     assert_eq!(poly.coeffs[0], Scalar::one());
-    assert_eq!(poly.coeffs[1], (3_usize).to_scalar());
-    assert_eq!(poly.coeffs[2], (2_usize).to_scalar());
+    assert_eq!(poly.coeffs[1], Scalar::from(3_usize));
+    assert_eq!(poly.coeffs[2], Scalar::from(2_usize));
 
     let hint = e0 + e1;
     let compressed_poly = poly.compress();
@@ -141,17 +141,17 @@ mod tests {
       assert_eq!(decompressed_poly.coeffs[i], poly.coeffs[i]);
     }
 
-    let e3 = (28_usize).to_scalar();
-    assert_eq!(poly.evaluate(&(3_usize).to_scalar()), e3);
+    let e3 = Scalar::from(28_usize);
+    assert_eq!(poly.evaluate(&Scalar::from(3_usize)), e3);
   }
 
   #[test]
   fn test_from_evals_cubic() {
     // polynomial is x^3 + 2x^2 + 3x + 1
     let e0 = Scalar::one();
-    let e1 = (7_usize).to_scalar();
-    let e2 = (23_usize).to_scalar();
-    let e3 = (55_usize).to_scalar();
+    let e1 = Scalar::from(7_usize);
+    let e2 = Scalar::from(23_usize);
+    let e3 = Scalar::from(55_usize);
     let evals = vec![e0, e1, e2, e3];
     let poly = UniPoly::from_evals(&evals);
 
@@ -159,9 +159,9 @@ mod tests {
     assert_eq!(poly.eval_at_one(), e1);
     assert_eq!(poly.coeffs.len(), 4);
     assert_eq!(poly.coeffs[0], Scalar::one());
-    assert_eq!(poly.coeffs[1], (3_usize).to_scalar());
-    assert_eq!(poly.coeffs[2], (2_usize).to_scalar());
-    assert_eq!(poly.coeffs[3], (1_usize).to_scalar());
+    assert_eq!(poly.coeffs[1], Scalar::from(3_usize));
+    assert_eq!(poly.coeffs[2], Scalar::from(2_usize));
+    assert_eq!(poly.coeffs[3], Scalar::from(1_usize));
 
     let hint = e0 + e1;
     let compressed_poly = poly.compress();
@@ -170,7 +170,7 @@ mod tests {
       assert_eq!(decompressed_poly.coeffs[i], poly.coeffs[i]);
     }
 
-    let e4 = (109_usize).to_scalar();
-    assert_eq!(poly.evaluate(&(4_usize).to_scalar()), e4);
+    let e4 = Scalar::from(109_usize);
+    assert_eq!(poly.evaluate(&Scalar::from(4_usize)), e4);
   }
 }

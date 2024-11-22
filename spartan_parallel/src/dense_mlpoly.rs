@@ -10,7 +10,6 @@ use core::ops::Index;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::collections::HashMap;
 
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
@@ -996,9 +995,9 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 
 #[cfg(test)]
 mod tests {
-  use super::super::scalar::ScalarFromPrimitives;
   use super::*;
   use rand::rngs::OsRng;
+  use crate::scalar::Scalar;
 
   fn evaluate_with_LR(Z: &[Scalar], r: &[Scalar]) -> Scalar {
     let eq = EqPolynomial::new(r.to_vec());
@@ -1026,19 +1025,19 @@ mod tests {
     // Z = [1, 2, 1, 4]
     let Z = vec![
       Scalar::one(),
-      (2_usize).to_scalar(),
-      (1_usize).to_scalar(),
-      (4_usize).to_scalar(),
+      Scalar::from(2_usize),
+      Scalar::from(1_usize),
+      Scalar::from(4_usize),
     ];
 
     // r = [4,3]
-    let r = vec![(4_usize).to_scalar(), (3_usize).to_scalar()];
+    let r = vec![Scalar::from(4_usize), Scalar::from(3_usize)];
 
     let eval_with_LR = evaluate_with_LR(&Z, &r);
     let poly = DensePolynomial::new(Z);
 
     let eval = poly.evaluate(&r);
-    assert_eq!(eval, (28_usize).to_scalar());
+    assert_eq!(eval, Scalar::from(28_usize));
     assert_eq!(eval_with_LR, eval);
   }
 

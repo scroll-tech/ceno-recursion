@@ -14,8 +14,6 @@ use circ::target::r1cs::trans::to_r1cs;
 use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
 use circ::target::r1cs::ProverData;
 use circ::target::r1cs::{Lc, VarType};
-use core::cmp::min;
-use rug::Integer;
 
 use std::fs::{create_dir_all, File};
 use std::io::{BufRead, BufReader, Write};
@@ -25,6 +23,8 @@ use circ::cfg::{
     clap::{self, Parser, ValueEnum},
     CircOpt,
 };
+use std::path::PathBuf;
+use std::path::Path;
 use core::cmp::Ordering;
 
 use std::time::*;
@@ -33,7 +33,6 @@ use libspartan::{
     instance::Instance, 
     Assignment, VarsAssignment, SNARK, InputsAssignment, MemsAssignment};
 use merlin::Transcript;
-use serde::{Deserialize, Serialize};
 use std::time::*;
 
 // How many reserved variables (EXCLUDING V) are in front of the actual input / output?

@@ -4,12 +4,10 @@
 use std::io::{BufRead, Read};
 use std::{default, env};
 use std::{fs::File, io::BufReader};
-use std::{fs::File, io::BufReader};
 
 use libspartan::scalar::{Scalar, SpartanExtensionField};
 use libspartan::{instance::Instance, InputsAssignment, MemsAssignment, VarsAssignment, SNARK};
 use merlin::Transcript;
-use serde::{Deserialize, Serialize};
 use serde::{Deserialize, Serialize};
 use std::time::*;
 
@@ -26,13 +24,6 @@ struct CompileTimeKnowledge {
   block_num_vir_ops: Vec<usize>,
   max_ts_width: usize,
 
-  args: Vec<
-    Vec<(
-      Vec<(usize, [u8; 32])>,
-      Vec<(usize, [u8; 32])>,
-      Vec<(usize, [u8; 32])>,
-    )>,
-  >,
   args: Vec<
     Vec<(
       Vec<(usize, [u8; 32])>,

@@ -73,11 +73,11 @@ impl<S: SpartanExtensionField> Instance<S> {
             return Err(R1CSError::InvalidIndex);
           }
 
-        // col must be smaller than num_vars
-        if col >= num_vars {
-          println!("COL: {}, NUM_VARS: {}", col, num_vars);
-          return Err(R1CSError::InvalidIndex);
-        }
+          // col must be smaller than num_vars
+          if col >= num_vars {
+            println!("COL: {}, NUM_VARS: {}", col, num_vars);
+            return Err(R1CSError::InvalidIndex);
+          }
 
           let val = S::from_bytes(&val_bytes);
           if val.is_some().unwrap_u8() == 1 {
@@ -101,8 +101,8 @@ impl<S: SpartanExtensionField> Instance<S> {
           }
         }
 
-      Ok(mat)
-    };
+        Ok(mat)
+      };
 
     let mut A_scalar_list = Vec::new();
     let mut B_scalar_list = Vec::new();
@@ -346,7 +346,6 @@ impl<S: SpartanExtensionField> Instance<S> {
         let mut A: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut B: Vec<(usize, usize, [u8; 32])> = Vec::new();
         let mut C: Vec<(usize, usize, [u8; 32])> = Vec::new();
-
 
         // constraints for correctness
         for i in 0..arg.len() {

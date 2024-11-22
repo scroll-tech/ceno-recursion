@@ -996,8 +996,8 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use rand::rngs::OsRng;
   use crate::scalar::Scalar;
+  use rand::rngs::OsRng;
 
   fn evaluate_with_LR(Z: &[Scalar], r: &[Scalar]) -> Scalar {
     let eq = EqPolynomial::new(r.to_vec());

@@ -1531,9 +1531,9 @@ impl<S: SpartanExtensionField> SparsePolynomial<S> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::scalar::Scalar;
   use rand::rngs::OsRng;
   use rand::RngCore;
-  use crate::scalar::Scalar;
   #[test]
   fn check_sparse_polyeval_proof() {
     let mut csprng: OsRng = OsRng;

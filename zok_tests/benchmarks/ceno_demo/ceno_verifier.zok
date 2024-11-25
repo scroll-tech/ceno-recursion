@@ -157,13 +157,12 @@ const u32 SEL_DEGREE = 2
 /// verify proof and return input opening point
 def verify_opcode_proof(
     ZKVMVerifier self,
-    field[0] name,
+    // field[0] name,
     // vp: &PCS::VerifierParam,
     VerifyingKey circuit_vk,
     ZKVMOpcodeProof proof,
     Transcript t,
     u32 num_product_fanin,
-    PointAndEval out_evals,
     ExtField[2] challenges // derive challenge from PCS
 ) -> ExtField[0]:
     ConstraintSystem cs = circuit_vk.cs
@@ -568,23 +567,26 @@ pub fn verify_table_proof(
 */
 
 def main(
+    field[0] expr_concat,
+    field[0] expr_pointer,
+    field[0] cs_concat,
     ZKVMVerifier self,
-    field[0] name,
-    VerifyingKey circuit_vk,
+    // field[0] name,
+    field[0] proof_entries_concat,
+    field[0] proof_pointers_mat,
+    field[0] main_sel_sumcheck_proofs_concat,
     ZKVMOpcodeProof proof,
     Transcript t,
     u32 num_product_fanin,
-    PointAndEval out_evals,
     ExtField[2] challenges // derive challenge from PCS
 ) -> field:
     ExtField[0] result = verify_opcode_proof(
         self,
-        name,
-        circuit_vk,
+        // name,
+        self.vk.circuit_vks_key[0],
         proof,
         t,
         num_product_fanin,
-        out_evals,
         challenges // derive challenge from PCS
     )
     return result[0].b0

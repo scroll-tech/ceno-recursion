@@ -89,7 +89,7 @@ fn print_bls(bls: &Vec<Block>, entry_bl: &usize) {
     for b in bls {
         b.pretty();
         println!("");
-    }    
+    }
 }
 
 // --
@@ -1161,6 +1161,9 @@ fn la_inst<'ast>(
                 if is_alive(&state, var) {
                     new_instructions.insert(0, BlockContent::Witness((var.clone(), ty.clone(), true)));
                     state.remove(var);
+                    for (_, s) in state_per_call_trace.iter_mut() {
+                        s.remove(var);
+                    }
                 } else {
                     new_instructions.insert(0, BlockContent::Witness((var.clone(), ty.clone(), false)));
                 }
@@ -2149,77 +2152,83 @@ impl<'ast> ZGen<'ast> {
         mut entry_bls_fn: BTreeSet<usize>,
         mut exit_bls_fn: BTreeSet<usize>,
     ) -> Vec<Block<'ast>> {
+        // Repeatedly scan through all blocks until no function can be merged
+        let mut changed = true;
         // Iterate through CFG, find all functions that are called once
-        for callee in 0..bls.len() {
-            if entry_bls_fn.contains(&callee) && predecessor[callee].len() == 1 {
-                let caller = predecessor[callee].first().unwrap().clone();
-                // Update fn_num_exec_bound of callee
-                let num_exec_factor = bls[caller].fn_num_exec_bound;
-                let caller_fn = &bls[caller].fn_name.clone();
-                let callee_fn = &bls[callee].fn_name.clone();
-                let scope_diff = bls[caller].scope + 1;
-                // Find func call exit block
-                assert_eq!(successor_fn[caller].len(), 1);
-                let caller_exit = successor_fn[caller].first().unwrap().clone();
-                // Update CFG
-                successor_fn[caller] = BTreeSet::from([callee]);
-                entry_bls_fn.remove(&callee);
-                
-                // Merge callee with caller
-                // First on caller (to deal with call parameters)
-                bls[caller].instructions = fm_inst::<true>(&bls[caller].instructions, callee_fn, caller_fn, scope_diff);
-                // Then on callee
-                let mut visited: Vec<bool> = vec![false; bls.len()];
-                let mut next_bls: VecDeque<usize> = VecDeque::new();
-                next_bls.push_back(callee);
-                while !next_bls.is_empty() {
-                    let cur_bl = next_bls.pop_front().unwrap();
-                    // Only visit each block once
-                    if !visited[cur_bl] {
-                        visited[cur_bl] = true;
-                        assert_eq!(&bls[cur_bl].fn_name, callee_fn);
-                        bls[cur_bl].fn_name = caller_fn.clone();
-                        bls[cur_bl].scope += scope_diff;
-                        bls[cur_bl].fn_num_exec_bound *= num_exec_factor;
-                        bls[cur_bl].instructions = fm_inst::<false>(&bls[cur_bl].instructions, callee_fn, caller_fn, scope_diff);
-                        // Update terminator
-                        if let BlockTerminator::Transition(e) = &bls[cur_bl].terminator {
-                            bls[cur_bl].terminator = BlockTerminator::Transition(expr_replace_fn(e, callee_fn, caller_fn, scope_diff));
-                        } else {
-                            unreachable!();
-                        }
-
-                        // Update terminator and push in successors
-                        if exit_bls_fn.contains(&cur_bl) {
-                            // Update CFG
-                            exit_bls_fn.remove(&cur_bl);
-                            assert_eq!(successor_fn[cur_bl].len(), 0);
-                            successor_fn[cur_bl] = BTreeSet::from([caller_exit]);
-                            // Assert terminator is rp@ and replace it with caller_exit
-                            if let BlockTerminator::Transition(Expression::Identifier(ie)) = &bls[cur_bl].terminator {
-                                assert!(is_rp(&ie.value).is_some());
-                                bls[cur_bl].terminator = BlockTerminator::Transition(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
-                                    value: DecimalNumber {
-                                        value: format!("{}", caller_exit),
-                                        span: Span::new("", 0, 0).unwrap()
-                                    },
-                                    suffix: Some(ty_to_dec_suffix(&Type::Basic(BasicType::Field(FieldType {
-                                        span: Span::new("", 0, 0).unwrap()
-                                    })))),
-                                    span: Span::new("", 0, 0).unwrap()
-                                })))
+        while changed {
+            changed = false;
+            for callee in 0..bls.len() {
+                if entry_bls_fn.contains(&callee) && predecessor[callee].len() == 1 {
+                    changed = true;
+                    let caller = predecessor[callee].first().unwrap().clone();
+                    // Update fn_num_exec_bound of callee
+                    let num_exec_factor = bls[caller].fn_num_exec_bound;
+                    let caller_fn = &bls[caller].fn_name.clone();
+                    let callee_fn = &bls[callee].fn_name.clone();
+                    let scope_diff = bls[caller].scope + 1;
+                    // Find func call exit block
+                    assert_eq!(successor_fn[caller].len(), 1);
+                    let caller_exit = successor_fn[caller].first().unwrap().clone();
+                    // Update CFG
+                    successor_fn[caller] = BTreeSet::from([callee]);
+                    entry_bls_fn.remove(&callee);
+                    
+                    // Merge callee with caller
+                    // First on caller (to deal with call parameters)
+                    bls[caller].instructions = fm_inst::<true>(&bls[caller].instructions, callee_fn, caller_fn, scope_diff);
+                    // Then on callee
+                    let mut visited: Vec<bool> = vec![false; bls.len()];
+                    let mut next_bls: VecDeque<usize> = VecDeque::new();
+                    next_bls.push_back(callee);
+                    while !next_bls.is_empty() {
+                        let cur_bl = next_bls.pop_front().unwrap();
+                        // Only visit each block once
+                        if !visited[cur_bl] {
+                            visited[cur_bl] = true;
+                            assert_eq!(&bls[cur_bl].fn_name, callee_fn);
+                            bls[cur_bl].fn_name = caller_fn.clone();
+                            bls[cur_bl].scope += scope_diff;
+                            bls[cur_bl].fn_num_exec_bound *= num_exec_factor;
+                            bls[cur_bl].instructions = fm_inst::<false>(&bls[cur_bl].instructions, callee_fn, caller_fn, scope_diff);
+                            // Update terminator
+                            if let BlockTerminator::Transition(e) = &bls[cur_bl].terminator {
+                                bls[cur_bl].terminator = BlockTerminator::Transition(expr_replace_fn(e, callee_fn, caller_fn, scope_diff));
                             } else {
                                 unreachable!();
                             }
-                        } else {
-                            for s in &successor_fn[cur_bl] {
-                                next_bls.push_back(*s);
+
+                            // Update terminator and push in successors
+                            if exit_bls_fn.contains(&cur_bl) {
+                                // Update CFG
+                                exit_bls_fn.remove(&cur_bl);
+                                assert_eq!(successor_fn[cur_bl].len(), 0);
+                                successor_fn[cur_bl] = BTreeSet::from([caller_exit]);
+                                // Assert terminator is rp@ and replace it with caller_exit
+                                if let BlockTerminator::Transition(Expression::Identifier(ie)) = &bls[cur_bl].terminator {
+                                    assert!(is_rp(&ie.value).is_some());
+                                    bls[cur_bl].terminator = BlockTerminator::Transition(Expression::Literal(LiteralExpression::DecimalLiteral(DecimalLiteralExpression {
+                                        value: DecimalNumber {
+                                            value: format!("{}", caller_exit),
+                                            span: Span::new("", 0, 0).unwrap()
+                                        },
+                                        suffix: Some(ty_to_dec_suffix(&Type::Basic(BasicType::Field(FieldType {
+                                            span: Span::new("", 0, 0).unwrap()
+                                        })))),
+                                        span: Span::new("", 0, 0).unwrap()
+                                    })))
+                                } else {
+                                    unreachable!();
+                                }
+                            } else {
+                                for s in &successor_fn[cur_bl] {
+                                    next_bls.push_back(*s);
+                                }
                             }
                         }
                     }
+                    // Finally on caller_exit
+                    bls[caller_exit].instructions = fm_inst::<false>(&bls[caller_exit].instructions, callee_fn, caller_fn, scope_diff);
                 }
-                // Finally on caller_exit
-                bls[caller_exit].instructions = fm_inst::<false>(&bls[caller_exit].instructions, callee_fn, caller_fn, scope_diff);
             }
         }
 

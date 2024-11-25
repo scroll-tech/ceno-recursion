@@ -23,7 +23,7 @@ return_types = _{ ( "->" ~ ( "(" ~ ty_list ~ ")" | ty ))? }
 constant_generics_declaration = _{ "<" ~ constant_generics_list ~ ">" }
 constant_generics_list = _{ identifier ~ ("," ~ identifier)* }
 
-parameter_list = _{(parameter ~ ("," ~ NEWLINE? ~ COMMENT? ~ NEWLINE? ~ parameter)*)?}
+parameter_list = _{(parameter ~ ("," ~ NEWLINE? ~ COMMENT? ~ NEWLINE? ~ COMMENT? ~ NEWLINE? ~ parameter)*)?}
 parameter = {array_param_metadata? ~ vis? ~ ty ~ identifier}
 
 // basic types
@@ -84,7 +84,7 @@ typed_identifier_or_assignee_list = _{ typed_identifier_or_assignee ~ ("," ~ typ
 typed_identifier_or_assignee = { typed_identifier | assignee } // we don't use { ty? ~ identifier } as with a single token, it gets parsed as `ty` but we want `identifier`
 
 // Expressions
-expression_list = _{(expression ~ ("," ~ NEWLINE? ~ expression)*)?}
+expression_list = _{(expression ~ ("," ~ NEWLINE? ~ COMMENT? ~ NEWLINE? ~ expression)*)?}
 
 expression = { unaried_term ~ (op_binary ~ unaried_term)* }
 unaried_term = { op_unary? ~ powered_term }

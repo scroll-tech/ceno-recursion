@@ -4,35 +4,36 @@ from "tower_struct" import TowerProofs
 from "expression" import Expression, LogupTableExpression
 
 struct ConstraintSystem {
-    u16 num_witin
-    field[0][0] witin_namespace_map // Vec<String>
-    u32 num_fixed
-    field[0][0] fixed_namespace_map // Vec<String>
+    // u16 num_witin
+    // field[0][0] witin_namespace_map // Vec<String>
+    // u32 num_fixed
+    // field[0][0] fixed_namespace_map // Vec<String>
 
     u32 r_expressions_len
     Expression[0] r_expressions
-    field[0][0] r_expressions_namespace_map // Vec<String>
+    // field[0][0] r_expressions_namespace_map // Vec<String>
 
     u32 w_expressions_len
     Expression[0] w_expressions
-    field[0][0] w_expressions_namespace_map // Vec<String>
+    // field[0][0] w_expressions_namespace_map // Vec<String>
 
     /// lookup expression
     u32 lk_expressions_len
     Expression[0] lk_expressions
-    field[0][0] lk_expressions_namespace_map // Vec<String>
+    // field[0][0] lk_expressions_namespace_map // Vec<String>
+    u32 lk_table_expressions_len
     LogupTableExpression[0] lk_table_expressions
-    field[0][0] lk_table_expressions_namespace_map // Vec<String>
+    // field[0][0] lk_table_expressions_namespace_map // Vec<String>
 
     /// main constraints zero expression
     u32 assert_zero_expressions_len
     Expression[0] assert_zero_expressions
-    field[0][0] assert_zero_expressions_namespace_map // Vec<String>
+    // field[0][0] assert_zero_expressions_namespace_map // Vec<String>
 
     /// main constraints zero expression for expression degree > 1, which require sumcheck to prove
     u32 assert_zero_sumcheck_expressions_len
     Expression[0] assert_zero_sumcheck_expressions
-    field[0][0] assert_zero_sumcheck_expressions_namespace_map
+    // field[0][0] assert_zero_sumcheck_expressions_namespace_map
 
     /// max zero sumcheck degree
     u32 max_non_lc_degree
@@ -53,7 +54,8 @@ struct ZKVMVerifyingKey {
     // pk for opcode and table circuits
     // TODO: Need to prove uniqueness of BTreeMap. The prover can have to entries of same name but different proof
     // circuit_vks: BTreeMap<String, VerifyingKey<E, PCS>>
-    field[0][0] circuit_vks_name
+    u32 circuit_vks_len
+    // field[0][0] circuit_vks_name // Vec<String>
     VerifyingKey[0] circuit_vks_key
 }
 
@@ -92,13 +94,18 @@ struct ZKVMOpcodeProof {
     TowerProofs tower_proof
 
     // main constraint and select sumcheck proof
+    u32 main_sel_sumcheck_proofs_len
     IOPProverMessage[0] main_sel_sumcheck_proofs
+    u32 r_records_in_evals_len
     ExtField[0] r_records_in_evals
+    u32 w_records_in_evals_len
     ExtField[0] w_records_in_evals
+    u32 lk_records_in_evals_len
     ExtField[0] lk_records_in_evals
 
     // pub wits_commit: PCS::Commitment,
     // pub wits_opening_proof: PCS::Proof,
+    u32 wits_in_evals_len
     ExtField[0] wits_in_evals
 }
 

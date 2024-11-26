@@ -2,19 +2,19 @@ use std::cmp::max;
 
 use crate::errors::R1CSError;
 use crate::math::Math;
-use crate::scalar::Scalar;
+use crate::scalar::SpartanExtensionField;
 use crate::R1CSInstance;
 
 /// `Instance` holds the description of R1CS matrices and a hash of the matrices
 #[derive(Clone)]
-pub struct Instance {
+pub struct Instance<S: SpartanExtensionField> {
   /// Matrix of Instance
-  pub inst: crate::R1CSInstance,
+  pub inst: crate::R1CSInstance<S>,
   /// Digest of Instance
   pub digest: Vec<u8>,
 }
 
-impl Instance {
+impl<S: SpartanExtensionField> Instance<S> {
   /// Constructs a new `Instance` and an associated satisfying assignment
   pub fn new(
     num_instances: usize,
@@ -24,7 +24,7 @@ impl Instance {
     A: &Vec<Vec<(usize, usize, [u8; 32])>>,
     B: &Vec<Vec<(usize, usize, [u8; 32])>>,
     C: &Vec<Vec<(usize, usize, [u8; 32])>>,
-  ) -> Result<Instance, R1CSError> {
+  ) -> Result<Instance<S>, R1CSError> {
     let (num_vars_padded, max_num_cons_padded, num_cons_padded) = {
       let num_vars_padded = {
         let mut num_vars_padded = num_vars;
@@ -63,47 +63,46 @@ impl Instance {
       (num_vars_padded, max_num_cons_padded, num_cons_padded)
     };
 
-    let bytes_to_scalar = |b: usize,
-                           tups: &[(usize, usize, [u8; 32])]|
-     -> Result<Vec<(usize, usize, Scalar)>, R1CSError> {
-      let mut mat: Vec<(usize, usize, Scalar)> = Vec::new();
-      for &(row, col, val_bytes) in tups {
-        // row must be smaller than num_cons
-        if row >= num_cons[b] {
-          println!("ROW: {}, NUM_CONS: {}", row, num_cons[b]);
-          return Err(R1CSError::InvalidIndex);
-        }
-
-        // col must be smaller than num_vars
-        if col >= num_vars {
-          println!("COL: {}, NUM_VARS: {}", col, num_vars);
-          return Err(R1CSError::InvalidIndex);
-        }
-
-        let val = Scalar::from_bytes(&val_bytes);
-        if val.is_some().unwrap_u8() == 1 {
-          // if col >= num_vars, it means that it is referencing a 1 or input in the satisfying
-          // assignment
-          if col >= num_vars {
-            mat.push((row, col + num_vars_padded - num_vars, val.unwrap()));
-          } else {
-            mat.push((row, col, val.unwrap()));
+    let bytes_to_scalar =
+      |b: usize, tups: &[(usize, usize, [u8; 32])]| -> Result<Vec<(usize, usize, S)>, R1CSError> {
+        let mut mat: Vec<(usize, usize, S)> = Vec::new();
+        for &(row, col, val_bytes) in tups {
+          // row must be smaller than num_cons
+          if row >= num_cons[b] {
+            println!("ROW: {}, NUM_CONS: {}", row, num_cons[b]);
+            return Err(R1CSError::InvalidIndex);
           }
-        } else {
-          return Err(R1CSError::InvalidScalar);
-        }
-      }
 
-      // pad with additional constraints up until num_cons_padded if the original constraints were 0 or 1
-      // we do not need to pad otherwise because the dummy constraints are implicit in the sum-check protocol
-      if num_cons[b] == 0 || num_cons[b] == 1 {
-        for i in tups.len()..num_cons_padded[b] {
-          mat.push((i, num_vars, Scalar::zero()));
-        }
-      }
+          // col must be smaller than num_vars
+          if col >= num_vars {
+            println!("COL: {}, NUM_VARS: {}", col, num_vars);
+            return Err(R1CSError::InvalidIndex);
+          }
 
-      Ok(mat)
-    };
+          let val = S::from_bytes(&val_bytes);
+          if val.is_some().unwrap_u8() == 1 {
+            // if col >= num_vars, it means that it is referencing a 1 or input in the satisfying
+            // assignment
+            if col >= num_vars {
+              mat.push((row, col + num_vars_padded - num_vars, val.unwrap()));
+            } else {
+              mat.push((row, col, val.unwrap()));
+            }
+          } else {
+            return Err(R1CSError::InvalidScalar);
+          }
+        }
+
+        // pad with additional constraints up until num_cons_padded if the original constraints were 0 or 1
+        // we do not need to pad otherwise because the dummy constraints are implicit in the sum-check protocol
+        if num_cons[b] == 0 || num_cons[b] == 1 {
+          for i in tups.len()..num_cons_padded[b] {
+            mat.push((i, num_vars, S::field_zero()));
+          }
+        }
+
+        Ok(mat)
+      };
 
     let mut A_scalar_list = Vec::new();
     let mut B_scalar_list = Vec::new();
@@ -166,9 +165,9 @@ impl Instance {
     Vec<(usize, usize, [u8; 32])>,
   ) {
     let int_to_scalar = |i: isize| {
-      let abs_scalar = Scalar::from(i.unsigned_abs() as u64);
+      let abs_scalar = S::from(i.abs() as u64);
       if i < 0 {
-        abs_scalar.neg().to_bytes()
+        abs_scalar.negate().to_bytes()
       } else {
         abs_scalar.to_bytes()
       }
@@ -261,7 +260,7 @@ impl Instance {
     // Information used only by printing
     num_vars_per_block: &Vec<usize>,
     block_num_proofs: &Vec<usize>,
-  ) -> (usize, usize, usize, Instance) {
+  ) -> (usize, usize, usize, Instance<S>) {
     assert_eq!(num_instances, args.len());
 
     if PRINT_SIZE {
@@ -353,7 +352,7 @@ impl Instance {
           tmp_nnz_A += arg[i].0.len();
           tmp_nnz_B += arg[i].1.len();
           tmp_nnz_C += arg[i].2.len();
-          (A, B, C) = Instance::gen_constr_bytes(
+          (A, B, C) = Instance::<S>::gen_constr_bytes(
             A,
             B,
             C,
@@ -369,7 +368,7 @@ impl Instance {
           // correctness of w2
           // for i1..
           for i in 1..num_inputs_unpadded - 1 {
-            (A, B, C) = Instance::gen_constr(
+            (A, B, C) = Instance::<S>::gen_constr(
               A,
               B,
               C,
@@ -382,7 +381,7 @@ impl Instance {
           }
           // for o0, o1..
           for i in 0..num_inputs_unpadded - 1 {
-            (A, B, C) = Instance::gen_constr(
+            (A, B, C) = Instance::<S>::gen_constr(
               A,
               B,
               C,
@@ -394,7 +393,7 @@ impl Instance {
             counter += 1;
           }
           // v[k]
-          (A, B, C) = Instance::gen_constr(
+          (A, B, C) = Instance::<S>::gen_constr(
             A,
             B,
             C,
@@ -405,7 +404,7 @@ impl Instance {
           );
           counter += 1;
           // x[k]
-          (A, B, C) = Instance::gen_constr(
+          (A, B, C) = Instance::<S>::gen_constr(
             A,
             B,
             C,
@@ -422,7 +421,7 @@ impl Instance {
           );
           counter += 1;
           // D[k] = x[k] * (pi[k + 1] + (1 - v[k + 1]))
-          (A, B, C) = Instance::gen_constr(
+          (A, B, C) = Instance::<S>::gen_constr(
             A,
             B,
             C,
@@ -433,7 +432,7 @@ impl Instance {
           );
           counter += 1;
           // pi[k] = v[k] * D[k]
-          (A, B, C) = Instance::gen_constr(
+          (A, B, C) = Instance::<S>::gen_constr(
             A,
             B,
             C,
@@ -454,7 +453,7 @@ impl Instance {
         // Physical Memory
         for i in 0..num_phy_ops[b] {
           // PMR = r * PD
-          (A, B, C) = Instance::gen_constr(
+          (A, B, C) = Instance::<S>::gen_constr(
             A,
             B,
             C,
@@ -466,7 +465,7 @@ impl Instance {
           counter += 1;
           // PMC = (1 or PMC[i-1]) * (tau - PA - PMR)
           if i == 0 {
-            (A, B, C) = Instance::gen_constr(
+            (A, B, C) = Instance::<S>::gen_constr(
               A,
               B,
               C,
@@ -476,7 +475,7 @@ impl Instance {
               vec![(V_PMC(i), 1)],
             );
           } else {
-            (A, B, C) = Instance::gen_constr(
+            (A, B, C) = Instance::<S>::gen_constr(
               A,
               B,
               C,
@@ -490,7 +489,7 @@ impl Instance {
         }
         counter += 1;
         // Pd
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -506,7 +505,7 @@ impl Instance {
         );
         counter += 1;
         // Pp
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -524,7 +523,7 @@ impl Instance {
         // Virtual Memory
         for i in 0..num_vir_ops[b] {
           // VMR1 = r * VD
-          (A, B, C) = Instance::gen_constr(
+          (A, B, C) = Instance::<S>::gen_constr(
             A,
             B,
             C,
@@ -535,7 +534,7 @@ impl Instance {
           );
           counter += 1;
           // VMR2 = r^2 * VL
-          (A, B, C) = Instance::gen_constr(
+          (A, B, C) = Instance::<S>::gen_constr(
             A,
             B,
             C,
@@ -546,7 +545,7 @@ impl Instance {
           );
           counter += 1;
           // VMR3 = r^3 * VT
-          (A, B, C) = Instance::gen_constr(
+          (A, B, C) = Instance::<S>::gen_constr(
             A,
             B,
             C,
@@ -558,7 +557,7 @@ impl Instance {
           counter += 1;
           // VMC = (1 or VMC[i-1]) * (tau - VA - VMR1 - VMR2 - VMR3)
           if i == 0 {
-            (A, B, C) = Instance::gen_constr(
+            (A, B, C) = Instance::<S>::gen_constr(
               A,
               B,
               C,
@@ -574,7 +573,7 @@ impl Instance {
               vec![(V_VMC(b, i), 1)],
             );
           } else {
-            (A, B, C) = Instance::gen_constr(
+            (A, B, C) = Instance::<S>::gen_constr(
               A,
               B,
               C,
@@ -594,7 +593,7 @@ impl Instance {
         }
         counter += 1;
         // Vd
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -610,7 +609,7 @@ impl Instance {
         );
         counter += 1;
         // Vp
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -738,7 +737,7 @@ impl Instance {
     consis_num_proofs: usize,
     total_num_phy_mem_accesses: usize,
     total_num_vir_mem_accesses: usize,
-  ) -> (usize, usize, usize, Instance) {
+  ) -> (usize, usize, usize, Instance<S>) {
     if PRINT_SIZE {
       println!("\n\n--\nPAIRWISE INSTS");
       println!(
@@ -774,7 +773,7 @@ impl Instance {
 
         // R1CS:
         // Output matches input
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -818,7 +817,7 @@ impl Instance {
 
         let mut num_cons = 0;
         // (v[k] - 1) * v[k + 1] = 0
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -829,7 +828,7 @@ impl Instance {
         );
         num_cons += 1;
         // v[k + 1] * (1 - addr[k + 1] + addr[k]) = D[k]
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -840,7 +839,7 @@ impl Instance {
         );
         num_cons += 1;
         // D[k] * (addr[k + 1] - addr[k]) = 0
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -851,7 +850,7 @@ impl Instance {
         );
         num_cons += 1;
         // D[k] * (val[k + 1] - val[k]) = 0
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -902,7 +901,7 @@ impl Instance {
         let mut num_cons = 0;
         // Sortedness
         // (v[k] - 1) * v[k + 1] = 0
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -913,7 +912,7 @@ impl Instance {
         );
         num_cons += 1;
         // D1[k] = v[k + 1] * (1 - addr[k + 1] + addr[k])
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -924,7 +923,7 @@ impl Instance {
         );
         num_cons += 1;
         // D1[k] * (addr[k + 1] - addr[k]) = 0
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -935,7 +934,7 @@ impl Instance {
         );
         num_cons += 1;
         // EQ
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -948,7 +947,7 @@ impl Instance {
         // C>=
         for i in 0..max_ts_width {
           // Bi * Bi = Bi
-          (A, B, C) = Instance::gen_constr(
+          (A, B, C) = Instance::<S>::gen_constr(
             A,
             B,
             C,
@@ -960,7 +959,7 @@ impl Instance {
           num_cons += 1;
         }
         // D1[k] * (ts[k + 1] - ts[k]) = EQ + \Sum_i B_i
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -979,7 +978,7 @@ impl Instance {
 
         // Consistency
         // D1[k] * (ls[k + 1] - STORE) = D2[k], where STORE = 0
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -990,7 +989,7 @@ impl Instance {
         );
         num_cons += 1;
         // D2[k] * (data[k + 1] - data[k]) = 0
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -1001,7 +1000,7 @@ impl Instance {
         );
         num_cons += 1;
         // (1 - D1[k]) * (ls[k + 1] - STORE) = 0, where STORE = 0
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -1044,7 +1043,7 @@ impl Instance {
         println!("Total Cons Exec Size: {}", total_cons_exec_size);
       }
 
-      Instance::new(
+      let pairwise_check_inst = Instance::new(
         3,
         pairwise_check_max_num_cons,
         pairwise_check_num_cons,
@@ -1053,7 +1052,8 @@ impl Instance {
         &B_list,
         &C_list,
       )
-      .unwrap()
+      .unwrap();
+      pairwise_check_inst
     };
     (
       pairwise_check_num_vars,
@@ -1086,7 +1086,7 @@ impl Instance {
     consis_num_proofs: usize,
     total_num_phy_mem_accesses: usize,
     total_num_vir_mem_accesses: usize,
-  ) -> (usize, usize, Instance) {
+  ) -> (usize, usize, Instance<S>) {
     if PRINT_SIZE {
       println!("\n\n--\nPERM INSTS");
       println!(
@@ -1141,7 +1141,7 @@ impl Instance {
         // correctness of w2
         // for i1..
         for i in 1..num_inputs_unpadded - 1 {
-          (A, B, C) = Instance::gen_constr(
+          (A, B, C) = Instance::<S>::gen_constr(
             A,
             B,
             C,
@@ -1154,7 +1154,7 @@ impl Instance {
         }
         // for o0, o1..
         for i in 0..num_inputs_unpadded - 1 {
-          (A, B, C) = Instance::gen_constr(
+          (A, B, C) = Instance::<S>::gen_constr(
             A,
             B,
             C,
@@ -1166,7 +1166,7 @@ impl Instance {
           constraint_count += 1;
         }
         // ZO * r^n = r^n * o0 + r^(n + 1) * o1, ...
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -1179,7 +1179,7 @@ impl Instance {
         );
         constraint_count += 1;
         // I = v * (v + i0 + r * i1 + r^2 * i2 + ...)
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -1196,7 +1196,7 @@ impl Instance {
         );
         constraint_count += 1;
         // O = v * (v + ZO)
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -1207,7 +1207,7 @@ impl Instance {
         );
         constraint_count += 1;
         // v[k]
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -1218,7 +1218,7 @@ impl Instance {
         );
         constraint_count += 1;
         // x[k]
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -1235,7 +1235,7 @@ impl Instance {
         );
         constraint_count += 1;
         // D[k] = x[k] * (pi[k + 1] + (1 - v[k + 1]))
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -1246,7 +1246,7 @@ impl Instance {
         );
         constraint_count += 1;
         // pi[k] = v[k] * D[k]
-        (A, B, C) = Instance::gen_constr(
+        (A, B, C) = Instance::<S>::gen_constr(
           A,
           B,
           C,
@@ -1294,7 +1294,7 @@ impl Instance {
         println!("Total Cons Exec Size: {}", total_cons_exec_size);
       }
 
-      Instance::new(
+      let perm_root_inst = Instance::new(
         1,
         perm_root_num_cons,
         vec![perm_root_num_cons],
@@ -1303,7 +1303,8 @@ impl Instance {
         &B_list,
         &C_list,
       )
-      .unwrap()
+      .unwrap();
+      perm_root_inst
     };
     (
       perm_root_num_cons,

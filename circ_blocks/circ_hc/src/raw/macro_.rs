@@ -4,9 +4,11 @@ macro_rules! generate_hashcons_raw {
     ($Op:ty) => {
         use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
-        use std::cell::{Cell, RefCell};
-        use std::rc::Rc;
-        use std::thread_local;
+        use std::{
+            cell::{Cell, RefCell},
+            rc::Rc,
+            thread_local,
+        };
 
         use $crate::Id;
 

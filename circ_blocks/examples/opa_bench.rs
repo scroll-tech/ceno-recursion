@@ -1,7 +1,9 @@
-use circ::cfg::clap::{self, Parser};
-use circ::ir::term::*;
-use circ::target::aby::assignment::ilp;
-use circ::term;
+use circ::{
+    cfg::clap::{self, Parser},
+    ir::term::*,
+    target::aby::assignment::ilp,
+    term,
+};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -30,5 +32,5 @@ fn main() {
         ..Default::default()
     };
     let _assignment = ilp::assign(&cs, "hycc");
-    //dbg!(&assignment);
+    // dbg!(&assignment);
 }

@@ -2,11 +2,13 @@ use fxhash::FxHashMap as HashMap;
 
 use crate::Id;
 use log::trace;
-use std::borrow::Borrow;
-use std::cell::{Cell, RefCell};
-use std::net::SocketAddrV6 as TemplateOp;
-use std::rc::Rc;
-use std::thread_local;
+use std::{
+    borrow::Borrow,
+    cell::{Cell, RefCell},
+    net::SocketAddrV6 as TemplateOp,
+    rc::Rc,
+    thread_local,
+};
 
 #[allow(dead_code)]
 struct NodeData {
@@ -297,8 +299,10 @@ impl crate::Weak<TemplateOp> for Weak {
 
 mod hash {
     use super::{Node, NodeData, NodeDataRef, Weak};
-    use std::borrow::Borrow;
-    use std::hash::{Hash, Hasher};
+    use std::{
+        borrow::Borrow,
+        hash::{Hash, Hasher},
+    };
 
     impl Hash for Node {
         fn hash<H: Hasher>(&self, state: &mut H) {

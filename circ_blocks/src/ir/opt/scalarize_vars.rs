@@ -1,8 +1,7 @@
 //! Replacing array and tuple variables with scalars.
 use log::trace;
 
-use crate::ir::opt::visit::RewritePass;
-use crate::ir::term::*;
+use crate::ir::{opt::visit::RewritePass, term::*};
 
 struct Pass;
 

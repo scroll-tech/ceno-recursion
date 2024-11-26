@@ -3,7 +3,7 @@
 use super::*;
 
 use circ_fields::{FieldT, FieldV};
-use rand::{distributions::Distribution, prelude::SliceRandom, Rng};
+use rand::{Rng, distributions::Distribution, prelude::SliceRandom};
 use std::iter::repeat;
 
 // A distribution of boolean terms with some size.
@@ -318,8 +318,7 @@ pub mod test {
 
     use fxhash::FxHashMap as HashMap;
     use quickcheck::{Arbitrary, Gen};
-    use rand::distributions::Distribution;
-    use rand::SeedableRng;
+    use rand::{SeedableRng, distributions::Distribution};
 
     #[derive(Clone, Debug)]
     pub struct PureBool(pub Term, pub FxHashMap<String, Value>);

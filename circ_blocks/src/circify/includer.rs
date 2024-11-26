@@ -1,7 +1,9 @@
 //! Language-agnostic machinery for recursively loading files
 
-use std::collections::{HashMap, VecDeque};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::{HashMap, VecDeque},
+    path::{Path, PathBuf},
+};
 
 /// A trait which defines a graph of files that can be recursively loaded
 pub trait Loader: Sized {

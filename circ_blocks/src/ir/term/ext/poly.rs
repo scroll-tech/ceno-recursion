@@ -6,8 +6,7 @@
 //! Compute f'(X) and s,t s.t. fs + f't = 1. Return an array of coefficients for s and one for t
 //! (as a tuple).
 
-use crate::ir::term::ty::*;
-use crate::ir::term::*;
+use crate::ir::term::{ty::*, *};
 
 /// Type-check [super::ExtOp::UniqDeriGcd].
 pub fn check(arg_sorts: &[&Sort]) -> Result<Sort, TypeErrorReason> {

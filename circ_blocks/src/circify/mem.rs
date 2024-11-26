@@ -159,8 +159,7 @@ impl MemManager {
 mod test {
     use super::*;
     use crate::target::smt::check_sat;
-    use std::cell::RefCell;
-    use std::rc::Rc;
+    use std::{cell::RefCell, rc::Rc};
 
     fn bv_var(s: &str, w: usize) -> Term {
         leaf_term(Op::Var(s.to_owned(), Sort::BitVector(w)))

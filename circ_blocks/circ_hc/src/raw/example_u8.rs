@@ -1,9 +1,11 @@
 // Warning: this file is generated from src/template.rs and generate_u8.zsh
 use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-use std::thread_local;
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    thread_local,
+};
 
 use crate::Id;
 

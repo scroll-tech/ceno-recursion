@@ -4,35 +4,35 @@ const PRINT_PROOF: bool = false;
 const INLINE_SPARTAN_PROOF: bool = false;
 const TOTAL_NUM_VARS_BOUND: usize = 100000000;
 
-use circ::front::zsharp::{self, ZSharpFE};
-use circ::front::{FrontEnd, Mode};
-use circ::ir::opt::{opt, Opt};
-use circ::target::r1cs::trans::to_r1cs;
-use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
-use circ::target::r1cs::ProverData;
-use circ::target::r1cs::{Lc, VarType};
+use circ::{
+    front::{
+        FrontEnd, Mode,
+        zsharp::{self, ZSharpFE},
+    },
+    ir::opt::{Opt, opt},
+    target::r1cs::{Lc, ProverData, VarType, trans::to_r1cs, wit_comp::StagedWitCompEvaluator},
+};
 use core::cmp::min;
 use libspartan::scalar::{Scalar, SpartanExtensionField};
 use rug::Integer;
 
-use std::fs::{create_dir_all, File};
-use std::io::{BufRead, BufReader, Write};
+use std::{
+    fs::{File, create_dir_all},
+    io::{BufRead, BufReader, Write},
+};
 
 use circ::cfg::{
-    cfg,
+    CircOpt, cfg,
     clap::{self, Parser, ValueEnum},
-    CircOpt,
 };
 use core::cmp::Ordering;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use libspartan::{
-    instance::Instance, Assignment, InputsAssignment, MemsAssignment, VarsAssignment, SNARK,
+    Assignment, InputsAssignment, MemsAssignment, SNARK, VarsAssignment, instance::Instance,
 };
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
-use std::time::*;
 use std::time::*;
 
 // How many reserved variables (EXCLUDING V) are in front of the actual input / output?
@@ -585,30 +585,27 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
     };
 
     println!("Optimizing IR... ");
-    let cs = opt(
-        cs,
-        vec![
-            Opt::ScalarizeVars,
-            Opt::Flatten,
-            Opt::Sha,
-            Opt::ConstantFold(Box::new([])),
-            Opt::Flatten,
-            Opt::Inline,
-            // Tuples must be eliminated before oblivious array elim
-            Opt::Tuple,
-            Opt::ConstantFold(Box::new([])),
-            Opt::Obliv,
-            // The obliv elim pass produces more tuples, that must be eliminated
-            Opt::Tuple,
-            Opt::LinearScan,
-            // The linear scan pass produces more tuples, that must be eliminated
-            Opt::Tuple,
-            Opt::Flatten,
-            Opt::ConstantFold(Box::new([])),
-            Opt::Inline,
-            Opt::SkolemizeChallenges,
-        ],
-    );
+    let cs = opt(cs, vec![
+        Opt::ScalarizeVars,
+        Opt::Flatten,
+        Opt::Sha,
+        Opt::ConstantFold(Box::new([])),
+        Opt::Flatten,
+        Opt::Inline,
+        // Tuples must be eliminated before oblivious array elim
+        Opt::Tuple,
+        Opt::ConstantFold(Box::new([])),
+        Opt::Obliv,
+        // The obliv elim pass produces more tuples, that must be eliminated
+        Opt::Tuple,
+        Opt::LinearScan,
+        // The linear scan pass produces more tuples, that must be eliminated
+        Opt::Tuple,
+        Opt::Flatten,
+        Opt::ConstantFold(Box::new([])),
+        Opt::Inline,
+        Opt::SkolemizeChallenges,
+    ]);
     println!("done.");
 
     if VERBOSE {
@@ -1013,10 +1010,11 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
             }
         }
 
-        let inputs = [
-            vars[..io_width].to_vec(),
-            vec![zero.clone(); io_width.next_power_of_two() - io_width],
-        ]
+        let inputs = [vars[..io_width].to_vec(), vec![
+            zero.clone();
+            io_width.next_power_of_two()
+                - io_width
+        ]]
         .concat();
         let inputs_assignment = Assignment::new(
             &inputs
@@ -1416,46 +1414,48 @@ fn run_spartan_proof<S: SpartanExtensionField>(
     println!("Verifying the proof...");
     // verify the proof of satisfiability
     let mut verifier_transcript = Transcript::new(b"snark_example");
-    assert!(proof
-        .verify(
-            ctk.input_block_num,
-            ctk.output_block_num,
-            &ctk.input_liveness,
-            ctk.func_input_width,
-            ctk.input_offset,
-            ctk.output_offset,
-            &rtk.input,
-            &rtk.input_stack,
-            &rtk.input_mem,
-            &rtk.output,
-            rtk.output_exec_num,
-            num_vars,
-            num_ios,
-            max_block_num_phy_ops,
-            &block_num_phy_ops,
-            max_block_num_vir_ops,
-            &block_num_vir_ops,
-            mem_addr_ts_bits_size,
-            num_inputs_unpadded,
-            &ctk.num_vars_per_block,
-            block_num_instances_bound,
-            rtk.block_max_num_proofs,
-            &block_num_proofs,
-            block_num_cons,
-            &block_comm_map,
-            &block_comm_list,
-            rtk.consis_num_proofs,
-            rtk.total_num_init_phy_mem_accesses,
-            rtk.total_num_init_vir_mem_accesses,
-            rtk.total_num_phy_mem_accesses,
-            rtk.total_num_vir_mem_accesses,
-            pairwise_check_num_cons,
-            &pairwise_check_comm,
-            perm_root_num_cons,
-            &perm_root_comm,
-            &mut verifier_transcript
-        )
-        .is_ok());
+    assert!(
+        proof
+            .verify(
+                ctk.input_block_num,
+                ctk.output_block_num,
+                &ctk.input_liveness,
+                ctk.func_input_width,
+                ctk.input_offset,
+                ctk.output_offset,
+                &rtk.input,
+                &rtk.input_stack,
+                &rtk.input_mem,
+                &rtk.output,
+                rtk.output_exec_num,
+                num_vars,
+                num_ios,
+                max_block_num_phy_ops,
+                &block_num_phy_ops,
+                max_block_num_vir_ops,
+                &block_num_vir_ops,
+                mem_addr_ts_bits_size,
+                num_inputs_unpadded,
+                &ctk.num_vars_per_block,
+                block_num_instances_bound,
+                rtk.block_max_num_proofs,
+                &block_num_proofs,
+                block_num_cons,
+                &block_comm_map,
+                &block_comm_list,
+                rtk.consis_num_proofs,
+                rtk.total_num_init_phy_mem_accesses,
+                rtk.total_num_init_vir_mem_accesses,
+                rtk.total_num_phy_mem_accesses,
+                rtk.total_num_vir_mem_accesses,
+                pairwise_check_num_cons,
+                &pairwise_check_comm,
+                perm_root_num_cons,
+                &perm_root_comm,
+                &mut verifier_transcript
+            )
+            .is_ok()
+    );
     println!("proof verification successful!");
 }
 

@@ -4,9 +4,7 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 
-use pest::error::Error;
-use pest::iterators::Pairs;
-use pest::Parser;
+use pest::{Parser, error::Error, iterators::Pairs};
 
 #[derive(Parser)]
 #[grammar = "zokrates.pest"]
@@ -27,8 +25,7 @@ mod tests {
         #[test]
         fn examples_dir() {
             use glob::glob;
-            use std::fs;
-            use std::io::Read;
+            use std::{fs, io::Read};
             // Traverse all .zok files in examples dir
             for entry in
                 glob("../zokrates_cli/examples/**/*.zok").expect("Failed to read glob pattern")

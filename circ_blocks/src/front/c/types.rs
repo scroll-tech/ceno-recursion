@@ -1,9 +1,12 @@
 //! C Types
-use crate::circify::CirCtx;
-use crate::front::c::term::CTerm;
-use crate::front::c::term::CTermData;
-use crate::front::field_list::FieldList;
-use crate::ir::term::*;
+use crate::{
+    circify::CirCtx,
+    front::{
+        c::term::{CTerm, CTermData},
+        field_list::FieldList,
+    },
+    ir::term::*,
+};
 
 use std::fmt::{self, Display, Formatter};
 

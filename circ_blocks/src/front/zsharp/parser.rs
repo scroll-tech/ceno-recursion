@@ -6,13 +6,14 @@
 use zokrates_pest_ast as ast;
 
 use log::debug;
-use std::collections::HashMap;
-use std::env::var_os;
+use std::{collections::HashMap, env::var_os};
 
 use crate::circify::includer::Loader;
-use std::fs::File;
-use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::{
+    fs::File,
+    io::Read,
+    path::{Path, PathBuf},
+};
 use typed_arena::Arena;
 
 /// A representation of the standard libary's location.

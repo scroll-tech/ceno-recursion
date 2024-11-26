@@ -3,19 +3,22 @@
 // PUSH is not equivalent to a change in scope. Instead of popping out the last state,
 // PUSH should result in the union of the last two states.
 
-use crate::front::zsharp::blocks::*;
-use crate::front::zsharp::Ty;
+use crate::front::zsharp::{Ty, blocks::*};
 use itertools::Itertools;
-use std::cmp::max;
-use std::collections::VecDeque;
-use std::collections::{BTreeMap, BTreeSet};
-use std::iter::FromIterator;
+use std::{
+    cmp::max,
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    iter::FromIterator,
+};
 use zokrates_pest_ast::*;
 
-use crate::front::zsharp::ZGen;
-use crate::front::zsharp::{cfg, ZSharp};
-use crate::front::Computations;
-use crate::target::r1cs::trans::to_r1cs;
+use crate::{
+    front::{
+        Computations,
+        zsharp::{ZGen, ZSharp, cfg},
+    },
+    target::r1cs::trans::to_r1cs,
+};
 
 const MAX_BLOCK_SIZE: usize = 32768;
 const CFG_VERBOSE: bool = false;
@@ -2104,7 +2107,9 @@ impl<'ast> ZGen<'ast> {
             }
             NextBlock::Rp(_) => {
                 if rp_successor.len() == 0 {
-                    panic!("Control flow graph construction fails: reaching end of function point but rp@ not set!")
+                    panic!(
+                        "Control flow graph construction fails: reaching end of function point but rp@ not set!"
+                    )
                 }
                 // Add everything in rp_successor of cur_bl to successor of cur_bl
                 for i in rp_successor[cur_bl].iter() {
@@ -2221,7 +2226,10 @@ impl<'ast> ZGen<'ast> {
                             if let NextBlock::Label(l) = b {
                                 entry_bl_fn.insert(*l);
                             } else {
-                                panic!("Blocks {} invokes function calls and cannot terminate to rp@ block.", cur_bl)
+                                panic!(
+                                    "Blocks {} invokes function calls and cannot terminate to rp@ block.",
+                                    cur_bl
+                                )
                             }
                         }
                     }
@@ -2685,7 +2693,10 @@ impl<'ast> ZGen<'ast> {
                 for (name, ty) in &bl_out[*s] {
                     if let Some(k) = state.get(name) {
                         if *ty != *k {
-                            panic!("Type analysis failed: mismatched types on variable {} of block {}, expected {:?} but obtained {:?}", name, cur_bl, ty, k)
+                            panic!(
+                                "Type analysis failed: mismatched types on variable {} of block {}, expected {:?} but obtained {:?}",
+                                name, cur_bl, ty, k
+                            )
                         }
                     }
                     if state.get(name) == None {
@@ -3492,11 +3503,7 @@ impl<'ast> ZGen<'ast> {
                                                     .outputs
                                                     .iter()
                                                     .fold(None, |a, b| {
-                                                        if &b.0 == var {
-                                                            b.1.clone()
-                                                        } else {
-                                                            a
-                                                        }
+                                                        if &b.0 == var { b.1.clone() } else { a }
                                                     });
                                                 if let Some(var_ty) = var_type {
                                                     // GEN
@@ -3527,11 +3534,7 @@ impl<'ast> ZGen<'ast> {
                                         if !oos.contains(var) {
                                             let var_type: Option<Ty> =
                                                 bls[cur_bl].outputs.iter().fold(None, |a, b| {
-                                                    if &b.0 == var {
-                                                        b.1.clone()
-                                                    } else {
-                                                        a
-                                                    }
+                                                    if &b.0 == var { b.1.clone() } else { a }
                                                 });
                                             if let Some(var_ty) = var_type {
                                                 // GEN

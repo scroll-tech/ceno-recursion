@@ -1,6 +1,6 @@
 //! Utilities for interpretting zsharp
 
-use super::term::{Ty, T};
+use super::term::{T, Ty};
 use crate::ir::term::*;
 use fxhash::FxHashMap as HashMap;
 

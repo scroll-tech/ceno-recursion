@@ -1,9 +1,7 @@
 use from_pest::FromPest;
-use pest::error::Error as PestError;
-use pest::iterators::Pairs;
+use pest::{error::Error as PestError, iterators::Pairs};
 use std::fmt;
-use zokrates_parser::parse;
-use zokrates_parser::Rule;
+use zokrates_parser::{Rule, parse};
 #[macro_use]
 extern crate lazy_static;
 
@@ -13,7 +11,7 @@ pub use ast::{
     Assignee, AssigneeAccess, BasicOrStructType, BasicType, BinaryExpression, BinaryOperator,
     BooleanLiteralExpression, BooleanType, CallAccess, CondStoreStatement, ConditionalStatement,
     ConstantDefinition, ConstantGenericValue, Curve, DecimalLiteralExpression, DecimalNumber,
-    DecimalSuffix, DefinitionStatement, DimRO, ExplicitGenerics, Expression, FieldSuffix,
+    DecimalSuffix, DefinitionStatement, DimRO, EOI, ExplicitGenerics, Expression, FieldSuffix,
     FieldType, File, FromExpression, FromImportDirective, FuncInline, FunctionDefinition,
     HexLiteralExpression, HexNumberExpression, IdentifierExpression, ImportDirective, ImportSymbol,
     InlineArrayExpression, InlineStructExpression, InlineStructMember, IterationStatement,
@@ -22,19 +20,19 @@ pub use ast::{
     Range, RangeOrExpression, ReturnStatement, Span, Spread, SpreadOrExpression, Statement,
     StrOperator, StructDefinition, StructField, StructType, SymbolDeclaration, TernaryExpression,
     ToExpression, ToFieldOperator, Type, TypeDefinition, TypedIdentifier,
-    TypedIdentifierOrAssignee, U16NumberExpression, U16Suffix, U16Type, U32NumberExpression,
-    U32Suffix, U32Type, U64NumberExpression, U64Suffix, U64Type, U8NumberExpression, U8Suffix,
-    U8Type, UnaryExpression, UnaryOperator, Underscore, Visibility, WhileLoopStatement,
-    WitnessStatement, EOI,
+    TypedIdentifierOrAssignee, U8NumberExpression, U8Suffix, U8Type, U16NumberExpression,
+    U16Suffix, U16Type, U32NumberExpression, U32Suffix, U32Type, U64NumberExpression, U64Suffix,
+    U64Type, UnaryExpression, UnaryOperator, Underscore, Visibility, WhileLoopStatement,
+    WitnessStatement,
 };
 
 mod ast {
-    use from_pest::ConversionError;
-    use from_pest::FromPest;
-    use from_pest::Void;
-    use pest::iterators::{Pair, Pairs};
-    use pest::pratt_parser::{Assoc, Op, PrattParser};
+    use from_pest::{ConversionError, FromPest, Void};
     pub use pest::Span;
+    use pest::{
+        iterators::{Pair, Pairs},
+        pratt_parser::{Assoc, Op, PrattParser},
+    };
     use pest_ast::FromPest;
     use zokrates_parser::Rule;
 
@@ -1181,15 +1179,13 @@ pub fn generate_ast(input: &str) -> Result<ast::File, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::ast::*;
-    use super::*;
+    use super::{ast::*, *};
     use pest::Span;
 
     #[test]
     fn examples() {
         use glob::glob;
-        use std::fs;
-        use std::io::Read;
+        use std::{fs, io::Read};
         // Traverse all .zok files in examples dir
         for entry in glob("../zokrates_cli/examples/**/*.zok").expect("Failed to read glob pattern")
         {

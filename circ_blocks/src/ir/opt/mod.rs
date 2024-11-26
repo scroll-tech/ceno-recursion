@@ -149,7 +149,7 @@ pub fn opt<I: IntoIterator<Item = Opt>>(mut cs: Computations, optimizations: I) 
             }
             debug!("After {:?}: {} outputs", i, c.outputs.len());
             trace!("After {:?}: {}", i, c.outputs[0]);
-            //debug!("After {:?}: {}", i, Letified(cs.outputs[0].clone()));
+            // debug!("After {:?}: {}", i, Letified(cs.outputs[0].clone()));
             debug!("After {:?}: {} terms", i, c.terms());
         }
         if crate::cfg::cfg().ir.frequent_gc {

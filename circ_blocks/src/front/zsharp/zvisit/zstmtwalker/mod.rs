@@ -2,12 +2,11 @@
 
 mod zexprtyper;
 
-use super::super::term::Ty;
-use super::super::{span_to_string, ZGen};
-use super::eqtype::*;
-use super::walkfns::*;
 use super::{
-    bos_to_type, ZConstLiteralRewriter, ZResult, ZVisitorError, ZVisitorMut, ZVisitorResult,
+    super::{ZGen, span_to_string, term::Ty},
+    ZConstLiteralRewriter, ZResult, ZVisitorError, ZVisitorMut, ZVisitorResult, bos_to_type,
+    eqtype::*,
+    walkfns::*,
 };
 use zexprtyper::ZExpressionTyper;
 
@@ -28,10 +27,11 @@ impl<'ast, 'ret> ZStatementWalker<'ast, 'ret> {
         gens: &'ret [ast::IdentifierExpression<'ast>],
         zgen: &'ret ZGen<'ast>,
     ) -> Self {
-        let vars = vec![prms
-            .iter()
-            .map(|p| (p.id.value.clone(), p.ty.clone()))
-            .collect()];
+        let vars = vec![
+            prms.iter()
+                .map(|p| (p.id.value.clone(), p.ty.clone()))
+                .collect(),
+        ];
         Self {
             rets,
             gens,
@@ -587,8 +587,8 @@ impl<'ast, 'ret> ZStatementWalker<'ast, 'ret> {
     where
         F: Fn(&T) -> ZResult<MSAccRef<'_, 'ast>>,
     {
-        use ast::Type;
         use MSAccRef::*;
+        use ast::Type;
         let mut acc_dim_offset = 0;
         for acc in accs {
             if matches!(ty, Type::Basic(_)) {

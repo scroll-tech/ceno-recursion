@@ -1,8 +1,9 @@
 //! AST Walker for zokrates_pest_ast
 
-use super::super::eqtype::*;
-use super::super::{bos_to_type, ZResult, ZVisitorError, ZVisitorMut, ZVisitorResult};
-use super::ZStatementWalker;
+use super::{
+    super::{ZResult, ZVisitorError, ZVisitorMut, ZVisitorResult, bos_to_type, eqtype::*},
+    ZStatementWalker,
+};
 
 use zokrates_pest_ast as ast;
 

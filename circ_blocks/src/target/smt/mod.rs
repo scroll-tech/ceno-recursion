@@ -6,16 +6,20 @@
 
 use crate::ir::term::*;
 
-use rsmt2::errors::SmtRes;
-use rsmt2::parse::{IdentParser, ModelParser, SmtParser};
-use rsmt2::print::{Expr2Smt, Sort2Smt, Sym2Smt};
+use rsmt2::{
+    errors::SmtRes,
+    parse::{IdentParser, ModelParser, SmtParser},
+    print::{Expr2Smt, Sort2Smt, Sym2Smt},
+};
 
 use rug::Integer;
 
-use std::collections::HashMap;
-use std::fmt::{self, Display, Formatter};
-use std::io::Write;
-use std::str::FromStr;
+use std::{
+    collections::HashMap,
+    fmt::{self, Display, Formatter},
+    io::Write,
+    str::FromStr,
+};
 
 use ieee754::Ieee754;
 
@@ -320,7 +324,7 @@ impl<'a, Br: ::std::io::BufRead> ModelParser<String, Sort, Value, &'a mut SmtPar
         } else {
             unimplemented!("Could not parse model suffix: {}", input.buff_rest())
         };
-        //if !input.try_tag(")")? {
+        // if !input.try_tag(")")? {
         //    input.fail_with("No trailing ')'")?;
         //}
         Ok(r)
@@ -375,7 +379,7 @@ pub fn check_sat(t: &Term) -> bool {
 
 fn get_model_solver(t: &Term, inc: bool) -> rsmt2::Solver<Parser> {
     let mut solver = make_solver(Parser, true, inc);
-    //solver.path_tee("solver_com").unwrap();
+    // solver.path_tee("solver_com").unwrap();
     for c in PostOrderIter::new(t.clone()) {
         if let Op::Var(n, s) = &c.op() {
             solver.declare_const(&SmtSymDisp(n), s).unwrap();

@@ -1,6 +1,6 @@
 use circ::cfg::{
-    clap::{self, Parser, ValueEnum},
     CircOpt,
+    clap::{self, Parser, ValueEnum},
 };
 use std::path::PathBuf;
 
@@ -59,13 +59,10 @@ fn main() {
             Mirage::cp_prove_fs(&opts.prover_key, &opts.inputs, &opts.proof, opts.rands).unwrap();
         }
         ProofAction::Verify => {
-            assert!(Mirage::cp_verify_fs(
-                &opts.verifier_key,
-                &opts.inputs,
-                &opts.proof,
-                opts.commits
-            )
-            .unwrap());
+            assert!(
+                Mirage::cp_verify_fs(&opts.verifier_key, &opts.inputs, &opts.proof, opts.commits)
+                    .unwrap()
+            );
         }
         ProofAction::Commit => {
             assert_eq!(

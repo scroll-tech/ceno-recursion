@@ -6,18 +6,17 @@
 //       Can try eliminate ternaries with a constant condition
 //       What would happen if block 0 is a loop to itself? Many analyses would break down!!!
 
-use blocks_optimization::bl_trans_map;
-use blocks_optimization::rp_replacement_stmt;
+use blocks_optimization::{bl_trans_map, rp_replacement_stmt};
 use log::debug;
 
-use crate::front::field_list::FieldList;
-use crate::front::zsharp::pretty::*;
-use crate::front::zsharp::PathBuf;
-use crate::front::zsharp::Ty;
-use crate::front::zsharp::ZGen;
-use crate::front::zsharp::*;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::convert::TryInto;
+use crate::front::{
+    field_list::FieldList,
+    zsharp::{PathBuf, Ty, ZGen, pretty::*, *},
+};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    convert::TryInto,
+};
 use zokrates_pest_ast::*;
 
 const STORE: usize = 0;
@@ -260,16 +259,16 @@ pub struct Block<'ast> {
 #[derive(Clone, PartialEq, Debug)]
 pub enum BlockContent<'ast> {
     //       val   type  liveness
-    Witness((String, Ty, bool)), // Dead witnesses will still be provided by the prover, and thus liveness must be explicitly stated
+    Witness((String, Ty, bool)), /* Dead witnesses will still be provided by the prover, and thus liveness must be explicitly stated */
     //       val   type  offset
     MemPush((String, Ty, usize)), // %PHY[%SP + offset] = val
     MemPop((String, Ty, usize)),  // val = %PHY[%BP + offset]
     //          arr   type size_expr         read_only
     ArrayInit((String, Ty, Expression<'ast>, bool)),
     //     val_expr         type   arr   id_expr           init?  read-only?
-    Store((Expression<'ast>, Ty, String, Expression<'ast>, bool, bool)), // arr[id] = val, if read-only then no timestamp & load/store
+    Store((Expression<'ast>, Ty, String, Expression<'ast>, bool, bool)), /* arr[id] = val, if read-only then no timestamp & load/store */
     //    var    type   arr   id_expr           read_only?
-    Load((String, Ty, String, Expression<'ast>, bool)), // val = arr[id], if read-only then no timestamp & load/store
+    Load((String, Ty, String, Expression<'ast>, bool)), /* val = arr[id], if read-only then no timestamp & load/store */
     //        read_only?
     DummyLoad(bool),
     Branch(
@@ -285,8 +284,8 @@ pub enum BlockContent<'ast> {
 #[derive(Clone)]
 // Coda is the number of total types of blocks
 pub enum BlockTerminator<'ast> {
-    Transition(Expression<'ast>), // Expression that should be evaluated to either a const int or "rp@"
-    FuncCall(String), // Placeholders before blocks corresponding to each function has been determined
+    Transition(Expression<'ast>), /* Expression that should be evaluated to either a const int or "rp@" */
+    FuncCall(String), /* Placeholders before blocks corresponding to each function has been determined */
     ProgTerm,         // The program terminates
 }
 
@@ -937,7 +936,7 @@ impl<'ast> ZGen<'ast> {
         &'ast self,
         mut blks: Vec<Block<'ast>>,
         mut blks_len: usize,
-        args: Vec<Expression<'ast>>, // We do not use &args here because Expressions might be reconstructed
+        args: Vec<Expression<'ast>>, /* We do not use &args here because Expressions might be reconstructed */
         f_path: PathBuf,
         f_name: String,
         func_count: usize,
@@ -1785,7 +1784,10 @@ impl<'ast> ZGen<'ast> {
                                                     entry_ty = members.clone().into_map().get(&m.id.value)
                                                         .ok_or(format!("Array struct {} does not have member {}!", l.id.value, m.id.value))?.clone();
                                                 } else {
-                                                    return Err(format!("Cannot perform member access on non-struct {}!", l.id.value));
+                                                    return Err(format!(
+                                                        "Cannot perform member access on non-struct {}!",
+                                                        l.id.value
+                                                    ));
                                                 }
                                             } else {
                                                 break;
@@ -3119,7 +3121,10 @@ impl<'ast> ZGen<'ast> {
                                         })?
                                         .clone()
                                 } else {
-                                    return Err(format!("Accessing member {} of a variable {} that is not a struct!", member_name, var_extended_name));
+                                    return Err(format!(
+                                        "Accessing member {} of a variable {} that is not a struct!",
+                                        member_name, var_extended_name
+                                    ));
                                 };
                                 member_ty
                             }

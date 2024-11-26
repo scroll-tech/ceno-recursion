@@ -652,7 +652,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     );
 
     // We need one proof per poly size + L size
-    let mut index_map: HashMap<(usize, Vec<S>), usize> = HashMap::new();
+    let index_map: HashMap<(usize, Vec<S>), usize> = HashMap::new();
     let mut Zc_list = Vec::new();
     let mut L_list: Vec<Vec<S>> = Vec::new();
     let mut R_list: Vec<Vec<S>> = Vec::new();

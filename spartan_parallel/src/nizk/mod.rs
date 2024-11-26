@@ -4,7 +4,7 @@ use crate::scalar::SpartanExtensionField;
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::random::RandomTape;
-use super::transcript::{AppendToTranscript, ProofTranscript};
+use super::transcript::ProofTranscript;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 mod bullet;

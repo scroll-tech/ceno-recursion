@@ -18,7 +18,6 @@ use std::{
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;
 
-use crate::transcript::AppendToTranscript;
 use merlin::Transcript;
 
 /// Trait describing the field element
@@ -35,21 +34,17 @@ pub trait SpartanExtensionField:
   + Zeroize
   + Neg
   + Default
-
   + Add<Output = Self>
   + for<'a> Add<&'a Self, Output = Self>
   + AddAssign
   + for<'a> AddAssign<&'a Self>
-
   + Sub<Output = Self>
   + for<'a> Sub<&'a Self, Output = Self>
   + SubAssign
   + for<'a> SubAssign<&'a Self>
-
   + Mul<Output = Self>
   + MulAssign
   + for<'a> MulAssign<&'a Self>
-
   + Sum
   + Product
   + Clone

@@ -14,7 +14,7 @@ use zeroize::Zeroize;
 /// Constant representing the modulus
 /// q = 2^64 - 2^32 + 1
 /// 0xFFFFFFFF00000001
-const P: u64 = 0xFFFF_FFFF_0000_0001;
+const P: u64 = ceno_goldilocks::MODULUS;
 
 /// Field wrapper around base Goldilocks
 #[derive(Clone, Copy, Eq, Serialize, Deserialize, Hash, Debug)]

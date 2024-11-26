@@ -1,5 +1,4 @@
 //! Translation from IR to MILP
-//!
 
 // Needed until https://github.com/rust-lang/rust-clippy/pull/8183 is resolved.
 #![allow(clippy::identity_op)]

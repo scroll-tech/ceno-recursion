@@ -7,7 +7,6 @@ use fxhash::FxHashSet;
 /// This is a tool for sweeping a list of equations, some of which define new variables as
 /// functions of previous ones, and eliminating these new variables, by substituting them
 /// elsewhere.
-///
 pub struct Inliner<'a> {
     /// Map from variables to their values.
     /// Invariant: no key variable in in any value variable.

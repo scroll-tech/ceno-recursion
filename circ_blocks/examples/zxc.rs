@@ -13,6 +13,7 @@ use circ::{
     target::r1cs::{Lc, ProverData, VarType, trans::to_r1cs, wit_comp::StagedWitCompEvaluator},
 };
 use core::cmp::min;
+use libspartan::scalar::{Scalar, SpartanExtensionField};
 use rug::Integer;
 
 use std::{
@@ -28,8 +29,7 @@ use core::cmp::Ordering;
 use std::path::{Path, PathBuf};
 
 use libspartan::{
-    Assignment, InputsAssignment, MemsAssignment, SNARK, SNARKGens, VarsAssignment,
-    instance::Instance,
+    Assignment, InputsAssignment, MemsAssignment, SNARK, VarsAssignment, instance::Instance,
 };
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
@@ -352,7 +352,7 @@ impl CompileTimeKnowledge {
 }
 
 #[derive(Serialize, Deserialize)]
-struct RunTimeKnowledge {
+struct RunTimeKnowledge<S: SpartanExtensionField> {
     block_max_num_proofs: usize,
     block_num_proofs: Vec<usize>,
     consis_num_proofs: usize,
@@ -361,14 +361,14 @@ struct RunTimeKnowledge {
     total_num_phy_mem_accesses: usize,
     total_num_vir_mem_accesses: usize,
 
-    block_vars_matrix: Vec<Vec<VarsAssignment>>,
-    exec_inputs: Vec<InputsAssignment>,
+    block_vars_matrix: Vec<Vec<VarsAssignment<S>>>,
+    exec_inputs: Vec<InputsAssignment<S>>,
     // Initial memory state, in (addr, val, ls = STORE, ts = 0) pair, sorted by appearance in program input (the same as address order)
-    init_phy_mems_list: Vec<MemsAssignment>,
-    init_vir_mems_list: Vec<MemsAssignment>,
-    addr_phy_mems_list: Vec<MemsAssignment>,
-    addr_vir_mems_list: Vec<MemsAssignment>,
-    addr_ts_bits_list: Vec<MemsAssignment>,
+    init_phy_mems_list: Vec<MemsAssignment<S>>,
+    init_vir_mems_list: Vec<MemsAssignment<S>>,
+    addr_phy_mems_list: Vec<MemsAssignment<S>>,
+    addr_vir_mems_list: Vec<MemsAssignment<S>>,
+    addr_ts_bits_list: Vec<MemsAssignment<S>>,
 
     input: Vec<[u8; 32]>,
     input_stack: Vec<[u8; 32]>,
@@ -377,7 +377,7 @@ struct RunTimeKnowledge {
     output_exec_num: usize,
 }
 
-impl RunTimeKnowledge {
+impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
     fn serialize_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
         let file_name = format!("../zok_tests/inputs/{benchmark_name}_bin.rtk");
         create_dir_all(Path::new(&file_name).parent().unwrap())?;
@@ -829,7 +829,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 // --
 // Generate witnesses and others
 // --
-fn get_run_time_knowledge<const VERBOSE: bool>(
+fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
     path: PathBuf,
     options: &Options,
     entry_regs: Vec<Integer>,
@@ -842,7 +842,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     prover_data_list: Vec<ProverData>,
     total_num_init_phy_mem_accesses: usize,
     total_num_init_vir_mem_accesses: usize,
-) -> RunTimeKnowledge {
+) -> RunTimeKnowledge<S> {
     let num_blocks = ctk.block_num_instances;
     let num_input_unpadded = ctk.num_inputs_unpadded;
     let io_width = 2 * num_input_unpadded;
@@ -1265,7 +1265,10 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     }
 }
 
-fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
+fn run_spartan_proof<S: SpartanExtensionField>(
+    ctk: CompileTimeKnowledge,
+    rtk: RunTimeKnowledge<S>,
+) {
     // --
     // INSTANCE PREPROCESSING
     // --
@@ -1337,46 +1340,14 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
     // --
     // COMMITMENT PREPROCESSING
     // --
-    println!("Producing Public Parameters...");
-    // produce public parameters
-    let block_gens = SNARKGens::new(
-        block_num_cons,
-        block_num_vars,
-        block_num_instances_bound,
-        block_num_non_zero_entries,
-    );
-    let pairwise_check_gens = SNARKGens::new(
-        pairwise_check_num_cons,
-        4 * pairwise_check_num_vars,
-        3,
-        pairwise_check_num_non_zero_entries,
-    );
-    let perm_root_gens = SNARKGens::new(
-        perm_root_num_cons,
-        8 * num_ios,
-        1,
-        perm_root_num_non_zero_entries,
-    );
-    // Only use one version of gens_r1cs_sat
-    let vars_gens = SNARKGens::new(
-        block_num_cons,
-        TOTAL_NUM_VARS_BOUND,
-        block_num_instances_bound.next_power_of_two(),
-        block_num_non_zero_entries,
-    )
-    .gens_r1cs_sat;
-
-    // create a commitment to the R1CS instance
     println!("Comitting Circuits...");
     // block_comm_map records the sparse_polys committed in each commitment
     // Note that A, B, C are committed separately, so sparse_poly[3*i+2] corresponds to poly C of instance i
-    let (block_comm_map, block_comm_list, block_decomm_list) =
-        SNARK::multi_encode(&block_inst, &block_gens);
+    let (block_comm_map, block_comm_list, block_decomm_list) = SNARK::multi_encode(&block_inst);
     println!("Finished Block");
-    let (pairwise_check_comm, pairwise_check_decomm) =
-        SNARK::encode(&pairwise_check_inst, &pairwise_check_gens);
+    let (pairwise_check_comm, pairwise_check_decomm) = SNARK::encode(&pairwise_check_inst);
     println!("Finished Pairwise");
-    let (perm_root_comm, perm_root_decomm) = SNARK::encode(&perm_root_inst, &perm_root_gens);
+    let (perm_root_comm, perm_root_decomm) = SNARK::encode(&perm_root_inst);
     println!("Finished Perm");
 
     // --
@@ -1419,7 +1390,6 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
         &block_comm_map,
         &block_comm_list,
         &block_decomm_list,
-        &block_gens,
         rtk.consis_num_proofs,
         rtk.total_num_init_phy_mem_accesses,
         rtk.total_num_init_vir_mem_accesses,
@@ -1428,7 +1398,6 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
         &mut pairwise_check_inst,
         &pairwise_check_comm,
         &pairwise_check_decomm,
-        &pairwise_check_gens,
         block_vars_matrix,
         rtk.exec_inputs,
         rtk.init_phy_mems_list,
@@ -1439,8 +1408,6 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
         &perm_root_inst,
         &perm_root_comm,
         &perm_root_decomm,
-        &perm_root_gens,
-        &vars_gens,
         &mut prover_transcript,
     );
 
@@ -1476,7 +1443,6 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
                 block_num_cons,
                 &block_comm_map,
                 &block_comm_list,
-                &block_gens,
                 rtk.consis_num_proofs,
                 rtk.total_num_init_phy_mem_accesses,
                 rtk.total_num_init_vir_mem_accesses,
@@ -1484,11 +1450,8 @@ fn run_spartan_proof(ctk: CompileTimeKnowledge, rtk: RunTimeKnowledge) {
                 rtk.total_num_vir_mem_accesses,
                 pairwise_check_num_cons,
                 &pairwise_check_comm,
-                &pairwise_check_gens,
                 perm_root_num_cons,
                 &perm_root_comm,
-                &perm_root_gens,
-                &vars_gens,
                 &mut verifier_transcript
             )
             .is_ok()
@@ -1606,7 +1569,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<false>(
+    let rtk = get_run_time_knowledge::<false, Scalar>(
         path.clone(),
         &options,
         entry_regs,

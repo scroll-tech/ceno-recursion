@@ -192,7 +192,7 @@ pub fn dump_op_stats() {
 }
 
 /// Iterator over descendents in child-first order.
-pub struct PostOrderSkipIter<'a, F: Fn(&Term) -> bool + 'a> {
+pub struct PostOrderSkipIter<'a, F: Fn(&Term) -> bool> {
     // (cs stacked, term)
     stack: Vec<(bool, Term)>,
     visited: TermSet,

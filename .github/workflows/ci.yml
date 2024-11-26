@@ -51,7 +51,7 @@ jobs:
             for cargo_toml in $(git ls-files '**/Cargo.toml'); do
                 (
                     cd "$(dirname ${cargo_toml})"
-                    cargo +nightly fmt --check
+                    cargo +nightly-2024-10-03 fmt --check
                     cargo check --all-targets
                 )
             done

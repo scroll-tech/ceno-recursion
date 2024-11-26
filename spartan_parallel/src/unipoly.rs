@@ -93,7 +93,7 @@ impl<Scalar: SpartanExtensionField> CompressedUniPoly<Scalar> {
     let mut linear_term =
       *hint - self.coeffs_except_linear_term[0] - self.coeffs_except_linear_term[0];
     for i in 1..self.coeffs_except_linear_term.len() {
-      linear_term = linear_term - self.coeffs_except_linear_term[i];
+      linear_term -= self.coeffs_except_linear_term[i];
     }
 
     let mut coeffs = vec![self.coeffs_except_linear_term[0], linear_term];

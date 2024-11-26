@@ -1868,7 +1868,6 @@ impl<S: SpartanExtensionField> SNARK<S> {
       (proof, block_challenges)
     };
 
-    
     // Final evaluation on BLOCK
     let (block_inst_evals_bound_rp, block_inst_evals_list, block_r1cs_eval_proof_list) = {
       let [rp, _, rx, ry] = block_challenges;

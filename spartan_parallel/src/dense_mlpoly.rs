@@ -382,9 +382,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     let eq = EqPolynomial::new(r.to_vec());
     let (L, R) = eq.compute_factored_evals();
 
-    let _ = self
-      .proof
-      .verify(R.len(), transcript, &R);
+    let _ = self.proof.verify(R.len(), transcript, &R);
 
     // TODO: Alternative PCS Verification
     Ok(())
@@ -394,7 +392,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     &self,
     transcript: &mut Transcript,
     r: &[S], // point at which the polynomial is evaluated
-    _Zr: &S,  // evaluation \widetilde{Z}(r)
+    _Zr: &S, // evaluation \widetilde{Z}(r)
   ) -> Result<(), ProofVerifyError> {
     self.verify(transcript, r);
 
@@ -862,7 +860,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
         // compute a weighted sum of commitments and L
         let LZ = S::field_zero();
         L_list.push(L);
-        R_list.push(R);        
+        R_list.push(R);
         LZ_list.push(LZ);
       }
     }
@@ -873,9 +871,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     for i in 0..LZ_list.len() {
       let R = &R_list[i];
 
-      proof_list[i]
-        .proof
-        .verify(R.len(), transcript, R)?;
+      proof_list[i].proof.verify(R.len(), transcript, R)?;
     }
 
     Ok(())

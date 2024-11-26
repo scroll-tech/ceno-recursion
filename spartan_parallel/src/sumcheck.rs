@@ -91,7 +91,7 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
     for i in 0..num_rounds {
       // derive the verifier's challenge for the next round
       let r_i = transcript.challenge_scalar(b"challenge_nextround");
-      
+
       // verify the proof of sum-check and evals
       let res = {
         // produce two weights
@@ -121,12 +121,7 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
             .collect::<Vec<S>>()
         };
 
-        self.proofs[i]
-          .verify(
-            transcript,
-            &a,
-          )
-          .is_ok()
+        self.proofs[i].verify(transcript, &a).is_ok()
       };
 
       r.push(r_i);

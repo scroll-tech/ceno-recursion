@@ -755,9 +755,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     timer_commit_opening.stop();
 
     // verify proof that expected_claim_post_phase2 == claim_post_phase2
-    self.proof_eq_sc_phase2.verify(
-      transcript,
-    )?;
+    self.proof_eq_sc_phase2.verify(transcript)?;
 
     Ok([rp, rq_rev, rx, [rw, ry].concat()])
   }

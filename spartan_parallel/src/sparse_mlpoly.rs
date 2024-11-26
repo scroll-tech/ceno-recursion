@@ -831,8 +831,8 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
     let eval_init_addr = IdentityPolynomial::new(rand_mem.len()).evaluate(rand_mem);
     let eval_init_val = EqPolynomial::new(r.to_vec()).evaluate(rand_mem);
     let hash_init_at_rand_mem =
-      hash_func(&eval_init_addr, &eval_init_val, &S::field_zero()) - *r_multiset_check; 
-      
+      hash_func(&eval_init_addr, &eval_init_val, &S::field_zero()) - *r_multiset_check;
+
     // verify the claim_last of init chunk
     assert_eq!(&hash_init_at_rand_mem, claim_init);
 

@@ -57,6 +57,9 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
       // derive the verifier's challenge for the next round
       let r_i = transcript.challenge_scalar(b"challenge_nextround");
 
+      // scalar_debug
+      // println!("=> SumcheckInstanceProof-verify, challenge round {:?} - {:?}", i, r_i);
+
       r.push(r_i);
 
       // evaluate the claimed degree-ell polynomial at r_i
@@ -80,14 +83,51 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
   pub fn verify(
     &self,
     num_rounds: usize,
-    _degree_bound: usize,
+    degree_bound: usize,
     transcript: &mut Transcript,
   ) -> Result<Vec<S>, ProofVerifyError> {
     let mut r: Vec<S> = Vec::new();
 
-    for _i in 0..num_rounds {
+    for i in 0..num_rounds {
       // derive the verifier's challenge for the next round
       let r_i = transcript.challenge_scalar(b"challenge_nextround");
+      
+      // verify the proof of sum-check and evals
+      let res = {
+        // produce two weights
+        let w: Vec<S> = transcript.challenge_vector(b"combine_two_claims_to_one", 2);
+
+        let a = {
+          // the vector to use to decommit for sum-check test
+          let a_sc = {
+            let mut a = vec![S::field_one(); degree_bound + 1];
+            a[0] = a[0] + S::field_one();
+            a
+          };
+
+          // the vector to use to decommit for evaluation
+          let a_eval = {
+            let mut a = vec![S::field_one(); degree_bound + 1];
+            for j in 1..a.len() {
+              a[j] = a[j - 1] * r_i;
+            }
+            a
+          };
+
+          // take weighted sum of the two vectors using w
+          assert_eq!(a_sc.len(), a_eval.len());
+          (0..a_sc.len())
+            .map(|i| w[0] * a_sc[i] + w[1] * a_eval[i])
+            .collect::<Vec<S>>()
+        };
+
+        self.proofs[i]
+          .verify(
+            transcript,
+            &a,
+          )
+          .is_ok()
+      };
 
       r.push(r_i);
     }
@@ -291,6 +331,10 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
 
       //derive the verifier's challenge for the next round
       let r_j = transcript.challenge_scalar(b"challenge_nextround");
+
+      // scalar_debug
+      // println!("=> prove_cubic_batched, challenge round {:?} - {:?}", _j, r_j);
+
       r.push(r_j);
 
       // bound all tables to the verifier's challenege

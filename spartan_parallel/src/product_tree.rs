@@ -322,6 +322,7 @@ impl<S: SpartanExtensionField> ProductCircuitEvalProofBatched<S> {
       // produce a fresh set of coeffs and a joint claim
       let coeff_vec =
         transcript.challenge_vector(b"rand_coeffs_next_layer", claims_to_verify.len());
+
       let claim = (0..claims_to_verify.len())
         .map(|i| claims_to_verify[i] * coeff_vec[i])
         .sum();
@@ -407,7 +408,7 @@ impl<S: SpartanExtensionField> ProductCircuitEvalProofBatched<S> {
         .map(|i| claims_to_verify[i] * coeff_vec[i])
         .sum();
 
-      let (_claim_last, rand_prod) = self.proof[i].verify(claim, num_rounds, 3, transcript);
+      let (claim_last, rand_prod) = self.proof[i].verify(claim, num_rounds, 3, transcript);
 
       let claims_prod_left = &self.proof[i].claims_prod_left;
       let claims_prod_right = &self.proof[i].claims_prod_right;
@@ -446,9 +447,7 @@ impl<S: SpartanExtensionField> ProductCircuitEvalProofBatched<S> {
         }
       }
 
-      /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       assert_eq!(claim_expected, claim_last);
-      */
 
       // produce a random challenge
       let r_layer = transcript.challenge_scalar(b"challenge_r_layer");

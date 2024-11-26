@@ -1846,6 +1846,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       &block_w3_prover,
       &block_w3_shifted_prover,
     ];
+
     let (block_r1cs_sat_proof, block_challenges) = {
       let (proof, block_challenges) = {
         R1CSProof::prove(
@@ -1867,6 +1868,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       (proof, block_challenges)
     };
 
+    
     // Final evaluation on BLOCK
     let (block_inst_evals_bound_rp, block_inst_evals_list, block_r1cs_eval_proof_list) = {
       let [rp, _, rx, ry] = block_challenges;
@@ -1881,6 +1883,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       for r in &inst_evals_list {
         S::append_field_to_transcript(b"ABCr_claim", transcript, *r);
       }
+
       // Sample random combinations of A, B, C for inst_evals_bound_rp check in the Verifier
       // The random values are not used by the prover, but need to be appended to the transcript
       let _: S = transcript.challenge_scalar(b"challenge_c0");
@@ -1901,6 +1904,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
             transcript,
             &mut random_tape,
           );
+
           let proof_encoded: Vec<u8> = bincode::serialize(&proof).unwrap();
           Timer::print(&format!("len_r1cs_eval_proof {:?}", proof_encoded.len()));
 
@@ -2864,6 +2868,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
         &block_w3_verifier,
         &block_w3_shifted_verifier,
       ];
+
       let block_challenges = self.block_r1cs_sat_proof.verify(
         block_num_instances,
         block_max_num_proofs,
@@ -2883,6 +2888,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       for r in &self.block_inst_evals_list {
         S::append_field_to_transcript(b"ABCr_claim", transcript, *r);
       }
+
       // Sample random combinations of A, B, C for inst_evals_bound_rp check
       let c0: S = transcript.challenge_scalar(b"challenge_c0");
       let c1: S = transcript.challenge_scalar(b"challenge_c1");
@@ -2908,6 +2914,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
           transcript,
         )?;
       }
+
       // Permute block_inst_evals_list to the correct order for RP evaluation
       let _ABC_evals: Vec<S> = (0..block_num_instances)
         .map(|i| ABC_evals[block_index[i]])

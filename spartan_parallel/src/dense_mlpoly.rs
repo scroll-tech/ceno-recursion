@@ -370,19 +370,34 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 
   pub fn verify(
     &self,
-    _transcript: &mut Transcript,
-    _r: &[S], // point at which the polynomial is evaluated
+    transcript: &mut Transcript,
+    r: &[S], // point at which the polynomial is evaluated
   ) -> Result<(), ProofVerifyError> {
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      PolyEvalProof::<S>::protocol_name(),
+    );
+
+    // compute L and R
+    let eq = EqPolynomial::new(r.to_vec());
+    let (L, R) = eq.compute_factored_evals();
+
+    let _ = self
+      .proof
+      .verify(R.len(), transcript, &R);
+
     // TODO: Alternative PCS Verification
     Ok(())
   }
 
   pub fn verify_plain(
     &self,
-    _transcript: &mut Transcript,
-    _r: &[S], // point at which the polynomial is evaluated
+    transcript: &mut Transcript,
+    r: &[S], // point at which the polynomial is evaluated
     _Zr: &S,  // evaluation \widetilde{Z}(r)
   ) -> Result<(), ProofVerifyError> {
+    self.verify(transcript, r);
+
     // TODO: Alternative PCS Verification
     Ok(())
   }
@@ -758,6 +773,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     }
 
     let mut proof_list = Vec::new();
+
     for i in 0..LZ_list.len() {
       let L = &L_list[i];
       let L_size = L.len();
@@ -781,8 +797,10 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
         &Zc_list[i],
         blind_Zr,
       );
+
       proof_list.push(PolyEvalProof { proof });
     }
+
     proof_list
   }
 
@@ -801,6 +819,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 
     // We need one proof per poly size
     let mut index_map: HashMap<(usize, usize), usize> = HashMap::new();
+    let mut LZ_list: Vec<S> = Vec::new();
     let mut L_list = Vec::new();
     let mut R_list = Vec::new();
 
@@ -815,7 +834,11 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
       if let Some(index) = index_map.get(&(num_proofs, num_inputs)) {
         c = c * c_base;
         let _L = &L_list[*index];
+
+        let LZ = S::field_zero();
+        LZ_list[*index] = LZ_list[*index] + c * LZ;
       } else {
+        index_map.insert((num_proofs, num_inputs), LZ_list.len());
         let num_vars_q = num_proofs.log_2();
         let num_vars_y = num_inputs.log_2();
         // pad or trim rq and ry to correct length
@@ -837,9 +860,22 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
           eq.compute_factored_evals()
         };
         // compute a weighted sum of commitments and L
+        let LZ = S::field_zero();
         L_list.push(L);
-        R_list.push(R);
+        R_list.push(R);        
+        LZ_list.push(LZ);
       }
+    }
+
+    assert_eq!(LZ_list.len(), proof_list.len());
+
+    // Verify proofs
+    for i in 0..LZ_list.len() {
+      let R = &R_list[i];
+
+      proof_list[i]
+        .proof
+        .verify(R.len(), transcript, R)?;
     }
 
     Ok(())

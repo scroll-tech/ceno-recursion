@@ -251,6 +251,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       transcript,
       random_tape,
     );
+
     assert_eq!(poly_tau_p.len(), 1);
     assert_eq!(poly_tau_q.len(), 1);
     assert_eq!(poly_tau_x.len(), 1);
@@ -464,6 +465,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
         }
       }
     }
+
     let proof_eval_vars_at_ry_list = PolyEvalProof::prove_batched_instances_disjoint_rounds(
       &poly_list,
       &num_proofs_list,
@@ -751,6 +753,11 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     }
 
     timer_commit_opening.stop();
+
+    // verify proof that expected_claim_post_phase2 == claim_post_phase2
+    self.proof_eq_sc_phase2.verify(
+      transcript,
+    )?;
 
     Ok([rp, rq_rev, rx, [rw, ry].concat()])
   }

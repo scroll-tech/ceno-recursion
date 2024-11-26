@@ -44,7 +44,14 @@ impl<S: SpartanExtensionField> KnowledgeProof<S> {
     KnowledgeProof { z1, z2 }
   }
 
-  pub fn verify(&self, _transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
+  pub fn verify(&self, transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      KnowledgeProof::<S>::protocol_name(),
+    );
+
+    let c: S = transcript.challenge_scalar(b"c");
+
     // TODO: Alternative PCS Verification
     Ok(())
   }
@@ -81,7 +88,14 @@ impl<S: SpartanExtensionField> EqualityProof<S> {
     EqualityProof { z }
   }
 
-  pub fn verify(&self, _transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
+  pub fn verify(&self, transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      EqualityProof::<S>::protocol_name(),
+    );
+
+    let c: S = transcript.challenge_scalar(b"c");
+
     // TODO: Alternative PCS Verification
     Ok(())
   }
@@ -136,7 +150,14 @@ impl<S: SpartanExtensionField> ProductProof<S> {
     true
   }
 
-  pub fn verify(&self, _transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
+  pub fn verify(&self, transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      ProductProof::<S>::protocol_name(),
+    );
+
+    let c: S = transcript.challenge_scalar(b"c");
+
     // TODO: Alternative PCS Verification
     Ok(())
   }
@@ -183,6 +204,7 @@ impl<S: SpartanExtensionField> DotProductProof<S> {
 
     let _dotproduct_a_d = DotProductProof::compute_dotproduct(a_vec, &d_vec);
 
+    S::append_field_vector_to_transcript(b"a", transcript, a_vec);
     let c: S = transcript.challenge_scalar(b"c");
 
     let z = (0..d_vec.len())
@@ -201,7 +223,8 @@ impl<S: SpartanExtensionField> DotProductProof<S> {
       DotProductProof::<S>::protocol_name(),
     );
     S::append_field_vector_to_transcript(b"a", transcript, a);
-    let _c: S = transcript.challenge_scalar(b"c");
+    let c: S = transcript.challenge_scalar(b"c");
+
     let _dotproduct_z_a = DotProductProof::compute_dotproduct(&self.z, a);
 
     // TODO: Alternative PCS Verification
@@ -275,10 +298,33 @@ impl<S: SpartanExtensionField> DotProductProofLog<S> {
 
   pub fn verify(
     &self,
-    _n: usize,
-    _transcript: &mut Transcript,
-    _a: &[S],
+    n: usize,
+    transcript: &mut Transcript,
+    a: &[S],
   ) -> Result<(), ProofVerifyError> {
+    assert_eq!(a.len(), n);
+
+    <Transcript as ProofTranscript<S>>::append_protocol_name(
+      transcript,
+      DotProductProofLog::<S>::protocol_name(),
+    );
+
+    S::append_field_vector_to_transcript(b"a", transcript, a);
+
+    // sample a random base and scale the generator used for
+    // the output of the inner product
+    let r: S = transcript.challenge_scalar(b"r");
+
+    // BulletReductionProof - verification_scalars
+    let mut m = a.len();
+    while m != 1 {
+      m /= 2;
+
+      let u: S = transcript.challenge_scalar(b"u");
+    }
+
+    let c: S = transcript.challenge_scalar(b"c");
+
     // TODO: Alternative PCS Verification
     Ok(())
   }

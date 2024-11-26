@@ -56,6 +56,7 @@ impl<S: SpartanExtensionField> BulletReductionProof<S> {
       let (blind_L, blind_R) = blinds_iter.next().unwrap();
 
       let u: S = transcript.challenge_scalar(b"u");
+
       let u_inv = u.invert().unwrap();
 
       for i in 0..n {

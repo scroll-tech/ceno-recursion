@@ -831,19 +831,17 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
     let eval_init_addr = IdentityPolynomial::new(rand_mem.len()).evaluate(rand_mem);
     let eval_init_val = EqPolynomial::new(r.to_vec()).evaluate(rand_mem);
     let hash_init_at_rand_mem =
-      hash_func(&eval_init_addr, &eval_init_val, &S::field_zero()) - *r_multiset_check; // verify the claim_last of init chunk
-                                                                                        /* TODO: IMPORTANT, DEBUG, CHECK FAIL
-                                                                                        assert_eq!(&hash_init_at_rand_mem, claim_init);
-                                                                                        */
+      hash_func(&eval_init_addr, &eval_init_val, &S::field_zero()) - *r_multiset_check; 
+      
+    // verify the claim_last of init chunk
+    assert_eq!(&hash_init_at_rand_mem, claim_init);
 
     // read
     for i in 0..eval_ops_addr.len() {
       let hash_read_at_rand_ops =
         hash_func(&eval_ops_addr[i], &eval_ops_val[i], &eval_read_ts[i]) - *r_multiset_check;
       // verify the claim_last of init chunk
-      /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       assert_eq!(&hash_read_at_rand_ops, &claim_read[i]);
-      */
     }
 
     // write: shares addr, val component; only decommit write_ts
@@ -852,9 +850,7 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
       let hash_write_at_rand_ops =
         hash_func(&eval_ops_addr[i], &eval_ops_val[i], &eval_write_ts) - *r_multiset_check;
       // verify the claim_last of init chunk
-      /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       assert_eq!(&hash_write_at_rand_ops, &claim_write[i]);
-      */
     }
 
     // audit: shares addr and val with init
@@ -862,9 +858,7 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
     let eval_audit_val = eval_init_val;
     let hash_audit_at_rand_mem =
       hash_func(&eval_audit_addr, &eval_audit_val, eval_audit_ts) - *r_multiset_check;
-    /* TODO: IMPORTANT, DEBUG, CHECK FAIL
     assert_eq!(&hash_audit_at_rand_mem, claim_audit); // verify the last step of the sum-check for audit
-    */
 
     Ok(())
   }
@@ -905,11 +899,9 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
       let claim_col_ops_val = claims_dotp[3 * i + 1];
       let claim_val = claims_dotp[3 * i + 2];
 
-      /* TODO: IMPORTANT, DEBUG, CHECK FAIL
       assert_eq!(claim_row_ops_val, eval_row_ops_val[i]);
       assert_eq!(claim_col_ops_val, eval_col_ops_val[i]);
-      assert_eq!(claim_val, eval_val_vec[i]);\
-      */
+      assert_eq!(claim_val, eval_val_vec[i]);
     }
 
     // verify addr-timestamps using comm_comb_ops at rand_ops
@@ -1170,7 +1162,6 @@ impl<S: SpartanExtensionField> ProductLayerProof<S> {
       transcript,
       ProductLayerProof::<S>::protocol_name(),
     );
-
     let timer = Timer::new("verify_prod_proof");
     let num_instances = eval.len();
 

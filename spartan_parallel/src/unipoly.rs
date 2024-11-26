@@ -6,24 +6,24 @@ use serde::{Deserialize, Serialize};
 // ax^2 + bx + c stored as vec![c,b,a]
 // ax^3 + bx^2 + cx + d stored as vec![d,c,b,a]
 #[derive(Debug)]
-pub struct UniPoly<S: SpartanExtensionField> {
-  coeffs: Vec<S>,
+pub struct UniPoly<Scalar: SpartanExtensionField> {
+  coeffs: Vec<Scalar>,
 }
 
 // ax^2 + bx + c stored as vec![c,a]
 // ax^3 + bx^2 + cx + d stored as vec![d,b,a]
 #[derive(Serialize, Deserialize, Debug)]
-pub struct CompressedUniPoly<S: SpartanExtensionField> {
-  coeffs_except_linear_term: Vec<S>,
+pub struct CompressedUniPoly<Scalar: SpartanExtensionField> {
+  coeffs_except_linear_term: Vec<Scalar>,
 }
 
-impl<S: SpartanExtensionField> UniPoly<S> {
-  pub fn from_evals(evals: &[S]) -> Self {
+impl<Scalar: SpartanExtensionField> UniPoly<Scalar> {
+  pub fn from_evals(evals: &[Scalar]) -> Self {
     // we only support degree-2 or degree-3 univariate polynomials
     assert!(evals.len() == 3 || evals.len() == 4);
     let coeffs = if evals.len() == 3 {
       // ax^2 + bx + c
-      let two_inv = S::from(2_usize).invert().unwrap();
+      let two_inv = Scalar::from(2_usize).invert().unwrap();
 
       let c = evals[0];
       let a = two_inv * (evals[2] - evals[1] - evals[1] + c);
@@ -31,8 +31,8 @@ impl<S: SpartanExtensionField> UniPoly<S> {
       vec![c, b, a]
     } else {
       // ax^3 + bx^2 + cx + d
-      let two_inv = S::from(2_usize).invert().unwrap();
-      let six_inv = S::from(6_usize).invert().unwrap();
+      let two_inv = Scalar::from(2_usize).invert().unwrap();
+      let six_inv = Scalar::from(6_usize).invert().unwrap();
 
       let d = evals[0];
       let a = six_inv
@@ -55,19 +55,19 @@ impl<S: SpartanExtensionField> UniPoly<S> {
     self.coeffs.len() - 1
   }
 
-  pub fn as_vec(&self) -> Vec<S> {
+  pub fn as_vec(&self) -> Vec<Scalar> {
     self.coeffs.clone()
   }
 
-  pub fn eval_at_zero(&self) -> S {
+  pub fn eval_at_zero(&self) -> Scalar {
     self.coeffs[0]
   }
 
-  pub fn eval_at_one(&self) -> S {
+  pub fn eval_at_one(&self) -> Scalar {
     (0..self.coeffs.len()).map(|i| self.coeffs[i]).sum()
   }
 
-  pub fn evaluate(&self, r: &S) -> S {
+  pub fn evaluate(&self, r: &Scalar) -> Scalar {
     let mut eval = self.coeffs[0];
     let mut power = *r;
     for i in 1..self.coeffs.len() {
@@ -77,7 +77,7 @@ impl<S: SpartanExtensionField> UniPoly<S> {
     eval
   }
 
-  pub fn compress(&self) -> CompressedUniPoly<S> {
+  pub fn compress(&self) -> CompressedUniPoly<Scalar> {
     let coeffs_except_linear_term = [&self.coeffs[..1], &self.coeffs[2..]].concat();
     assert_eq!(coeffs_except_linear_term.len() + 1, self.coeffs.len());
     CompressedUniPoly {

@@ -109,9 +109,9 @@ impl<S: SpartanExtensionField> Assignment<S> {
   }
 
   /// Write the assignment into a file
-  pub fn write(&self, mut f: &File) -> std::io::Result<()> {
+  pub fn write(&self, f: &File) -> std::io::Result<()> {
     for assg in &self.assignment {
-      write_bytes(&mut f, &assg.to_bytes())?;
+      write_bytes(f, &assg.to_bytes())?;
     }
     Ok(())
   }

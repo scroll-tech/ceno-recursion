@@ -80,25 +80,21 @@ pub trait SpartanExtensionField:
   );
 
   /// Return the neg of field element
-  #[inline]
   fn negate(&self) -> Self {
     self.inner().neg().into()
   }
 
   /// Doubles this field element.
-  #[inline]
   fn double(&self) -> Self {
     self.add(*self)
   }
 
   /// Squares this element.
-  #[inline]
   fn square(&self) -> Self {
     self.mul(*self)
   }
 
   /// Negates `self`.
-  #[inline]
   fn neg(&self) -> Self {
     self.inner().neg().into()
   }
@@ -186,7 +182,6 @@ macro_rules! impl_add_binop_specify_output {
     impl<'b> Add<&'b $rhs> for $lhs {
       type Output = $output;
 
-      #[inline]
       fn add(self, rhs: &'b $rhs) -> $output {
         &self + rhs
       }
@@ -195,7 +190,6 @@ macro_rules! impl_add_binop_specify_output {
     impl<'a> Add<$rhs> for &'a $lhs {
       type Output = $output;
 
-      #[inline]
       fn add(self, rhs: $rhs) -> $output {
         self + &rhs
       }
@@ -204,7 +198,6 @@ macro_rules! impl_add_binop_specify_output {
     impl Add<$rhs> for $lhs {
       type Output = $output;
 
-      #[inline]
       fn add(self, rhs: $rhs) -> $output {
         &self + &rhs
       }
@@ -219,7 +212,6 @@ macro_rules! impl_sub_binop_specify_output {
     impl<'b> Sub<&'b $rhs> for $lhs {
       type Output = $output;
 
-      #[inline]
       fn sub(self, rhs: &'b $rhs) -> $output {
         &self - rhs
       }
@@ -228,7 +220,6 @@ macro_rules! impl_sub_binop_specify_output {
     impl<'a> Sub<$rhs> for &'a $lhs {
       type Output = $output;
 
-      #[inline]
       fn sub(self, rhs: $rhs) -> $output {
         self - &rhs
       }
@@ -237,7 +228,6 @@ macro_rules! impl_sub_binop_specify_output {
     impl Sub<$rhs> for $lhs {
       type Output = $output;
 
-      #[inline]
       fn sub(self, rhs: $rhs) -> $output {
         &self - &rhs
       }
@@ -261,7 +251,6 @@ macro_rules! impl_binops_multiplicative_mixed {
     impl<'b> Mul<&'b $rhs> for $lhs {
       type Output = $output;
 
-      #[inline]
       fn mul(self, rhs: &'b $rhs) -> $output {
         &self * rhs
       }
@@ -270,7 +259,6 @@ macro_rules! impl_binops_multiplicative_mixed {
     impl<'a> Mul<$rhs> for &'a $lhs {
       type Output = $output;
 
-      #[inline]
       fn mul(self, rhs: $rhs) -> $output {
         self * &rhs
       }
@@ -279,7 +267,6 @@ macro_rules! impl_binops_multiplicative_mixed {
     impl Mul<$rhs> for $lhs {
       type Output = $output;
 
-      #[inline]
       fn mul(self, rhs: $rhs) -> $output {
         &self * &rhs
       }
@@ -294,28 +281,24 @@ macro_rules! impl_binops_additive {
     crate::impl_binops_additive_specify_output!($lhs, $rhs, $lhs);
 
     impl SubAssign<$rhs> for $lhs {
-      #[inline]
       fn sub_assign(&mut self, rhs: $rhs) {
         *self = &*self - &rhs;
       }
     }
 
     impl AddAssign<$rhs> for $lhs {
-      #[inline]
       fn add_assign(&mut self, rhs: $rhs) {
         *self = &*self + &rhs;
       }
     }
 
     impl<'b> SubAssign<&'b $rhs> for $lhs {
-      #[inline]
       fn sub_assign(&mut self, rhs: &'b $rhs) {
         *self = &*self - rhs;
       }
     }
 
     impl<'b> AddAssign<&'b $rhs> for $lhs {
-      #[inline]
       fn add_assign(&mut self, rhs: &'b $rhs) {
         *self = &*self + rhs;
       }
@@ -330,14 +313,12 @@ macro_rules! impl_binops_multiplicative {
     crate::impl_binops_multiplicative_mixed!($lhs, $rhs, $lhs);
 
     impl MulAssign<$rhs> for $lhs {
-      #[inline]
       fn mul_assign(&mut self, rhs: $rhs) {
         *self = &*self * &rhs;
       }
     }
 
     impl<'b> MulAssign<&'b $rhs> for $lhs {
-      #[inline]
       fn mul_assign(&mut self, rhs: &'b $rhs) {
         *self = &*self * rhs;
       }

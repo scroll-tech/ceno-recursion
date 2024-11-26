@@ -117,26 +117,22 @@ impl Zeroize for ScalarExt2 {
 impl Neg for ScalarExt2 {
   type Output = Self;
 
-  #[inline]
   fn neg(self) -> Self {
     self.0.neg().into()
   }
 }
 impl Default for ScalarExt2 {
-  #[inline]
   fn default() -> Self {
     Self::zero()
   }
 }
 impl ScalarExt2 {
   /// Returns zero, the additive identity.
-  #[inline]
   pub const fn zero() -> Self {
     Self(GoldilocksExt2::ZERO)
   }
 
   /// Returns one, the multiplicative identity.
-  #[inline]
   pub const fn one() -> Self {
     Self(GoldilocksExt2::ONE)
   }
@@ -145,7 +141,6 @@ impl ScalarExt2 {
 impl<'a, 'b> Add<&'b ScalarExt2> for &'a ScalarExt2 {
   type Output = ScalarExt2;
 
-  #[inline]
   fn add(self, rhs: &'b ScalarExt2) -> ScalarExt2 {
     self.inner().add(rhs.inner()).into()
   }
@@ -154,7 +149,6 @@ impl<'a, 'b> Add<&'b ScalarExt2> for &'a ScalarExt2 {
 impl<'a, 'b> Sub<&'b ScalarExt2> for &'a ScalarExt2 {
   type Output = ScalarExt2;
 
-  #[inline]
   fn sub(self, rhs: &'b ScalarExt2) -> ScalarExt2 {
     self.inner().sub(rhs.inner()).into()
   }
@@ -163,7 +157,6 @@ impl<'a, 'b> Sub<&'b ScalarExt2> for &'a ScalarExt2 {
 impl<'a, 'b> Mul<&'b ScalarExt2> for &'a ScalarExt2 {
   type Output = ScalarExt2;
 
-  #[inline]
   fn mul(self, rhs: &'b ScalarExt2) -> ScalarExt2 {
     let a = self.inner();
     let b = rhs.inner();

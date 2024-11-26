@@ -126,7 +126,7 @@ fn write_bytes(mut f: &File, bytes: &[u8; 32]) -> std::io::Result<()> {
   for i in 0..size {
     write!(&mut f, "{} ", bytes[i])?;
   }
-  writeln!(&mut f, "")?;
+  writeln!(&mut f)?;
   Ok(())
 }
 
@@ -285,7 +285,7 @@ impl<S: SpartanExtensionField> IOProofs<S> {
     input_indices = input_indices[..live_input.len()].to_vec();
 
     // batch verify all proofs
-    let _ = PolyEvalProof::verify_plain_batched_points(
+    PolyEvalProof::verify_plain_batched_points(
       &self.proofs,
       transcript,
       [
@@ -313,9 +313,7 @@ impl<S: SpartanExtensionField> IOProofs<S> {
         live_input,
       ]
       .concat(),
-    )?;
-
-    Ok(())
+    )
   }
 }
 

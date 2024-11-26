@@ -120,13 +120,11 @@ impl Zeroize for Scalar {
 impl Neg for Scalar {
   type Output = Scalar;
 
-  #[inline]
   fn neg(self) -> Scalar {
     self.0.neg().into()
   }
 }
 impl Default for Scalar {
-  #[inline]
   fn default() -> Self {
     Self::zero()
   }
@@ -138,13 +136,11 @@ impl From<Goldilocks> for Scalar {
 }
 impl Scalar {
   /// Returns zero, the additive identity.
-  #[inline]
   pub const fn zero() -> Self {
     Self(Goldilocks(0u64))
   }
 
   /// Returns one, the multiplicative identity.
-  #[inline]
   pub const fn one() -> Self {
     Self(Goldilocks(1u64))
   }
@@ -153,7 +149,6 @@ impl Scalar {
 impl<'a, 'b> Add<&'b Scalar> for &'a Scalar {
   type Output = Scalar;
 
-  #[inline]
   fn add(self, rhs: &'b Scalar) -> Scalar {
     self.inner().add(rhs.inner()).into()
   }
@@ -162,7 +157,6 @@ impl<'a, 'b> Add<&'b Scalar> for &'a Scalar {
 impl<'a, 'b> Sub<&'b Scalar> for &'a Scalar {
   type Output = Scalar;
 
-  #[inline]
   fn sub(self, rhs: &'b Scalar) -> Scalar {
     self.inner().sub(rhs.inner()).into()
   }
@@ -171,7 +165,6 @@ impl<'a, 'b> Sub<&'b Scalar> for &'a Scalar {
 impl<'a, 'b> Mul<&'b Scalar> for &'a Scalar {
   type Output = Scalar;
 
-  #[inline]
   fn mul(self, rhs: &'b Scalar) -> Scalar {
     self.inner().mul(rhs.inner()).into()
   }

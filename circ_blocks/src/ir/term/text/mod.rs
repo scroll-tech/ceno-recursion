@@ -76,9 +76,11 @@ use fxhash::FxHashMap as HashMap;
 mod lex;
 
 use lex::Token;
-use std::fmt::{self, Debug, Display, Formatter, Write};
-use std::str::{from_utf8, FromStr};
-use std::sync::Arc;
+use std::{
+    fmt::{self, Debug, Display, Formatter, Write},
+    str::{FromStr, from_utf8},
+    sync::Arc,
+};
 
 use super::*;
 

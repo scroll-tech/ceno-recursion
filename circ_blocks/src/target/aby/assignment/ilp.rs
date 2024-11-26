@@ -31,9 +31,8 @@
 
 use fxhash::{FxHashMap, FxHashSet};
 
-use super::{ShareType, SharingMap, SHARE_TYPES};
-use crate::ir::term::*;
-use crate::target::aby::assignment::CostModel;
+use super::{SHARE_TYPES, ShareType, SharingMap};
+use crate::{ir::term::*, target::aby::assignment::CostModel};
 
 use crate::target::ilp::{Expression, Ilp, Variable};
 use good_lp::variable;

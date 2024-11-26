@@ -130,10 +130,7 @@ impl<'a> StagedWitCompEvaluator<'a> {
         let value = eval_op(op, &args, &self.variable_values);
         trace!(
             "Eval step {}: {} on {:?} -> {}",
-            next_step_idx,
-            op,
-            args,
-            value
+            next_step_idx, op, args, value
         );
         self.step_values.push(value);
     }
@@ -214,10 +211,10 @@ mod test {
         let mut comp = StagedWitComp::default();
         let field = FieldT::from(Integer::from(7));
         comp.add_stage(mk_inputs(vec![]), vec![pf_lit(field.new_v(0))]);
-        comp.add_stage(
-            mk_inputs(vec![]),
-            vec![pf_lit(field.new_v(1)), pf_lit(field.new_v(4))],
-        );
+        comp.add_stage(mk_inputs(vec![]), vec![
+            pf_lit(field.new_v(1)),
+            pf_lit(field.new_v(4)),
+        ]);
         comp.add_stage(mk_inputs(vec![]), vec![pf_lit(field.new_v(6))]);
         comp.add_stage(mk_inputs(vec![]), vec![pf_lit(field.new_v(0))]);
 

@@ -6,10 +6,8 @@ extern crate proc_macro2;
 use num_bigint::BigUint;
 use num_integer::Integer;
 use num_traits::{One, ToPrimitive, Zero};
-use quote::quote;
-use quote::TokenStreamExt;
-use std::iter;
-use std::str::FromStr;
+use quote::{TokenStreamExt, quote};
+use std::{iter, str::FromStr};
 
 mod pow_fixed;
 
@@ -191,15 +189,15 @@ fn validate_struct(ast: &syn::DeriveInput, limbs: usize) -> Option<proc_macro2::
             return Some(
                 syn::Error::new_spanned(ast, "PrimeField derive only works for structs.")
                     .to_compile_error(),
-            )
+            );
         }
     };
 
     // The struct should contain a single unnamed field.
-    let fields = match &variant_data.fields {
-        syn::Fields::Unnamed(x) if x.unnamed.len() == 1 => x,
-        _ => {
-            return Some(
+    let fields =
+        match &variant_data.fields {
+            syn::Fields::Unnamed(x) if x.unnamed.len() == 1 => x,
+            _ => return Some(
                 syn::Error::new_spanned(
                     &ast.ident,
                     format!(
@@ -208,9 +206,8 @@ fn validate_struct(ast: &syn::DeriveInput, limbs: usize) -> Option<proc_macro2::
                     ),
                 )
                 .to_compile_error(),
-            )
-        }
-    };
+            ),
+        };
     let field = &fields.unnamed[0];
 
     // The field should be an array.
@@ -226,7 +223,7 @@ fn validate_struct(ast: &syn::DeriveInput, limbs: usize) -> Option<proc_macro2::
                     ),
                 )
                 .to_compile_error(),
-            )
+            );
         }
     };
 
@@ -268,7 +265,7 @@ fn validate_struct(ast: &syn::DeriveInput, limbs: usize) -> Option<proc_macro2::
                     format!("To derive PrimeField, change this to `[u64; {}]`.", limbs),
                 )
                 .to_compile_error(),
-            )
+            );
         }
     };
     if lit_int.base10_digits() != limbs.to_string() {
@@ -287,7 +284,7 @@ fn validate_struct(ast: &syn::DeriveInput, limbs: usize) -> Option<proc_macro2::
         _ => {
             return Some(
                 syn::Error::new_spanned(&field.vis, "Field must not be public.").to_compile_error(),
-            )
+            );
         }
     }
 

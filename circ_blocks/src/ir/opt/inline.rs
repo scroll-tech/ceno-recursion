@@ -1,15 +1,12 @@
 //! Substitutions
 
 use super::cfold;
-use crate::ir::term::extras::*;
-use crate::ir::term::*;
+use crate::ir::term::{extras::*, *};
 use fxhash::FxHashSet;
 
 /// This is a tool for sweeping a list of equations, some of which define new variables as
 /// functions of previous ones, and eliminating these new variables, by substituting them
 /// elsewhere.
-///
-///
 pub struct Inliner<'a> {
     /// Map from variables to their values.
     /// Invariant: no key variable in in any value variable.
@@ -75,7 +72,9 @@ impl<'a> Inliner<'a> {
                     assert!(
                         self.stale_vars.contains(&child),
                         "{}",
-                        format!("Variable {child} in the substitution cache for {key}, {value} is not marked stale")
+                        format!(
+                            "Variable {child} in the substitution cache for {key}, {value} is not marked stale"
+                        )
                     );
                 }
             }
@@ -126,7 +125,7 @@ impl<'a> Inliner<'a> {
     /// If `t` is not a substitution, then its (substituted variant) is returned.
     fn ingest_term(&mut self, t: &Term) -> Option<Term> {
         if let Some((var, val)) = self.as_fresh_def(t) {
-            //debug!(target: "circ::ir::opt::inline", "Inline: {} -> {}", var, val.clone());
+            // debug!(target: "circ::ir::opt::inline", "Inline: {} -> {}", var, val.clone());
             // Rewrite the substitution
             let subst_val = self.apply(&val);
 
@@ -143,7 +142,7 @@ impl<'a> Inliner<'a> {
                 .extend(PostOrderIter::new(val).filter(|t| t.is_var()));
 
             // Comment out?
-            //self.check_substs();
+            // self.check_substs();
 
             None
         } else {

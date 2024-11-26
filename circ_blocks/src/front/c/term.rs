@@ -1,9 +1,9 @@
 //! C Terms
-use crate::circify::mem::AllocId;
-use crate::circify::{CirCtx, Embeddable, Typed};
-use crate::front::c::types::*;
-use crate::front::field_list::FieldList;
-use crate::ir::term::*;
+use crate::{
+    circify::{CirCtx, Embeddable, Typed, mem::AllocId},
+    front::{c::types::*, field_list::FieldList},
+    ir::term::*,
+};
 use rug::Integer;
 use std::fmt::{self, Display, Formatter};
 
@@ -249,11 +249,7 @@ fn inner_usual_arith_conversions(a: &CTerm, b: &CTerm) -> (CTerm, CTerm) {
             let ty = Ty::Int(false, s_ty.num_bits());
             (cast(Some(ty.clone()), s), cast(Some(ty), u))
         };
-        if signed_first {
-            (s_, u_)
-        } else {
-            (u_, s_)
-        }
+        if signed_first { (s_, u_) } else { (u_, s_) }
     }
 }
 

@@ -1,7 +1,6 @@
 //! Oprators for maps
 
-use crate::ir::term::ty::*;
-use crate::ir::term::*;
+use crate::ir::term::{ty::*, *};
 
 /// Type-check [super::ExtOp::ArrayToMap].
 pub fn check_array_to_map(arg_sorts: &[&Sort]) -> Result<Sort, TypeErrorReason> {

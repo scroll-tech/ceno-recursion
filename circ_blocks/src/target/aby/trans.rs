@@ -6,23 +6,18 @@
 
 use rug::Integer;
 
-use crate::ir::opt::cfold::fold;
-use crate::ir::term::*;
 #[cfg(feature = "lp")]
 use crate::target::aby::assignment::ilp::assign;
-use crate::target::aby::assignment::SharingMap;
-use crate::target::aby::utils::*;
-use std::collections::HashMap;
-use std::fs;
-use std::io;
-use std::path::Path;
+use crate::{
+    ir::{opt::cfold::fold, term::*},
+    target::aby::{assignment::SharingMap, utils::*},
+};
+use std::{collections::HashMap, fs, io, path::Path};
 
-use super::assignment::assign_all_boolean;
-use super::assignment::assign_all_yao;
-use super::assignment::assign_arithmetic_and_boolean;
-use super::assignment::assign_arithmetic_and_yao;
-use super::assignment::assign_greedy;
-use super::assignment::ShareType;
+use super::assignment::{
+    ShareType, assign_all_boolean, assign_all_yao, assign_arithmetic_and_boolean,
+    assign_arithmetic_and_yao, assign_greedy,
+};
 
 const PUBLIC: u8 = 2;
 const WRITE_SIZE: usize = 65536;
@@ -504,10 +499,10 @@ impl<'a> ToABY<'a> {
                         let const_shift_amount =
                             const_shift_amount_term.as_bv_opt().unwrap().uint();
 
-                        let key = (
-                            t.op().clone(),
-                            vec![a, const_shift_amount.to_i32().unwrap()],
-                        );
+                        let key = (t.op().clone(), vec![
+                            a,
+                            const_shift_amount.to_i32().unwrap(),
+                        ]);
                         let s = self.get_share(&t, to_share_type);
                         if let std::collections::hash_map::Entry::Vacant(e) =
                             self.cache.entry(key.clone())
@@ -863,7 +858,7 @@ impl<'a> ToABY<'a> {
                 )
             });
 
-            //reset for next function
+            // reset for next function
             self.bytecode_input.clear();
             self.bytecode_output.clear();
             self.inputs.clear();

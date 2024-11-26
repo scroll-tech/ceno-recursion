@@ -1,8 +1,10 @@
 //! Utility functions to write compiler output to ABY
 
-use std::fs::{self, File, OpenOptions};
-use std::io::Write;
-use std::path::Path;
+use std::{
+    fs::{self, File, OpenOptions},
+    io::Write,
+    path::Path,
+};
 
 /// Given Path `path` and String denominator `lang`, return the filename of the path
 pub fn get_path(path: &Path, lang: &str, t: &str, create: bool) -> String {

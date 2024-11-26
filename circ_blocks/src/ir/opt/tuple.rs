@@ -60,8 +60,8 @@
 //! fast vector type, instead of standard terms. This allows for log-time updates.
 
 use crate::ir::term::{
-    bv_lit, check, leaf_term, term, Array, Computation, Node, Op, PostOrderIter, Sort, Term,
-    TermMap, Value, AND,
+    AND, Array, Computation, Node, Op, PostOrderIter, Sort, Term, TermMap, Value, bv_lit, check,
+    leaf_term, term,
 };
 use std::collections::BTreeMap;
 

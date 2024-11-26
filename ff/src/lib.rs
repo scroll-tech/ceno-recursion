@@ -22,8 +22,10 @@ pub use bitvec::view::BitViewSized;
 
 #[cfg(feature = "bits")]
 use bitvec::{array::BitArray, order::Lsb0};
-use core::fmt;
-use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use core::{
+    fmt,
+    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+};
 use rand_core::RngCore;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
@@ -267,7 +269,9 @@ pub trait PrimeFieldBits: PrimeField {
 pub mod derive {
     pub use crate::arith_impl::*;
 
-    pub use {byteorder, rand_core, subtle};
+    pub use byteorder;
+    pub use rand_core;
+    pub use subtle;
 
     #[cfg(feature = "bits")]
     pub use bitvec;

@@ -1,6 +1,6 @@
 use ff::{
-    derive::subtle::{Choice, ConditionallySelectable, ConstantTimeEq},
     Field,
+    derive::subtle::{Choice, ConditionallySelectable, ConstantTimeEq},
 };
 use rand::RngCore;
 use serde::{Deserialize, Serialize};

@@ -1,14 +1,12 @@
 //! Constant folding
 
-use crate::cfg::cfg_or_default as cfg;
-use crate::ir::term::*;
+use crate::{cfg::cfg_or_default as cfg, ir::term::*};
 
 use circ_fields::FieldV;
 use circ_opt::FieldToBv;
 use itertools::Itertools;
 use rug::Integer;
-use std::cell::RefCell;
-use std::cmp::Ordering;
+use std::{cell::RefCell, cmp::Ordering};
 
 thread_local! {
     static FOLDS: RefCell<TermCache<TTerm>> = RefCell::new(TermCache::with_capacity(TERM_CACHE_LIMIT));
@@ -464,11 +462,7 @@ impl NaryFlat<bool> for BoolNaryOp {
                     leaf_term(Op::Const(Value::Bool(odd_trues)))
                 } else {
                     let t = safe_nary(XOR, children);
-                    if odd_trues {
-                        term![NOT; t]
-                    } else {
-                        t
-                    }
+                    if odd_trues { term![NOT; t] } else { t }
                 }
             }
         }

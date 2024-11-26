@@ -1,7 +1,6 @@
 // Generate a poseidon zok file where every constants are registers
 use crate::poseidon_constants::*;
-use std::fs::File;
-use std::io::Write;
+use std::{fs::File, io::Write};
 
 pub fn poseidon_gen() {
     let c = POSEIDON_C;

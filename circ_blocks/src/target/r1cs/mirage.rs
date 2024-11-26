@@ -1,27 +1,28 @@
 //! Exporting our R1CS to field1ield1ellman
 #![allow(unused)]
 use ::bellman::{
+    SynthesisError,
     cc::{CcCircuit, CcConstraintSystem},
-    kw15, mirage, SynthesisError,
+    kw15, mirage,
 };
 use ff::{Field, PrimeField, PrimeFieldBits};
 use fxhash::FxHashMap;
-use group::GroupEncoding;
-use group::WnafGroup;
+use group::{GroupEncoding, WnafGroup};
 use log::debug;
 use pairing::{Engine, MultiMillerLoop};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::marker::PhantomData;
-use std::path::Path;
-use std::str::FromStr;
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::{BufRead, BufReader},
+    marker::PhantomData,
+    path::Path,
+    str::FromStr,
+};
 
 use rug::Integer;
 
-use super::proof;
-use super::{wit_comp::StagedWitCompEvaluator, ProverData, VarType, VerifierData};
+use super::{ProverData, VarType, VerifierData, proof, wit_comp::StagedWitCompEvaluator};
 use crate::ir::term::Value;
 
 use super::bellman::{get_modulus, int_to_ff, lc_to_bellman};

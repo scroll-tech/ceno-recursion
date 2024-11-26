@@ -3,8 +3,7 @@
 #![allow(clippy::empty_docs)]
 #![allow(clippy::clone_on_copy)]
 
-use pest::error::Error;
-use pest::Parser;
+use pest::{Parser, error::Error};
 use pest_derive::Parser;
 
 // Issue with the proc macro
@@ -15,13 +14,13 @@ struct MyParser;
 
 pub mod ast {
     use super::Rule;
-    use from_pest::ConversionError;
-    use from_pest::FromPest;
-    use from_pest::Void;
+    use from_pest::{ConversionError, FromPest, Void};
     use lazy_static::lazy_static;
-    use pest::iterators::{Pair, Pairs};
-    use pest::pratt_parser::{Assoc, Op, PrattParser};
     pub use pest::Span;
+    use pest::{
+        iterators::{Pair, Pairs},
+        pratt_parser::{Assoc, Op, PrattParser},
+    };
     use pest_ast::FromPest;
 
     fn span_into_str(span: Span) -> &str {
@@ -307,7 +306,7 @@ pub mod ast {
     // Create an Expression from a `term`.
     // Precondition: `pair` MUST be a term
     fn build_factor(pair: Pair<Rule>) -> Box<Expression> {
-        //println!("pairs: {:#?}", pair);
+        // println!("pairs: {:#?}", pair);
         Box::new(match pair.as_rule() {
             Rule::term => {
                 // clone the pair to peek into what we should create

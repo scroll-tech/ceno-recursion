@@ -7,8 +7,7 @@ use paste::paste;
 use rayon::prelude::*;
 use rug::Integer;
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
-use std::hash::Hash;
+use std::{fmt::Debug, hash::Hash};
 
 use crate::ir::term::*;
 
@@ -341,11 +340,7 @@ impl R1cs {
 
         let half_m: Integer = self.modulus().clone() / 2;
         let abs = |i: Integer| {
-            if i <= half_m {
-                i
-            } else {
-                self.modulus() - i
-            }
+            if i <= half_m { i } else { self.modulus() - i }
         };
         let sign = |i: &Integer| if i < &half_m { "+" } else { "-" };
         let format_i = |i: &FieldV| {
@@ -930,8 +925,8 @@ impl R1cs {
         let mut precompute = cs.precomputes.clone();
         self.extend_precomputation(&mut precompute, false);
         // we still need to remove the non-r1cs variables
-        //use crate::ir::proof::PROVER_ID;
-        //let all_inputs = cs.metadata.get_inputs_for_party(Some(PROVER_ID));
+        // use crate::ir::proof::PROVER_ID;
+        // let all_inputs = cs.metadata.get_inputs_for_party(Some(PROVER_ID));
         let mut precompute_map = precompute.flatten();
         let mut vars: HashMap<String, Sort> = {
             PostOrderIter::from_roots_and_skips(

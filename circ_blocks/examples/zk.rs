@@ -1,6 +1,6 @@
 use circ::cfg::{
-    clap::{self, Parser, ValueEnum},
     CircOpt,
+    clap::{self, Parser, ValueEnum},
 };
 use std::path::PathBuf;
 

@@ -1,7 +1,6 @@
 //! Sort operator
 
-use crate::ir::term::ty::*;
-use crate::ir::term::*;
+use crate::ir::term::{ty::*, *};
 
 /// Type-check [super::ExtOp::Sort].
 pub fn check(arg_sorts: &[&Sort]) -> Result<Sort, TypeErrorReason> {

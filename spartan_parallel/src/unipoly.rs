@@ -71,8 +71,8 @@ impl<Scalar: SpartanExtensionField> UniPoly<Scalar> {
     let mut eval = self.coeffs[0];
     let mut power = *r;
     for i in 1..self.coeffs.len() {
-      eval = eval + power * self.coeffs[i];
-      power = power * *r;
+      eval += power * self.coeffs[i];
+      power *= r;
     }
     eval
   }

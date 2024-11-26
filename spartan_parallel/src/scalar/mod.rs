@@ -8,6 +8,7 @@ pub use fp2::ScalarExt2;
 use rand::{CryptoRng, RngCore};
 use serde::Serialize;
 use std::fmt;
+use std::ops::{AddAssign, MulAssign, SubAssign};
 use std::{
   cmp::Eq,
   hash::Hash,
@@ -35,8 +36,14 @@ pub trait SpartanExtensionField:
   + Neg
   + Default
   + Add<Output = Self>
+  + AddAssign
+  + for<'a> AddAssign<&'a Self>
   + Sub<Output = Self>
+  + SubAssign
+  + for<'a> SubAssign<&'a Self>
   + Mul<Output = Self>
+  + MulAssign
+  + for<'a> MulAssign<&'a Self>
   + Sum
   + Product
   + Clone

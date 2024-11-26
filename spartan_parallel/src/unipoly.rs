@@ -86,10 +86,10 @@ impl<Scalar: SpartanExtensionField> UniPoly<Scalar> {
   }
 }
 
-impl<S: SpartanExtensionField> CompressedUniPoly<S> {
+impl<Scalar: SpartanExtensionField> CompressedUniPoly<Scalar> {
   // we require eval(0) + eval(1) = hint, so we can solve for the linear term as:
   // linear_term = hint - 2 * constant_term - deg2 term - deg3 term
-  pub fn decompress(&self, hint: &S) -> UniPoly<S> {
+  pub fn decompress(&self, hint: &Scalar) -> UniPoly<Scalar> {
     let mut linear_term =
       *hint - self.coeffs_except_linear_term[0] - self.coeffs_except_linear_term[0];
     for i in 1..self.coeffs_except_linear_term.len() {

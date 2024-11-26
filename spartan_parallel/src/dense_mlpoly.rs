@@ -1000,7 +1000,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 
     for i in 0..poly_size.len() {
       let num_vars = poly_size[i].next_power_of_two().log_2();
-      let L = if let Some(L) = L_map.get(&num_vars) {
+      let _L = if let Some(L) = L_map.get(&num_vars) {
         L
       } else {
         let (left_num_vars, right_num_vars) = EqPolynomial::<S>::compute_factored_lens(num_vars);

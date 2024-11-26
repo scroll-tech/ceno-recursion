@@ -485,7 +485,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     // So we need to multiply each entry by (1 - rq0)(1 - rq1)
     let mut eval_vars_comb_list = Vec::new();
     for p in 0..num_instances {
-      let wit_sec_p = |i: usize| {
+      let _wit_sec_p = |i: usize| {
         if witness_secs[i].w_mat.len() == 1 {
           0
         } else {

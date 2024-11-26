@@ -1,4 +1,4 @@
-use super::scalar::{Scalar, SpartanExtensionField};
+use super::scalar::SpartanExtensionField;
 use super::transcript::{AppendToTranscript, ProofTranscript};
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
@@ -115,8 +115,8 @@ impl<S: SpartanExtensionField> AppendToTranscript for UniPoly<S> {
 
 #[cfg(test)]
 mod tests {
-
   use super::*;
+  use crate::scalar::Scalar;
 
   #[test]
   fn test_from_evals_quad() {

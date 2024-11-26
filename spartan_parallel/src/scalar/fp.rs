@@ -1,5 +1,5 @@
 use super::SpartanExtensionField;
-use crate::{AppendToTranscript, ProofTranscript, Transcript};
+use crate::{ProofTranscript, Transcript};
 use ceno_goldilocks::Goldilocks;
 use core::borrow::Borrow;
 use core::iter::{Product, Sum};

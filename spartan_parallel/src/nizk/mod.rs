@@ -4,7 +4,7 @@ use crate::scalar::SpartanExtensionField;
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::random::RandomTape;
-use super::transcript::{AppendToTranscript, ProofTranscript};
+use super::transcript::ProofTranscript;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 mod bullet;
@@ -45,12 +45,15 @@ impl<S: SpartanExtensionField> KnowledgeProof<S> {
   }
 
   pub fn verify(&self, transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      KnowledgeProof::<S>::protocol_name(),
-    );
+    // Transcript operations to preserve consistency for the verify function
+    {
+      <Transcript as ProofTranscript<S>>::append_protocol_name(
+        transcript,
+        KnowledgeProof::<S>::protocol_name(),
+      );
 
-    let c: S = transcript.challenge_scalar(b"c");
+      let _c: S = transcript.challenge_scalar(b"c");
+    }
 
     // TODO: Alternative PCS Verification
     Ok(())
@@ -89,12 +92,15 @@ impl<S: SpartanExtensionField> EqualityProof<S> {
   }
 
   pub fn verify(&self, transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      EqualityProof::<S>::protocol_name(),
-    );
+    // Transcript operations to preserve consistency for the verify function
+    {
+      <Transcript as ProofTranscript<S>>::append_protocol_name(
+        transcript,
+        EqualityProof::<S>::protocol_name(),
+      );
 
-    let c: S = transcript.challenge_scalar(b"c");
+      let _c: S = transcript.challenge_scalar(b"c");
+    }
 
     // TODO: Alternative PCS Verification
     Ok(())
@@ -145,18 +151,21 @@ impl<S: SpartanExtensionField> ProductProof<S> {
     ProductProof { z }
   }
 
-  fn check_equality(_c: &S, _z1: &S, _z2: &S) -> bool {
+  fn _check_equality(_c: &S, _z1: &S, _z2: &S) -> bool {
     // TODO: Alternative PCS Verification
     true
   }
 
   pub fn verify(&self, transcript: &mut Transcript) -> Result<(), ProofVerifyError> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      ProductProof::<S>::protocol_name(),
-    );
+    // Transcript operations to preserve consistency for the verify function
+    {
+      <Transcript as ProofTranscript<S>>::append_protocol_name(
+        transcript,
+        ProductProof::<S>::protocol_name(),
+      );
 
-    let c: S = transcript.challenge_scalar(b"c");
+      let _c: S = transcript.challenge_scalar(b"c");
+    }
 
     // TODO: Alternative PCS Verification
     Ok(())
@@ -218,12 +227,15 @@ impl<S: SpartanExtensionField> DotProductProof<S> {
   }
 
   pub fn verify(&self, transcript: &mut Transcript, a: &[S]) -> Result<(), ProofVerifyError> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      DotProductProof::<S>::protocol_name(),
-    );
-    S::append_field_vector_to_transcript(b"a", transcript, a);
-    let c: S = transcript.challenge_scalar(b"c");
+    // Transcript operations to preserve consistency for the verify function
+    {
+      <Transcript as ProofTranscript<S>>::append_protocol_name(
+        transcript,
+        DotProductProof::<S>::protocol_name(),
+      );
+      S::append_field_vector_to_transcript(b"a", transcript, a);
+      let _c: S = transcript.challenge_scalar(b"c");
+    }
 
     let _dotproduct_z_a = DotProductProof::compute_dotproduct(&self.z, a);
 
@@ -304,26 +316,29 @@ impl<S: SpartanExtensionField> DotProductProofLog<S> {
   ) -> Result<(), ProofVerifyError> {
     assert_eq!(a.len(), n);
 
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      DotProductProofLog::<S>::protocol_name(),
-    );
+    // Transcript operations to preserve consistency for the verify function
+    {
+      <Transcript as ProofTranscript<S>>::append_protocol_name(
+        transcript,
+        DotProductProofLog::<S>::protocol_name(),
+      );
 
-    S::append_field_vector_to_transcript(b"a", transcript, a);
+      S::append_field_vector_to_transcript(b"a", transcript, a);
 
-    // sample a random base and scale the generator used for
-    // the output of the inner product
-    let r: S = transcript.challenge_scalar(b"r");
+      // sample a random base and scale the generator used for
+      // the output of the inner product
+      let _r: S = transcript.challenge_scalar(b"r");
 
-    // BulletReductionProof - verification_scalars
-    let mut m = a.len();
-    while m != 1 {
-      m /= 2;
+      // BulletReductionProof - verification_scalars
+      let mut m = a.len();
+      while m != 1 {
+        m /= 2;
 
-      let u: S = transcript.challenge_scalar(b"u");
+        let _u: S = transcript.challenge_scalar(b"u");
+      }
+
+      let _c: S = transcript.challenge_scalar(b"c");
     }
-
-    let c: S = transcript.challenge_scalar(b"c");
 
     // TODO: Alternative PCS Verification
     Ok(())

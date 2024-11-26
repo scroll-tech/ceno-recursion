@@ -5,6 +5,7 @@ use ceno_goldilocks::ExtensionField;
 use ff::Field;
 pub use fp::Scalar;
 pub use fp2::ScalarExt2;
+use merlin::Transcript;
 use rand::{CryptoRng, RngCore};
 use serde::Serialize;
 use std::fmt;
@@ -16,9 +17,6 @@ use std::{
 };
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;
-
-use crate::transcript::AppendToTranscript;
-use merlin::Transcript;
 
 /// Trait describing the field element
 /// Wraps around Goldilocks field towers from ceno-goldilocks

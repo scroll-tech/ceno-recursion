@@ -93,7 +93,7 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
       let r_i = transcript.challenge_scalar(b"challenge_nextround");
 
       // verify the proof of sum-check and evals
-      let res = {
+      let _res = {
         // produce two weights
         let w: Vec<S> = transcript.challenge_vector(b"combine_two_claims_to_one", 2);
 

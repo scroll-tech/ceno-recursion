@@ -2,9 +2,8 @@
 //!
 //! Output order: input switches, upper subnet, lower subnet, output switches
 
-use crate::ir::term::ty::*;
-use crate::ir::term::*;
-use circ_waksman::{n_switches, Config};
+use crate::ir::term::{ty::*, *};
+use circ_waksman::{Config, n_switches};
 use std::iter::FromIterator;
 
 /// Type-check [super::ExtOp::Waksman].

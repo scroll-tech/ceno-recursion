@@ -1,14 +1,14 @@
 //! A library for building front-ends
-use crate::circify::mem::AllocId;
-use crate::ir::term::*;
+use crate::{circify::mem::AllocId, ir::term::*};
 
 use crate::cfg::cfg;
 use fxhash::FxHashMap;
-use std::cell::RefCell;
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::fmt::{self, Debug, Display, Formatter};
-use std::rc::Rc;
+use std::{
+    cell::RefCell,
+    collections::{HashMap, hash_map::Entry},
+    fmt::{self, Debug, Display, Formatter},
+    rc::Rc,
+};
 use thiserror::Error;
 
 pub mod includer;
@@ -440,7 +440,7 @@ impl<E: Embeddable> Drop for Circify<E> {
         // a live CirCtx, in which case the Computation's Drop impl
         // will garbage collect.
         //
-        //drop(self.take_ctx());
+        // drop(self.take_ctx());
 
         // force garbage collection
         garbage_collect();
@@ -623,10 +623,11 @@ impl<E: Embeddable> Circify<E> {
         let t = self
             .e
             .declare_input(f, &mut self.cir_ctx, &ty, ssa_name.to_string(), None, None);
-        assert!(self
-            .vals
-            .insert(ssa_name.to_string(), Val::Term(t.clone()))
-            .is_none());
+        assert!(
+            self.vals
+                .insert(ssa_name.to_string(), Val::Term(t.clone()))
+                .is_none()
+        );
         let t = term![Op::PfChallenge(ssa_name, cfg().field().clone())];
         self.push(f, t);
         Ok(())
@@ -666,10 +667,11 @@ impl<E: Embeddable> Circify<E> {
                 };
                 let ite_val = Val::Term(ite);
                 // TODO: add language-specific coersion here if needed
-                assert!(self
-                    .vals
-                    .insert(new_name.clone(), ite_val.clone())
-                    .is_none());
+                assert!(
+                    self.vals
+                        .insert(new_name.clone(), ite_val.clone())
+                        .is_none()
+                );
                 Ok(ite_val)
             }
             (_, v @ Val::Ref(_)) => {
@@ -759,10 +761,11 @@ impl<E: Embeddable> Circify<E> {
                 .unwrap()
                 .clone();
             let default_ret_val = self.e.initialize_return(&ty, &ssa_name);
-            assert!(self
-                .vals
-                .insert(ssa_name, Val::Term(default_ret_val))
-                .is_none());
+            assert!(
+                self.vals
+                    .insert(ssa_name, Val::Term(default_ret_val))
+                    .is_none()
+            );
         }
     }
 

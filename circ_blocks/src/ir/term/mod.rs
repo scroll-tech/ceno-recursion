@@ -19,7 +19,6 @@
 //!       * [PostOrderIter]: an iterator over the descendents of a term. Children-first.
 //!    * [Computation]: a collection of variables and assertions about them
 //!    * [Value]: a variable-free (and evaluated) term
-//!
 use crate::cfg::cfg_or_default as cfg;
 
 use circ_fields::{FieldT, FieldV};
@@ -29,10 +28,12 @@ use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, trace};
 use rug::Integer;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::borrow::Borrow;
-use std::cell::Cell;
-use std::collections::BTreeMap;
-use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
+use std::{
+    borrow::Borrow,
+    cell::Cell,
+    collections::BTreeMap,
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
+};
 
 pub mod bv;
 pub mod dist;
@@ -48,7 +49,7 @@ pub mod ty;
 
 pub use bv::BitVector;
 pub use ext::ExtOp;
-pub use ty::{check, check_rec, TypeError, TypeErrorReason};
+pub use ty::{TypeError, TypeErrorReason, check, check_rec};
 
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 /// An operator
@@ -106,7 +107,7 @@ pub enum Op {
     FpUnPred(FpUnPred),
     /// floating-point unary operator
     FpUnOp(FpUnOp),
-    //FpFma,
+    // FpFma,
     /// cast bit-vector to floating-point, as bits
     BvToFp,
     /// translate the (unsigned) bit-vector number represented by the argument to a floating-point
@@ -971,11 +972,7 @@ impl Sort {
                 Box::new(
                     std::iter::successors(Some(Integer::from(0)), move |p| {
                         let q = p.clone() + 1;
-                        if q < lim {
-                            Some(q)
-                        } else {
-                            None
-                        }
+                        if q < lim { Some(q) } else { None }
                     })
                     .map(move |i| Value::BitVector(BitVector::new(i, w))),
                 )
@@ -986,11 +983,7 @@ impl Sort {
                 Box::new(
                     std::iter::successors(Some(Integer::from(0)), move |p| {
                         let q = p.clone() + 1;
-                        if q < *m {
-                            Some(q)
-                        } else {
-                            None
-                        }
+                        if q < *m { Some(q) } else { None }
                     })
                     .map(move |i| Value::Field(fty.new_v(i))),
                 )
@@ -1436,16 +1429,13 @@ pub fn eval_op(op: &Op, args: &[&Value], var_vals: &FxHashMap<String, Value>) ->
         Op::BvNaryOp(o) => Value::BitVector({
             let mut xs = args.iter().map(|a| a.as_bv().clone());
             let f = xs.next().unwrap();
-            xs.fold(
-                f,
-                match o {
-                    BvNaryOp::Add => std::ops::Add::add,
-                    BvNaryOp::Mul => std::ops::Mul::mul,
-                    BvNaryOp::Xor => std::ops::BitXor::bitxor,
-                    BvNaryOp::Or => std::ops::BitOr::bitor,
-                    BvNaryOp::And => std::ops::BitAnd::bitand,
-                },
-            )
+            xs.fold(f, match o {
+                BvNaryOp::Add => std::ops::Add::add,
+                BvNaryOp::Mul => std::ops::Mul::mul,
+                BvNaryOp::Xor => std::ops::BitXor::bitxor,
+                BvNaryOp::Or => std::ops::BitOr::bitor,
+                BvNaryOp::And => std::ops::BitAnd::bitand,
+            })
         }),
         Op::BvSext(w) => Value::BitVector({
             let a = args[0].as_bv().clone();
@@ -1505,13 +1495,10 @@ pub fn eval_op(op: &Op, args: &[&Value], var_vals: &FxHashMap<String, Value>) ->
         Op::PfNaryOp(o) => Value::Field({
             let mut xs = args.iter().map(|a| a.as_pf().clone());
             let f = xs.next().unwrap();
-            xs.fold(
-                f,
-                match o {
-                    PfNaryOp::Add => std::ops::Add::add,
-                    PfNaryOp::Mul => std::ops::Mul::mul,
-                },
-            )
+            xs.fold(f, match o {
+                PfNaryOp::Add => std::ops::Add::add,
+                PfNaryOp::Mul => std::ops::Mul::mul,
+            })
         }),
         Op::IntBinPred(o) => Value::Bool({
             let a = args[0].as_int();
@@ -1526,13 +1513,10 @@ pub fn eval_op(op: &Op, args: &[&Value], var_vals: &FxHashMap<String, Value>) ->
         Op::IntNaryOp(o) => Value::Int({
             let mut xs = args.iter().map(|a| a.as_int().clone());
             let f = xs.next().unwrap();
-            xs.fold(
-                f,
-                match o {
-                    IntNaryOp::Add => std::ops::Add::add,
-                    IntNaryOp::Mul => std::ops::Mul::mul,
-                },
-            )
+            xs.fold(f, match o {
+                IntNaryOp::Add => std::ops::Add::add,
+                IntNaryOp::Mul => std::ops::Mul::mul,
+            })
         }),
         Op::UbvToPf(fty) => Value::Field(fty.new_v(args[0].as_bv().uint())),
         Op::PfChallenge(name, field) => Value::Field(pf_challenge(name, field)),
@@ -2091,7 +2075,6 @@ impl ComputationMetadata {
     /// ## Returns
     ///
     /// A call term with the input arguments in sorted order by argument names.
-    ///
     pub fn ordered_call_term(
         &self,
         name: String,
@@ -2231,7 +2214,10 @@ impl Computation {
             match input_visiblities.len() {
                 0 => None,
                 1 => input_visiblities.into_iter().next().unwrap(),
-                _ => panic!("Precomputation for new var {} with term\n\t{}\ninvolves multiple input non-public visibilities:\n\t{:?}", new_input_var, precomp, input_visiblities),
+                _ => panic!(
+                    "Precomputation for new var {} with term\n\t{}\ninvolves multiple input non-public visibilities:\n\t{:?}",
+                    new_input_var, precomp, input_visiblities
+                ),
             }
         };
         let sort = check(&precomp);
@@ -2386,8 +2372,7 @@ impl Computations {
 
 /// Compute a (deterministic) prime-field challenge.
 pub fn pf_challenge(name: &str, field: &FieldT) -> FieldV {
-    use rand_chacha::rand_core::SeedableRng;
-    use rand_chacha::ChaChaRng;
+    use rand_chacha::{ChaChaRng, rand_core::SeedableRng};
     use std::hash::{Hash, Hasher};
     // hash the string
     let mut hasher = fxhash::FxHasher::default();

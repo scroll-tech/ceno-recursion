@@ -7,8 +7,7 @@
 //!
 //! All input and output arrays must be be field -> field
 
-use crate::ir::term::ty::*;
-use crate::ir::term::*;
+use crate::ir::term::{ty::*, *};
 
 /// Type-check [super::ExtOp::UniqDeriGcd].
 pub fn check(arg_sorts: &[&Sort]) -> Result<Sort, TypeErrorReason> {

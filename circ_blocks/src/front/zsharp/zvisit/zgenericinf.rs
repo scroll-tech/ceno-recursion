@@ -1,15 +1,15 @@
 //! Generic parameter inference
 
-use super::super::term::{cond, const_val, Ty, T};
-use super::super::{span_to_string, ZGen};
-use crate::ir::term::{bv_lit, leaf_term, term, BoolNaryOp, Op, Sort, Term, Value};
+use super::super::{
+    ZGen, span_to_string,
+    term::{T, Ty, cond, const_val},
+};
+use crate::ir::term::{BoolNaryOp, Op, Sort, Term, Value, bv_lit, leaf_term, term};
 #[cfg(feature = "smt")]
 use crate::target::smt::find_unique_model;
 
 use log::debug;
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::path::Path;
+use std::{cell::RefCell, collections::HashMap, path::Path};
 use zokrates_pest_ast as ast;
 
 thread_local! {
@@ -183,9 +183,10 @@ impl<'ast, 'gen, const IS_CNST: bool> ZGenericInf<'ast, 'gen, IS_CNST> {
                     }
                     g_name.truncate(self.gens[idx].value.len());
                     g_name.shrink_to_fit();
-                    assert!(res
-                        .insert(g_name, T::new(Ty::Uint(32), term![Op::Const(g_val)]))
-                        .is_none());
+                    assert!(
+                        res.insert(g_name, T::new(Ty::Uint(32), term![Op::Const(g_val)]))
+                            .is_none()
+                    );
                 }
             });
         if self.constr.is_some() {
@@ -314,8 +315,7 @@ impl<'ast, 'gen, const IS_CNST: bool> ZGenericInf<'ast, 'gen, IS_CNST> {
         {
             return Err(format!(
                 "Cannot infer generic values for struct {} arg to function {}\nGeneric structs in fn defns must have explicit generics (in terms of fn generic vars)",
-                &def_ty.id.value,
-                &self.fdef.id.value,
+                &def_ty.id.value, &self.fdef.id.value,
             ));
         }
 

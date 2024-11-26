@@ -1,6 +1,5 @@
 // Warning: this file is generated from src/template.rs and generate_u8.zsh
-use hashconsing::*;
-use hashconsing::{HConsed, HashConsign};
+use hashconsing::{HConsed, HashConsign, *};
 
 use crate::Id;
 

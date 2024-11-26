@@ -4,13 +4,15 @@
 use datasize::DataSize;
 use paste::paste;
 use rug::{
-    ops::{RemRounding, RemRoundingAssign},
     Integer,
+    ops::{RemRounding, RemRoundingAssign},
 };
 use serde::{Deserialize, Serialize};
-use std::fmt::{self, Display, Formatter};
-use std::ops::Deref;
-use std::sync::Arc;
+use std::{
+    fmt::{self, Display, Formatter},
+    ops::Deref,
+    sync::Arc,
+};
 
 #[derive(PartialEq, Eq, Clone, Debug, PartialOrd, Ord, Hash, Serialize, Deserialize, DataSize)]
 pub struct IntField {

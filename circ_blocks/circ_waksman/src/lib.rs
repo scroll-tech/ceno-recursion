@@ -4,12 +4,10 @@
 //!
 //! Reference: "On Arbitrary Waksman Networks and their Vulnerability", by Bruno Beauquier and Eric Darrot.
 
-use fxhash::FxHashMap as HashMap;
-use fxhash::FxHashSet as HashSet;
+use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::collections::VecDeque;
 
-use std::fmt::Debug;
-use std::hash::Hash;
+use std::{fmt::Debug, hash::Hash};
 
 #[derive(Debug, Clone)]
 /// A network configuration
@@ -268,9 +266,7 @@ pub fn symbolic_apply<T: Clone, Cond, SwitchFn: FnMut(&T, &T, Cond) -> (T, T)>(
 mod tests {
     use super::*;
     use itertools::Itertools;
-    use rand::seq::SliceRandom;
-    use rand::Rng;
-    use rand::SeedableRng;
+    use rand::{Rng, SeedableRng, seq::SliceRandom};
 
     fn test_on_data(data: Vec<usize>) {
         let cfg = Config::for_sorting(data.clone());
@@ -417,11 +413,7 @@ mod tests {
                 data,
                 &mut switches,
                 &mut |top: &usize, bot: &usize, cond: bool| {
-                    if cond {
-                        (*bot, *top)
-                    } else {
-                        (*top, *bot)
-                    }
+                    if cond { (*bot, *top) } else { (*top, *bot) }
                 },
             );
             assert_eq!(apply_normal, apply_sym);

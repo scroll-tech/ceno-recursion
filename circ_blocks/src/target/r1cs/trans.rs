@@ -3,21 +3,18 @@
 //! [Ben Braun's
 //! thesis](https://github.com/circify/circ/tree/master/doc/resources/braun-bs-thesis.pdf)
 //! is a good intro to how this process works.
-use crate::cfg::CircCfg;
-use crate::ir::term::*;
-use crate::target::bitsize;
-use crate::target::r1cs::*;
+use crate::{
+    cfg::CircCfg,
+    ir::term::*,
+    target::{bitsize, r1cs::*},
+};
 
 use circ_fields::FieldT;
 use circ_opt::FieldDivByZero;
 use log::{debug, trace};
-use rug::ops::Pow;
-use rug::Integer;
+use rug::{Integer, ops::Pow};
 
-use std::cell::RefCell;
-use std::fmt::Display;
-use std::iter::ExactSizeIterator;
-use std::rc::Rc;
+use std::{cell::RefCell, fmt::Display, iter::ExactSizeIterator, rc::Rc};
 
 struct BvEntry {
     width: usize,
@@ -200,7 +197,7 @@ impl<'cfg> ToR1cs<'cfg> {
         debug_assert!(matches!(check(&comp), Sort::Bool));
         let comp = term![Op::Ite; comp, self.one.0.clone(), self.zero.0.clone()];
         let v = self.fresh_var(ctx, comp, VarType::FinalWit);
-        //debug!("Fresh bit: {}", self.r1cs.format_lc(&v));
+        // debug!("Fresh bit: {}", self.r1cs.format_lc(&v));
         self.enforce_bit(v.clone());
         v
     }
@@ -506,7 +503,7 @@ impl<'cfg> ToR1cs<'cfg> {
     }
 
     fn embed_bool(&mut self, c: Term) -> &TermLc {
-        //println!("Embed: {}", c);
+        // println!("Embed: {}", c);
         debug_assert!(check(&c) == Sort::Bool);
         // TODO: skip if already embedded
         if !self.cache.contains_key(&c) {
@@ -588,7 +585,7 @@ impl<'cfg> ToR1cs<'cfg> {
     }
 
     fn assert_bool(&mut self, t: &Term) {
-        //println!("Embed: {}", c);
+        // println!("Embed: {}", c);
         // TODO: skip if already embedded
         if t.op() == &Op::Eq {
             t.cs().iter().for_each(|c| self.embed(c.clone()));
@@ -720,8 +717,8 @@ impl<'cfg> ToR1cs<'cfg> {
     }
 
     fn embed_bv(&mut self, bv: Term) {
-        //println!("Embed: {}", bv);
-        //let bv2=  bv.clone();
+        // println!("Embed: {}", bv);
+        // let bv2=  bv.clone();
         if let Sort::BitVector(n) = check(&bv) {
             if !self.cache.contains_key(&bv) {
                 match &bv.op() {
@@ -925,7 +922,7 @@ impl<'cfg> ToR1cs<'cfg> {
                     _ => panic!("Non-bv in embed_bv: {}", bv),
                 }
             }
-        //self.r1cs.eval(self.get_bv_uint(&bv2)).map(|v| {
+        // self.r1cs.eval(self.get_bv_uint(&bv2)).map(|v| {
         //    println!("-> {:b}", v);
         //});
         } else {
@@ -1026,7 +1023,7 @@ impl<'cfg> ToR1cs<'cfg> {
     }
 
     fn embed_pf(&mut self, c: Term) -> &TermLc {
-        //println!("Embed: {}", c);
+        // println!("Embed: {}", c);
         // TODO: skip if already embedded
         if !self.cache.contains_key(&c) {
             debug!("embed_pf {}", c);
@@ -1177,9 +1174,10 @@ pub fn to_r1cs(cs: &Computation, cfg: &CircCfg) -> R1cs {
 pub mod test {
     use super::*;
 
-    use crate::ir::proof::Constraints;
-    use crate::ir::term::dist::test::*;
-    use crate::target::r1cs::opt::reduce_linearities;
+    use crate::{
+        ir::{proof::Constraints, term::dist::test::*},
+        target::r1cs::opt::reduce_linearities,
+    };
 
     use fxhash::FxHashMap;
     use quickcheck_macros::quickcheck;

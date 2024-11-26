@@ -3,8 +3,7 @@
 //! A "once queue".
 
 use fxhash::FxHashSet;
-use std::collections::VecDeque;
-use std::hash::Hash;
+use std::{collections::VecDeque, hash::Hash};
 
 /// A "once queue", which contains any element at most once.
 ///

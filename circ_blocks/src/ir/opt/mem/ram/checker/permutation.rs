@@ -1,7 +1,11 @@
 use super::super::hash::{MsHasher, UniversalHasher};
-use crate::ir::opt::mem::ram::{Access, AccessCfg, Order};
-use crate::ir::term::*;
-use crate::util::ns::Namespace;
+use crate::{
+    ir::{
+        opt::mem::ram::{Access, AccessCfg, Order},
+        term::*,
+    },
+    util::ns::Namespace,
+};
 use std::collections::VecDeque;
 
 /// Permute the accesses into sorted order using a Waksman network.

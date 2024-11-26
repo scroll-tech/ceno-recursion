@@ -2,8 +2,7 @@
 
 use std::iter::zip;
 
-use super::super::ZGen;
-use super::{ZResult, ZVisitorError, ZVisitorResult};
+use super::{super::ZGen, ZResult, ZVisitorError, ZVisitorResult};
 
 use zokrates_pest_ast as ast;
 

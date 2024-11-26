@@ -1,21 +1,17 @@
 //! Translation from IR to MILP
-//!
-//!
 
 // Needed until https://github.com/rust-lang/rust-clippy/pull/8183 is resolved.
 #![allow(clippy::identity_op)]
 
-use crate::ir::term::*;
-use crate::target::bitsize;
-use crate::target::ilp::Ilp;
+use crate::{
+    ir::term::*,
+    target::{bitsize, ilp::Ilp},
+};
 
-use good_lp::{variable, Expression};
+use good_lp::{Expression, variable};
 use log::debug;
 
-use std::cell::RefCell;
-use std::convert::TryInto;
-use std::fmt::Display;
-use std::rc::Rc;
+use std::{cell::RefCell, convert::TryInto, fmt::Display, rc::Rc};
 
 #[derive(Clone)]
 enum EmbeddedTerm {
@@ -332,7 +328,7 @@ impl ToMilp {
                             self.set_bv_bits(bv, res);
                         }
                         BvNaryOp::Add | BvNaryOp::Mul => {
-                            //let f_width = self.ilp.modulus().significant_bits() as usize - 1;
+                            // let f_width = self.ilp.modulus().significant_bits() as usize - 1;
                             let values = bv
                                 .cs()
                                 .iter()
@@ -358,7 +354,7 @@ impl ToMilp {
                                     .new_constraint(sum.eq(r.clone() + bv_modulus(n) * q));
                                 self.set_bv_uint(bv, r, n);
                             }
-                            //BvBinOp::Udiv | BvBinOp::Urem => {
+                            // BvBinOp::Udiv | BvBinOp::Urem => {
                             //    let b = b.clone();
                             //    let a = a.clone();
                             //    let is_zero = self.is_zero(b.clone());
@@ -536,7 +532,7 @@ impl ToMilp {
     /// Returns whether `a` is (`strict`ly) (`signed`ly) greater than `b`.
     /// Assumes they are each `w`-bit bit-vectors.
     fn bv_cmp(&mut self, w: usize, signed: bool, strict: bool, a: &Term, b: &Term) -> Expression {
-        //assert!(!signed, "TODO: signed cmp");
+        // assert!(!signed, "TODO: signed cmp");
         let a = if signed {
             self.get_bv_signed_int(a)
         } else {
@@ -683,9 +679,10 @@ pub fn to_ilp(cs: Computation) -> Ilp {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ir::proof::Constraints;
-    use crate::ir::term::dist::test::PureBool;
-    use crate::ir::term::test as test_vecs;
+    use crate::ir::{
+        proof::Constraints,
+        term::{dist::test::PureBool, test as test_vecs},
+    };
     use approx::assert_abs_diff_eq;
     use good_lp::default_solver;
     use quickcheck_macros::quickcheck;

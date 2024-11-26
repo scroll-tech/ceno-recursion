@@ -7,8 +7,10 @@ pub mod datalog;
 #[cfg(all(feature = "smt", feature = "zok"))]
 pub mod zsharp;
 
-use crate::ir::proof;
-use crate::ir::term::{Computations, PartyId};
+use crate::ir::{
+    proof,
+    term::{Computations, PartyId},
+};
 
 use std::fmt::{self, Display, Formatter};
 

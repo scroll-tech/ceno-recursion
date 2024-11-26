@@ -2,8 +2,7 @@
 
 use fxhash::FxHashMap as HashMap;
 
-use crate::ir::opt::visit::RewritePass;
-use crate::ir::term::*;
+use crate::ir::{opt::visit::RewritePass, term::*};
 
 /// A recursive linker.
 struct Linker<'f> {

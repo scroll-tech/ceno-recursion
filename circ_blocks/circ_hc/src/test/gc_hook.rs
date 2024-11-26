@@ -1,7 +1,5 @@
 use crate::{Id, Node, Table};
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 /// One step in the test.
 #[derive(Debug)]

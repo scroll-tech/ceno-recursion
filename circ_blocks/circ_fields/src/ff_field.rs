@@ -85,11 +85,7 @@ macro_rules! def_field {
                 fn from(mut i: i64) -> Self {
                     let u = i.abs_diff(0);
                     let neg = i < 0;
-                    if neg {
-                        -Ft::from(u)
-                    } else {
-                        Ft::from(u)
-                    }
+                    if neg { -Ft::from(u) } else { Ft::from(u) }
                 }
             }
 
@@ -100,7 +96,7 @@ macro_rules! def_field {
 
             #[cfg(test)]
             mod test {
-                use super::{Ft, FMOD};
+                use super::{FMOD, Ft};
                 use ff::Field;
                 use rand::thread_rng;
                 use rug::Integer;

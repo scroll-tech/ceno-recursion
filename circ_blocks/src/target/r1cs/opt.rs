@@ -5,8 +5,7 @@ use log::debug;
 use std::collections::hash_map::Entry;
 
 use super::*;
-use crate::cfg::CircCfg;
-use crate::util::once::OnceQueue;
+use crate::{cfg::CircCfg, util::once::OnceQueue};
 
 struct LinReducer {
     r1cs: R1cs,

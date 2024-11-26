@@ -1,5 +1,7 @@
-use std::cmp::{Eq, Ord, PartialEq, PartialOrd};
-use std::hash::Hash;
+use std::{
+    cmp::{Eq, Ord, PartialEq, PartialOrd},
+    hash::Hash,
+};
 
 #[cfg(feature = "hashconsing")]
 pub mod hashconsing;

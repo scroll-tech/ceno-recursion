@@ -1,7 +1,7 @@
 //! Machinery for formatting IR types
 use super::{
-    check, ext, map::Map, Array, ComputationMetadata, Node, Op, PartyId, PostOrderIter, Sort, Term,
-    TermMap, Value, VariableMetadata,
+    Array, ComputationMetadata, Node, Op, PartyId, PostOrderIter, Sort, Term, TermMap, Value,
+    VariableMetadata, check, ext, map::Map,
 };
 use crate::cfg::{cfg, is_cfg_set};
 

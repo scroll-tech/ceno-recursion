@@ -1,8 +1,6 @@
 //! RAM checking
-use super::hash::MsHasher;
-use super::*;
-use crate::front::PROVER_VIS;
-use crate::util::ns::Namespace;
+use super::{hash::MsHasher, *};
+use crate::{front::PROVER_VIS, util::ns::Namespace};
 use circ_fields::FieldT;
 use log::{debug, trace};
 

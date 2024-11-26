@@ -2,8 +2,7 @@
 
 use super::*;
 
-use std::cell::RefCell;
-use std::convert::TryFrom;
+use std::{cell::RefCell, convert::TryFrom};
 
 use circ_hc::collections::cache::NodeCache;
 

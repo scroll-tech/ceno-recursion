@@ -4,13 +4,15 @@ use bincode::{deserialize_from, serialize_into};
 use curve25519_dalek::scalar::Scalar;
 use fxhash::FxHashMap as HashMap;
 use gmp_mpfr_sys::gmp::limb_t;
-use libspartan::{Assignment, InputsAssignment, Instance, NIZKGens, VarsAssignment, NIZK};
+use libspartan::{Assignment, InputsAssignment, Instance, NIZK, NIZKGens, VarsAssignment};
 use merlin::Transcript;
 use rug::Integer;
-use std::fs::File;
-use std::io;
-use std::io::{BufReader, BufWriter};
-use std::path::Path;
+use std::{
+    fs::File,
+    io,
+    io::{BufReader, BufWriter},
+    path::Path,
+};
 
 /// Hold Spartan variables
 #[derive(Debug)]
@@ -63,9 +65,11 @@ pub fn verify<P: AsRef<Path>>(
 
     println!("Verifying with Spartan");
     let mut verifier_transcript = Transcript::new(b"nizk_example");
-    assert!(proof
-        .verify(inst, &inputs, &mut verifier_transcript, gens)
-        .is_ok());
+    assert!(
+        proof
+            .verify(inst, &inputs, &mut verifier_transcript, gens)
+            .is_ok()
+    );
 
     println!("Proof Verification Successful!");
     Ok(())

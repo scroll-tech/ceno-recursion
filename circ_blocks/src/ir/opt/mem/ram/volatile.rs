@@ -1,8 +1,7 @@
 //! A general-purpose RAM extractor
 use super::*;
 
-use fxhash::FxHashMap as HashMap;
-use fxhash::FxHashSet as HashSet;
+use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::collections::BinaryHeap;
 
 use log::{debug, trace};
@@ -25,7 +24,6 @@ use log::{debug, trace};
 /// An array term in the graph is non-RAM if is is connected (undirectedly) in
 /// the constant-free graph to any node with multiple parents or children in the
 /// constant-free graph.
-///
 #[derive(Debug)]
 struct ArrayGraph {
     /// Map from array terms to their children (dependencies)

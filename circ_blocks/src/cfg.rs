@@ -13,13 +13,12 @@ use circ_fields::FieldT;
 use once_cell::sync::OnceCell;
 use rug::Integer;
 
-use std::convert::From;
-use std::default::Default;
+use std::{convert::From, default::Default};
 
-/// Re-export our clap version
-pub use circ_opt::clap;
 /// Re-export our clap [clap::Args]
 pub use circ_opt::CircOpt;
+/// Re-export our clap version
+pub use circ_opt::clap;
 
 /// A Circ configuration. Contructible [From::from] [CircOpt].
 #[derive(Clone, Debug)]

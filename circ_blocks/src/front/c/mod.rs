@@ -7,25 +7,28 @@ mod term;
 mod types;
 
 use super::{FrontEnd, Mode};
-use crate::circify::mem::AllocId;
-use crate::circify::{CircError, Circify, Loc, Val};
-use crate::front::c::ast_utils::*;
-use crate::front::c::term::*;
-use crate::front::c::types::*;
-use crate::front::field_list::FieldList;
-use crate::ir::opt::cfold::fold;
-use crate::ir::proof::ConstraintMetadata;
-use crate::ir::term::Node as IrNode;
-use crate::ir::term::*;
-use lang_c::ast::*;
-use lang_c::span::Node;
+use crate::{
+    circify::{CircError, Circify, Loc, Val, mem::AllocId},
+    front::{
+        c::{ast_utils::*, term::*, types::*},
+        field_list::FieldList,
+    },
+    ir::{
+        opt::cfold::fold,
+        proof::ConstraintMetadata,
+        term::{Node as IrNode, *},
+    },
+};
+use lang_c::{ast::*, span::Node};
 use log::debug;
 
 use fxhash::FxHashMap;
-use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
-use std::fmt::Display;
-use std::path::PathBuf;
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    path::PathBuf,
+};
 
 /// Inputs to the C compiler
 pub struct Inputs {
@@ -1017,7 +1020,7 @@ impl CGen {
         }
     }
 
-    //TODO: This function is not quite right because the loop body could modify the iteration variable.
+    // TODO: This function is not quite right because the loop body could modify the iteration variable.
     fn get_const_iters(&mut self, for_stmt: &ForStatement) -> ConstIteration {
         let init: Option<ConstIteration> = match &for_stmt.initializer.node {
             ForInitializer::Declaration(d) => {

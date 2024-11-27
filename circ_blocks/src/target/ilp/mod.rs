@@ -139,8 +139,8 @@ pub enum IlpUnsat {
 mod test {
     use super::*;
     use good_lp::{
-        default_solver, solvers::lp_solvers::SolverTrait, variable, ProblemVariables, Solution,
-        SolverModel,
+        ProblemVariables, Solution, SolverModel, default_solver, solvers::lp_solvers::SolverTrait,
+        variable,
     };
 
     #[test]

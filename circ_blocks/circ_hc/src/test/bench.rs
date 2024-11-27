@@ -6,7 +6,7 @@ fn test_rng() -> ChaChaRng {
 
 use crate::{Node, Table};
 
-use rand::{distributions::Distribution, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, distributions::Distribution};
 use rand_distr::Geometric;
 use std::time::{Duration, Instant};
 

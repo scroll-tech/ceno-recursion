@@ -1,20 +1,20 @@
 //! Datalog implementation
 
-use std::fs::File;
-use std::io::Read;
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{fs::File, io::Read, path::PathBuf, str::FromStr};
 
 use fxhash::FxHashMap;
 use log::debug;
 use rug::Integer;
 
-use crate::cfg::cfg;
-use crate::circify::{Circify, Loc, Val};
-use crate::front::{PROVER_VIS, PUBLIC_VIS};
-use crate::ir::opt::cfold::fold;
-use crate::ir::term::extras::as_uint_constant;
-use crate::ir::term::*;
+use crate::{
+    cfg::cfg,
+    circify::{Circify, Loc, Val},
+    front::{PROVER_VIS, PUBLIC_VIS},
+    ir::{
+        opt::cfold::fold,
+        term::{extras::as_uint_constant, *},
+    },
+};
 
 use super::FrontEnd;
 
@@ -54,7 +54,7 @@ impl<'ast> Gen<'ast> {
     /// Returns `false` if doing so would violate the recursion limit.
     fn enter_function(&mut self, name: &'ast str, dec_value: Option<Integer>) -> bool {
         let e = self.stack_by_fn.entry(name).or_default();
-        //assert_eq!(e.last().and_then(|l| l.as_ref()).is_some(), dec_value.is_some());
+        // assert_eq!(e.last().and_then(|l| l.as_ref()).is_some(), dec_value.is_some());
         let do_enter = if let (Some(last_val), Some(this_val)) =
             (e.last().and_then(|l| l.as_ref()), dec_value.as_ref())
         {

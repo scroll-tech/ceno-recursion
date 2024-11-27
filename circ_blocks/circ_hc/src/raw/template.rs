@@ -1,9 +1,11 @@
 use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
-use std::cell::{Cell, RefCell};
-use std::net::SocketAddrV6 as TemplateOp;
-use std::rc::Rc;
-use std::thread_local;
+use std::{
+    cell::{Cell, RefCell},
+    net::SocketAddrV6 as TemplateOp,
+    rc::Rc,
+    thread_local,
+};
 
 use crate::Id;
 

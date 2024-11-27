@@ -1,7 +1,6 @@
 //! Operator PersistentRamSplit
 
-use crate::ir::term::ty::*;
-use crate::ir::term::*;
+use crate::ir::term::{ty::*, *};
 use fxhash::FxHashSet as HashSet;
 
 /// Type-check [super::ExtOp::PersistentRamSplit].

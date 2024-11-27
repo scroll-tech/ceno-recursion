@@ -3,8 +3,10 @@
 use rug::Integer;
 use serde::{Deserialize, Serialize};
 
-use std::fmt::{self, Display, Formatter};
-use std::ops::{Add, BitAnd, BitOr, BitXor, Mul, Sub};
+use std::{
+    fmt::{self, Display, Formatter},
+    ops::{Add, BitAnd, BitOr, BitXor, Mul, Sub},
+};
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Serialize, Deserialize)]
 /// A bit-vector constant

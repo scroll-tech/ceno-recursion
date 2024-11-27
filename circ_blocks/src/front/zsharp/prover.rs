@@ -1,20 +1,12 @@
-use crate::front::zsharp::blocks::*;
-use crate::front::zsharp::const_bool;
-use crate::front::zsharp::const_val;
-use crate::front::zsharp::pretty::pretty_name;
-use crate::front::zsharp::span_to_string;
-use crate::front::zsharp::Op;
-use crate::front::zsharp::Ty;
-use crate::front::zsharp::Value;
-use crate::front::zsharp::ZGen;
-use crate::front::zsharp::T;
-use crate::front::zsharp::*;
-use crate::ir::term::*;
-use log::debug;
-use log::warn;
-use std::cmp::Ordering;
-use std::collections::BTreeMap;
-use std::iter::zip;
+use crate::{
+    front::zsharp::{
+        Op, T, Ty, Value, ZGen, blocks::*, const_bool, const_val, pretty::pretty_name,
+        span_to_string, *,
+    },
+    ir::term::*,
+};
+use log::{debug, warn};
+use std::{cmp::Ordering, collections::BTreeMap, iter::zip};
 use zokrates_pest_ast::*;
 
 use rug::Integer;
@@ -138,26 +130,38 @@ impl<'ast> ZGen<'ast> {
     fn t_to_usize(&self, a: T) -> Result<usize, String> {
         let t = const_val(a)?;
         match &t.term.op() {
-            Op::Const(val) => {
-                match val {
-                    Value::Field(f) => {
-                        let intg = f.i().to_usize().ok_or("Stack Overflow: array index exceeds usize limit.")?;
-                        return Ok(intg);
-                    }
-                    Value::BitVector(bv) => {
-                        let intg = bv.uint().to_usize().ok_or("Stack Overflow: array index exceeds usize limit.")?;
-                        return Ok(intg);
-                    }
-                    Value::Int(i) => {
-                        let intg = i.to_usize().ok_or("Stack Overflow: array index exceeds usize limit.")?;
-                        return Ok(intg);
-                    }
-                    _ => {
-                        return Err(format!("Fail to evaluate array index: index is not a number."));
-                    }
+            Op::Const(val) => match val {
+                Value::Field(f) => {
+                    let intg = f
+                        .i()
+                        .to_usize()
+                        .ok_or("Stack Overflow: array index exceeds usize limit.")?;
+                    return Ok(intg);
                 }
+                Value::BitVector(bv) => {
+                    let intg = bv
+                        .uint()
+                        .to_usize()
+                        .ok_or("Stack Overflow: array index exceeds usize limit.")?;
+                    return Ok(intg);
+                }
+                Value::Int(i) => {
+                    let intg = i
+                        .to_usize()
+                        .ok_or("Stack Overflow: array index exceeds usize limit.")?;
+                    return Ok(intg);
+                }
+                _ => {
+                    return Err(format!(
+                        "Fail to evaluate array index: index is not a number."
+                    ));
+                }
+            },
+            _ => {
+                return Err(format!(
+                    "This line should not be triggered unless const_val has been modified. Const_val needs to return Op::Const for Term."
+                ));
             }
-            _ => { return Err(format!("This line should not be triggered unless const_val has been modified. Const_val needs to return Op::Const for Term.")) }
         }
     }
 
@@ -662,7 +666,10 @@ impl<'ast> ZGen<'ast> {
                         .ok_or(format!("Push to %PHY failed: %SP is uninitialized."))?;
                     let sp = self.t_to_usize(sp_t)?;
                     if sp + offset != phy_mem.len() {
-                        return Err(format!("Error processing %PHY push: index {sp} + {offset} does not match with stack size {}.", phy_mem.len()));
+                        return Err(format!(
+                            "Error processing %PHY push: index {sp} + {offset} does not match with stack size {}.",
+                            phy_mem.len()
+                        ));
                     } else {
                         let e = self.cvar_lookup(&var).ok_or(format!(
                             "Push to %PHY failed: pushing an out-of-scope variable: {}.",
@@ -962,7 +969,7 @@ impl<'ast> ZGen<'ast> {
                                 "Const conditional expression eval failed: {} at\n{}",
                                 err,
                                 span_to_string(cond.span()),
-                            ))
+                            ));
                         }
                     }
                 }
@@ -1002,14 +1009,14 @@ impl<'ast> ZGen<'ast> {
                                 .map(|m| m.value.as_ref())
                                 .unwrap_or("(no error message given)"),
                             span_to_string(a.expression.span()),
-                        ))
+                        ));
                     }
                     Err(err) => {
                         return Err(format!(
                             "Const assert expression eval failed: {} at\n{}",
                             err,
                             span_to_string(a.expression.span()),
-                        ))
+                        ));
                     }
                 }
             }

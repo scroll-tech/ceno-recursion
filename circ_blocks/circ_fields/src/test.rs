@@ -1,6 +1,5 @@
 use super::*;
-use rand::thread_rng;
-use rand::Rng;
+use rand::{Rng, thread_rng};
 use rug::ops::RemRounding;
 
 #[test]

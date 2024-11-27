@@ -1,14 +1,17 @@
 //! Symbolic Z# terms
-use std::collections::BTreeMap;
-use std::fmt::{self, Display, Formatter};
+use std::{
+    collections::BTreeMap,
+    fmt::{self, Display, Formatter},
+};
 
 use rug::Integer;
 
-use crate::cfg::cfg;
-use crate::circify::{CirCtx, Embeddable, Typed};
-use crate::front::field_list::FieldList;
-use crate::ir::opt::cfold::fold as constant_fold;
-use crate::ir::term::*;
+use crate::{
+    cfg::cfg,
+    circify::{CirCtx, Embeddable, Typed},
+    front::field_list::FieldList,
+    ir::{opt::cfold::fold as constant_fold, term::*},
+};
 
 #[derive(Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum Ty {
@@ -1053,7 +1056,11 @@ impl Embeddable for ZSharp {
                                 f_ty,
                                 field_name(&name, f_name),
                                 visibility,
-                                precompute.as_ref().map(|_| unimplemented!("precomputations for declared inputs that are Z# structures")),
+                                precompute.as_ref().map(|_| {
+                                    unimplemented!(
+                                        "precomputations for declared inputs that are Z# structures"
+                                    )
+                                }),
                             ),
                         )
                     })

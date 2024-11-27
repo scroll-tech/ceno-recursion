@@ -1,5 +1,5 @@
 //! Exporting our R1CS to bellman
-use ::bellman::{groth16, Circuit, ConstraintSystem, LinearCombination, SynthesisError, Variable};
+use ::bellman::{Circuit, ConstraintSystem, LinearCombination, SynthesisError, Variable, groth16};
 use ff::{Field, PrimeField, PrimeFieldBits};
 use fxhash::FxHashMap;
 use group::WnafGroup;
@@ -7,18 +7,21 @@ use log::debug;
 use pairing::{Engine, MultiMillerLoop};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::marker::PhantomData;
-use std::path::Path;
-use std::str::FromStr;
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::{BufRead, BufReader},
+    marker::PhantomData,
+    path::Path,
+    str::FromStr,
+};
 
-use rug::integer::{IsPrime, Order};
-use rug::Integer;
+use rug::{
+    Integer,
+    integer::{IsPrime, Order},
+};
 
-use super::proof;
-use super::{wit_comp::StagedWitCompEvaluator, Lc, ProverData, Var, VarType, VerifierData};
+use super::{Lc, ProverData, Var, VarType, VerifierData, proof, wit_comp::StagedWitCompEvaluator};
 use crate::ir::term::Value;
 
 /// Convert a (rug) integer to a prime field element.

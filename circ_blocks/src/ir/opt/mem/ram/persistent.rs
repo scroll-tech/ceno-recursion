@@ -1,7 +1,6 @@
 //! Represent a persistent array as (committed) scalar values and a RAM.
 
-use super::super::super::visit::RewritePass;
-use super::*;
+use super::{super::super::visit::RewritePass, *};
 use crate::front::PROVER_VIS;
 use log::debug;
 

@@ -24,13 +24,12 @@
 //! round(v
 use log::{debug, trace};
 
-use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::{cell::RefCell, collections::BTreeSet};
 
-use crate::ir::opt::visit::RewritePass;
-use crate::ir::proof::PROVER_ID;
-use crate::ir::term::*;
-use crate::util::ns::Uniquer;
+use crate::{
+    ir::{opt::visit::RewritePass, proof::PROVER_ID, term::*},
+    util::ns::Uniquer,
+};
 
 /// Replace witness terms with new variables.
 pub fn deskolemize_witnesses(comp: &mut Computation) {

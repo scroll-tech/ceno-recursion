@@ -1,12 +1,8 @@
-use crate::front::c::types::Ty;
-use crate::front::c::Expression::Identifier;
+use crate::front::c::{Expression::Identifier, types::Ty};
 use lang_c::ast::*;
 use std::fmt::{self, Display, Formatter};
 
-use crate::front::Mode;
-use crate::front::PartyId;
-use crate::front::PROVER_VIS;
-use crate::front::PUBLIC_VIS;
+use crate::front::{Mode, PROVER_VIS, PUBLIC_VIS, PartyId};
 
 #[derive(Clone)]
 pub struct FnInfo {

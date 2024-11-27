@@ -70,6 +70,7 @@ mod field_list {
 
     #[derive(Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
     pub struct FieldList<T> {
+        org_list: Vec<String>,
         // must be kept in sorted order
         list: Vec<(String, T)>,
     }
@@ -77,8 +78,9 @@ mod field_list {
     #[allow(dead_code)]
     impl<T> FieldList<T> {
         pub fn new(mut list: Vec<(String, T)>) -> Self {
+            let org_list = list.iter().map(|(n, _)| n.clone()).collect();
             list.sort_by_cached_key(|p| p.0.clone());
-            FieldList { list }
+            FieldList { org_list, list }
         }
         pub fn search(&self, key: &str) -> Option<(usize, &T)> {
             let idx = self
@@ -93,6 +95,9 @@ mod field_list {
         pub fn set(&mut self, idx: usize, val: T) {
             let key = &self.list[idx].0;
             self.list[idx] = (key.clone(), val);
+        }
+        pub fn org_fields(&self) -> impl Iterator<Item = &String> {
+            self.org_list.iter()
         }
         pub fn fields(&self) -> impl Iterator<Item = &(String, T)> {
             self.list.iter()

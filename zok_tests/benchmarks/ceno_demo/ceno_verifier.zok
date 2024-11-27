@@ -170,9 +170,6 @@ def verify_opcode_proof(
     u32 w_counts_per_instance = cs.w_expressions_len
     u32 lk_counts_per_instance = cs.lk_expressions_len
 
-    assert(r_counts_per_instance == 3)
-
-    /*
     u32 log2_r_count = ceil_log2(r_counts_per_instance)
     u32 log2_w_count = ceil_log2(w_counts_per_instance)
     u32 log2_lk_count = ceil_log2(lk_counts_per_instance)
@@ -200,6 +197,7 @@ def verify_opcode_proof(
         ],
         t
     )
+    /*
     assert!(record_evals.len() == 2, "[r_record, w_record]");
     assert!(logup_q_evals.len() == 1, "[lk_q_record]");
     assert!(logup_p_evals.len() == 1, "[lk_p_record]");

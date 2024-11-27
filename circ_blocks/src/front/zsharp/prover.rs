@@ -192,7 +192,6 @@ impl<'ast> ZGen<'ast> {
                 span: Span::new("", 0, 0).unwrap()
             }
         ));
-
         let val = self.literal_(e)?;
         Ok(val)
     }

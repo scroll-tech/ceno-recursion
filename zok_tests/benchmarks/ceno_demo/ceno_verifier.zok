@@ -170,6 +170,9 @@ def verify_opcode_proof(
     u32 w_counts_per_instance = cs.w_expressions_len
     u32 lk_counts_per_instance = cs.lk_expressions_len
 
+    assert(r_counts_per_instance == 3)
+
+    /*
     u32 log2_r_count = ceil_log2(r_counts_per_instance)
     u32 log2_w_count = ceil_log2(w_counts_per_instance)
     u32 log2_lk_count = ceil_log2(lk_counts_per_instance)
@@ -197,12 +200,12 @@ def verify_opcode_proof(
         ],
         t
     )
-    /*
     assert!(record_evals.len() == 2, "[r_record, w_record]");
     assert!(logup_q_evals.len() == 1, "[lk_q_record]");
     assert!(logup_p_evals.len() == 1, "[lk_p_record]");
     */
 
+    /*
     // verify LogUp witness nominator p(x) ?= constant vector 1
     // index 0 is LogUp witness for Fixed Lookup table
     ExtField[0] rt_tower = output.rt_tower
@@ -258,6 +261,7 @@ def verify_opcode_proof(
     )
     t = sc_t.t
     SumCheckSubClaim main_sel_subclaim = sc_t.sc
+    */
 
     return [to_ext(1)]
     /*
@@ -582,7 +586,7 @@ def main(
     ExtField[0] result = verify_opcode_proof(
         self,
         // name,
-        self.vk.circuit_vks_key[0],
+        self.vk.circuit_vks_key[1],
         proof,
         t,
         num_product_fanin,

@@ -13,6 +13,7 @@ const PRINT_PROOF: bool = false;
 const TOTAL_NUM_VARS_BOUND: usize = 10000000000;
 
 use core::cmp::min;
+use std::collections::BTreeMap;
 use rug::Integer;
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
@@ -769,10 +770,13 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 fn get_run_time_knowledge<const VERBOSE: bool>(
     path: PathBuf,
     options: &Options,
-    entry_regs: Vec<Integer>,
-    entry_stacks: Vec<Vec<Integer>>,
-    entry_arrays: Vec<Vec<Integer>>,
+    mut entry_regs: BTreeMap<String, Integer>,
+    entry_stacks: BTreeMap<String, Vec<Integer>>,
+    entry_arrays: BTreeMap<String, Vec<Integer>>,
     entry_witnesses: Vec<Integer>,
+    entry_regs_concat: Vec<Integer>,
+    entry_stacks_concat: Vec<Integer>,
+    entry_arrays_concat: Vec<Integer>,
     ctk: &CompileTimeKnowledge,
     live_io_size: Vec<usize>,
     live_mem_size: Vec<usize>,
@@ -807,7 +811,7 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
             verbose_opt: options.verbose_opt
         };
 
-        ZSharpFE::interpret(inputs, &entry_regs, &entry_stacks, &entry_arrays, &entry_witnesses)
+        ZSharpFE::interpret(inputs, &mut entry_regs, &entry_stacks, &entry_arrays, &entry_witnesses)
     };
     let interpret_time = interpret_start.elapsed();
     println!("\n--\nInterpret time: {}ms", interpret_time.as_millis());
@@ -1045,38 +1049,36 @@ fn get_run_time_knowledge<const VERBOSE: bool>(
     }
 
     // Fold entry_arrays
-    let entry_stacks = entry_stacks.into_iter().fold(Vec::new(), |acc, a| [acc, a].concat()).to_vec();
-    let entry_arrays = entry_arrays.into_iter().fold(Vec::new(), |acc, a| [acc, a].concat()).to_vec();
     let mem_time = mem_start.elapsed();
     println!("\n--\nMem gen time: {}ms", mem_time.as_millis());
 
     println!("\n--\nFUNC");
     print!("{:3} ", " ");
-    for i in 0..if entry_regs.len() == 0 {1} else {0} {
+    for i in 0..if entry_regs_concat.len() == 0 {1} else {0} {
         print!("{:3} ", i);
     }
     println!();
     print!("{:3} ", "I");
-    for i in 0..entry_regs.len() {
-        print!("{:3} ", entry_regs[i]);
+    for i in 0..entry_regs_concat.len() {
+        print!("{:3} ", entry_regs_concat[i]);
     }
     println!();
     print!("{:3} ", "S");
-    for i in 0..min(entry_stacks.len(), 32) {
-        print!("{:3} ", entry_stacks[i]);
+    for i in 0..min(entry_stacks_concat.len(), 32) {
+        print!("{:3} ", entry_stacks_concat[i]);
     }
     println!();
     print!("{:3} ", "M");
-    for i in 0..min(entry_arrays.len(), 32) {
-        print!("{:3} ", entry_arrays[i]);
+    for i in 0..min(entry_arrays_concat.len(), 32) {
+        print!("{:3} ", entry_arrays_concat[i]);
     }
     println!();
     print!("{:3} ", "O");
     println!("{:3} ", func_outputs);
 
-    let func_inputs = entry_regs.iter().map(|i| integer_to_bytes(i.clone())).collect();
-    let input_stack = entry_stacks.iter().map(|i| integer_to_bytes(i.clone())).collect();
-    let input_mem = entry_arrays.iter().map(|i| integer_to_bytes(i.clone())).collect();
+    let func_inputs = entry_regs_concat.iter().map(|i| integer_to_bytes(i.clone())).collect();
+    let input_stack = entry_stacks_concat.iter().map(|i| integer_to_bytes(i.clone())).collect();
+    let input_mem = entry_arrays_concat.iter().map(|i| integer_to_bytes(i.clone())).collect();
     let func_outputs = integer_to_bytes(func_outputs);
 
     RunTimeKnowledge {
@@ -1335,14 +1337,18 @@ fn main() {
     // Obtain Inputs
     // --
     let witness_start = Instant::now();
-    // Assume inputs are listed in the order of the parameters
-    let mut entry_regs: Vec<Integer> = Vec::new();
     // Keep track of %SP and %AS and record initial memory state
     let mut stack_alloc_counter = 0;
     let mut mem_alloc_counter = 0;
-    // One array per input, regardless of type. This is because arrays might be fed in as pointers.
-    let mut entry_stacks: Vec<Vec<Integer>> = Vec::new(); // for read-only
-    let mut entry_arrays: Vec<Vec<Integer>> = Vec::new(); // for others
+    // Inputs as register, stack, or array
+    // Note that stacks and arrays cans be passed as pointers (registers)
+    let mut entry_regs: BTreeMap<String, Integer> = BTreeMap::new();
+    let mut entry_stacks: BTreeMap<String, Vec<Integer>> = BTreeMap::new(); // for read-only
+    let mut entry_arrays: BTreeMap<String, Vec<Integer>> = BTreeMap::new(); // for others
+    // Initial memory setup
+    let mut entry_regs_concat: Vec<Integer> = Vec::new();
+    let mut entry_stacks_concat: Vec<Integer> = Vec::new();
+    let mut entry_arrays_concat: Vec<Integer> = Vec::new();
 
     let input_file_name = format!("../zok_tests/benchmarks/{}.input", benchmark_name);
     let f = File::open(input_file_name);
@@ -1353,25 +1359,29 @@ fn main() {
         let _ = buffer.trim();
         while buffer != "END".to_string() {
         let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
+        let var_name = split[0].split(":").next().unwrap().trim();
         // split is either of form [VAR, VAL] or [VAR, "[", ENTRY_0, ENTRY_1, ..., "]"] 
         if let Ok(val) = Integer::from_str_radix(&split[1], 10) {
-            entry_regs.push(val);
-            entry_stacks.push(vec![]);
-            entry_arrays.push(vec![]);
+            entry_regs.insert(var_name.to_string(), val.clone());
+            entry_regs_concat.push(val);
         } else if split[1] == "[ro" {
             assert_eq!(split[split.len() - 1], "]");
-            entry_regs.push(Integer::from(stack_alloc_counter));
+            entry_regs.insert(var_name.to_string(), Integer::from(stack_alloc_counter));
+            entry_regs_concat.push(Integer::from(stack_alloc_counter));
             // Parse the entries
-            entry_stacks.push(split[2..split.len() - 1].iter().map(|entry| Integer::from_str_radix(&entry, 10).unwrap()).collect());
-            entry_arrays.push(vec![]);
+            let stack_entries: Vec<Integer> = split[2..split.len() - 1].iter().map(|entry| Integer::from_str_radix(&entry, 10).unwrap()).collect();
+            entry_stacks.insert(var_name.to_string(), stack_entries.clone());
+            entry_stacks_concat.extend(stack_entries);
             stack_alloc_counter += split.len() - 3; // var, "[", and "]"
         } else {
             assert_eq!(split[1], "[");
             assert_eq!(split[split.len() - 1], "]");
-            entry_regs.push(Integer::from(mem_alloc_counter));
-            entry_stacks.push(vec![]);
+            entry_regs.insert(var_name.to_string(), Integer::from(mem_alloc_counter));
+            entry_regs_concat.push(Integer::from(mem_alloc_counter));
             // Parse the entries
-            entry_arrays.push(split[2..split.len() - 1].iter().map(|entry| Integer::from_str_radix(&entry, 10).unwrap()).collect());
+            let array_entries: Vec<Integer> = split[2..split.len() - 1].iter().map(|entry| Integer::from_str_radix(&entry, 10).unwrap()).collect();
+            entry_arrays.insert(var_name.to_string(), array_entries.clone());
+            entry_arrays_concat.extend(array_entries);
             mem_alloc_counter += split.len() - 3; // var, "[", and "]"
         }
         buffer.clear();
@@ -1379,8 +1389,10 @@ fn main() {
     }
     }
     // Insert [%SP, %AS] to the front of entry_reg
-    entry_regs.insert(0, Integer::from(mem_alloc_counter));
-    entry_regs.insert(0, Integer::from(stack_alloc_counter));
+    entry_regs.insert("%AS".to_string(), Integer::from(mem_alloc_counter));
+    entry_regs_concat.insert(0, Integer::from(mem_alloc_counter));
+    entry_regs.insert("%SP".to_string(), Integer::from(stack_alloc_counter));
+    entry_regs_concat.insert(0, Integer::from(stack_alloc_counter));
 
     // Obtain Witnesses,
     let mut entry_witnesses: Vec<Integer> = Vec::new();
@@ -1399,7 +1411,7 @@ fn main() {
         }
     }
 
-    println!("INPUT: {:?}", entry_regs);
+    println!("INPUT: {:?}", entry_regs_concat);
 
     // --
     // Generate Witnesses
@@ -1411,6 +1423,9 @@ fn main() {
         entry_stacks, 
         entry_arrays, 
         entry_witnesses,
+        entry_regs_concat,
+        entry_stacks_concat,
+        entry_arrays_concat,
         &ctk, 
         live_io_size, 
         live_mem_size, 

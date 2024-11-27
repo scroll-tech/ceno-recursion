@@ -645,6 +645,15 @@ fn is_bp_update(s: &Statement) -> bool {
     return false;
 }
 
+/*
+// Given a variable and function, determine if the variable belongs to the function
+fn var_fn_match(var_name: &String, fn_name: &String) -> Boolean {
+    // var can be of form name@fn1@fn2.fn.scope.ver
+    // if fn1 exists, match fn1 with fn_name, otherwise match fn with fn_name
+    
+}
+*/
+
 // Liveness analysis
 // GEN all variables in gen
 fn la_gen(
@@ -1654,7 +1663,7 @@ impl<'ast> ZGen<'ast> {
     // BLOCK OPTIMIZATION
     // --
 
-    // Returns: blks, entry_bl, input_liveness
+    // Returns: blks, entry_bl, live_input_set
     // Inputs are (variable, type) pairs
     pub fn optimize_block(
         &self,
@@ -1664,7 +1673,7 @@ impl<'ast> ZGen<'ast> {
         // When no_opt is set, DO NOT perform Merge / Spilling
         no_opt: bool,
         VERBOSE: bool,
-    ) -> (Vec<Block<'ast>>, usize, Vec<bool>) {
+    ) -> (Vec<Block<'ast>>, usize, BTreeSet<String>) {
         println!("\n\n--\nOptimization:");
         // Add %SP and %AS to program input
         inputs.insert(0, ("%AS".to_string(), Ty::Field));
@@ -1833,13 +1842,13 @@ impl<'ast> ZGen<'ast> {
         }
 
         // Set I/O again after optimizations
-        let input_liveness: Vec<bool>;
-        (bls, input_liveness) = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, &entry_bls_fn, &exit_bls_fn, &call_exit_entry_map, inputs.clone());
+        let live_input_set: BTreeSet<String>;
+        (bls, live_input_set) = self.set_input_output(bls, &successor, &predecessor, &predecessor_fn, &entry_bl, &exit_bls, &entry_bls_fn, &exit_bls_fn, &call_exit_entry_map, inputs.clone());
         if VERBOSE {
             println!("\n\n--\nSet Input Output after Spilling:");
             print_bls(&bls, &entry_bl);
         }
-        (bls, entry_bl, input_liveness)
+        (bls, entry_bl, live_input_set)
     }
 
     // Return value: successor, rp_successor, successor_fn, visited, next_bls
@@ -2236,7 +2245,7 @@ impl<'ast> ZGen<'ast> {
     }
 
     // For each block, set its input to be variables that are alive & defined at the entry point of the block and their type
-    // Returns: bls, input_liveness
+    // Returns: bls, live_input_set
     // This pass consists of a liveness analysis and a reaching definition (for typing)
     fn set_input_output(
         &self,
@@ -2250,7 +2259,7 @@ impl<'ast> ZGen<'ast> {
         exit_bls_fn: &BTreeSet<usize>,
         call_exit_entry_map: &BTreeMap<usize, usize>,
         inputs: Vec<(String, Ty)>
-    ) -> (Vec<Block<'ast>>, Vec<bool>) {
+    ) -> (Vec<Block<'ast>>, BTreeSet<String>) {
         // Liveness
         let mut visited: Vec<bool> = vec![false; bls.len()];
         // MEET is union, so IN and OUT are Empty Set
@@ -2446,19 +2455,17 @@ impl<'ast> ZGen<'ast> {
         // For entry block, inputs need to be sorted the same order as program input
         // Determine liveness of each program input along the way
         bls[*entry_bl].inputs = Vec::new();
-        let mut input_liveness = Vec::new();
+        let mut live_input_set = BTreeSet::new();
         for (name, _) in &inputs {
             if input_lst[*entry_bl].contains(name) {
-                input_liveness.push(true);
+                live_input_set.insert(name.to_string());
                 if let Some(ty) = ty_map_in[*entry_bl].get(name) {
                     bls[*entry_bl].inputs.push((name.to_string(), Some(ty.clone())));
                 }
-            } else {
-                input_liveness.push(false);
             }
         }
 
-        return (bls, input_liveness);
+        return (bls, live_input_set);
     }
 
     // Count number of constraints for a block

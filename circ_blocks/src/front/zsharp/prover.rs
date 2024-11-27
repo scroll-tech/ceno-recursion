@@ -1,4 +1,6 @@
+use std::collections::BTreeSet;
 use std::iter::zip;
+use pretty::pretty_block_content;
 use pretty::pretty_expr;
 use zokrates_pest_ast::*;
 use crate::front::zsharp::ZGen;
@@ -170,7 +172,7 @@ impl<'ast> ZGen<'ast> {
                     span: Span::new("", 0, 0).unwrap()
                 },
                 suffix: Some(match ty {
-                    Ty::Field => DecimalSuffix::Field(FieldSuffix {
+                    Ty::Field | Ty::Array(..) => DecimalSuffix::Field(FieldSuffix {
                         span: Span::new("", 0, 0).unwrap()
                     }),
                     Ty::Uint(64) => DecimalSuffix::U64(U64Suffix {
@@ -226,7 +228,6 @@ impl<'ast> ZGen<'ast> {
         self.literal_(&e)
     }
 
-
     // I am hacking cvars_stack to do the interpretation. Ideally we want a separate var_table to do so.
     // We only need BTreeMap<String, T> to finish evaluation, so the 2 Vecs of cvars_stack should always have
     // size 1, i.e. we use only one function and one scope.
@@ -234,10 +235,10 @@ impl<'ast> ZGen<'ast> {
         &self,
         entry_bl: usize,
         prog_inputs: &Vec<(String, Ty)>,
-        input_liveness: &Vec<bool>,
-        entry_regs: &Vec<Integer>, // Entry regs should match the input of the entry block
-        entry_stacks: &Vec<Vec<Integer>>,
-        entry_arrays: &Vec<Vec<Integer>>,
+        live_input_set: &mut BTreeSet<String>,
+        entry_regs: &mut BTreeMap<String, Integer>, // Entry regs should match the input of the entry block
+        entry_stacks: &BTreeMap<String, Vec<Integer>>,
+        entry_arrays: &BTreeMap<String, Vec<Integer>>,
         entry_witnesses: &Vec<Integer>,
         bls: &Vec<Block<'ast>>,
         io_size: usize
@@ -277,11 +278,9 @@ impl<'ast> ZGen<'ast> {
         // Process input variables & arrays
         // Add %BN, %SP, and %AS to the front of inputs
         // Note: %SP and %AS are handled by the input parser and is already present in entry_regs
-        let entry_regs = &[vec![Integer::from(0)], entry_regs.clone()].concat();
+        entry_regs.insert("%BN".to_string(), Integer::from(0));
         let prog_inputs = &[vec![("%BN".to_string(), Ty::Field), ("%SP".to_string(), Ty::Field), ("%AS".to_string(), Ty::Field)], prog_inputs.clone()].concat();
-        let entry_stacks = &[vec![vec![]], vec![vec![]], vec![vec![]], entry_stacks.clone()].concat();
-        let entry_arrays = &[vec![vec![]], vec![vec![]], vec![vec![]], entry_arrays.clone()].concat();
-        let input_liveness = &[vec![true], input_liveness.clone()].concat();
+        live_input_set.insert("%BN".to_string());
 
         let mut prog_reg_in = vec![None; io_size];
         // The next stack / address to allocate
@@ -291,63 +290,89 @@ impl<'ast> ZGen<'ast> {
         let mut i = 0;
         // The corresponding index in bls[entry_bl].input
         let mut input_count = 0;
-        assert_eq!(prog_inputs.len(), entry_regs.len());
-        assert_eq!(prog_inputs.len(), entry_stacks.len());
-        assert_eq!(prog_inputs.len(), entry_arrays.len());
-        assert_eq!(prog_inputs.len(), input_liveness.len());
-        for ((_, x), alive) in zip(prog_inputs, input_liveness) {
+        for (name, x) in prog_inputs {
+            let alive = live_input_set.contains(name);
             assert!(i < entry_regs.len());
+            // Obtain var_name by stripping all @ and . out of name
+            let var_name = name.split(".").next().unwrap().split("@").next().unwrap().to_string();
 
             // Determine if ty is basic or complex
             match x {
                 Ty::Uint(_) | Ty::Field | Ty::Bool => {
-                    if *alive {
+                    if alive {
+                        // Find register name
                         let (name, _) = &bls[entry_bl].inputs[input_count];
-                        let val = self.int_to_t(&entry_regs[i], &x)?;
+                        let val = self.int_to_t(&entry_regs.get(&var_name).unwrap(), &x)?;
                         self.bl_eval_assign_impl_(&mut io_regs, &mut wit_regs, name, val)?;
                         input_count += 1;
                     }
                 },
                 Ty::Array(read_only, _, entry_ty) => {
                     let entry_ty = match **entry_ty {
-                        Ty::Uint(_) | Ty::Field | Ty::Bool => { &*entry_ty },
-                        Ty::Array(..) | Ty::Struct(..) => { &Ty::Field }
+                        Ty::Uint(_) | Ty::Field | Ty::Bool => { vec![*entry_ty.clone()] },
+                        Ty::Array(..) => { vec![Ty::Field] }
+                        Ty::Struct(..) => {
+                            let mut flattened_var = Vec::new();
+                            flatten_var("", &*entry_ty, &mut flattened_var);
+                            flattened_var.into_iter().map(|i| i.1).collect()
+                        }
                         _ => { panic!("Mut Array input type not supported!") }
                     };
-                    if *alive {
+                    if alive {
+                        // Find register name
                         let (name, _) = &bls[entry_bl].inputs[input_count];
                         // Declare the array as a pointer
-                        let val = self.int_to_t(&entry_regs[i], &Ty::Field)?;
+                        let val = self.int_to_t(&entry_regs.get(&var_name).unwrap(), &Ty::Field)?;
                         self.bl_eval_assign_impl_(&mut io_regs, &mut wit_regs, name, val)?;
                         input_count += 1;
                     }
                     // Add all entries as STOREs
                     if *read_only {
-                        assert_eq!(entry_arrays[i].len(), 0);
-                        for entry in &entry_stacks[i] {
+                        let entry_stack = entry_stacks.get(&var_name).unwrap();
+                        if entry_stack.len() % entry_ty.len() != 0 {
+                            return Err(format!(
+                                "Error processing ro array input: {}. Input size {} is not a multiple of struct width {}!", 
+                                name,
+                                entry_stack.len(),
+                                entry_ty.len(),
+                            ));
+                        }
+                        let mut next_ty_index = 0;
+                        for entry in entry_stack {
                             let addr = stack_addr_count;
                             let addr_t = self.int_to_t(&Integer::from(stack_addr_count), &Ty::Field)?;
-                            let data_t = self.int_to_t(&entry, &*entry_ty)?;
+                            let data_t = self.int_to_t(&entry, &entry_ty[next_ty_index])?;
                             phy_mem.push(Some(data_t.clone()));
                             init_phy_mem_list.push(MemOp::new_phy(addr, addr_t, data_t));
                             stack_addr_count += 1;
+                            next_ty_index = (next_ty_index + 1) % entry_ty.len();
                         }
                     } else {
-                        assert_eq!(entry_stacks[i].len(), 0);
-                        for entry in &entry_arrays[i] {
+                        let entry_array = entry_arrays.get(&var_name).unwrap();
+                        if entry_array.len() % entry_ty.len() != 0 {
+                            return Err(format!(
+                                "Error processing array input: {}. Input size {} is not a multiple of struct width {}!", 
+                                name,
+                                entry_array.len(),
+                                entry_ty.len(),
+                            ));
+                        }
+                        let mut next_ty_index = 0;
+                        for entry in entry_array {
                             let addr = mem_addr_count;
                             let addr_t = self.int_to_t(&Integer::from(mem_addr_count), &Ty::Field)?;
-                            let data_t = self.int_to_t(&entry, &*entry_ty)?;
+                            let data_t = self.int_to_t(&entry, &entry_ty[next_ty_index])?;
                             let ls_t = self.int_to_t(&Integer::from(STORE), &Ty::Field)?;
                             let ts = 0;
                             let ts_t = self.int_to_t(&Integer::from(0), &Ty::Field)?;
                             vir_mem.push(Some(data_t.clone()));
                             init_vir_mem_list.push(MemOp::new_vir(addr, addr_t, data_t, ls_t, ts, ts_t));
                             mem_addr_count += 1;
+                            next_ty_index = (next_ty_index + 1) % entry_ty.len();
                         }
                     }
                 },
-                _ => { panic!("Struct input type not supported!") }
+                _ => { return Err(format!("Error processing input type: {:?}. Program input should not contain structs!", x)); }
             }
             i += 1;
         }

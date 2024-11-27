@@ -70,7 +70,8 @@ impl FrontEnd for ZSharpFE {
             b.pretty();
             println!("");
         }
-        let (blks, entry_bl, input_liveness) = g.optimize_block(blks, entry_bl, inputs, i.no_opt, i.verbose_opt);
+        let (blks, entry_bl, live_input_set) = g.optimize_block(blks, entry_bl, inputs.clone(), i.no_opt, i.verbose_opt);
+        let input_liveness = inputs.iter().map(|(n, _)| live_input_set.contains(n)).collect();
         let (blks, _, io_size, _, live_io_list, num_mem_accesses, live_vm_list) = 
             g.process_block::<0>(blks, entry_bl, i.verbose_opt);
         // NOTE: The input of block 0 includes %BN, which should be removed when reasoning about function input
@@ -90,9 +91,9 @@ impl ZSharpFE {
     /// Execute the Z# front-end interpreter on the supplied file with the supplied inputs
     pub fn interpret(
         i: Inputs, 
-        entry_regs: &Vec<Integer>, 
-        entry_stacks: &Vec<Vec<Integer>>, 
-        entry_arrays: &Vec<Vec<Integer>>,
+        entry_regs: &mut BTreeMap<String, Integer>, 
+        entry_stacks: &BTreeMap<String, Vec<Integer>>, 
+        entry_arrays: &BTreeMap<String, Vec<Integer>>,
         entry_witnesses: &Vec<Integer>,
     ) -> (
         T, // Return Value
@@ -113,7 +114,7 @@ impl ZSharpFE {
         g.generics_stack_push(HashMap::new());
         
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
-        let (blks, entry_bl, input_liveness) = g.optimize_block(blks, entry_bl, inputs.clone(), i.no_opt, INTERPRET_VERBOSE);
+        let (blks, entry_bl, mut live_input_set) = g.optimize_block(blks, entry_bl, inputs.clone(), i.no_opt, INTERPRET_VERBOSE);
         let (blks, entry_bl, io_size, _, _, _, _) = g.process_block::<1>(blks, entry_bl, INTERPRET_VERBOSE);
 
         println!("\n\n--\nInterpretation:");
@@ -129,8 +130,8 @@ impl ZSharpFE {
         ) = g.bl_eval_entry_fn::<INTERPRET_VERBOSE>(
             entry_bl, 
             &inputs, 
-            &input_liveness, 
-            &entry_regs, 
+            &mut live_input_set, 
+            entry_regs, 
             entry_stacks, 
             entry_arrays,
             entry_witnesses,

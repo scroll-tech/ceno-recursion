@@ -567,14 +567,13 @@ pub fn verify_table_proof(
 */
 
 def main(
-    field[0] expr_concat,
+    Expression[0] expr_concat,
     field[0] expr_pointer,
-    field[0] cs_concat,
     ZKVMVerifier self,
     // field[0] name,
-    field[0] proof_entries_concat,
+    ExtField[0] proof_entries_concat,
     field[0] proof_pointers_mat,
-    field[0] main_sel_sumcheck_proofs_concat,
+    IOPProverMessage[0] main_sel_sumcheck_proofs_concat,
     ZKVMOpcodeProof proof,
     Transcript t,
     u32 num_product_fanin,

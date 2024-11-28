@@ -1,6 +1,6 @@
 use super::SpartanExtensionField;
 use crate::{ProofTranscript, Transcript};
-use ceno_goldilocks::Goldilocks;
+use goldilocks::{Goldilocks, MODULUS as P};
 use core::borrow::Borrow;
 use core::iter::{Product, Sum};
 use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
@@ -10,11 +10,6 @@ use serde::{Deserialize, Serialize};
 use std::ops::Neg;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;
-
-/// Constant representing the modulus
-/// q = 2^64 - 2^32 + 1
-/// 0xFFFFFFFF00000001
-const P: u64 = ceno_goldilocks::MODULUS;
 
 /// Field wrapper around base Goldilocks
 #[derive(Clone, Copy, Eq, Serialize, Deserialize, Hash, Debug)]

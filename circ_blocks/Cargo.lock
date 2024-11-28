@@ -288,19 +288,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
-name = "ceno-goldilocks"
-version = "0.1.0"
-source = "git+https://github.com/scroll-tech/ceno-Goldilocks.git?branch=fix/crate-ready#9853bc49cc26879cdbbefdb35e1b76c69ba35c04"
-dependencies = [
- "ff 0.13.0",
- "halo2curves",
- "itertools 0.12.1",
- "rand_core 0.6.4",
- "serde",
- "subtle",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -877,6 +864,19 @@ checksum = "b0205cd82059bc63b63cf516d714352a30c44f2c74da9961dfda2617ae6b5918"
 dependencies = [
  "libc",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "goldilocks"
+version = "0.1.0"
+source = "git+https://github.com/scroll-tech/ceno-Goldilocks#29a15d186ce4375dab346a3cc9eca6e43540cb8d"
+dependencies = [
+ "ff 0.13.0",
+ "halo2curves",
+ "itertools 0.12.1",
+ "rand_core 0.6.4",
+ "serde",
+ "subtle",
 ]
 
 [[package]]
@@ -1699,12 +1699,12 @@ version = "0.8.0"
 dependencies = [
  "bincode",
  "byteorder",
- "ceno-goldilocks",
  "colored",
  "curve25519-dalek 4.1.3",
  "digest 0.10.7",
  "ff 0.13.0",
  "flate2",
+ "goldilocks",
  "itertools 0.13.0",
  "merlin",
  "rand 0.8.5",

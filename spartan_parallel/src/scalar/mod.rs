@@ -1,7 +1,7 @@
 mod fp;
 mod fp2;
 
-use ceno_goldilocks::ExtensionField;
+use goldilocks::ExtensionField;
 use ff::Field;
 pub use fp::Scalar;
 pub use fp2::ScalarExt2;

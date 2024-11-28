@@ -1,10 +1,10 @@
 mod fp;
 mod fp2;
 
-use goldilocks::ExtensionField;
 use ff::Field;
 pub use fp::Scalar;
 pub use fp2::ScalarExt2;
+use goldilocks::ExtensionField;
 use merlin::Transcript;
 use rand::{CryptoRng, RngCore};
 use serde::Serialize;

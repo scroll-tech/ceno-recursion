@@ -1,10 +1,10 @@
 use super::SpartanExtensionField;
 use crate::{ProofTranscript, Transcript};
-use goldilocks::{Goldilocks, MODULUS as P};
 use core::borrow::Borrow;
 use core::iter::{Product, Sum};
 use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use ff::{Field, FromUniformBytes};
+use goldilocks::{Goldilocks, MODULUS as P};
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::ops::Neg;

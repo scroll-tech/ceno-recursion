@@ -1,11 +1,11 @@
 use super::Scalar;
 use super::SpartanExtensionField;
 use crate::{AppendToTranscript, ProofTranscript, Transcript};
-use goldilocks::{ExtensionField, Goldilocks, GoldilocksExt2};
 use core::borrow::Borrow;
 use core::iter::{Product, Sum};
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use ff::{Field, FromUniformBytes};
+use goldilocks::{ExtensionField, Goldilocks, GoldilocksExt2};
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};

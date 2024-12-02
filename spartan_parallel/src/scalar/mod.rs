@@ -42,7 +42,7 @@ pub trait SpartanExtensionField:
   + Hash
   + From<Self::InnerType>
   + fmt::Debug
-  + Mul<Self::BaseField>
+  + Mul<Self::BaseField, Output = Self>
   + MulAssign<Self::BaseField>
 {
   /// Inner Goldilocks extension field

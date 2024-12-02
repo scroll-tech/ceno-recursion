@@ -17,6 +17,7 @@ pub struct Scalar(Goldilocks);
 
 impl SpartanExtensionField for Scalar {
   type InnerType = Goldilocks;
+  type BaseField = Self;
 
   fn inner(&self) -> &Goldilocks {
     &self.0
@@ -28,6 +29,11 @@ impl SpartanExtensionField for Scalar {
 
   fn field_one() -> Self {
     Goldilocks::ONE.into()
+  }
+
+  /// Build a self from a base element; pad ext with 0s.
+  fn from_base(b: &Self::BaseField) -> Self {
+    *b
   }
 
   fn random<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> Self {

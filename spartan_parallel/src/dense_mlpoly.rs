@@ -443,7 +443,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     let mut R_list: Vec<Vec<S>> = Vec::new();
     let mut Zc_list: Vec<S> = Vec::new();
 
-    let c_base = transcript.challenge_scalar(b"challenge_c");
+    let c_base: S = transcript.challenge_scalar(b"challenge_c");
     let mut c = S::field_one();
     for i in 0..r_list.len() {
       let eq = EqPolynomial::new(r_list[i].to_vec());
@@ -516,7 +516,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     let mut R_list: Vec<Vec<S>> = Vec::new();
     let mut Zc_list: Vec<S> = Vec::new();
 
-    let c_base = transcript.challenge_scalar(b"challenge_c");
+    let c_base: S = transcript.challenge_scalar(b"challenge_c");
     let mut c = S::field_one();
     for i in 0..r_list.len() {
       let eq = EqPolynomial::new(r_list[i].to_vec());
@@ -570,7 +570,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     let mut R_list: Vec<Vec<S>> = Vec::new();
 
     // generate coefficient for RLC
-    let c_base = transcript.challenge_scalar(b"challenge_c");
+    let c_base: S = transcript.challenge_scalar(b"challenge_c");
     let mut c = S::field_one();
     let zero = S::field_zero();
     for i in 0..poly_list.len() {
@@ -658,7 +658,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     let mut R_list: Vec<Vec<S>> = Vec::new();
 
     // generate coefficient for RLC
-    let c_base = transcript.challenge_scalar(b"challenge_c");
+    let c_base: S = transcript.challenge_scalar(b"challenge_c");
     let mut c = S::field_one();
     let zero = S::field_zero();
 
@@ -724,7 +724,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     let mut R_list = Vec::new();
 
     // generate coefficient for RLC
-    let c_base = transcript.challenge_scalar(b"challenge_c");
+    let c_base: S = transcript.challenge_scalar(b"challenge_c");
     let mut c = S::field_one();
     let zero = S::field_zero();
     for i in 0..poly_list.len() {
@@ -822,7 +822,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     let mut R_list = Vec::new();
 
     // generate coefficient for RLC
-    let c_base = transcript.challenge_scalar(b"challenge_c");
+    let c_base: S = transcript.challenge_scalar(b"challenge_c");
     let mut c = S::field_one();
     let zero = S::field_zero();
 
@@ -917,7 +917,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 
     // compute the vector underneath L*Z
     // compute vector-matrix product between L and Z viewed as a matrix
-    let c_base = transcript.challenge_scalar(b"challenge_c");
+    let c_base: S = transcript.challenge_scalar(b"challenge_c");
     let mut c = S::field_one();
     let mut LZ_comb = vec![zero; R_size];
     let mut Zr_comb = zero;
@@ -995,7 +995,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     let mut L_map: HashMap<usize, Vec<S>> = HashMap::new();
 
     // compute a weighted sum of commitments and L
-    let c_base = transcript.challenge_scalar(b"challenge_c");
+    let c_base: S = transcript.challenge_scalar(b"challenge_c");
     let mut c = S::field_one();
 
     for i in 0..poly_size.len() {

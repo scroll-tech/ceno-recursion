@@ -13,7 +13,7 @@ use std::{
   cmp::Eq,
   hash::Hash,
   iter::{Product, Sum},
-  ops::{Add, Mul, Neg, Sub},
+  ops::{Add, Mul, Neg, Sub, MulAssign},
 };
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;
@@ -42,9 +42,14 @@ pub trait SpartanExtensionField:
   + Hash
   + From<Self::InnerType>
   + fmt::Debug
+  + Mul<Self::BaseField>
+  + MulAssign<Self::BaseField>
 {
   /// Inner Goldilocks extension field
   type InnerType: ExtensionField + Field;
+
+  /// Basefield for conserving computational resources
+  type BaseField: SpartanExtensionField;
 
   /// Return inner Goldilocks field element
   fn inner(&self) -> &Self::InnerType;
@@ -54,6 +59,9 @@ pub trait SpartanExtensionField:
 
   /// Return the multiplicative identity
   fn field_one() -> Self;
+
+  /// Build a self from a base element; pad ext with 0s.
+  fn from_base(b: &Self::BaseField) -> Self;
 
   /// Sample field element
   fn random<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> Self;

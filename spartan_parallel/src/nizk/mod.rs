@@ -36,7 +36,7 @@ impl<S: SpartanExtensionField> KnowledgeProof<S> {
     let t1 = random_tape.random_scalar(b"t1");
     let t2 = random_tape.random_scalar(b"t2");
 
-    let c = transcript.challenge_scalar(b"c");
+    let c: S = transcript.challenge_scalar(b"c");
 
     let z1 = *x * c + t1;
     let z2 = *r * c + t2;

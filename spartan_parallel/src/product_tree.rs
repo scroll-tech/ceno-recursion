@@ -399,7 +399,7 @@ impl<S: SpartanExtensionField> ProductCircuitEvalProofBatched<S> {
       }
 
       // produce random coefficients, one for each instance
-      let coeff_vec =
+      let coeff_vec: Vec<S> =
         transcript.challenge_vector(b"rand_coeffs_next_layer", claims_to_verify.len());
 
       // produce a joint claim

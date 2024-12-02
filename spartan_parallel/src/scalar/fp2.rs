@@ -1,4 +1,5 @@
 use super::SpartanExtensionField;
+use crate::scalar::Scalar;
 use crate::{AppendToTranscript, ProofTranscript, Transcript};
 use core::borrow::Borrow;
 use core::iter::{Product, Sum};
@@ -9,7 +10,6 @@ use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;
-use crate::scalar::Scalar;
 
 /// Field wrapper around ext2 Goldilocks
 #[derive(Clone, Copy, Eq, Serialize, Deserialize, Hash, Debug)]
@@ -26,7 +26,7 @@ impl Mul<Scalar> for ScalarExt2 {
 
   #[inline]
   fn mul(self, rhs: Scalar) -> Self::Output {
-      (self.inner() * &rhs.inner()).into()
+    (self.inner() * &rhs.inner()).into()
   }
 }
 impl<'a> Mul<&'a Scalar> for ScalarExt2 {
@@ -34,20 +34,20 @@ impl<'a> Mul<&'a Scalar> for ScalarExt2 {
 
   #[inline]
   fn mul(mut self, rhs: &'a Scalar) -> Self::Output {
-      self *= rhs;
-      self
+    self *= rhs;
+    self
   }
 }
 impl MulAssign<&Scalar> for ScalarExt2 {
   #[inline]
   fn mul_assign(&mut self, rhs: &Scalar) {
-      self.0 *= rhs.inner();
+    self.0 *= rhs.inner();
   }
 }
 impl MulAssign<Scalar> for ScalarExt2 {
   #[inline]
   fn mul_assign(&mut self, rhs: Scalar) {
-      self.mul_assign(&rhs)
+    self.mul_assign(&rhs)
   }
 }
 impl SpartanExtensionField for ScalarExt2 {
@@ -69,7 +69,7 @@ impl SpartanExtensionField for ScalarExt2 {
   /// Build a self from a base element; pad ext with 0s.
   fn from_base(b: &Self::BaseField) -> Self {
     GoldilocksExt2::from_base(b.inner()).into()
-}
+  }
 
   fn random<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> Self {
     GoldilocksExt2::random(rng).into()

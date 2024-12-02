@@ -13,7 +13,7 @@ use std::{
   cmp::Eq,
   hash::Hash,
   iter::{Product, Sum},
-  ops::{Add, Mul, Neg, Sub, MulAssign},
+  ops::{Add, Mul, MulAssign, Neg, Sub},
 };
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;

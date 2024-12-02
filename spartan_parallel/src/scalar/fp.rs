@@ -4,7 +4,7 @@ use core::borrow::Borrow;
 use core::iter::{Product, Sum};
 use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use ff::{Field, FromUniformBytes};
-use goldilocks::{Goldilocks, MODULUS as P};
+use goldilocks::Goldilocks;
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::ops::Neg;
@@ -31,11 +31,7 @@ impl SpartanExtensionField for Scalar {
   }
 
   fn random<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> Self {
-    let mut res = rng.next_u64();
-    while res >= P {
-      res = rng.next_u64();
-    }
-    Goldilocks(res).into()
+    Goldilocks::random(rng).into()
   }
 
   /// Attempts to convert a little-endian byte representation of

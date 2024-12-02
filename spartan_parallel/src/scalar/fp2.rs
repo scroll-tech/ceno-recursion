@@ -1,4 +1,3 @@
-use super::Scalar;
 use super::SpartanExtensionField;
 use crate::{AppendToTranscript, ProofTranscript, Transcript};
 use core::borrow::Borrow;
@@ -37,7 +36,7 @@ impl SpartanExtensionField for ScalarExt2 {
   }
 
   fn random<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> Self {
-    GoldilocksExt2([*Scalar::random(rng).inner(), *Scalar::random(rng).inner()]).into()
+    GoldilocksExt2::random(rng).into()
   }
 
   /// Attempts to convert a little-endian byte representation of

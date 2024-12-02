@@ -164,7 +164,7 @@ def verify_opcode_proof(
     Transcript t,
     u32 num_product_fanin,
     ExtField[2] challenges // derive challenge from PCS
-) -> ExtField[0]:
+) -> field:
     ConstraintSystem cs = circuit_vk.cs
     u32 r_counts_per_instance = cs.r_expressions_len
     u32 w_counts_per_instance = cs.w_expressions_len
@@ -261,7 +261,7 @@ def verify_opcode_proof(
     SumCheckSubClaim main_sel_subclaim = sc_t.sc
     */
 
-    return [to_ext(1)]
+    return 1
     /*
     let (input_opening_point, expected_evaluation) = (
         main_sel_subclaim
@@ -581,7 +581,7 @@ def main(
     u32 num_product_fanin,
     ExtField[2] challenges // derive challenge from PCS
 ) -> field:
-    ExtField[0] result = verify_opcode_proof(
+    field result = verify_opcode_proof(
         self,
         // name,
         self.vk.circuit_vks_key[1],
@@ -590,4 +590,4 @@ def main(
         num_product_fanin,
         challenges // derive challenge from PCS
     )
-    return result[0].b0
+    return result

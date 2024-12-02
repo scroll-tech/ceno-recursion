@@ -74,7 +74,8 @@ def tower_verify(
         point: initial_rt,
         eval: initial_claim
     }
-    for u32 round in 0..expected_max_round - 1 do
+    // for u32 round in 0..expected_max_round - 1 do
+    u32 round = 0
         ExtField[0] out_rt = next_rt.point
         ExtField out_claim = next_rt.eval
         u32 rt_len = (round + 1) * log2_num_fanin
@@ -210,7 +211,7 @@ def tower_verify(
             eval: next_eval
         }
         alpha_pows = next_alpha_pows
-    endfor
+    // endfor
 
     return TowerVerifierOutput {
         rt_tower: next_rt.point,
@@ -219,7 +220,7 @@ def tower_verify(
         logup_q_evals: logup_spec_q_input_layer_eval
     }
 
-
+/*
 // Main function with dynamic inputs
 def main(
     u32 prod_spec_size,
@@ -312,7 +313,7 @@ def main(
     // Tower Verify
     TowerVerifierOutput output = tower_verify(prod_out_evals, logup_out_evals, tower_proofs, expected_rounds, t)
     return output.rt_tower[0].b0
-
+*/
 
 /*
 // Main function with static inputs

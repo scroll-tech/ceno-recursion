@@ -37,6 +37,7 @@ def verify_round_and_update_state(SumcheckIOPVerifierState self, IOPProverMessag
     }
 
 def interpolate_uni_poly(u32 p_i_len, ExtField[0] p_i, ExtField eval_at) -> ExtField:
+    return eval_at
     u32 len = p_i_len
     array_decl ExtField[len] evals
 

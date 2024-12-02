@@ -6,6 +6,7 @@
 use std::collections::VecDeque;
 use zokrates_pest_ast::*;
 use crate::front::zsharp::blocks::*;
+use crate::front::zsharp::pretty::pretty_block_content;
 use std::collections::{BTreeMap, BTreeSet};
 use crate::front::zsharp::Ty;
 use itertools::Itertools;
@@ -1161,8 +1162,13 @@ fn la_inst<'ast>(
     // One live variable set per each function call trace, expressed as a BTreeMap
     mut state_per_call_trace: BTreeMap<Vec<usize>, BTreeSet<String>>,
     inst: &Vec<BlockContent<'ast>>
-) -> (BTreeSet<String>, BTreeMap<Vec<usize>, BTreeSet<String>>, Vec<BlockContent<'ast>>) {
+) -> (
+    BTreeSet<String>, BTreeMap<Vec<usize>, BTreeSet<String>>, Vec<BlockContent<'ast>>, 
+    usize, usize // Number of ROM and RAM accesses
+) {
     let mut new_instructions = Vec::new();
+    let mut num_ro_ops = 0;
+    let mut num_vm_ops = 0;
     for i in inst.iter().rev() {
         match i {
             BlockContent::Witness((var, ty, _)) => {
@@ -1180,6 +1186,7 @@ fn la_inst<'ast>(
             BlockContent::MemPush((var, _, _)) => {
                 // Keep all push statements
                 new_instructions.insert(0, i.clone());
+                num_ro_ops += 1;
                 state.insert(var.to_string());
                 state.insert("%SP".to_string());
                 for (_, s) in state_per_call_trace.iter_mut() {
@@ -1190,6 +1197,7 @@ fn la_inst<'ast>(
             BlockContent::MemPop((var, _, _)) => {
                 if is_alive(&state, var) {
                     new_instructions.insert(0, i.clone());
+                    num_ro_ops += 1;
                 }
                 state.remove(var);
                 state.insert("%BP".to_string());
@@ -1226,6 +1234,7 @@ fn la_inst<'ast>(
             BlockContent::Store((val_expr, _, arr, id_expr, _, read_only)) => {
                 // if is_alive(&state, arr) {
                     new_instructions.insert(0, i.clone());
+                    num_vm_ops += 1;
                     state.insert(arr.to_string());
                     let val_gen = expr_find_val(val_expr);
                     la_gen(&mut state, &val_gen);
@@ -1248,6 +1257,7 @@ fn la_inst<'ast>(
             BlockContent::Load((val, _, arr, id_expr, read_only)) => {
                 if is_alive(&state, val) {
                     new_instructions.insert(0, i.clone());
+                    num_vm_ops += 1;
                     state.remove(val);
                     state.insert(arr.to_string());
                     let gen = expr_find_val(id_expr);
@@ -1268,6 +1278,7 @@ fn la_inst<'ast>(
             // Do not reason about liveness of dummy loads, mark %TS as alive
             BlockContent::DummyLoad(read_only) => {
                 new_instructions.insert(0, i.clone());
+                num_vm_ops += 1;
                 if !*read_only {
                     state.insert("%TS".to_string());
                 }
@@ -1278,10 +1289,13 @@ fn la_inst<'ast>(
                 }
             }
             BlockContent::Branch((cond, if_inst, else_inst)) => {
+                println!("");
+                pretty_block_content(0, i);
+
                 // Liveness of branches
-                let (mut new_if_state, mut new_if_state_per_call_trace, new_if_inst) = 
+                let (mut new_if_state, mut new_if_state_per_call_trace, new_if_inst, left_ro_ops, left_vm_ops) = 
                     la_inst(state.clone(), state_per_call_trace.clone(), if_inst);
-                let (new_else_state, new_else_state_per_call_trace, new_else_inst) = 
+                let (new_else_state, new_else_state_per_call_trace, new_else_inst, right_ro_ops, right_vm_ops) = 
                     la_inst(state.clone(), state_per_call_trace.clone(), else_inst);
                 new_if_state.extend(new_else_state);
                 assert_eq!(new_if_state_per_call_trace.len(), new_else_state_per_call_trace.len());
@@ -1296,9 +1310,15 @@ fn la_inst<'ast>(
                 for (_, s) in state_per_call_trace.iter_mut() {
                     la_gen(s, &gen);
                 }
-                // Branch is dead if both branches are empty
-                if new_if_inst.len() > 0 || new_else_inst.len() > 0 {
+                // Branch is dead if both branches are empty or contain only dummyloads
+                let is_branch_alive = |bc: &Vec<BlockContent<'ast>>| 
+                    bc.iter().fold(false, |b, i| b || !matches!(i, BlockContent::DummyLoad(_)));
+                if is_branch_alive(&new_if_inst) || is_branch_alive(&new_else_inst) {
                     new_instructions.insert(0, BlockContent::Branch((cond.clone(), new_if_inst, new_else_inst)));
+                    assert_eq!(left_ro_ops, right_ro_ops);
+                    assert_eq!(left_vm_ops, right_vm_ops);
+                    num_ro_ops += left_ro_ops;
+                    num_vm_ops += right_vm_ops;
                 }
             }
             BlockContent::Stmt(s) => {
@@ -1318,7 +1338,7 @@ fn la_inst<'ast>(
             }
         }
     }
-    (state, state_per_call_trace, new_instructions)
+    (state, state_per_call_trace, new_instructions, num_ro_ops, num_vm_ops)
 }
 
 // Typing
@@ -2088,7 +2108,7 @@ impl<'ast> ZGen<'ast> {
                 // KILL and GEN within the block
                 // We do not need to worry about state_per_trace in liveness analysis
                 // Only useful in set_input_output
-                (state, _, _) = la_inst(state, BTreeMap::new(), &bls[cur_bl].instructions);
+                (state, _, _, _, _) = la_inst(state, BTreeMap::new(), &bls[cur_bl].instructions);
                 bl_in[cur_bl] = state;
 
                 // Block Transition
@@ -2130,8 +2150,12 @@ impl<'ast> ZGen<'ast> {
                     BlockTerminator::ProgTerm => {}            
                 }
 
-                (_, _, new_instructions) = la_inst(state, BTreeMap::new(), &bls[cur_bl].instructions);
+                let num_ro_ops: usize;
+                let num_vm_ops: usize;
+                (_, _, new_instructions, num_ro_ops, num_vm_ops) = la_inst(state, BTreeMap::new(), &bls[cur_bl].instructions);
                 bls[cur_bl].instructions = new_instructions;
+                bls[cur_bl].num_ro_ops = num_ro_ops;
+                bls[cur_bl].num_vm_ops = num_vm_ops;
 
                 // Block Transition
                 for tmp_bl in &predecessor[cur_bl] {
@@ -2354,7 +2378,7 @@ impl<'ast> ZGen<'ast> {
                 }
 
                 // KILL and GEN within the block
-                (state, state_per_trace, _) = la_inst(state, state_per_trace, &bls[cur_bl].instructions);
+                (state, state_per_trace, _, _, _) = la_inst(state, state_per_trace, &bls[cur_bl].instructions);
 
                 bl_in[cur_bl] = state;
                 bl_in_per_call_trace[cur_bl] = state_per_trace.clone();

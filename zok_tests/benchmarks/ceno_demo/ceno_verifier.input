@@ -18,9 +18,9 @@ proof^lk_q2_out_eval^b0: 17223569427953884163
 proof^lk_q2_out_eval^b1: 9977041609298931304
 proof^tower_proof^prod_spec_size: 2
 proof^tower_proof^logup_spec_size: 1
-proof^tower_proof^proofs: [ 8112 8113 8115 8118 8122 8127 8133 8140 8148 ]
-proof^tower_proof^prod_specs_eval: [ 8157 8165 ]
-proof^tower_proof^logup_specs_eval: [ 8173 ]
+proof^tower_proof^proofs: [ 8048 8049 8051 8054 8058 8063 8069 8076 8084 ]
+proof^tower_proof^prod_specs_eval: [ 8093 8101 ]
+proof^tower_proof^logup_specs_eval: [ 8109 ]
 proof^main_sel_sumcheck_proofs_len: 7
 proof^main_sel_sumcheck_proofs: [ 8124 8128 8132 8136 8140 8144 8148 ]
 proof^r_records_in_evals_len: 3

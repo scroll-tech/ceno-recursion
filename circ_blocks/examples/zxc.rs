@@ -1356,8 +1356,7 @@ fn main() {
         let mut reader = BufReader::new(f);
         let mut buffer = String::new();
         reader.read_line(&mut buffer).unwrap();
-        let _ = buffer.trim();
-        while buffer != "END".to_string() {
+        while buffer.trim() != "END".to_string() {
         let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
         let var_name = split[0].split(":").next().unwrap().trim();
         // split is either of form [VAR, VAL] or [VAR, "[", ENTRY_0, ENTRY_1, ..., "]"] 
@@ -1402,8 +1401,7 @@ fn main() {
         let mut reader = BufReader::new(f);
         let mut buffer = String::new();
         reader.read_line(&mut buffer).unwrap();
-        let _ = buffer.trim();
-        while buffer != "END".to_string() {
+        while buffer.trim() != "END".to_string() {
             let split: Vec<String> = buffer.split(' ').map(|i| i.to_string().trim().to_string()).collect();
             entry_witnesses.extend(split.iter().map(|entry| Integer::from_str_radix(&entry, 10).unwrap()));
             buffer.clear();

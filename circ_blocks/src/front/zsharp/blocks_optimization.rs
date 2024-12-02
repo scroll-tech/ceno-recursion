@@ -1164,7 +1164,7 @@ fn la_inst<'ast>(
     inst: &Vec<BlockContent<'ast>>
 ) -> (
     BTreeSet<String>, BTreeMap<Vec<usize>, BTreeSet<String>>, Vec<BlockContent<'ast>>, 
-    usize, usize // Number of ROM and RAM accesses
+    usize, usize // Number of RO and VM accesses
 ) {
     let mut new_instructions = Vec::new();
     let mut num_ro_ops = 0;
@@ -1186,7 +1186,6 @@ fn la_inst<'ast>(
             BlockContent::MemPush((var, _, _)) => {
                 // Keep all push statements
                 new_instructions.insert(0, i.clone());
-                num_ro_ops += 1;
                 state.insert(var.to_string());
                 state.insert("%SP".to_string());
                 for (_, s) in state_per_call_trace.iter_mut() {
@@ -1197,7 +1196,6 @@ fn la_inst<'ast>(
             BlockContent::MemPop((var, _, _)) => {
                 if is_alive(&state, var) {
                     new_instructions.insert(0, i.clone());
-                    num_ro_ops += 1;
                 }
                 state.remove(var);
                 state.insert("%BP".to_string());
@@ -1234,7 +1232,11 @@ fn la_inst<'ast>(
             BlockContent::Store((val_expr, _, arr, id_expr, _, read_only)) => {
                 // if is_alive(&state, arr) {
                     new_instructions.insert(0, i.clone());
-                    num_vm_ops += 1;
+                    if *read_only {
+                        num_ro_ops += 1;
+                    } else {
+                        num_vm_ops += 1;
+                    }
                     state.insert(arr.to_string());
                     let val_gen = expr_find_val(val_expr);
                     la_gen(&mut state, &val_gen);
@@ -1257,7 +1259,11 @@ fn la_inst<'ast>(
             BlockContent::Load((val, _, arr, id_expr, read_only)) => {
                 if is_alive(&state, val) {
                     new_instructions.insert(0, i.clone());
-                    num_vm_ops += 1;
+                    if *read_only {
+                        num_ro_ops += 1;
+                    } else {
+                        num_vm_ops += 1;
+                    }
                     state.remove(val);
                     state.insert(arr.to_string());
                     let gen = expr_find_val(id_expr);
@@ -1278,7 +1284,11 @@ fn la_inst<'ast>(
             // Do not reason about liveness of dummy loads, mark %TS as alive
             BlockContent::DummyLoad(read_only) => {
                 new_instructions.insert(0, i.clone());
-                num_vm_ops += 1;
+                if *read_only {
+                    num_ro_ops += 1;
+                } else {
+                    num_vm_ops += 1;
+                }
                 if !*read_only {
                     state.insert("%TS".to_string());
                 }
@@ -1289,9 +1299,6 @@ fn la_inst<'ast>(
                 }
             }
             BlockContent::Branch((cond, if_inst, else_inst)) => {
-                println!("");
-                pretty_block_content(0, i);
-
                 // Liveness of branches
                 let (mut new_if_state, mut new_if_state_per_call_trace, new_if_inst, left_ro_ops, left_vm_ops) = 
                     la_inst(state.clone(), state_per_call_trace.clone(), if_inst);
@@ -1314,6 +1321,8 @@ fn la_inst<'ast>(
                 let is_branch_alive = |bc: &Vec<BlockContent<'ast>>| 
                     bc.iter().fold(false, |b, i| b || !matches!(i, BlockContent::DummyLoad(_)));
                 if is_branch_alive(&new_if_inst) || is_branch_alive(&new_else_inst) {
+                    println!("\nIF:");
+                    pretty_block_content(1, &i);
                     new_instructions.insert(0, BlockContent::Branch((cond.clone(), new_if_inst, new_else_inst)));
                     assert_eq!(left_ro_ops, right_ro_ops);
                     assert_eq!(left_vm_ops, right_vm_ops);

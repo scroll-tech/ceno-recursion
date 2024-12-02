@@ -5,7 +5,7 @@ use std::io::{BufRead, Read};
 use std::{default, env};
 use std::{fs::File, io::BufReader};
 
-use libspartan::scalar::{Scalar, SpartanExtensionField};
+use libspartan::scalar::{ScalarExt2, SpartanExtensionField};
 use libspartan::{instance::Instance, InputsAssignment, MemsAssignment, VarsAssignment, SNARK};
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
@@ -91,7 +91,7 @@ fn main() {
   // let ctk = CompileTimeKnowledge::read_from_file(benchmark_name.to_string()).unwrap();
   let ctk = CompileTimeKnowledge::deserialize_from_file(benchmark_name.to_string());
   // let rtk = RunTimeKnowledge::read_from_file(benchmark_name.to_string()).unwrap();
-  let rtk: RunTimeKnowledge<Scalar> =
+  let rtk: RunTimeKnowledge<ScalarExt2> =
     RunTimeKnowledge::deserialize_from_file(benchmark_name.to_string());
 
   // --

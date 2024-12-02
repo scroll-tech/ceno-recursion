@@ -12,7 +12,7 @@ use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
 use circ::target::r1cs::ProverData;
 use circ::target::r1cs::{Lc, VarType};
 use core::cmp::min;
-use libspartan::scalar::{Scalar, SpartanExtensionField};
+use libspartan::scalar::{ScalarExt2, SpartanExtensionField};
 use rug::Integer;
 
 use std::fs::{create_dir_all, File};
@@ -1569,7 +1569,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<false, Scalar>(
+    let rtk = get_run_time_knowledge::<false, ScalarExt2>(
         path.clone(),
         &options,
         entry_regs,

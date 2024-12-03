@@ -49,7 +49,7 @@ pub trait SpartanExtensionField:
   type InnerType: ExtensionField + Field;
 
   /// Basefield for conserving computational resources
-  type BaseField: SpartanExtensionField;
+  type BaseField: Field;
 
   /// Return inner Goldilocks field element
   fn inner(&self) -> &Self::InnerType;

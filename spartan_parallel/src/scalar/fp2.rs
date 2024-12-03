@@ -1,5 +1,4 @@
 use super::SpartanExtensionField;
-use crate::scalar::Scalar;
 use crate::{AppendToTranscript, ProofTranscript, Transcript};
 use core::borrow::Borrow;
 use core::iter::{Product, Sum};
@@ -21,38 +20,38 @@ impl From<GoldilocksExt2> for ScalarExt2 {
   }
 }
 
-impl Mul<Scalar> for ScalarExt2 {
+impl Mul<Goldilocks> for ScalarExt2 {
   type Output = ScalarExt2;
 
   #[inline]
-  fn mul(self, rhs: Scalar) -> Self::Output {
-    (self.inner() * &rhs.inner()).into()
+  fn mul(self, rhs: Goldilocks) -> Self::Output {
+    (self.inner() * &rhs).into()
   }
 }
-impl<'a> Mul<&'a Scalar> for ScalarExt2 {
+impl<'a> Mul<&'a Goldilocks> for ScalarExt2 {
   type Output = Self;
 
   #[inline]
-  fn mul(mut self, rhs: &'a Scalar) -> Self::Output {
+  fn mul(mut self, rhs: &'a Goldilocks) -> Self::Output {
     self *= rhs;
     self
   }
 }
-impl MulAssign<&Scalar> for ScalarExt2 {
+impl MulAssign<&Goldilocks> for ScalarExt2 {
   #[inline]
-  fn mul_assign(&mut self, rhs: &Scalar) {
-    self.0 *= rhs.inner();
+  fn mul_assign(&mut self, rhs: &Goldilocks) {
+    self.0 *= rhs;
   }
 }
-impl MulAssign<Scalar> for ScalarExt2 {
+impl MulAssign<Goldilocks> for ScalarExt2 {
   #[inline]
-  fn mul_assign(&mut self, rhs: Scalar) {
+  fn mul_assign(&mut self, rhs: Goldilocks) {
     self.mul_assign(&rhs)
   }
 }
 impl SpartanExtensionField for ScalarExt2 {
   type InnerType = GoldilocksExt2;
-  type BaseField = Scalar;
+  type BaseField = Goldilocks;
 
   fn inner(&self) -> &GoldilocksExt2 {
     &self.0
@@ -68,7 +67,7 @@ impl SpartanExtensionField for ScalarExt2 {
 
   /// Build a self from a base element; pad ext with 0s.
   fn from_base(b: &Self::BaseField) -> Self {
-    GoldilocksExt2::from_base(b.inner()).into()
+    GoldilocksExt2::from_base(b).into()
   }
 
   fn random<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> Self {

@@ -2,6 +2,7 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 #![allow(clippy::assertions_on_result_states)]
+#![feature(associated_type_defaults)]
 
 // TODO: Can we allow split in R1CSGens?
 // TODO: Can we parallelize the proofs?

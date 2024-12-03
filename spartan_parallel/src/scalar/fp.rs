@@ -4,7 +4,7 @@ use core::borrow::Borrow;
 use core::iter::{Product, Sum};
 use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use ff::{Field, FromUniformBytes};
-use goldilocks::Goldilocks;
+use goldilocks::{ExtensionField, Goldilocks};
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::ops::Neg;
@@ -15,9 +15,39 @@ use zeroize::Zeroize;
 #[derive(Clone, Copy, Eq, Serialize, Deserialize, Hash, Debug)]
 pub struct Scalar(Goldilocks);
 
+impl Mul<Goldilocks> for Scalar {
+  type Output = Scalar;
+
+  #[inline]
+  fn mul(self, rhs: Goldilocks) -> Self::Output {
+    (*self.inner() * rhs).into()
+  }
+}
+impl<'a> Mul<&'a Goldilocks> for Scalar {
+  type Output = Self;
+
+  #[inline]
+  fn mul(mut self, rhs: &'a Goldilocks) -> Self::Output {
+    self *= rhs;
+    self
+  }
+}
+impl MulAssign<&Goldilocks> for Scalar {
+  #[inline]
+  fn mul_assign(&mut self, rhs: &Goldilocks) {
+    self.0 *= rhs;
+  }
+}
+impl MulAssign<Goldilocks> for Scalar {
+  #[inline]
+  fn mul_assign(&mut self, rhs: Goldilocks) {
+    self.mul_assign(&rhs)
+  }
+}
+
 impl SpartanExtensionField for Scalar {
   type InnerType = Goldilocks;
-  type BaseField = Self;
+  type BaseField = Goldilocks;
 
   fn inner(&self) -> &Goldilocks {
     &self.0
@@ -33,7 +63,7 @@ impl SpartanExtensionField for Scalar {
 
   /// Build a self from a base element; pad ext with 0s.
   fn from_base(b: &Self::BaseField) -> Self {
-    *b
+    Self::InnerType::from_base(b).into()
   }
 
   fn random<Rng: RngCore + CryptoRng>(rng: &mut Rng) -> Self {

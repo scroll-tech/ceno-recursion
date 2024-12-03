@@ -71,7 +71,7 @@ impl FrontEnd for ZSharpFE {
             println!("");
         }
         let (blks, entry_bl, live_input_set) = g.optimize_block(blks, entry_bl, inputs.clone(), i.no_opt, i.verbose_opt);
-        let input_liveness = inputs.iter().map(|(n, _)| live_input_set.contains(n)).collect();
+        let input_liveness = [vec![("%SP".to_string(), Ty::Field), ("%AS".to_string(), Ty::Field)], inputs].concat().iter().map(|(n, _)| live_input_set.contains(n)).collect();
         let (blks, _, io_size, _, live_io_list, num_mem_accesses, live_vm_list) = 
             g.process_block::<0>(blks, entry_bl, i.verbose_opt);
         // NOTE: The input of block 0 includes %BN, which should be removed when reasoning about function input

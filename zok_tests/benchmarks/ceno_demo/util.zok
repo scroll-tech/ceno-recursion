@@ -1,7 +1,11 @@
 def inline max(u32 a, u32 b) -> u32:
     return a < b ? b : a
 
+// Bit split x - 1 to obtain the length
 def ceil_log2(u32 x) -> u32:
+    if x == 1 then
+        x = 2
+    endif
     witness u32 width
     // TODO: is there concern for overflow?
     assert(width <= 32)
@@ -13,5 +17,5 @@ def ceil_log2(u32 x) -> u32:
         assert(next_bit * (1 - next_bit) == 0)
         acc_bit = acc_bit + next_bit
     endfor
-    assert(acc_bit == x)
+    assert(acc_bit == x - 1)
     return width

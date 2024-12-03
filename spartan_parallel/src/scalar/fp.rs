@@ -220,5 +220,6 @@ where
   }
 }
 
-crate::impl_binops_additive!(Scalar, Scalar);
-crate::impl_binops_multiplicative!(Scalar, Scalar);
+crate::impl_add_binop_specify_output!(Scalar, Scalar, Scalar);
+crate::impl_sub_binop_specify_output!(Scalar, Scalar, Scalar);
+crate::impl_binops_multiplicative_mixed!(Scalar, Scalar, Scalar);

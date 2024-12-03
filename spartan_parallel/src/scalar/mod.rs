@@ -208,6 +208,18 @@ macro_rules! impl_add_binop_specify_output {
         &self + &rhs
       }
     }
+
+    impl AddAssign<$rhs> for $lhs {
+      fn add_assign(&mut self, rhs: $rhs) {
+        *self = &*self + &rhs;
+      }
+    }
+
+    impl<'b> AddAssign<&'b $rhs> for $lhs {
+      fn add_assign(&mut self, rhs: &'b $rhs) {
+        *self = &*self + rhs;
+      }
+    }
   };
 }
 
@@ -238,15 +250,18 @@ macro_rules! impl_sub_binop_specify_output {
         &self - &rhs
       }
     }
-  };
-}
 
-/// impl_binops_additive_specify_output
-#[macro_export]
-macro_rules! impl_binops_additive_specify_output {
-  ($lhs:ident, $rhs:ident, $output:ident) => {
-    crate::impl_add_binop_specify_output!($lhs, $rhs, $output);
-    crate::impl_sub_binop_specify_output!($lhs, $rhs, $output);
+    impl SubAssign<$rhs> for $lhs {
+      fn sub_assign(&mut self, rhs: $rhs) {
+        *self = &*self - &rhs;
+      }
+    }
+
+    impl<'b> SubAssign<&'b $rhs> for $lhs {
+      fn sub_assign(&mut self, rhs: &'b $rhs) {
+        *self = &*self - rhs;
+      }
+    }
   };
 }
 
@@ -277,46 +292,6 @@ macro_rules! impl_binops_multiplicative_mixed {
         &self * &rhs
       }
     }
-  };
-}
-
-/// macro_rules! impl_binops_additive
-#[macro_export]
-macro_rules! impl_binops_additive {
-  ($lhs:ident, $rhs:ident) => {
-    crate::impl_binops_additive_specify_output!($lhs, $rhs, $lhs);
-
-    impl SubAssign<$rhs> for $lhs {
-      fn sub_assign(&mut self, rhs: $rhs) {
-        *self = &*self - &rhs;
-      }
-    }
-
-    impl AddAssign<$rhs> for $lhs {
-      fn add_assign(&mut self, rhs: $rhs) {
-        *self = &*self + &rhs;
-      }
-    }
-
-    impl<'b> SubAssign<&'b $rhs> for $lhs {
-      fn sub_assign(&mut self, rhs: &'b $rhs) {
-        *self = &*self - rhs;
-      }
-    }
-
-    impl<'b> AddAssign<&'b $rhs> for $lhs {
-      fn add_assign(&mut self, rhs: &'b $rhs) {
-        *self = &*self + rhs;
-      }
-    }
-  };
-}
-
-/// macro_rules! impl_binops_multiplicative
-#[macro_export]
-macro_rules! impl_binops_multiplicative {
-  ($lhs:ident, $rhs:ident) => {
-    crate::impl_binops_multiplicative_mixed!($lhs, $rhs, $lhs);
 
     impl MulAssign<$rhs> for $lhs {
       fn mul_assign(&mut self, rhs: $rhs) {

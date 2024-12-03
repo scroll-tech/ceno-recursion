@@ -244,5 +244,6 @@ impl AppendToTranscript for [ScalarExt2] {
   }
 }
 
-crate::impl_binops_additive!(ScalarExt2, ScalarExt2);
-crate::impl_binops_multiplicative!(ScalarExt2, ScalarExt2);
+crate::impl_add_binop_specify_output!(ScalarExt2, ScalarExt2, ScalarExt2);
+crate::impl_sub_binop_specify_output!(ScalarExt2, ScalarExt2, ScalarExt2);
+crate::impl_binops_multiplicative_mixed!(ScalarExt2, ScalarExt2, ScalarExt2);

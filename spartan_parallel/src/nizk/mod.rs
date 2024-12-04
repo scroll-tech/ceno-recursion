@@ -76,7 +76,6 @@ impl<S: SpartanExtensionField> EqualityProof<S> {
     _v1: &S,
     s1: &S,
     _v2: &S,
-    s2: &S,
   ) -> EqualityProof<S> {
     <Transcript as ProofTranscript<S>>::append_protocol_name(
       transcript,
@@ -86,7 +85,7 @@ impl<S: SpartanExtensionField> EqualityProof<S> {
     // produce a random Scalar
     let r = random_tape.random_scalar(b"r");
     let c: S = transcript.challenge_scalar(b"c");
-    let z = c * (*s1 - *s2) + r;
+    let z = c * *s1 + r;
 
     EqualityProof { z }
   }
@@ -193,10 +192,8 @@ impl<S: SpartanExtensionField> DotProductProof<S> {
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
     x_vec: &[S],
-    blind_x: &S,
     a_vec: &[S],
     _y: &S,
-    blind_y: &S,
   ) -> DotProductProof<S> {
     <Transcript as ProofTranscript<S>>::append_protocol_name(
       transcript,
@@ -220,8 +217,8 @@ impl<S: SpartanExtensionField> DotProductProof<S> {
       .map(|i| c * x_vec[i] + d_vec[i])
       .collect::<Vec<S>>();
 
-    let z_delta = c * *blind_x + r_delta;
-    let z_beta = c * *blind_y + r_beta;
+    let z_delta = c + r_delta;
+    let z_beta = c + r_beta;
 
     DotProductProof { z, z_delta, z_beta }
   }

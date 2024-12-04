@@ -6,7 +6,7 @@ use super::math::Math;
 use super::nizk::{EqualityProof, KnowledgeProof, ProductProof};
 use super::r1csinstance::R1CSInstance;
 use super::random::RandomTape;
-use super::sumcheck::ZKSumcheckInstanceProof;
+use super::sumcheck::R1CSSumcheckInstanceProof;
 use super::timer::Timer;
 use super::transcript::ProofTranscript;
 use crate::scalar::SpartanExtensionField;
@@ -17,8 +17,8 @@ use std::cmp::min;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct R1CSProof<S: SpartanExtensionField> {
-  sc_proof_phase1: ZKSumcheckInstanceProof<S>,
-  sc_proof_phase2: ZKSumcheckInstanceProof<S>,
+  sc_proof_phase1: R1CSSumcheckInstanceProof<S>,
+  sc_proof_phase2: R1CSSumcheckInstanceProof<S>,
   pok_claims_phase2: (KnowledgeProof<S>, ProductProof<S>),
   proof_eq_sc_phase1: EqualityProof<S>,
   proof_eq_sc_phase2: EqualityProof<S>,
@@ -41,15 +41,14 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     evals_Cz: &mut DensePolynomialPqx<S>,
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
-  ) -> (ZKSumcheckInstanceProof<S>, Vec<S>, Vec<S>, S) {
+  ) -> (R1CSSumcheckInstanceProof<S>, Vec<S>, Vec<S>) {
     let comb_func = |poly_A_comp: &S, poly_B_comp: &S, poly_C_comp: &S, poly_D_comp: &S| -> S {
       *poly_A_comp * (*poly_B_comp * *poly_C_comp - *poly_D_comp)
     };
 
-    let (sc_proof_phase_one, r, claims, blind_claim_postsc) =
-      ZKSumcheckInstanceProof::<S>::prove_cubic_with_additive_term_disjoint_rounds(
+    let (sc_proof_phase_one, r, claims) =
+      R1CSSumcheckInstanceProof::<S>::prove_cubic_with_additive_term_disjoint_rounds(
         &S::field_zero(), // claim is zero
-        &S::field_zero(), // blind for claim is also zero
         num_rounds,
         num_rounds_x_max,
         num_rounds_q_max,
@@ -67,7 +66,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
         random_tape,
       );
 
-    (sc_proof_phase_one, r, claims, blind_claim_postsc)
+    (sc_proof_phase_one, r, claims)
   }
 
   fn prove_phase_two(
@@ -85,14 +84,13 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     evals_z: &mut DensePolynomialPqx<S>,
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
-  ) -> (ZKSumcheckInstanceProof<S>, Vec<S>, Vec<S>, S) {
+  ) -> (R1CSSumcheckInstanceProof<S>, Vec<S>, Vec<S>) {
     let comb_func = |poly_A_comp: &S, poly_B_comp: &S, poly_C_comp: &S| -> S {
       *poly_A_comp * *poly_B_comp * *poly_C_comp
     };
-    let (sc_proof_phase_two, r, claims, blind_claim_postsc) =
-      ZKSumcheckInstanceProof::<S>::prove_cubic_disjoint_rounds(
+    let (sc_proof_phase_two, r, claims) =
+      R1CSSumcheckInstanceProof::<S>::prove_cubic_disjoint_rounds(
         claim,
-        blind_claim,
         num_rounds,
         num_rounds_y_max,
         num_rounds_w,
@@ -108,7 +106,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
         random_tape,
       );
 
-    (sc_proof_phase_two, r, claims, blind_claim_postsc)
+    (sc_proof_phase_two, r, claims)
   }
 
   fn protocol_name() -> &'static [u8] {
@@ -235,7 +233,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
 
     // Sumcheck 1: (Az * Bz - Cz) * eq(x, q, p) = 0
     let timer_tmp = Timer::new("prove_sum_check");
-    let (sc_proof_phase1, rx, _claims_phase1, blind_claim_postsc1) = R1CSProof::prove_phase_one(
+    let (sc_proof_phase1, rx, _claims_phase1) = R1CSProof::prove_phase_one(
       num_rounds_x + num_rounds_q + num_rounds_p,
       num_rounds_x,
       num_rounds_q,
@@ -303,7 +301,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       &claim_post_phase1,
       &blind_expected_claim_postsc1,
       &claim_post_phase1,
-      &blind_claim_postsc1,
     );
 
     // Separate the result rx into rp, rq, and rx
@@ -380,7 +377,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let mut eq_p_rp_poly = DensePolynomial::new(EqPolynomial::new(rp).evals());
 
     // Sumcheck 2: (rA + rB + rC) * Z * eq(p) = e
-    let (sc_proof_phase2, ry, claims_phase2, blind_claim_postsc2) = R1CSProof::prove_phase_two(
+    let (sc_proof_phase2, ry, claims_phase2) = R1CSProof::prove_phase_two(
       num_rounds_y + num_rounds_w + num_rounds_p,
       num_rounds_y,
       num_rounds_w,
@@ -553,7 +550,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       &claim_post_phase2,
       &blind_expected_claim_postsc2,
       &claim_post_phase2,
-      &blind_claim_postsc2,
     );
 
     timer_prove.stop();

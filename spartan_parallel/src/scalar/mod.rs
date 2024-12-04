@@ -4,10 +4,10 @@ mod fp2;
 use ff::Field;
 pub use fp::Scalar;
 pub use fp2::ScalarExt2;
-use goldilocks::ExtensionField;
+use goldilocks::{ExtensionField, SmallField};
 use merlin::Transcript;
 use rand::{CryptoRng, RngCore};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::{
   cmp::Eq,
@@ -49,7 +49,7 @@ pub trait SpartanExtensionField:
   type InnerType: ExtensionField + Field;
 
   /// Basefield for conserving computational resources
-  type BaseField: Field;
+  type BaseField: SmallField + for<'a> Deserialize<'a>;
 
   /// Return inner Goldilocks field element
   fn inner(&self) -> &Self::InnerType;

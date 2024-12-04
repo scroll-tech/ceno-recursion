@@ -203,7 +203,6 @@ def verify_opcode_proof(
     assert!(logup_p_evals.len() == 1, "[lk_p_record]");
     */
 
-    /*
     // verify LogUp witness nominator p(x) ?= constant vector 1
     // index 0 is LogUp witness for Fixed Lookup table
     ExtField[0] rt_tower = output.rt_tower
@@ -244,6 +243,7 @@ def verify_opcode_proof(
             ext_mul(alpha_lk, ext_sub(logup_q_evals[0].eval, chip_record_alpha))
         )
     )
+/*
     SumCheckSubClaimAndTranscript sc_t = verify_sumcheck(
         claim_sum, 
         SumcheckProof {
@@ -259,7 +259,7 @@ def verify_opcode_proof(
     )
     t = sc_t.t
     SumCheckSubClaim main_sel_subclaim = sc_t.sc
-    */
+*/
 
     return 1
     /*

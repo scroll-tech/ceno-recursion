@@ -13,7 +13,7 @@ use std::{
   cmp::Eq,
   hash::Hash,
   iter::{Product, Sum},
-  ops::{Add, Mul, MulAssign, Neg, Sub},
+  ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;
@@ -35,6 +35,9 @@ pub trait SpartanExtensionField:
   + Add<Output = Self>
   + Sub<Output = Self>
   + Mul<Output = Self>
+  + AddAssign<Self>
+  + SubAssign<Self>
+  + MulAssign<Self>
   + Sum
   + Product
   + Clone

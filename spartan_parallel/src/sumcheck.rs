@@ -155,7 +155,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
       let len = poly_A.len() / 2;
       for i in 0..len {
         // eval 0: bound_func is A(low)
-        eval_point_0 = eval_point_0 + comb_func(&poly_A[i], &poly_B[i], &poly_C[i]);
+        eval_point_0 += comb_func(&poly_A[i], &poly_B[i], &poly_C[i]);
 
         // eval 2: bound_func is -A(low) + 2*A(high)
         let poly_A_bound_point = poly_A[len + i] + poly_A[len + i] - poly_A[i];

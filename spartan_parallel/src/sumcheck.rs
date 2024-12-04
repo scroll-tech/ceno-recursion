@@ -71,13 +71,13 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ZKSumcheckInstanceProof<S: SpartanExtensionField> {
+pub struct R1CSSumcheckInstanceProof<S: SpartanExtensionField> {
   proofs: Vec<DotProductProof<S>>,
 }
 
-impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
+impl<S: SpartanExtensionField> R1CSSumcheckInstanceProof<S> {
   pub fn new(proofs: Vec<DotProductProof<S>>) -> Self {
-    ZKSumcheckInstanceProof { proofs }
+    R1CSSumcheckInstanceProof { proofs }
   }
 
   pub fn verify(
@@ -155,7 +155,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
       let len = poly_A.len() / 2;
       for i in 0..len {
         // eval 0: bound_func is A(low)
-        eval_point_0 = eval_point_0 + comb_func(&poly_A[i], &poly_B[i], &poly_C[i]);
+        eval_point_0 += comb_func(&poly_A[i], &poly_B[i], &poly_C[i]);
 
         // eval 2: bound_func is -A(low) + 2*A(high)
         let poly_A_bound_point = poly_A[len + i] + poly_A[len + i] - poly_A[i];
@@ -381,10 +381,9 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
   }
 }
 
-impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
+impl<S: SpartanExtensionField> R1CSSumcheckInstanceProof<S> {
   pub fn prove_cubic_disjoint_rounds<F>(
     claim: &S,
-    blind_claim: &S,
     num_rounds: usize,
     num_rounds_y_max: usize,
     num_rounds_w: usize,
@@ -398,7 +397,7 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
     comb_func: F,
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
-  ) -> (Self, Vec<S>, Vec<S>, S)
+  ) -> (Self, Vec<S>, Vec<S>)
   where
     F: Fn(&S, &S, &S) -> S,
   {
@@ -407,11 +406,6 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
     // We perform sumcheck in y -> w -> p order, but all polynomials have parameters (p, w, y)
     // poly_A is the EQ polynomial of size P * W * Y_max
     assert_eq!(num_rounds, num_rounds_y_max + num_rounds_w + num_rounds_p);
-
-    let (blinds_poly, blinds_evals) = (
-      random_tape.random_vector(b"blinds_poly", num_rounds),
-      random_tape.random_vector(b"blinds_evals", num_rounds),
-    );
 
     let mut claim_per_round = *claim;
 
@@ -577,18 +571,6 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
         // compute a weighted sum of the RHS
         let target = w[0] * claim_per_round + w[1] * eval;
 
-        let blind = {
-          let blind_sc = if j == 0 {
-            blind_claim
-          } else {
-            &blinds_evals[j - 1]
-          };
-
-          let blind_eval = &blinds_evals[j];
-
-          w[0] * *blind_sc + w[1] * *blind_eval
-        };
-
         let a = {
           // the vector to use to decommit for sum-check test
           let a_sc = {
@@ -613,15 +595,7 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
             .collect::<Vec<S>>()
         };
 
-        let proof = DotProductProof::prove(
-          transcript,
-          random_tape,
-          &poly.as_vec(),
-          &blinds_poly[j],
-          &a,
-          &target,
-          &blind,
-        );
+        let proof = DotProductProof::prove(transcript, random_tape, &poly.as_vec(), &a, &target);
 
         (proof, eval)
       };
@@ -632,20 +606,18 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
     }
 
     (
-      ZKSumcheckInstanceProof::new(proofs),
+      R1CSSumcheckInstanceProof::new(proofs),
       r,
       vec![
         poly_A[0],
         poly_B.index(0, 0, 0, 0),
         poly_C.index(0, 0, 0, 0),
       ],
-      blinds_evals[num_rounds - 1],
     )
   }
 
   pub fn prove_cubic_with_additive_term_disjoint_rounds<F>(
     claim: &S,
-    blind_claim: &S,
     num_rounds: usize,
     num_rounds_x_max: usize,
     num_rounds_q_max: usize,
@@ -661,7 +633,7 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
     comb_func: F,
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
-  ) -> (Self, Vec<S>, Vec<S>, S)
+  ) -> (Self, Vec<S>, Vec<S>)
   where
     F: Fn(&S, &S, &S, &S) -> S,
   {
@@ -677,11 +649,6 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
     assert_eq!(poly_B.num_witness_secs, 1);
     assert_eq!(poly_C.num_witness_secs, 1);
     assert_eq!(poly_D.num_witness_secs, 1);
-
-    let (blinds_poly, blinds_evals) = (
-      random_tape.random_vector(b"blinds_poly", num_rounds),
-      random_tape.random_vector(b"blinds_evals", num_rounds),
-    );
 
     let mut claim_per_round = *claim;
 
@@ -864,18 +831,6 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
         // compute a weighted sum of the RHS
         let target = w[0] * claim_per_round + w[1] * eval;
 
-        let blind = {
-          let blind_sc = if j == 0 {
-            blind_claim
-          } else {
-            &blinds_evals[j - 1]
-          };
-
-          let blind_eval = &blinds_evals[j];
-
-          w[0] * *blind_sc + w[1] * *blind_eval
-        };
-
         let a = {
           // the vector to use to decommit for sum-check test
           let a_sc = {
@@ -900,15 +855,7 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
             .collect::<Vec<S>>()
         };
 
-        let proof = DotProductProof::prove(
-          transcript,
-          random_tape,
-          &poly.as_vec(),
-          &blinds_poly[j],
-          &a,
-          &target,
-          &blind,
-        );
+        let proof = DotProductProof::prove(transcript, random_tape, &poly.as_vec(), &a, &target);
 
         (proof, eval)
       };
@@ -919,7 +866,7 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
     }
 
     (
-      ZKSumcheckInstanceProof::new(proofs),
+      R1CSSumcheckInstanceProof::new(proofs),
       r,
       vec![
         poly_Ap[0] * poly_Aq[0] * poly_Ax[0],
@@ -927,7 +874,6 @@ impl<S: SpartanExtensionField> ZKSumcheckInstanceProof<S> {
         poly_C.index(0, 0, 0, 0),
         poly_D.index(0, 0, 0, 0),
       ],
-      blinds_evals[num_rounds - 1],
     )
   }
 }

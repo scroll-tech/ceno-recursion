@@ -20,35 +20,6 @@ impl From<GoldilocksExt2> for ScalarExt2 {
   }
 }
 
-impl Mul<Goldilocks> for ScalarExt2 {
-  type Output = ScalarExt2;
-
-  #[inline]
-  fn mul(self, rhs: Goldilocks) -> Self::Output {
-    (self.inner() * &rhs).into()
-  }
-}
-impl<'a> Mul<&'a Goldilocks> for ScalarExt2 {
-  type Output = Self;
-
-  #[inline]
-  fn mul(mut self, rhs: &'a Goldilocks) -> Self::Output {
-    self *= rhs;
-    self
-  }
-}
-impl MulAssign<&Goldilocks> for ScalarExt2 {
-  #[inline]
-  fn mul_assign(&mut self, rhs: &Goldilocks) {
-    self.0 *= rhs;
-  }
-}
-impl MulAssign<Goldilocks> for ScalarExt2 {
-  #[inline]
-  fn mul_assign(&mut self, rhs: Goldilocks) {
-    self.mul_assign(&rhs)
-  }
-}
 impl SpartanExtensionField for ScalarExt2 {
   type InnerType = GoldilocksExt2;
   type BaseField = Goldilocks;
@@ -202,6 +173,39 @@ impl<'a, 'b> Mul<&'b ScalarExt2> for &'a ScalarExt2 {
     let c1 = a1b1 + Goldilocks(7) * a2b2;
     let c2 = a2b1 + a1b2;
     GoldilocksExt2([c1, c2]).into()
+  }
+}
+
+impl Mul<Goldilocks> for ScalarExt2 {
+  type Output = ScalarExt2;
+
+  #[inline]
+  fn mul(self, rhs: Goldilocks) -> Self::Output {
+    (self.inner() * &rhs).into()
+  }
+}
+
+impl<'a> Mul<&'a Goldilocks> for ScalarExt2 {
+  type Output = Self;
+
+  #[inline]
+  fn mul(mut self, rhs: &'a Goldilocks) -> Self::Output {
+    self *= rhs;
+    self
+  }
+}
+
+impl MulAssign<&Goldilocks> for ScalarExt2 {
+  #[inline]
+  fn mul_assign(&mut self, rhs: &Goldilocks) {
+    self.0 *= rhs;
+  }
+}
+
+impl MulAssign<Goldilocks> for ScalarExt2 {
+  #[inline]
+  fn mul_assign(&mut self, rhs: Goldilocks) {
+    self.mul_assign(&rhs)
   }
 }
 

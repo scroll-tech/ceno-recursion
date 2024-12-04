@@ -15,36 +15,6 @@ use zeroize::Zeroize;
 #[derive(Clone, Copy, Eq, Serialize, Deserialize, Hash, Debug)]
 pub struct Scalar(Goldilocks);
 
-impl Mul<Goldilocks> for Scalar {
-  type Output = Scalar;
-
-  #[inline]
-  fn mul(self, rhs: Goldilocks) -> Self::Output {
-    (*self.inner() * rhs).into()
-  }
-}
-impl<'a> Mul<&'a Goldilocks> for Scalar {
-  type Output = Self;
-
-  #[inline]
-  fn mul(mut self, rhs: &'a Goldilocks) -> Self::Output {
-    self *= rhs;
-    self
-  }
-}
-impl MulAssign<&Goldilocks> for Scalar {
-  #[inline]
-  fn mul_assign(&mut self, rhs: &Goldilocks) {
-    self.0 *= rhs;
-  }
-}
-impl MulAssign<Goldilocks> for Scalar {
-  #[inline]
-  fn mul_assign(&mut self, rhs: Goldilocks) {
-    self.mul_assign(&rhs)
-  }
-}
-
 impl SpartanExtensionField for Scalar {
   type InnerType = Goldilocks;
   type BaseField = Goldilocks;
@@ -194,6 +164,38 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a Scalar {
 
   fn mul(self, rhs: &'b Scalar) -> Scalar {
     self.inner().mul(rhs.inner()).into()
+  }
+}
+
+impl Mul<Goldilocks> for Scalar {
+  type Output = Scalar;
+
+  #[inline]
+  fn mul(self, rhs: Goldilocks) -> Self::Output {
+    (*self.inner() * rhs).into()
+  }
+}
+
+impl<'a> Mul<&'a Goldilocks> for Scalar {
+  type Output = Self;
+
+  #[inline]
+  fn mul(mut self, rhs: &'a Goldilocks) -> Self::Output {
+    self *= rhs;
+    self
+  }
+}
+
+impl MulAssign<&Goldilocks> for Scalar {
+  #[inline]
+  fn mul_assign(&mut self, rhs: &Goldilocks) {
+    self.0 *= rhs;
+  }
+}
+impl MulAssign<Goldilocks> for Scalar {
+  #[inline]
+  fn mul_assign(&mut self, rhs: Goldilocks) {
+    self.mul_assign(&rhs)
   }
 }
 

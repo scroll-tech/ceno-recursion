@@ -78,7 +78,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     num_witness_secs: usize,
     num_inputs: Vec<usize>,
     claim: &S,
-    blind_claim: &S,
     evals_eq: &mut DensePolynomial<S>,
     evals_ABC: &mut DensePolynomialPqx<S>,
     evals_z: &mut DensePolynomialPqx<S>,
@@ -321,7 +320,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let r_C: S = transcript.challenge_scalar(b"challenge_Cz");
 
     let claim_phase2 = r_A * *Az_claim + r_B * *Bz_claim + r_C * *Cz_claim;
-    let blind_claim_phase2 = r_A * Az_blind + r_B * Bz_blind + r_C * Cz_blind;
 
     let timer_tmp = Timer::new("prove_abc_gen");
     let evals_ABC = {
@@ -386,7 +384,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       num_witness_secs,
       num_inputs.clone(),
       &claim_phase2,
-      &blind_claim_phase2,
       &mut eq_p_rp_poly,
       &mut ABC_poly,
       &mut Z_poly,

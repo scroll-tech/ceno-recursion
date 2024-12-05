@@ -1,6 +1,4 @@
-use super::commitments::{Commitments, MultiCommitGens};
-use super::group::GroupElement;
-use super::scalar::{Scalar, ScalarFromPrimitives};
+use super::scalar::SpartanExtensionField;
 use super::transcript::{AppendToTranscript, ProofTranscript};
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
@@ -8,24 +6,24 @@ use serde::{Deserialize, Serialize};
 // ax^2 + bx + c stored as vec![c,b,a]
 // ax^3 + bx^2 + cx + d stored as vec![d,c,b,a]
 #[derive(Debug)]
-pub struct UniPoly {
-  coeffs: Vec<Scalar>,
+pub struct UniPoly<S: SpartanExtensionField> {
+  coeffs: Vec<S>,
 }
 
 // ax^2 + bx + c stored as vec![c,a]
 // ax^3 + bx^2 + cx + d stored as vec![d,b,a]
 #[derive(Serialize, Deserialize, Debug)]
-pub struct CompressedUniPoly {
-  coeffs_except_linear_term: Vec<Scalar>,
+pub struct CompressedUniPoly<S: SpartanExtensionField> {
+  coeffs_except_linear_term: Vec<S>,
 }
 
-impl UniPoly {
-  pub fn from_evals(evals: &[Scalar]) -> Self {
+impl<S: SpartanExtensionField> UniPoly<S> {
+  pub fn from_evals(evals: &[S]) -> Self {
     // we only support degree-2 or degree-3 univariate polynomials
     assert!(evals.len() == 3 || evals.len() == 4);
     let coeffs = if evals.len() == 3 {
       // ax^2 + bx + c
-      let two_inv = (2_usize).to_scalar().invert().unwrap();
+      let two_inv = S::from(2_usize).invert().unwrap();
 
       let c = evals[0];
       let a = two_inv * (evals[2] - evals[1] - evals[1] + c);
@@ -33,8 +31,8 @@ impl UniPoly {
       vec![c, b, a]
     } else {
       // ax^3 + bx^2 + cx + d
-      let two_inv = (2_usize).to_scalar().invert().unwrap();
-      let six_inv = (6_usize).to_scalar().invert().unwrap();
+      let two_inv = S::from(2_usize).invert().unwrap();
+      let six_inv = S::from(6_usize).invert().unwrap();
 
       let d = evals[0];
       let a = six_inv
@@ -57,49 +55,45 @@ impl UniPoly {
     self.coeffs.len() - 1
   }
 
-  pub fn as_vec(&self) -> Vec<Scalar> {
+  pub fn as_vec(&self) -> Vec<S> {
     self.coeffs.clone()
   }
 
-  pub fn eval_at_zero(&self) -> Scalar {
+  pub fn eval_at_zero(&self) -> S {
     self.coeffs[0]
   }
 
-  pub fn eval_at_one(&self) -> Scalar {
+  pub fn eval_at_one(&self) -> S {
     (0..self.coeffs.len()).map(|i| self.coeffs[i]).sum()
   }
 
-  pub fn evaluate(&self, r: &Scalar) -> Scalar {
+  pub fn evaluate(&self, r: &S) -> S {
     let mut eval = self.coeffs[0];
     let mut power = *r;
     for i in 1..self.coeffs.len() {
-      eval += power * self.coeffs[i];
-      power *= r;
+      eval = eval + power * self.coeffs[i];
+      power = power * *r;
     }
     eval
   }
 
-  pub fn compress(&self) -> CompressedUniPoly {
+  pub fn compress(&self) -> CompressedUniPoly<S> {
     let coeffs_except_linear_term = [&self.coeffs[..1], &self.coeffs[2..]].concat();
     assert_eq!(coeffs_except_linear_term.len() + 1, self.coeffs.len());
     CompressedUniPoly {
       coeffs_except_linear_term,
     }
   }
-
-  pub fn commit(&self, gens: &MultiCommitGens, blind: &Scalar) -> GroupElement {
-    self.coeffs.commit(blind, gens)
-  }
 }
 
-impl CompressedUniPoly {
+impl<S: SpartanExtensionField> CompressedUniPoly<S> {
   // we require eval(0) + eval(1) = hint, so we can solve for the linear term as:
   // linear_term = hint - 2 * constant_term - deg2 term - deg3 term
-  pub fn decompress(&self, hint: &Scalar) -> UniPoly {
+  pub fn decompress(&self, hint: &S) -> UniPoly<S> {
     let mut linear_term =
-      hint - self.coeffs_except_linear_term[0] - self.coeffs_except_linear_term[0];
+      *hint - self.coeffs_except_linear_term[0] - self.coeffs_except_linear_term[0];
     for i in 1..self.coeffs_except_linear_term.len() {
-      linear_term -= self.coeffs_except_linear_term[i];
+      linear_term = linear_term - self.coeffs_except_linear_term[i];
     }
 
     let mut coeffs = vec![self.coeffs_except_linear_term[0], linear_term];
@@ -109,7 +103,7 @@ impl CompressedUniPoly {
   }
 }
 
-impl AppendToTranscript for UniPoly {
+impl<S: SpartanExtensionField> AppendToTranscript for UniPoly<S> {
   fn append_to_transcript(&self, label: &'static [u8], transcript: &mut Transcript) {
     transcript.append_message(label, b"UniPoly_begin");
     for i in 0..self.coeffs.len() {
@@ -121,15 +115,15 @@ impl AppendToTranscript for UniPoly {
 
 #[cfg(test)]
 mod tests {
-
   use super::*;
+  use crate::scalar::Scalar;
 
   #[test]
   fn test_from_evals_quad() {
     // polynomial is 2x^2 + 3x + 1
     let e0 = Scalar::one();
-    let e1 = (6_usize).to_scalar();
-    let e2 = (15_usize).to_scalar();
+    let e1 = Scalar::from(6u64);
+    let e2 = Scalar::from(15u64);
     let evals = vec![e0, e1, e2];
     let poly = UniPoly::from_evals(&evals);
 
@@ -137,8 +131,8 @@ mod tests {
     assert_eq!(poly.eval_at_one(), e1);
     assert_eq!(poly.coeffs.len(), 3);
     assert_eq!(poly.coeffs[0], Scalar::one());
-    assert_eq!(poly.coeffs[1], (3_usize).to_scalar());
-    assert_eq!(poly.coeffs[2], (2_usize).to_scalar());
+    assert_eq!(poly.coeffs[1], Scalar::from(3_usize));
+    assert_eq!(poly.coeffs[2], Scalar::from(2_usize));
 
     let hint = e0 + e1;
     let compressed_poly = poly.compress();
@@ -147,17 +141,17 @@ mod tests {
       assert_eq!(decompressed_poly.coeffs[i], poly.coeffs[i]);
     }
 
-    let e3 = (28_usize).to_scalar();
-    assert_eq!(poly.evaluate(&(3_usize).to_scalar()), e3);
+    let e3 = Scalar::from(28_usize);
+    assert_eq!(poly.evaluate(&Scalar::from(3_usize)), e3);
   }
 
   #[test]
   fn test_from_evals_cubic() {
     // polynomial is x^3 + 2x^2 + 3x + 1
     let e0 = Scalar::one();
-    let e1 = (7_usize).to_scalar();
-    let e2 = (23_usize).to_scalar();
-    let e3 = (55_usize).to_scalar();
+    let e1 = Scalar::from(7_usize);
+    let e2 = Scalar::from(23_usize);
+    let e3 = Scalar::from(55_usize);
     let evals = vec![e0, e1, e2, e3];
     let poly = UniPoly::from_evals(&evals);
 
@@ -165,9 +159,9 @@ mod tests {
     assert_eq!(poly.eval_at_one(), e1);
     assert_eq!(poly.coeffs.len(), 4);
     assert_eq!(poly.coeffs[0], Scalar::one());
-    assert_eq!(poly.coeffs[1], (3_usize).to_scalar());
-    assert_eq!(poly.coeffs[2], (2_usize).to_scalar());
-    assert_eq!(poly.coeffs[3], (1_usize).to_scalar());
+    assert_eq!(poly.coeffs[1], Scalar::from(3_usize));
+    assert_eq!(poly.coeffs[2], Scalar::from(2_usize));
+    assert_eq!(poly.coeffs[3], Scalar::from(1_usize));
 
     let hint = e0 + e1;
     let compressed_poly = poly.compress();
@@ -176,7 +170,7 @@ mod tests {
       assert_eq!(decompressed_poly.coeffs[i], poly.coeffs[i]);
     }
 
-    let e4 = (109_usize).to_scalar();
-    assert_eq!(poly.evaluate(&(4_usize).to_scalar()), e4);
+    let e4 = Scalar::from(109_usize);
+    assert_eq!(poly.evaluate(&Scalar::from(4_usize)), e4);
   }
 }

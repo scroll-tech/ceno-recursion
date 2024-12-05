@@ -46,6 +46,7 @@ use std::{
 
 use dense_mlpoly::{DensePolynomial, PolyEvalProof};
 use errors::{ProofVerifyError, R1CSError};
+use halo2curves::serde::SerdeObject;
 use instance::Instance;
 use itertools::Itertools;
 use math::Math;
@@ -79,34 +80,21 @@ pub struct ComputationDecommitment<S: SpartanExtensionField> {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Assignment<S: SpartanExtensionField> {
   /// Entries of an assignment
-  pub assignment: Vec<S>,
+  pub assignment: Vec<S::BaseField>,
 }
 
 impl<S: SpartanExtensionField> Assignment<S> {
   /// Constructs a new `Assignment` from a vector
   pub fn new(assignment: &[[u8; 32]]) -> Result<Assignment<S>, R1CSError> {
-    let bytes_to_scalar = |vec: &[[u8; 32]]| -> Result<Vec<S>, R1CSError> {
-      let mut vec_scalar: Vec<S> = Vec::new();
-      for v in vec {
-        let val = S::from_bytes(v);
-        if val.is_some().unwrap_u8() == 1 {
-          vec_scalar.push(val.unwrap());
-        } else {
-          return Err(R1CSError::InvalidScalar);
-        }
-      }
-      Ok(vec_scalar)
+    let bytes_to_scalar = |vec: &[[u8; 32]]| -> Result<Vec<S::BaseField>, R1CSError> {
+      vec
+        .into_iter()
+        .map(|v| S::BaseField::from_raw_bytes(v).ok_or(R1CSError::InvalidScalar))
+        .collect()
     };
     let assignment_scalar = bytes_to_scalar(assignment);
 
-    // check for any parsing errors
-    if assignment_scalar.is_err() {
-      return Err(R1CSError::InvalidScalar);
-    }
-
-    Ok(Assignment {
-      assignment: assignment_scalar.unwrap(),
-    })
+    assignment_scalar.map(|a| Assignment { assignment: a })
   }
 
   /// Write the assignment into a file

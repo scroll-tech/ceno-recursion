@@ -25,7 +25,6 @@ mod errors;
 /// R1CS instance used by libspartan
 pub mod instance;
 mod math;
-mod nizk;
 mod product_tree;
 mod r1csinstance;
 mod r1csproof;

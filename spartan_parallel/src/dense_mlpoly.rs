@@ -3,9 +3,9 @@ use crate::scalar::SpartanExtensionField;
 
 use super::errors::ProofVerifyError;
 use super::math::Math;
+use super::nizk::DotProductProofLog;
 use super::random::RandomTape;
 use super::transcript::ProofTranscript;
-use super::unipoly::CompressedUniPoly;
 use core::ops::Index;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
@@ -309,9 +309,9 @@ impl<S: SpartanExtensionField> Index<usize> for DensePolynomial<S> {
   }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PolyEvalProof<S: SpartanExtensionField> {
-  polys: Vec<CompressedUniPoly<S>>,
+  proof: DotProductProofLog<S>,
 }
 
 impl<S: SpartanExtensionField> PolyEvalProof<S> {

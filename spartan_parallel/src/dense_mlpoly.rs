@@ -1,8 +1,5 @@
 #![allow(clippy::too_many_arguments)]
 use crate::scalar::SpartanExtensionField;
-use crate::dense_mlpoly::MLE::Base;
-use crate::dense_mlpoly::MLE::Ext;
-
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::nizk::DotProductProofLog;
@@ -13,30 +10,16 @@ use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use ff::Field;
+use crate::mle::{MLE, MLEType, Base, Ext};
 
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
-pub enum MLE<S: SpartanExtensionField> {
-  Base(Vec<S::BaseField>),
-  Ext(Vec<S>),
-}
-
-impl<S: SpartanExtensionField> MLE<S> {
-  pub(crate) fn len(&self) -> usize {
-    match self {
-      Base(v) => v.len(),
-      Ext(v) => v.len(),
-    }
-  }
-}
-
-#[derive(Debug, Clone)]
-pub struct DensePolynomial<S: SpartanExtensionField> {
+pub struct DensePolynomial<S: SpartanExtensionField, T: MLEType> {
   num_vars: usize, // the number of variables in the multilinear polynomial
   len: usize,
-  Z: MLE<S>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
+  Z: MLE<S, T>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
 }
 
 pub struct PolyCommitmentBlinds<S: SpartanExtensionField> {
@@ -137,7 +120,7 @@ impl<S: SpartanExtensionField> IdentityPolynomial<S> {
   }
 }
 
-impl<S: SpartanExtensionField> DensePolynomial<S> {
+impl<S: SpartanExtensionField, T: MLEType> DensePolynomial<S, T> {
   pub fn new(mut Z: Vec<S>) -> Self {
     // If length of Z is not a power of 2, append Z with 0
     let zero = S::field_zero();
@@ -145,7 +128,7 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     DensePolynomial {
       num_vars: Z.len().log_2(),
       len: Z.len(),
-      Z: MLE::Ext(Z),
+      Z: MLE::<S, Ext>::new(Z),
     }
   }
 
@@ -156,7 +139,7 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     DensePolynomial {
       num_vars: Z.len().log_2(),
       len: Z.len(),
-      Z: MLE::Base(Z),
+      Z: MLE::<S, Base>::new(Z),
     }
   }
 

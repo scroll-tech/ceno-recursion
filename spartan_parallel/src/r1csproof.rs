@@ -3,10 +3,9 @@ use super::custom_dense_mlpoly::DensePolynomialPqx;
 use super::dense_mlpoly::{DensePolynomial, EqPolynomial, PolyEvalProof};
 use super::errors::ProofVerifyError;
 use super::math::Math;
-use super::nizk::{EqualityProof, KnowledgeProof, ProductProof};
 use super::r1csinstance::R1CSInstance;
 use super::random::RandomTape;
-use super::sumcheck::R1CSSumcheckInstanceProof;
+use super::sumcheck::SumcheckInstanceProof;
 use super::timer::Timer;
 use super::transcript::ProofTranscript;
 use crate::scalar::SpartanExtensionField;
@@ -17,8 +16,8 @@ use std::cmp::min;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct R1CSProof<S: SpartanExtensionField> {
-  sc_proof_phase1: R1CSSumcheckInstanceProof<S>,
-  sc_proof_phase2: R1CSSumcheckInstanceProof<S>,
+  sc_proof_phase1: SumcheckInstanceProof<S>,
+  sc_proof_phase2: SumcheckInstanceProof<S>,
   pok_claims_phase2: (KnowledgeProof<S>, ProductProof<S>),
   proof_eq_sc_phase1: EqualityProof<S>,
   proof_eq_sc_phase2: EqualityProof<S>,
@@ -41,13 +40,13 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     evals_Cz: &mut DensePolynomialPqx<S>,
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
-  ) -> (R1CSSumcheckInstanceProof<S>, Vec<S>, Vec<S>) {
+  ) -> (SumcheckInstanceProof<S>, Vec<S>, Vec<S>) {
     let comb_func = |poly_A_comp: &S, poly_B_comp: &S, poly_C_comp: &S, poly_D_comp: &S| -> S {
       *poly_A_comp * (*poly_B_comp * *poly_C_comp - *poly_D_comp)
     };
 
     let (sc_proof_phase_one, r, claims) =
-      R1CSSumcheckInstanceProof::<S>::prove_cubic_with_additive_term_disjoint_rounds(
+      SumcheckInstanceProof::<S>::prove_cubic_with_additive_term_disjoint_rounds(
         &S::field_zero(), // claim is zero
         num_rounds,
         num_rounds_x_max,
@@ -83,12 +82,12 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     evals_z: &mut DensePolynomialPqx<S>,
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
-  ) -> (R1CSSumcheckInstanceProof<S>, Vec<S>, Vec<S>) {
+  ) -> (SumcheckInstanceProof<S>, Vec<S>, Vec<S>) {
     let comb_func = |poly_A_comp: &S, poly_B_comp: &S, poly_C_comp: &S| -> S {
       *poly_A_comp * *poly_B_comp * *poly_C_comp
     };
     let (sc_proof_phase_two, r, claims) =
-      R1CSSumcheckInstanceProof::<S>::prove_cubic_disjoint_rounds(
+      SumcheckInstanceProof::<S>::prove_cubic_disjoint_rounds(
         claim,
         num_rounds,
         num_rounds_y_max,
@@ -102,7 +101,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
         evals_z,
         comb_func,
         transcript,
-        random_tape,
       );
 
     (sc_proof_phase_two, r, claims)

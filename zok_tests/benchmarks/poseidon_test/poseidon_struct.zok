@@ -1,0 +1,1686 @@
+struct Digest {
+    field[4] elements
+}
+
+struct PoseidonState {
+    field state0
+    field state1
+    field state2
+    field state3
+    field state4
+    field state5
+    field state6
+    field state7
+    field state8
+    field state9
+    field state10
+    field state11
+}
+
+def poseidon(PoseidonState input) -> PoseidonState:
+    field state0 = input.state0
+    field state1 = input.state1
+    field state2 = input.state2
+    field state3 = input.state3
+    field state4 = input.state4
+    field state5 = input.state5
+    field state6 = input.state6
+    field state7 = input.state7
+    field state8 = input.state8
+    field state9 = input.state9
+    field state10 = input.state10
+    field state11 = input.state11
+
+    field c0 = 13080132714287612933
+    field c1 = 8594738767457295063
+    field c2 = 12896916465481390516
+    field c3 = 1109962092811921367
+    field c4 = 16216730422861946898
+    field c5 = 10137062673499593713
+    field c6 = 15292064466732465823
+    field c7 = 17255573294985989181
+    field c8 = 14827154241873003558
+    field c9 = 2846171647972703231
+    field c10 = 16246264663680317601
+    field c11 = 14214208087951879286
+    field c12 = 9667108687426275457
+    field c13 = 6470857420712283733
+    field c14 = 14103331940138337652
+    field c15 = 11854816473550292865
+    field c16 = 3498097497301325516
+    field c17 = 7947235692523864220
+    field c18 = 11110078701231901946
+    field c19 = 16384314112672821048
+    field c20 = 15404405912655775739
+    field c21 = 14077880830714445579
+    field c22 = 9555554662709218279
+    field c23 = 13859595358210603949
+    field c24 = 16859897325061800066
+    field c25 = 17685474420222222349
+    field c26 = 17858764734618734949
+    field c27 = 9410011022665866671
+    field c28 = 12495243629579414666
+    field c29 = 12416945298171515742
+    field c30 = 5776666812364270983
+    field c31 = 6314421662864060481
+    field c32 = 7402742471423223171
+    field c33 = 982536713192432718
+    field c34 = 17321168865775127905
+    field c35 = 2934354895005980211
+    field c36 = 10567510598607410195
+    field c37 = 8135543733717919110
+    field c38 = 116353493081713692
+    field c39 = 8029688163494945618
+    field c40 = 9003846637224807585
+    field c41 = 7052445132467233849
+    field c42 = 9645665432288852853
+    field c43 = 5446430061030868787
+    field c44 = 16770910634346036823
+    field c45 = 17708360571433944729
+    field c46 = 4661556288322237631
+    field c47 = 11977051899316327985
+    field c48 = 4378616569090929672
+    field c49 = 3334807502817538491
+    field c50 = 8019184735943344966
+    field c51 = 2395043908812246395
+    field c52 = 6558421058331732611
+    field c53 = 11735894060727326369
+    field c54 = 8143540538889204488
+    field c55 = 5991753489563751169
+    field c56 = 12235918791502088007
+    field c57 = 2880312033702687139
+    field c58 = 18224748115308382355
+    field c59 = 18070411013125314165
+    field c60 = 8156487614120951180
+    field c61 = 10615269510047010719
+    field c62 = 12489426404754222075
+    field c63 = 5055279340069995710
+    field c64 = 7231927319780248664
+    field c65 = 2602078848106763799
+    field c66 = 12445944369334781425
+    field c67 = 3978905923892496205
+    field c68 = 16711272944329818038
+    field c69 = 10439032361227108922
+    field c70 = 15110119871725214866
+    field c71 = 821141790655890946
+    field c72 = 11073536380651186235
+    field c73 = 4866839313097607757
+    field c74 = 13118391689513956636
+    field c75 = 14527674973762312380
+    field c76 = 7612751959265567999
+    field c77 = 6808090907814178161
+    field c78 = 6899703779492644997
+    field c79 = 3664666286336986826
+    field c80 = 783179505424462608
+    field c81 = 8990689241814097697
+    field c82 = 9646603555412825679
+    field c83 = 7351246026167205041
+    field c84 = 16970959813722173256
+    field c85 = 15735726858241466429
+    field c86 = 10347018221892268419
+    field c87 = 12195545878449322889
+    field c88 = 7423314197114049891
+    field c89 = 14908016116973904153
+    field c90 = 5840340122527363265
+    field c91 = 17740311462440614128
+    field c92 = 815306421953744623
+    field c93 = 17456357368219253949
+    field c94 = 6982651076559329072
+    field c95 = 11970987324614963868
+    field c96 = 8167785008538063246
+    field c97 = 9483259819397403968
+    field c98 = 954550221664291548
+    field c99 = 10339565171024313256
+    field c100 = 8651171084286500102
+    field c101 = 16974445528003515956
+    field c102 = 15104530047940621190
+    field c103 = 103271880867179718
+    field c104 = 14654666245504492663
+    field c105 = 12445769555936887967
+    field c106 = 11250582358051997490
+    field c107 = 6730977207490590241
+    field c108 = 15919951556166196935
+    field c109 = 4423540216573360915
+    field c110 = 16317664700341473511
+    field c111 = 4723997214951767765
+    field c112 = 10098756619006575500
+    field c113 = 3223149401237667964
+    field c114 = 6870494874300767682
+    field c115 = 2902095711130291898
+    field c116 = 7159372652788439733
+    field c117 = 11500508372997952671
+    field c118 = 13348148181479462670
+    field c119 = 12729401155983882093
+    field c120 = 15021242795466053388
+    field c121 = 3802990509227527157
+    field c122 = 4665459515680145682
+    field c123 = 13165553315407675603
+    field c124 = 6496364397926233172
+    field c125 = 12800832566287577810
+    field c126 = 9737592377590267426
+    field c127 = 8687131091302514939
+    field c128 = 1488200421755445892
+    field c129 = 11004377668730991641
+    field c130 = 13516338734600228410
+    field c131 = 2953581820660217936
+    field c132 = 3505040783153922951
+    field c133 = 3710332827435113697
+    field c134 = 15414874040873320221
+    field c135 = 8602547649919482301
+    field c136 = 13971349938398812007
+    field c137 = 187239246702636066
+    field c138 = 12886019973971254144
+    field c139 = 4512274763990493707
+    field c140 = 2986635507805503192
+    field c141 = 2315252455709119454
+    field c142 = 12537995864054210246
+    field c143 = 2039491936479859267
+    field c144 = 1558644089185031256
+    field c145 = 4074089203264759305
+    field c146 = 2522268501749395707
+    field c147 = 3414760436185256196
+    field c148 = 17420887529146466921
+    field c149 = 2817020417938125001
+    field c150 = 16538346563888261485
+    field c151 = 5592270336833998770
+    field c152 = 16876602064684906232
+    field c153 = 1793025614521516343
+    field c154 = 2178510518148748532
+    field c155 = 2726440714374752509
+    field c156 = 6502946837278398021
+    field c157 = 15816362857667988792
+    field c158 = 12997958454165692924
+    field c159 = 5314892854495903792
+    field c160 = 15533907063555687782
+    field c161 = 12312015675698548715
+    field c162 = 14140016464013350248
+    field c163 = 16325589062962838690
+    field c164 = 6796145646370327654
+    field c165 = 1168753512742361735
+    field c166 = 4100789820704709368
+    field c167 = 15947554381540469177
+    field c168 = 8597377839806076919
+    field c169 = 9704018824195918000
+    field c170 = 12763288618765762688
+    field c171 = 17249257732622847695
+    field c172 = 1998710993415069759
+    field c173 = 923759906393011543
+    field c174 = 1271051229666811593
+    field c175 = 17822362132088738077
+    field c176 = 11797234543722669271
+    field c177 = 5864538787265942447
+    field c178 = 15975583211110506970
+    field c179 = 7258516085733671960
+    field c180 = 17999926471875633100
+    field c181 = 635992114476018166
+    field c182 = 17205047318256576347
+    field c183 = 17384900867876315312
+    field c184 = 16484825562915784226
+    field c185 = 16694130609036138894
+    field c186 = 10575069350371260875
+    field c187 = 8330575162062887277
+    field c188 = 6212375704691932880
+    field c189 = 15965138197626618226
+    field c190 = 14285453069600046939
+    field c191 = 10005163510208402517
+    field c192 = 885298637936952595
+    field c193 = 541790758138118921
+    field c194 = 5985203084790372993
+    field c195 = 4685030219775483721
+    field c196 = 1411106851304815020
+    field c197 = 11290732479954096478
+    field c198 = 208280581124868513
+    field c199 = 10979018648467968495
+    field c200 = 8600643745023338215
+    field c201 = 3477453626867126061
+    field c202 = 6428436309340258604
+    field c203 = 5695415667275657934
+    field c204 = 15952065508715623490
+    field c205 = 15571300830419767248
+    field c206 = 17259785660502616862
+    field c207 = 4298425495274316083
+    field c208 = 9023601070579319352
+    field c209 = 7353589709321807492
+    field c210 = 2988848909076209475
+    field c211 = 10439527789422046135
+    field c212 = 6097734044161429459
+    field c213 = 1113429873817861476
+    field c214 = 1639063372386966591
+    field c215 = 7863102812716788759
+    field c216 = 216040220732135364
+    field c217 = 14252611488623712688
+    field c218 = 9543395466794536974
+    field c219 = 2714461051639810934
+    field c220 = 2588317208781407279
+    field c221 = 15458529123534594916
+    field c222 = 15748417817551040856
+    field c223 = 16414455697114422951
+    field c224 = 13378164466674639511
+    field c225 = 13894319928411294675
+    field c226 = 5032680892090751540
+    field c227 = 17201338494743078916
+    field c228 = 4397422800601932505
+    field c229 = 11285062031581972327
+    field c230 = 7309354640676468207
+    field c231 = 10457152817239331848
+    field c232 = 8855911538863247046
+    field c233 = 4301853449821814398
+    field c234 = 13001502396339103326
+    field c235 = 10218424535115580246
+    field c236 = 8628244713920681895
+    field c237 = 17410423622514037261
+    field c238 = 14080683768439215375
+    field c239 = 11453161143447188100
+    field c240 = 16761509772042181939
+    field c241 = 6688821660695954082
+    field c242 = 12083434295263160416
+    field c243 = 8540021431714616589
+    field c244 = 6891616215679974226
+    field c245 = 10229217098454812721
+    field c246 = 3292165387203778711
+    field c247 = 6090113424998243490
+    field c248 = 13431780521962358660
+    field c249 = 6061081364215809883
+    field c250 = 16792066504222214142
+    field c251 = 16134314044798124799
+    field c252 = 17070233710126619765
+    field c253 = 6915716851370550800
+    field c254 = 9505009849073026581
+    field c255 = 6422700465081897153
+    field c256 = 17977653991560529185
+    field c257 = 5800870252836247255
+    field c258 = 12096124733159345520
+    field c259 = 7679273623392321940
+    field c260 = 17835783910585744964
+    field c261 = 2478664878205754377
+    field c262 = 1720314468413114967
+    field c263 = 10376757819003248056
+    field c264 = 10376377187857634245
+    field c265 = 13344930747504284997
+    field c266 = 11579281865160153596
+    field c267 = 10300256980048736962
+    field c268 = 378765236515040565
+    field c269 = 11412420941557253424
+    field c270 = 12931662470734252786
+    field c271 = 43018908376346374
+    field c272 = 3589810689190160071
+    field c273 = 4688229274750659741
+    field c274 = 13688957436484306091
+    field c275 = 11424740943016984272
+    field c276 = 16001900718237913960
+    field c277 = 5548469743008097574
+    field c278 = 14584404916672178680
+    field c279 = 3396622135873576824
+    field c280 = 7861729246871155992
+    field c281 = 16112271126908045545
+    field c282 = 16988163966860016012
+    field c283 = 273641680619529493
+    field c284 = 15222677154027327363
+    field c285 = 4070328078309830604
+    field c286 = 13520458500363296391
+    field c287 = 8235111705801363015
+    field c288 = 5575990058472514138
+    field c289 = 2751301609188252989
+    field c290 = 6478598528223547074
+    field c291 = 386565553848556638
+    field c292 = 9417729078939938713
+    field c293 = 15204315939835727483
+    field c294 = 14942015033780606261
+    field c295 = 18369423901636582012
+    field c296 = 4715338437538604447
+    field c297 = 6840590980607806319
+    field c298 = 5535471161490539014
+    field c299 = 5341328005359029952
+    field c300 = 1475161295215894444
+    field c301 = 7999197814297036636
+    field c302 = 2984233088665867938
+    field c303 = 3097746028144832229
+    field c304 = 8849530863480031517
+    field c305 = 7464920943249009773
+    field c306 = 3802996844641460514
+    field c307 = 6284458522545927646
+    field c308 = 2307388003445002779
+    field c309 = 4461479354745457623
+    field c310 = 1649739722664588460
+    field c311 = 3008391274160432867
+    field c312 = 5142217010456550622
+    field c313 = 1775580461722730120
+    field c314 = 161694268822794344
+    field c315 = 1518963253808031703
+    field c316 = 16475258091652710137
+    field c317 = 119575899007375159
+    field c318 = 1275863735937973999
+    field c319 = 16539412514520642374
+    field c320 = 2303365191438051950
+    field c321 = 6435126839960916075
+    field c322 = 17794599201026020053
+    field c323 = 13847097589277840330
+    field c324 = 16645869274577729720
+    field c325 = 8039205965509554440
+    field c326 = 4788586935019371140
+    field c327 = 15129007200040077746
+    field c328 = 2055561615223771341
+    field c329 = 4149731103701412892
+    field c330 = 10268130195734144189
+    field c331 = 13406631635880074708
+    field c332 = 11429218277824986203
+    field c333 = 15773968030812198565
+    field c334 = 16050275277550506872
+    field c335 = 11858586752031736643
+    field c336 = 8927746344866569756
+    field c337 = 11802068403177695792
+    field c338 = 157833420806751556
+    field c339 = 4698875910749767878
+    field c340 = 1616722774788291698
+    field c341 = 3990951895163748090
+    field c342 = 16758609224720795472
+    field c343 = 3045571693290741477
+    field c344 = 9281634245289836419
+    field c345 = 13517688176723875370
+    field c346 = 7961395585333219380
+    field c347 = 1606574359105691080
+    field c348 = 17564372683613562171
+    field c349 = 4664015225343144418
+    field c350 = 6133721340680280128
+    field c351 = 2667022304383014929
+    field c352 = 12316557761857340230
+    field c353 = 10375614850625292317
+    field c354 = 8141542666379135068
+    field c355 = 9185476451083834432
+    field c356 = 4991072365274649547
+    field c357 = 17398204971778820365
+    field c358 = 16127888338958422584
+    field c359 = 13586792051317758204
+
+    field mc0 = 17
+    field mc1 = 15
+    field mc2 = 41
+    field mc3 = 16
+    field mc4 = 2
+    field mc5 = 28
+    field mc6 = 13
+    field mc7 = 13
+    field mc8 = 39
+    field mc9 = 18
+    field mc10 = 34
+    field mc11 = 20
+    field md0 = 8
+    field md1 = 0
+    field md2 = 0
+    field md3 = 0
+    field md4 = 0
+    field md5 = 0
+    field md6 = 0
+    field md7 = 0
+    field md8 = 0
+    field md9 = 0
+    field md10 = 0
+    field md11 = 0
+
+    // --
+    // r = 0
+    // ark
+    state0 = state0 + c0
+    state1 = state1 + c1
+    state2 = state2 + c2
+    state3 = state3 + c3
+    state4 = state4 + c4
+    state5 = state5 + c5
+    state6 = state6 + c6
+    state7 = state7 + c7
+    state8 = state8 + c8
+    state9 = state9 + c9
+    state10 = state10 + c10
+    state11 = state11 + c11
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1 ** 7
+    field new_state2 = state2 ** 7
+    field new_state3 = state3 ** 7
+    field new_state4 = state4 ** 7
+    field new_state5 = state5 ** 7
+    field new_state6 = state6 ** 7
+    field new_state7 = state7 ** 7
+    field new_state8 = state8 ** 7
+    field new_state9 = state9 ** 7
+    field new_state10 = state10 ** 7
+    field new_state11 = state11 ** 7
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 1
+    // ark
+    state0 = state0 + c12
+    state1 = state1 + c13
+    state2 = state2 + c14
+    state3 = state3 + c15
+    state4 = state4 + c16
+    state5 = state5 + c17
+    state6 = state6 + c18
+    state7 = state7 + c19
+    state8 = state8 + c20
+    state9 = state9 + c21
+    state10 = state10 + c22
+    state11 = state11 + c23
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1 ** 7
+    field new_state2 = state2 ** 7
+    field new_state3 = state3 ** 7
+    field new_state4 = state4 ** 7
+    field new_state5 = state5 ** 7
+    field new_state6 = state6 ** 7
+    field new_state7 = state7 ** 7
+    field new_state8 = state8 ** 7
+    field new_state9 = state9 ** 7
+    field new_state10 = state10 ** 7
+    field new_state11 = state11 ** 7
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 2
+    // ark
+    state0 = state0 + c24
+    state1 = state1 + c25
+    state2 = state2 + c26
+    state3 = state3 + c27
+    state4 = state4 + c28
+    state5 = state5 + c29
+    state6 = state6 + c30
+    state7 = state7 + c31
+    state8 = state8 + c32
+    state9 = state9 + c33
+    state10 = state10 + c34
+    state11 = state11 + c35
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1 ** 7
+    field new_state2 = state2 ** 7
+    field new_state3 = state3 ** 7
+    field new_state4 = state4 ** 7
+    field new_state5 = state5 ** 7
+    field new_state6 = state6 ** 7
+    field new_state7 = state7 ** 7
+    field new_state8 = state8 ** 7
+    field new_state9 = state9 ** 7
+    field new_state10 = state10 ** 7
+    field new_state11 = state11 ** 7
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 3
+    // ark
+    state0 = state0 + c36
+    state1 = state1 + c37
+    state2 = state2 + c38
+    state3 = state3 + c39
+    state4 = state4 + c40
+    state5 = state5 + c41
+    state6 = state6 + c42
+    state7 = state7 + c43
+    state8 = state8 + c44
+    state9 = state9 + c45
+    state10 = state10 + c46
+    state11 = state11 + c47
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1 ** 7
+    field new_state2 = state2 ** 7
+    field new_state3 = state3 ** 7
+    field new_state4 = state4 ** 7
+    field new_state5 = state5 ** 7
+    field new_state6 = state6 ** 7
+    field new_state7 = state7 ** 7
+    field new_state8 = state8 ** 7
+    field new_state9 = state9 ** 7
+    field new_state10 = state10 ** 7
+    field new_state11 = state11 ** 7
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 4
+    // ark
+    state0 = state0 + c48
+    state1 = state1 + c49
+    state2 = state2 + c50
+    state3 = state3 + c51
+    state4 = state4 + c52
+    state5 = state5 + c53
+    state6 = state6 + c54
+    state7 = state7 + c55
+    state8 = state8 + c56
+    state9 = state9 + c57
+    state10 = state10 + c58
+    state11 = state11 + c59
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 5
+    // ark
+    state0 = state0 + c60
+    state1 = state1 + c61
+    state2 = state2 + c62
+    state3 = state3 + c63
+    state4 = state4 + c64
+    state5 = state5 + c65
+    state6 = state6 + c66
+    state7 = state7 + c67
+    state8 = state8 + c68
+    state9 = state9 + c69
+    state10 = state10 + c70
+    state11 = state11 + c71
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 6
+    // ark
+    state0 = state0 + c72
+    state1 = state1 + c73
+    state2 = state2 + c74
+    state3 = state3 + c75
+    state4 = state4 + c76
+    state5 = state5 + c77
+    state6 = state6 + c78
+    state7 = state7 + c79
+    state8 = state8 + c80
+    state9 = state9 + c81
+    state10 = state10 + c82
+    state11 = state11 + c83
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 7
+    // ark
+    state0 = state0 + c84
+    state1 = state1 + c85
+    state2 = state2 + c86
+    state3 = state3 + c87
+    state4 = state4 + c88
+    state5 = state5 + c89
+    state6 = state6 + c90
+    state7 = state7 + c91
+    state8 = state8 + c92
+    state9 = state9 + c93
+    state10 = state10 + c94
+    state11 = state11 + c95
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 8
+    // ark
+    state0 = state0 + c96
+    state1 = state1 + c97
+    state2 = state2 + c98
+    state3 = state3 + c99
+    state4 = state4 + c100
+    state5 = state5 + c101
+    state6 = state6 + c102
+    state7 = state7 + c103
+    state8 = state8 + c104
+    state9 = state9 + c105
+    state10 = state10 + c106
+    state11 = state11 + c107
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 9
+    // ark
+    state0 = state0 + c108
+    state1 = state1 + c109
+    state2 = state2 + c110
+    state3 = state3 + c111
+    state4 = state4 + c112
+    state5 = state5 + c113
+    state6 = state6 + c114
+    state7 = state7 + c115
+    state8 = state8 + c116
+    state9 = state9 + c117
+    state10 = state10 + c118
+    state11 = state11 + c119
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 10
+    // ark
+    state0 = state0 + c120
+    state1 = state1 + c121
+    state2 = state2 + c122
+    state3 = state3 + c123
+    state4 = state4 + c124
+    state5 = state5 + c125
+    state6 = state6 + c126
+    state7 = state7 + c127
+    state8 = state8 + c128
+    state9 = state9 + c129
+    state10 = state10 + c130
+    state11 = state11 + c131
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 11
+    // ark
+    state0 = state0 + c132
+    state1 = state1 + c133
+    state2 = state2 + c134
+    state3 = state3 + c135
+    state4 = state4 + c136
+    state5 = state5 + c137
+    state6 = state6 + c138
+    state7 = state7 + c139
+    state8 = state8 + c140
+    state9 = state9 + c141
+    state10 = state10 + c142
+    state11 = state11 + c143
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 12
+    // ark
+    state0 = state0 + c144
+    state1 = state1 + c145
+    state2 = state2 + c146
+    state3 = state3 + c147
+    state4 = state4 + c148
+    state5 = state5 + c149
+    state6 = state6 + c150
+    state7 = state7 + c151
+    state8 = state8 + c152
+    state9 = state9 + c153
+    state10 = state10 + c154
+    state11 = state11 + c155
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 13
+    // ark
+    state0 = state0 + c156
+    state1 = state1 + c157
+    state2 = state2 + c158
+    state3 = state3 + c159
+    state4 = state4 + c160
+    state5 = state5 + c161
+    state6 = state6 + c162
+    state7 = state7 + c163
+    state8 = state8 + c164
+    state9 = state9 + c165
+    state10 = state10 + c166
+    state11 = state11 + c167
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 14
+    // ark
+    state0 = state0 + c168
+    state1 = state1 + c169
+    state2 = state2 + c170
+    state3 = state3 + c171
+    state4 = state4 + c172
+    state5 = state5 + c173
+    state6 = state6 + c174
+    state7 = state7 + c175
+    state8 = state8 + c176
+    state9 = state9 + c177
+    state10 = state10 + c178
+    state11 = state11 + c179
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 15
+    // ark
+    state0 = state0 + c180
+    state1 = state1 + c181
+    state2 = state2 + c182
+    state3 = state3 + c183
+    state4 = state4 + c184
+    state5 = state5 + c185
+    state6 = state6 + c186
+    state7 = state7 + c187
+    state8 = state8 + c188
+    state9 = state9 + c189
+    state10 = state10 + c190
+    state11 = state11 + c191
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 16
+    // ark
+    state0 = state0 + c192
+    state1 = state1 + c193
+    state2 = state2 + c194
+    state3 = state3 + c195
+    state4 = state4 + c196
+    state5 = state5 + c197
+    state6 = state6 + c198
+    state7 = state7 + c199
+    state8 = state8 + c200
+    state9 = state9 + c201
+    state10 = state10 + c202
+    state11 = state11 + c203
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 17
+    // ark
+    state0 = state0 + c204
+    state1 = state1 + c205
+    state2 = state2 + c206
+    state3 = state3 + c207
+    state4 = state4 + c208
+    state5 = state5 + c209
+    state6 = state6 + c210
+    state7 = state7 + c211
+    state8 = state8 + c212
+    state9 = state9 + c213
+    state10 = state10 + c214
+    state11 = state11 + c215
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 18
+    // ark
+    state0 = state0 + c216
+    state1 = state1 + c217
+    state2 = state2 + c218
+    state3 = state3 + c219
+    state4 = state4 + c220
+    state5 = state5 + c221
+    state6 = state6 + c222
+    state7 = state7 + c223
+    state8 = state8 + c224
+    state9 = state9 + c225
+    state10 = state10 + c226
+    state11 = state11 + c227
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 19
+    // ark
+    state0 = state0 + c228
+    state1 = state1 + c229
+    state2 = state2 + c230
+    state3 = state3 + c231
+    state4 = state4 + c232
+    state5 = state5 + c233
+    state6 = state6 + c234
+    state7 = state7 + c235
+    state8 = state8 + c236
+    state9 = state9 + c237
+    state10 = state10 + c238
+    state11 = state11 + c239
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 20
+    // ark
+    state0 = state0 + c240
+    state1 = state1 + c241
+    state2 = state2 + c242
+    state3 = state3 + c243
+    state4 = state4 + c244
+    state5 = state5 + c245
+    state6 = state6 + c246
+    state7 = state7 + c247
+    state8 = state8 + c248
+    state9 = state9 + c249
+    state10 = state10 + c250
+    state11 = state11 + c251
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 21
+    // ark
+    state0 = state0 + c252
+    state1 = state1 + c253
+    state2 = state2 + c254
+    state3 = state3 + c255
+    state4 = state4 + c256
+    state5 = state5 + c257
+    state6 = state6 + c258
+    state7 = state7 + c259
+    state8 = state8 + c260
+    state9 = state9 + c261
+    state10 = state10 + c262
+    state11 = state11 + c263
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 22
+    // ark
+    state0 = state0 + c264
+    state1 = state1 + c265
+    state2 = state2 + c266
+    state3 = state3 + c267
+    state4 = state4 + c268
+    state5 = state5 + c269
+    state6 = state6 + c270
+    state7 = state7 + c271
+    state8 = state8 + c272
+    state9 = state9 + c273
+    state10 = state10 + c274
+    state11 = state11 + c275
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 23
+    // ark
+    state0 = state0 + c276
+    state1 = state1 + c277
+    state2 = state2 + c278
+    state3 = state3 + c279
+    state4 = state4 + c280
+    state5 = state5 + c281
+    state6 = state6 + c282
+    state7 = state7 + c283
+    state8 = state8 + c284
+    state9 = state9 + c285
+    state10 = state10 + c286
+    state11 = state11 + c287
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 24
+    // ark
+    state0 = state0 + c288
+    state1 = state1 + c289
+    state2 = state2 + c290
+    state3 = state3 + c291
+    state4 = state4 + c292
+    state5 = state5 + c293
+    state6 = state6 + c294
+    state7 = state7 + c295
+    state8 = state8 + c296
+    state9 = state9 + c297
+    state10 = state10 + c298
+    state11 = state11 + c299
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 25
+    // ark
+    state0 = state0 + c300
+    state1 = state1 + c301
+    state2 = state2 + c302
+    state3 = state3 + c303
+    state4 = state4 + c304
+    state5 = state5 + c305
+    state6 = state6 + c306
+    state7 = state7 + c307
+    state8 = state8 + c308
+    state9 = state9 + c309
+    state10 = state10 + c310
+    state11 = state11 + c311
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1
+    field new_state2 = state2
+    field new_state3 = state3
+    field new_state4 = state4
+    field new_state5 = state5
+    field new_state6 = state6
+    field new_state7 = state7
+    field new_state8 = state8
+    field new_state9 = state9
+    field new_state10 = state10
+    field new_state11 = state11
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 26
+    // ark
+    state0 = state0 + c312
+    state1 = state1 + c313
+    state2 = state2 + c314
+    state3 = state3 + c315
+    state4 = state4 + c316
+    state5 = state5 + c317
+    state6 = state6 + c318
+    state7 = state7 + c319
+    state8 = state8 + c320
+    state9 = state9 + c321
+    state10 = state10 + c322
+    state11 = state11 + c323
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1 ** 7
+    field new_state2 = state2 ** 7
+    field new_state3 = state3 ** 7
+    field new_state4 = state4 ** 7
+    field new_state5 = state5 ** 7
+    field new_state6 = state6 ** 7
+    field new_state7 = state7 ** 7
+    field new_state8 = state8 ** 7
+    field new_state9 = state9 ** 7
+    field new_state10 = state10 ** 7
+    field new_state11 = state11 ** 7
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 27
+    // ark
+    state0 = state0 + c324
+    state1 = state1 + c325
+    state2 = state2 + c326
+    state3 = state3 + c327
+    state4 = state4 + c328
+    state5 = state5 + c329
+    state6 = state6 + c330
+    state7 = state7 + c331
+    state8 = state8 + c332
+    state9 = state9 + c333
+    state10 = state10 + c334
+    state11 = state11 + c335
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1 ** 7
+    field new_state2 = state2 ** 7
+    field new_state3 = state3 ** 7
+    field new_state4 = state4 ** 7
+    field new_state5 = state5 ** 7
+    field new_state6 = state6 ** 7
+    field new_state7 = state7 ** 7
+    field new_state8 = state8 ** 7
+    field new_state9 = state9 ** 7
+    field new_state10 = state10 ** 7
+    field new_state11 = state11 ** 7
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 28
+    // ark
+    state0 = state0 + c336
+    state1 = state1 + c337
+    state2 = state2 + c338
+    state3 = state3 + c339
+    state4 = state4 + c340
+    state5 = state5 + c341
+    state6 = state6 + c342
+    state7 = state7 + c343
+    state8 = state8 + c344
+    state9 = state9 + c345
+    state10 = state10 + c346
+    state11 = state11 + c347
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1 ** 7
+    field new_state2 = state2 ** 7
+    field new_state3 = state3 ** 7
+    field new_state4 = state4 ** 7
+    field new_state5 = state5 ** 7
+    field new_state6 = state6 ** 7
+    field new_state7 = state7 ** 7
+    field new_state8 = state8 ** 7
+    field new_state9 = state9 ** 7
+    field new_state10 = state10 ** 7
+    field new_state11 = state11 ** 7
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    // --
+    // r = 29
+    // ark
+    state0 = state0 + c348
+    state1 = state1 + c349
+    state2 = state2 + c350
+    state3 = state3 + c351
+    state4 = state4 + c352
+    state5 = state5 + c353
+    state6 = state6 + c354
+    state7 = state7 + c355
+    state8 = state8 + c356
+    state9 = state9 + c357
+    state10 = state10 + c358
+    state11 = state11 + c359
+    // sbox
+    field new_state0 = state0 ** 7
+    field new_state1 = state1 ** 7
+    field new_state2 = state2 ** 7
+    field new_state3 = state3 ** 7
+    field new_state4 = state4 ** 7
+    field new_state5 = state5 ** 7
+    field new_state6 = state6 ** 7
+    field new_state7 = state7 ** 7
+    field new_state8 = state8 ** 7
+    field new_state9 = state9 ** 7
+    field new_state10 = state10 ** 7
+    field new_state11 = state11 ** 7
+    // mix
+    state0 = new_state0 * md0+ new_state0 * mc0+ new_state1 * mc1+ new_state2 * mc2+ new_state3 * mc3+ new_state4 * mc4+ new_state5 * mc5+ new_state6 * mc6+ new_state7 * mc7+ new_state8 * mc8+ new_state9 * mc9+ new_state10 * mc10+ new_state11 * mc11
+    state1 = new_state1 * md1+ new_state1 * mc0+ new_state2 * mc1+ new_state3 * mc2+ new_state4 * mc3+ new_state5 * mc4+ new_state6 * mc5+ new_state7 * mc6+ new_state8 * mc7+ new_state9 * mc8+ new_state10 * mc9+ new_state11 * mc10+ new_state0 * mc11
+    state2 = new_state2 * md2+ new_state2 * mc0+ new_state3 * mc1+ new_state4 * mc2+ new_state5 * mc3+ new_state6 * mc4+ new_state7 * mc5+ new_state8 * mc6+ new_state9 * mc7+ new_state10 * mc8+ new_state11 * mc9+ new_state0 * mc10+ new_state1 * mc11
+    state3 = new_state3 * md3+ new_state3 * mc0+ new_state4 * mc1+ new_state5 * mc2+ new_state6 * mc3+ new_state7 * mc4+ new_state8 * mc5+ new_state9 * mc6+ new_state10 * mc7+ new_state11 * mc8+ new_state0 * mc9+ new_state1 * mc10+ new_state2 * mc11
+    state4 = new_state4 * md4+ new_state4 * mc0+ new_state5 * mc1+ new_state6 * mc2+ new_state7 * mc3+ new_state8 * mc4+ new_state9 * mc5+ new_state10 * mc6+ new_state11 * mc7+ new_state0 * mc8+ new_state1 * mc9+ new_state2 * mc10+ new_state3 * mc11
+    state5 = new_state5 * md5+ new_state5 * mc0+ new_state6 * mc1+ new_state7 * mc2+ new_state8 * mc3+ new_state9 * mc4+ new_state10 * mc5+ new_state11 * mc6+ new_state0 * mc7+ new_state1 * mc8+ new_state2 * mc9+ new_state3 * mc10+ new_state4 * mc11
+    state6 = new_state6 * md6+ new_state6 * mc0+ new_state7 * mc1+ new_state8 * mc2+ new_state9 * mc3+ new_state10 * mc4+ new_state11 * mc5+ new_state0 * mc6+ new_state1 * mc7+ new_state2 * mc8+ new_state3 * mc9+ new_state4 * mc10+ new_state5 * mc11
+    state7 = new_state7 * md7+ new_state7 * mc0+ new_state8 * mc1+ new_state9 * mc2+ new_state10 * mc3+ new_state11 * mc4+ new_state0 * mc5+ new_state1 * mc6+ new_state2 * mc7+ new_state3 * mc8+ new_state4 * mc9+ new_state5 * mc10+ new_state6 * mc11
+    state8 = new_state8 * md8+ new_state8 * mc0+ new_state9 * mc1+ new_state10 * mc2+ new_state11 * mc3+ new_state0 * mc4+ new_state1 * mc5+ new_state2 * mc6+ new_state3 * mc7+ new_state4 * mc8+ new_state5 * mc9+ new_state6 * mc10+ new_state7 * mc11
+    state9 = new_state9 * md9+ new_state9 * mc0+ new_state10 * mc1+ new_state11 * mc2+ new_state0 * mc3+ new_state1 * mc4+ new_state2 * mc5+ new_state3 * mc6+ new_state4 * mc7+ new_state5 * mc8+ new_state6 * mc9+ new_state7 * mc10+ new_state8 * mc11
+    state10 = new_state10 * md10+ new_state10 * mc0+ new_state11 * mc1+ new_state0 * mc2+ new_state1 * mc3+ new_state2 * mc4+ new_state3 * mc5+ new_state4 * mc6+ new_state5 * mc7+ new_state6 * mc8+ new_state7 * mc9+ new_state8 * mc10+ new_state9 * mc11
+    state11 = new_state11 * md11+ new_state11 * mc0+ new_state0 * mc1+ new_state1 * mc2+ new_state2 * mc3+ new_state3 * mc4+ new_state4 * mc5+ new_state5 * mc6+ new_state6 * mc7+ new_state7 * mc8+ new_state8 * mc9+ new_state9 * mc10+ new_state10 * mc11
+    return PoseidonState {
+        state0: state0, 
+        state1: state1, 
+        state2: state2, 
+        state3: state3, 
+        state4: state4, 
+        state5: state5, 
+        state6: state6, 
+        state7: state7, 
+        state8: state8, 
+        state9: state9, 
+        state10: state10, 
+        state11: state11,
+    }
+
+def main() -> field:
+    PoseidonState inputs = PoseidonState {
+        state0: 1,
+        state1: 2, 
+        state2: 3, 
+        state3: 4, 
+        state4: 5, 
+        state5: 6, 
+        state6: 7, 
+        state7: 8, 
+        state8: 0, 
+        state9: 0, 
+        state10: 0, 
+        state11: 0
+    }
+    field cumulated_hash = 0
+    for u32 i in 0..10000 do
+        PoseidonState hashes = poseidon(inputs)
+        cumulated_hash = cumulated_hash + hashes.state0 + hashes.state1 + hashes.state2 + hashes.state3 + hashes.state4 + hashes.state5 + hashes.state6 + hashes.state7 + hashes.state8 + hashes.state9 + hashes.state10 + hashes.state11
+    endfor
+
+    return cumulated_hash

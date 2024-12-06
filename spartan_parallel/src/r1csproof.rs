@@ -3,10 +3,9 @@ use super::custom_dense_mlpoly::DensePolynomialPqx;
 use super::dense_mlpoly::{DensePolynomial, EqPolynomial, PolyEvalProof};
 use super::errors::ProofVerifyError;
 use super::math::Math;
-use super::nizk::{EqualityProof, KnowledgeProof, ProductProof};
 use super::r1csinstance::R1CSInstance;
 use super::random::RandomTape;
-use super::sumcheck::ZKSumcheckInstanceProof;
+use super::sumcheck::SumcheckInstanceProof;
 use super::timer::Timer;
 use super::transcript::ProofTranscript;
 use crate::scalar::SpartanExtensionField;
@@ -17,12 +16,14 @@ use std::cmp::min;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct R1CSProof<S: SpartanExtensionField> {
-  sc_proof_phase1: ZKSumcheckInstanceProof<S>,
-  sc_proof_phase2: ZKSumcheckInstanceProof<S>,
-  pok_claims_phase2: (KnowledgeProof<S>, ProductProof<S>),
-  proof_eq_sc_phase1: EqualityProof<S>,
-  proof_eq_sc_phase2: EqualityProof<S>,
-  proof_eval_vars_at_ry_list: Vec<PolyEvalProof<S>>,
+  sc_proof_phase1: SumcheckInstanceProof<S>,
+  sc_proof_phase2: SumcheckInstanceProof<S>,
+  claims_phase2: (S, S, S),
+  // debug_zk
+  // pok_claims_phase2: (KnowledgeProof<S>, ProductProof<S>),
+  // proof_eq_sc_phase1: EqualityProof<S>,
+  // proof_eq_sc_phase2: EqualityProof<S>,
+  // proof_eval_vars_at_ry_list: Vec<PolyEvalProof<S>>,
 }
 
 impl<S: SpartanExtensionField> R1CSProof<S> {
@@ -41,15 +42,14 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     evals_Cz: &mut DensePolynomialPqx<S>,
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
-  ) -> (ZKSumcheckInstanceProof<S>, Vec<S>, Vec<S>, S) {
+  ) -> (SumcheckInstanceProof<S>, Vec<S>, Vec<S>) {
     let comb_func = |poly_A_comp: &S, poly_B_comp: &S, poly_C_comp: &S, poly_D_comp: &S| -> S {
       *poly_A_comp * (*poly_B_comp * *poly_C_comp - *poly_D_comp)
     };
 
-    let (sc_proof_phase_one, r, claims, blind_claim_postsc) =
-      ZKSumcheckInstanceProof::<S>::prove_cubic_with_additive_term_disjoint_rounds(
+    let (sc_proof_phase_one, r, claims) =
+      SumcheckInstanceProof::<S>::prove_cubic_with_additive_term_disjoint_rounds(
         &S::field_zero(), // claim is zero
-        &S::field_zero(), // blind for claim is also zero
         num_rounds,
         num_rounds_x_max,
         num_rounds_q_max,
@@ -67,7 +67,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
         random_tape,
       );
 
-    (sc_proof_phase_one, r, claims, blind_claim_postsc)
+    (sc_proof_phase_one, r, claims)
   }
 
   fn prove_phase_two(
@@ -79,36 +79,33 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     num_witness_secs: usize,
     num_inputs: Vec<usize>,
     claim: &S,
-    blind_claim: &S,
     evals_eq: &mut DensePolynomial<S>,
     evals_ABC: &mut DensePolynomialPqx<S>,
     evals_z: &mut DensePolynomialPqx<S>,
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
-  ) -> (ZKSumcheckInstanceProof<S>, Vec<S>, Vec<S>, S) {
+  ) -> (SumcheckInstanceProof<S>, Vec<S>, Vec<S>) {
     let comb_func = |poly_A_comp: &S, poly_B_comp: &S, poly_C_comp: &S| -> S {
       *poly_A_comp * *poly_B_comp * *poly_C_comp
     };
-    let (sc_proof_phase_two, r, claims, blind_claim_postsc) =
-      ZKSumcheckInstanceProof::<S>::prove_cubic_disjoint_rounds(
-        claim,
-        blind_claim,
-        num_rounds,
-        num_rounds_y_max,
-        num_rounds_w,
-        num_rounds_p,
-        single_inst,
-        num_witness_secs,
-        num_inputs,
-        evals_eq,
-        evals_ABC,
-        evals_z,
-        comb_func,
-        transcript,
-        random_tape,
-      );
+    let (sc_proof_phase_two, r, claims) = SumcheckInstanceProof::<S>::prove_cubic_disjoint_rounds(
+      claim,
+      num_rounds,
+      num_rounds_y_max,
+      num_rounds_w,
+      num_rounds_p,
+      single_inst,
+      num_witness_secs,
+      num_inputs,
+      evals_eq,
+      evals_ABC,
+      evals_z,
+      comb_func,
+      transcript,
+      random_tape,
+    );
 
-    (sc_proof_phase_two, r, claims, blind_claim_postsc)
+    (sc_proof_phase_two, r, claims)
   }
 
   fn protocol_name() -> &'static [u8] {
@@ -235,7 +232,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
 
     // Sumcheck 1: (Az * Bz - Cz) * eq(x, q, p) = 0
     let timer_tmp = Timer::new("prove_sum_check");
-    let (sc_proof_phase1, rx, _claims_phase1, blind_claim_postsc1) = R1CSProof::prove_phase_one(
+    let (sc_proof_phase1, rx, _claims_phase1) = R1CSProof::prove_phase_one(
       num_rounds_x + num_rounds_q + num_rounds_p,
       num_rounds_x,
       num_rounds_q,
@@ -275,21 +272,23 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       random_tape.random_scalar(b"prod_Az_Bz_blind"),
     );
 
-    let pok_Cz_claim = { KnowledgeProof::prove(transcript, random_tape, Cz_claim, &Cz_blind) };
+    // debug_zk
+    // let pok_Cz_claim = { KnowledgeProof::prove(transcript, random_tape, Cz_claim, &Cz_blind) };
 
-    let proof_prod = {
-      let prod = *Az_claim * *Bz_claim;
-      ProductProof::prove(
-        transcript,
-        random_tape,
-        Az_claim,
-        &Az_blind,
-        Bz_claim,
-        &Bz_blind,
-        &prod,
-        &prod_Az_Bz_blind,
-      )
-    };
+    // debug_zk
+    // let proof_prod = {
+    //   let prod = *Az_claim * *Bz_claim;
+    //   ProductProof::prove(
+    //     transcript,
+    //     random_tape,
+    //     Az_claim,
+    //     &Az_blind,
+    //     Bz_claim,
+    //     &Bz_blind,
+    //     &prod,
+    //     &prod_Az_Bz_blind,
+    //   )
+    // };
 
     // prove the final step of sum-check #1
     let taus_bound_rx = tau_claim;
@@ -297,14 +296,14 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let blind_expected_claim_postsc1 = *taus_bound_rx * (prod_Az_Bz_blind - Cz_blind);
     let claim_post_phase1 = (*Az_claim * *Bz_claim - *Cz_claim) * *taus_bound_rx;
 
-    let proof_eq_sc_phase1 = EqualityProof::prove(
-      transcript,
-      random_tape,
-      &claim_post_phase1,
-      &blind_expected_claim_postsc1,
-      &claim_post_phase1,
-      &blind_claim_postsc1,
-    );
+    // debug_zk
+    // let proof_eq_sc_phase1 = EqualityProof::prove(
+    //   transcript,
+    //   random_tape,
+    //   &claim_post_phase1,
+    //   &blind_expected_claim_postsc1,
+    //   &claim_post_phase1,
+    // );
 
     // Separate the result rx into rp, rq, and rx
     let (rx_rev, rq_rev) = rx.split_at(num_rounds_x);
@@ -324,7 +323,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let r_C: S = transcript.challenge_scalar(b"challenge_Cz");
 
     let claim_phase2 = r_A * *Az_claim + r_B * *Bz_claim + r_C * *Cz_claim;
-    let blind_claim_phase2 = r_A * Az_blind + r_B * Bz_blind + r_C * Cz_blind;
 
     let timer_tmp = Timer::new("prove_abc_gen");
     let evals_ABC = {
@@ -380,7 +378,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let mut eq_p_rp_poly = DensePolynomial::new(EqPolynomial::new(rp).evals());
 
     // Sumcheck 2: (rA + rB + rC) * Z * eq(p) = e
-    let (sc_proof_phase2, ry, claims_phase2, blind_claim_postsc2) = R1CSProof::prove_phase_two(
+    let (sc_proof_phase2, ry, claims_phase2) = R1CSProof::prove_phase_two(
       num_rounds_y + num_rounds_w + num_rounds_p,
       num_rounds_y,
       num_rounds_w,
@@ -389,7 +387,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       num_witness_secs,
       num_inputs.clone(),
       &claim_phase2,
-      &blind_claim_phase2,
       &mut eq_p_rp_poly,
       &mut ABC_poly,
       &mut Z_poly,
@@ -466,18 +463,18 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       }
     }
 
+    /*
     let proof_eval_vars_at_ry_list = PolyEvalProof::prove_batched_instances_disjoint_rounds(
       &poly_list,
       &num_proofs_list,
       &num_inputs_list,
-      None,
       &rq,
       &ry,
       &Zr_list,
-      None,
       transcript,
       random_tape,
     );
+    */
 
     // Bind the resulting witness list to rp
     // poly_vars stores the result of each witness matrix bounded to (rq_short ++ ry)
@@ -547,27 +544,30 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let blind_expected_claim_postsc2 = S::field_zero();
     let claim_post_phase2 = claims_phase2[0] * claims_phase2[1] * claims_phase2[2];
 
-    let proof_eq_sc_phase2 = EqualityProof::prove(
-      transcript,
-      random_tape,
-      &claim_post_phase2,
-      &blind_expected_claim_postsc2,
-      &claim_post_phase2,
-      &blind_claim_postsc2,
-    );
+    // debug_zk
+    // let proof_eq_sc_phase2 = EqualityProof::prove(
+    //   transcript,
+    //   random_tape,
+    //   &claim_post_phase2,
+    //   &blind_expected_claim_postsc2,
+    //   &claim_post_phase2,
+    // );
 
     timer_prove.stop();
 
-    let pok_claims_phase2 = (pok_Cz_claim, proof_prod);
+    // debug_zk
+    // let pok_claims_phase2 = (pok_Cz_claim, proof_prod);
 
     (
       R1CSProof {
         sc_proof_phase1,
         sc_proof_phase2,
-        pok_claims_phase2,
-        proof_eq_sc_phase1,
-        proof_eq_sc_phase2,
-        proof_eval_vars_at_ry_list,
+        claims_phase2: (*Az_claim, *Bz_claim, *Cz_claim),
+        // debug_zk
+        // pok_claims_phase2,
+        // proof_eq_sc_phase1,
+        // proof_eq_sc_phase2,
+        // proof_eval_vars_at_ry_list,
       },
       [rp, rq_rev, rx, [rw, ry].concat()],
     )
@@ -619,16 +619,20 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let tau_q = transcript.challenge_vector(b"challenge_tau_q", num_rounds_q);
     let tau_x = transcript.challenge_vector(b"challenge_tau_x", num_rounds_x);
 
-    let rx =
-      self
-        .sc_proof_phase1
-        .verify(num_rounds_x + num_rounds_q + num_rounds_p, 3, transcript)?;
+    let (_, rx) = self.sc_proof_phase1.verify(
+      S::field_zero(),
+      num_rounds_x + num_rounds_q + num_rounds_p,
+      3,
+      transcript,
+    )?;
 
+    // debug_zk
     // perform the intermediate sum-check test with claimed Az, Bz, and Cz
-    let (pok_Cz_claim, proof_prod) = &self.pok_claims_phase2;
+    // let (pok_Cz_claim, proof_prod) = &self.pok_claims_phase2;
 
-    pok_Cz_claim.verify(transcript)?;
-    proof_prod.verify(transcript)?;
+    // debug_zk
+    // pok_Cz_claim.verify(transcript)?;
+    // proof_prod.verify(transcript)?;
 
     // Separate the result rx into rp_round1, rq, and rx
     let (rx_rev, rq_rev) = rx.split_at(num_rounds_x);
@@ -652,19 +656,25 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       .product();
     let _taus_bound_rx = taus_bound_rp * taus_bound_rq * taus_bound_rx;
 
+    // debug_zk
     // verify proof that expected_claim_post_phase1 == claim_post_phase1
-    self.proof_eq_sc_phase1.verify(transcript)?;
+    // self.proof_eq_sc_phase1.verify(transcript)?;
 
     // derive three public challenges and then derive a joint claim
-    let _r_A: S = transcript.challenge_scalar(b"challenge_Az");
-    let _r_B: S = transcript.challenge_scalar(b"challenge_Bz");
-    let _r_C: S = transcript.challenge_scalar(b"challenge_Cz");
+    let r_A: S = transcript.challenge_scalar(b"challenge_Az");
+    let r_B: S = transcript.challenge_scalar(b"challenge_Bz");
+    let r_C: S = transcript.challenge_scalar(b"challenge_Cz");
+
+    let (Az_claim, Bz_claim, Cz_claim) = self.claims_phase2;
+    let claim_phase2 = r_A * Az_claim + r_B * Bz_claim + r_C * Cz_claim;
 
     // verify the joint claim with a sum-check protocol
-    let ry =
-      self
-        .sc_proof_phase2
-        .verify(num_rounds_y + num_rounds_w + num_rounds_p, 3, transcript)?;
+    let (_, ry) = self.sc_proof_phase2.verify(
+      claim_phase2,
+      num_rounds_y + num_rounds_w + num_rounds_p,
+      3,
+      transcript,
+    )?;
 
     // Separate ry into rp, rw, and ry
     let (ry_rev, rw) = ry.split_at(num_rounds_y);
@@ -701,6 +711,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       }
     }
 
+    /*
     PolyEvalProof::verify_batched_instances_disjoint_rounds(
       &self.proof_eval_vars_at_ry_list,
       &num_proofs_list,
@@ -709,6 +720,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       &rq,
       &ry,
     )?;
+    */
 
     // Then on rp
     for p in 0..num_instances {
@@ -754,8 +766,9 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
 
     timer_commit_opening.stop();
 
+    // debug_zk
     // verify proof that expected_claim_post_phase2 == claim_post_phase2
-    self.proof_eq_sc_phase2.verify(transcript)?;
+    // self.proof_eq_sc_phase2.verify(transcript)?;
 
     Ok([rp, rq_rev, rx, [rw, ry].concat()])
   }

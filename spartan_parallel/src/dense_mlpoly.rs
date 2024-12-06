@@ -321,8 +321,8 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 
   pub fn prove(
     poly: &DensePolynomial<S>,
-    r: &[S],                  // point at which the polynomial is evaluated
-    _Zr: &S,                   // evaluation of \widetilde{Z}(r)
+    r: &[S], // point at which the polynomial is evaluated
+    _Zr: &S, // evaluation of \widetilde{Z}(r)
     transcript: &mut Transcript,
     _random_tape: &mut RandomTape<S>,
   ) -> PolyEvalProof<S> {
@@ -383,8 +383,8 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   // Evaluation of multiple points on the same instance
   pub fn prove_batched_points(
     poly: &DensePolynomial<S>,
-    r_list: Vec<Vec<S>>,      // point at which the polynomial is evaluated
-    Zr_list: Vec<S>,          // evaluation of \widetilde{Z}(r) on each point
+    r_list: Vec<Vec<S>>, // point at which the polynomial is evaluated
+    Zr_list: Vec<S>,     // evaluation of \widetilde{Z}(r) on each point
     transcript: &mut Transcript,
     _random_tape: &mut RandomTape<S>,
   ) -> Vec<PolyEvalProof<S>> {
@@ -440,7 +440,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
       // compute vector-matrix product between L and Z viewed as a matrix
       let LZ = poly.bound(L);
 
-      proof_list.push(PolyEvalProof{ v: LZ });
+      proof_list.push(PolyEvalProof { v: LZ });
     }
 
     proof_list
@@ -497,8 +497,8 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   // Size of each instance might be different, but all are larger than the evaluation point
   pub fn prove_batched_instances(
     poly_list: &Vec<DensePolynomial<S>>, // list of instances
-    r_list: Vec<&Vec<S>>,     // point at which the polynomial is evaluated
-    Zr_list: &Vec<S>,         // evaluation of \widetilde{Z}(r) on each instance
+    r_list: Vec<&Vec<S>>,                // point at which the polynomial is evaluated
+    Zr_list: &Vec<S>,                    // evaluation of \widetilde{Z}(r) on each instance
     transcript: &mut Transcript,
     _random_tape: &mut RandomTape<S>,
   ) -> Vec<PolyEvalProof<S>> {
@@ -563,7 +563,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     for v in LZ_list.into_iter() {
       proof_list.push(PolyEvalProof { v });
     }
-    
+
     proof_list
   }
 
@@ -698,7 +698,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 
     let mut proof_list = Vec::new();
     for v in LZ_list.into_iter() {
-      proof_list.push(PolyEvalProof{ v });
+      proof_list.push(PolyEvalProof { v });
     }
 
     proof_list

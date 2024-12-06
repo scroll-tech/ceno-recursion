@@ -104,13 +104,8 @@ impl<S: SpartanExtensionField> DerefsEvalProof<S> {
     // decommit the joint polynomial at r_joint
     S::append_field_to_transcript(b"joint_claim_eval", transcript, eval_joint);
 
-    let proof_derefs = PolyEvalProof::prove(
-      joint_poly,
-      &r_joint,
-      &eval_joint,
-      transcript,
-      random_tape,
-    );
+    let proof_derefs =
+      PolyEvalProof::prove(joint_poly, &r_joint, &eval_joint, transcript, random_tape);
 
     proof_derefs
   }

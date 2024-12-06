@@ -88,23 +88,22 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let comb_func = |poly_A_comp: &S, poly_B_comp: &S, poly_C_comp: &S| -> S {
       *poly_A_comp * *poly_B_comp * *poly_C_comp
     };
-    let (sc_proof_phase_two, r, claims) =
-      SumcheckInstanceProof::<S>::prove_cubic_disjoint_rounds(
-        claim,
-        num_rounds,
-        num_rounds_y_max,
-        num_rounds_w,
-        num_rounds_p,
-        single_inst,
-        num_witness_secs,
-        num_inputs,
-        evals_eq,
-        evals_ABC,
-        evals_z,
-        comb_func,
-        transcript,
-        random_tape,
-      );
+    let (sc_proof_phase_two, r, claims) = SumcheckInstanceProof::<S>::prove_cubic_disjoint_rounds(
+      claim,
+      num_rounds,
+      num_rounds_y_max,
+      num_rounds_w,
+      num_rounds_p,
+      single_inst,
+      num_witness_secs,
+      num_inputs,
+      evals_eq,
+      evals_ABC,
+      evals_z,
+      comb_func,
+      transcript,
+      random_tape,
+    );
 
     (sc_proof_phase_two, r, claims)
   }
@@ -620,10 +619,12 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let tau_q = transcript.challenge_vector(b"challenge_tau_q", num_rounds_q);
     let tau_x = transcript.challenge_vector(b"challenge_tau_x", num_rounds_x);
 
-    let (_, rx) =
-      self
-        .sc_proof_phase1
-        .verify(S::field_zero(), num_rounds_x + num_rounds_q + num_rounds_p, 3, transcript)?;
+    let (_, rx) = self.sc_proof_phase1.verify(
+      S::field_zero(),
+      num_rounds_x + num_rounds_q + num_rounds_p,
+      3,
+      transcript,
+    )?;
 
     // debug_zk
     // perform the intermediate sum-check test with claimed Az, Bz, and Cz
@@ -668,10 +669,12 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let claim_phase2 = r_A * Az_claim + r_B * Bz_claim + r_C * Cz_claim;
 
     // verify the joint claim with a sum-check protocol
-    let (_, ry) =
-      self
-        .sc_proof_phase2
-        .verify(claim_phase2, num_rounds_y + num_rounds_w + num_rounds_p, 3, transcript)?;
+    let (_, ry) = self.sc_proof_phase2.verify(
+      claim_phase2,
+      num_rounds_y + num_rounds_w + num_rounds_p,
+      3,
+      transcript,
+    )?;
 
     // Separate ry into rp, rw, and ry
     let (ry_rev, rw) = ry.split_at(num_rounds_y);

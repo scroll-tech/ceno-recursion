@@ -648,6 +648,66 @@ impl<S: SpartanExtensionField> SNARK<S> {
     b"Spartan SNARK proof"
   }
 
+  // Computes proof size by commitment / non-commitment
+  fn compute_size(&self) -> (usize, usize, usize) {
+    /*
+    let commit_size = bincode::serialize(&self.block_comm_vars_list).unwrap().len()
+                           + bincode::serialize(&self.exec_comm_inputs).unwrap().len()
+                           + bincode::serialize(&self.addr_comm_phy_mems).unwrap().len()
+                           + bincode::serialize(&self.addr_comm_phy_mems_shifted).unwrap().len()
+                           + bincode::serialize(&self.addr_comm_vir_mems).unwrap().len()
+                           + bincode::serialize(&self.addr_comm_vir_mems_shifted).unwrap().len()
+                           + bincode::serialize(&self.addr_comm_ts_bits).unwrap().len()
+              
+                           + bincode::serialize(&self.perm_exec_comm_w2_list).unwrap().len()
+                           + bincode::serialize(&self.perm_exec_comm_w3_list).unwrap().len()
+                           + bincode::serialize(&self.perm_exec_comm_w3_shifted).unwrap().len()
+              
+                           + bincode::serialize(&self.block_comm_w2_list).unwrap().len()
+                           + bincode::serialize(&self.block_comm_w3_list).unwrap().len()
+                           + bincode::serialize(&self.block_comm_w3_list_shifted).unwrap().len()
+              
+                           + bincode::serialize(&self.init_phy_mem_comm_w2).unwrap().len()
+                           + bincode::serialize(&self.init_phy_mem_comm_w3).unwrap().len()
+                           + bincode::serialize(&self.init_phy_mem_comm_w3_shifted).unwrap().len()
+              
+                           + bincode::serialize(&self.init_vir_mem_comm_w2).unwrap().len()
+                           + bincode::serialize(&self.init_vir_mem_comm_w3).unwrap().len()
+                           + bincode::serialize(&self.init_vir_mem_comm_w3_shifted).unwrap().len()
+              
+                           + bincode::serialize(&self.phy_mem_addr_comm_w2).unwrap().len()
+                           + bincode::serialize(&self.phy_mem_addr_comm_w3).unwrap().len()
+                           + bincode::serialize(&self.phy_mem_addr_comm_w3_shifted).unwrap().len()
+              
+                           + bincode::serialize(&self.vir_mem_addr_comm_w2).unwrap().len()
+                           + bincode::serialize(&self.vir_mem_addr_comm_w3).unwrap().len()
+                           + bincode::serialize(&self.vir_mem_addr_comm_w3_shifted).unwrap().len();
+    */
+    let dense_commit_size = 0;
+    
+    let sparse_commit_size = bincode::serialize(&self.block_r1cs_eval_proof_list).unwrap().len()
+                                  + bincode::serialize(&self.pairwise_check_r1cs_eval_proof).unwrap().len()
+                                  + bincode::serialize(&self.perm_root_r1cs_eval_proof).unwrap().len()
+                                  + bincode::serialize(&self.proof_eval_perm_poly_prod_list).unwrap().len();
+
+    let noncommit_size = bincode::serialize(&self.block_r1cs_sat_proof).unwrap().len()
+                              + bincode::serialize(&self.block_inst_evals_bound_rp).unwrap().len()
+                              + bincode::serialize(&self.block_inst_evals_list).unwrap().len()
+
+                              + bincode::serialize(&self.pairwise_check_r1cs_sat_proof).unwrap().len()
+                              + bincode::serialize(&self.pairwise_check_inst_evals_bound_rp).unwrap().len()
+                              + bincode::serialize(&self.pairwise_check_inst_evals_list).unwrap().len()
+
+                              + bincode::serialize(&self.perm_root_r1cs_sat_proof).unwrap().len()
+                              + bincode::serialize(&self.perm_root_inst_evals).unwrap().len()
+
+                              + bincode::serialize(&self.perm_poly_poly_list).unwrap().len()
+
+                              // + bincode::serialize(&self.shift_proof).unwrap().len()
+                              + bincode::serialize(&self.io_proof).unwrap().len();
+    (dense_commit_size, sparse_commit_size, noncommit_size)
+  }
+
   /// A public computation to create a commitment to a list of R1CS instances
   pub fn multi_encode(
     inst: &Instance<S>,
@@ -1831,6 +1891,35 @@ impl<S: SpartanExtensionField> SNARK<S> {
     };
     timer_commit.stop();
 
+    // Record total size of witnesses:
+    let block_witness_sizes: Vec<usize> = [
+      block_vars_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+      block_w2_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+      block_w3_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+      block_w3_shifted_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>()
+    ].concat();
+    let exec_witness_sizes: Vec<usize> = [
+      exec_inputs_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+      perm_exec_w2_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+      perm_exec_w3_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+      perm_exec_w3_shifted_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+    ].concat();
+    let mem_witness_sizes: Vec<usize> = [
+      addr_phy_mems_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+      phy_mem_addr_w2_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+      phy_mem_addr_w3_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+      phy_mem_addr_w3_shifted_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+      addr_vir_mems_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+      addr_ts_bits_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+      vir_mem_addr_w2_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+      vir_mem_addr_w3_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+      vir_mem_addr_w3_shifted_prover.poly_w.iter().map(|i| i.len()).collect::<Vec<usize>>(),
+    ].concat();
+
+    println!("BLOCK WITNESSES: {:?} Goldilocks", block_witness_sizes);
+    println!("EXEC WITNESSES: {:?} Goldilocks", exec_witness_sizes);
+    println!("MEM WITNESSES: {:?} Goldilocks", mem_witness_sizes);
+
     // --
     // BLOCK_CORRECTNESS_EXTRACT
     // --
@@ -2368,14 +2457,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
 
     transcript: &mut Transcript,
   ) -> Result<(), ProofVerifyError> {
-    let proof_size = bincode::serialize(&self).unwrap().len();
-    let commit_size = bincode::serialize(&block_comm_list).unwrap().len() +
-      // bincode::serialize(&block_gens).unwrap().len() + 
-      bincode::serialize(&pairwise_check_comm).unwrap().len() +
-      // bincode::serialize(&pairwise_check_gens).unwrap().len() + 
-      bincode::serialize(&perm_root_comm).unwrap().len();
-    // bincode::serialize(&perm_root_gens).unwrap().len();
-    let meta_size =
+    let (_, _, sumcheck_size) = self.compute_size();
+    let meta_size = 
       // usize
       19 * std::mem::size_of::<usize>() +
       // Vec<usize> or Vec<Vec<usize>>
@@ -2387,8 +2470,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
       // Other vectors
       bincode::serialize(input).unwrap().len() +
       bincode::serialize(output).unwrap().len();
-    // Everything else
-    // bincode::serialize(vars_gens).unwrap().len();
+      // Everything else
+      // bincode::serialize(vars_gens).unwrap().len();
 
     let timer_verify = Timer::new("SNARK::verify");
     <Transcript as ProofTranscript<S>>::append_protocol_name(
@@ -3288,10 +3371,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
 
     timer_verify.stop();
 
-    println!("PROOF SIZE: {}", proof_size);
-    println!("COMMIT SIZE: {}", commit_size);
-    println!("META SIZE: {}", meta_size);
-    println!("Total Proof Size: {}", proof_size + commit_size + meta_size);
+    println!("SUMCHECK SIZE: {} bytes", sumcheck_size);
+    println!("META SIZE: {} bytes", meta_size);
 
     Ok(())
   }

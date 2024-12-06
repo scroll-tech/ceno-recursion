@@ -23,7 +23,7 @@ pub struct R1CSProof<S: SpartanExtensionField> {
   // pok_claims_phase2: (KnowledgeProof<S>, ProductProof<S>),
   // proof_eq_sc_phase1: EqualityProof<S>,
   // proof_eq_sc_phase2: EqualityProof<S>,
-  proof_eval_vars_at_ry_list: Vec<PolyEvalProof<S>>,
+  // proof_eval_vars_at_ry_list: Vec<PolyEvalProof<S>>,
 }
 
 impl<S: SpartanExtensionField> R1CSProof<S> {
@@ -464,6 +464,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       }
     }
 
+    /*
     let proof_eval_vars_at_ry_list = PolyEvalProof::prove_batched_instances_disjoint_rounds(
       &poly_list,
       &num_proofs_list,
@@ -474,6 +475,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       transcript,
       random_tape,
     );
+    */
 
     // Bind the resulting witness list to rp
     // poly_vars stores the result of each witness matrix bounded to (rq_short ++ ry)
@@ -566,7 +568,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
         // pok_claims_phase2,
         // proof_eq_sc_phase1,
         // proof_eq_sc_phase2,
-        proof_eval_vars_at_ry_list,
+        // proof_eval_vars_at_ry_list,
       },
       [rp, rq_rev, rx, [rw, ry].concat()],
     )
@@ -706,6 +708,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       }
     }
 
+    /*
     PolyEvalProof::verify_batched_instances_disjoint_rounds(
       &self.proof_eval_vars_at_ry_list,
       &num_proofs_list,
@@ -714,6 +717,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       &rq,
       &ry,
     )?;
+    */
 
     // Then on rp
     for p in 0..num_instances {

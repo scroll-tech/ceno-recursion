@@ -610,7 +610,7 @@ pub struct SNARK<S: SpartanExtensionField> {
   perm_poly_poly_list: Vec<S>,
   proof_eval_perm_poly_prod_list: Vec<PolyEvalProof<S>>,
 
-  shift_proof: ShiftProofs<S>,
+  // shift_proof: ShiftProofs<S>,
   io_proof: IOProofs<S>,
 }
 
@@ -2260,6 +2260,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
         shifted_polys.push(&vir_mem_addr_w3_shifted_prover.poly_w[0]);
         header_len_list.push(6);
       }
+      /*
       let shift_proof = ShiftProofs::prove(
         orig_polys,
         shifted_polys,
@@ -2268,6 +2269,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
         &mut random_tape,
       );
       shift_proof
+      */
     };
     timer_proof.stop();
 
@@ -2314,7 +2316,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       perm_poly_poly_list,
       proof_eval_perm_poly_prod_list,
 
-      shift_proof,
+      // shift_proof,
       io_proof,
     }
   }
@@ -3256,9 +3258,11 @@ impl<S: SpartanExtensionField> SNARK<S> {
         header_len_list.push(6);
       }
 
+      /*
       self
         .shift_proof
         .verify(poly_size_list, shift_size_list, header_len_list, transcript)?;
+      */
     }
     timer_proof.stop();
 

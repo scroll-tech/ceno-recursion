@@ -3,7 +3,6 @@ use crate::scalar::SpartanExtensionField;
 
 use super::errors::ProofVerifyError;
 use super::math::Math;
-use super::nizk::DotProductProofLog;
 use super::random::RandomTape;
 use super::transcript::ProofTranscript;
 use core::ops::Index;
@@ -19,10 +18,6 @@ pub struct DensePolynomial<S: SpartanExtensionField> {
   num_vars: usize, // the number of variables in the multilinear polynomial
   len: usize,
   Z: Vec<S>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
-}
-
-pub struct PolyCommitmentBlinds<S: SpartanExtensionField> {
-  pub(crate) blinds: Vec<S>,
 }
 
 pub struct EqPolynomial<S: SpartanExtensionField> {
@@ -258,7 +253,12 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     assert_eq!(r.len(), self.get_num_vars());
     let chis = EqPolynomial::new(r.to_vec()).evals();
     assert_eq!(chis.len(), self.Z.len());
-    DotProductProofLog::compute_dotproduct(&self.Z, &chis)
+    Self::compute_dotproduct(&self.Z, &chis)
+  }
+
+  fn compute_dotproduct(a: &[S], b: &[S]) -> S {
+    assert_eq!(a.len(), b.len());
+    (0..a.len()).map(|i| a[i] * b[i]).sum()
   }
 
   fn vec(&self) -> &Vec<S> {
@@ -311,7 +311,7 @@ impl<S: SpartanExtensionField> Index<usize> for DensePolynomial<S> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PolyEvalProof<S: SpartanExtensionField> {
-  proof: DotProductProofLog<S>,
+  v: Vec<S>,
 }
 
 impl<S: SpartanExtensionField> PolyEvalProof<S> {
@@ -321,12 +321,10 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 
   pub fn prove(
     poly: &DensePolynomial<S>,
-    blinds_opt: Option<&PolyCommitmentBlinds<S>>,
     r: &[S],                  // point at which the polynomial is evaluated
-    Zr: &S,                   // evaluation of \widetilde{Z}(r)
-    blind_Zr_opt: Option<&S>, // specifies a blind for Zr
+    _Zr: &S,                   // evaluation of \widetilde{Z}(r)
     transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
+    _random_tape: &mut RandomTape<S>,
   ) -> PolyEvalProof<S> {
     <Transcript as ProofTranscript<S>>::append_protocol_name(
       transcript,
@@ -340,32 +338,16 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     let L_size = left_num_vars.pow2();
     let R_size = right_num_vars.pow2();
 
-    let default_blinds = PolyCommitmentBlinds {
-      blinds: vec![S::field_zero(); L_size],
-    };
-    let blinds = blinds_opt.map_or(&default_blinds, |p| p);
-
-    assert_eq!(blinds.blinds.len(), L_size);
-
-    let zero = S::field_zero();
-    let blind_Zr = blind_Zr_opt.map_or(&zero, |p| p);
-
     // compute the L and R vectors
     let eq = EqPolynomial::new(r.to_vec());
     let (L, R) = eq.compute_factored_evals();
     assert_eq!(L.len(), L_size);
     assert_eq!(R.len(), R_size);
 
-    // compute the vector underneath L*Z and the L*blinds
     // compute vector-matrix product between L and Z viewed as a matrix
     let LZ = poly.bound(&L);
-    let LZ_blind: S = (0..L.len()).map(|i| blinds.blinds[i] * L[i]).sum();
 
-    // a dot product proof of size R_size
-    let proof =
-      DotProductProofLog::prove(transcript, random_tape, &LZ, &LZ_blind, &R, Zr, blind_Zr);
-
-    PolyEvalProof { proof }
+    PolyEvalProof { v: LZ }
   }
 
   pub fn verify(
@@ -380,9 +362,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 
     // compute L and R
     let eq = EqPolynomial::new(r.to_vec());
-    let (L, R) = eq.compute_factored_evals();
-
-    let _ = self.proof.verify(R.len(), transcript, &R);
+    let (_L, _R) = eq.compute_factored_evals();
 
     // TODO: Alternative PCS Verification
     Ok(())
@@ -403,12 +383,10 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   // Evaluation of multiple points on the same instance
   pub fn prove_batched_points(
     poly: &DensePolynomial<S>,
-    blinds_opt: Option<&PolyCommitmentBlinds<S>>,
     r_list: Vec<Vec<S>>,      // point at which the polynomial is evaluated
     Zr_list: Vec<S>,          // evaluation of \widetilde{Z}(r) on each point
-    blind_Zr_opt: Option<&S>, // specifies a blind for Zr
     transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
+    _random_tape: &mut RandomTape<S>,
   ) -> Vec<PolyEvalProof<S>> {
     <Transcript as ProofTranscript<S>>::append_protocol_name(
       transcript,
@@ -424,16 +402,6 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     let (left_num_vars, right_num_vars) = EqPolynomial::<S>::compute_factored_lens(r_list[0].len());
     let L_size = left_num_vars.pow2();
     let R_size = right_num_vars.pow2();
-
-    let default_blinds = PolyCommitmentBlinds {
-      blinds: vec![S::field_zero(); L_size],
-    };
-    let blinds = blinds_opt.map_or(&default_blinds, |p| p);
-
-    assert_eq!(blinds.blinds.len(), L_size);
-
-    let zero = S::field_zero();
-    let blind_Zr = blind_Zr_opt.map_or(&zero, |p| p);
 
     // compute the L and R vectors
     // We can perform batched opening if L is the same, so we regroup the proofs by L vector
@@ -468,31 +436,14 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     let mut proof_list = Vec::new();
     for i in 0..L_list.len() {
       let L = &L_list[i];
-      let R = &R_list[i];
-      // compute the vector underneath L*Z and the L*blinds
+      let _R = &R_list[i];
       // compute vector-matrix product between L and Z viewed as a matrix
       let LZ = poly.bound(L);
-      let LZ_blind: S = (0..L.len()).map(|i| blinds.blinds[i] * L[i]).sum();
 
-      // a dot product proof of size R_size
-      let proof = DotProductProofLog::prove(
-        transcript,
-        random_tape,
-        &LZ,
-        &LZ_blind,
-        R,
-        &Zc_list[i],
-        blind_Zr,
-      );
-      proof_list.push(proof);
+      proof_list.push(PolyEvalProof{ v: LZ });
     }
 
     proof_list
-      .iter()
-      .map(|proof| PolyEvalProof {
-        proof: proof.clone(),
-      })
-      .collect()
   }
 
   pub fn verify_plain_batched_points(
@@ -546,12 +497,10 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   // Size of each instance might be different, but all are larger than the evaluation point
   pub fn prove_batched_instances(
     poly_list: &Vec<DensePolynomial<S>>, // list of instances
-    blinds_opt: Option<&PolyCommitmentBlinds<S>>,
     r_list: Vec<&Vec<S>>,     // point at which the polynomial is evaluated
     Zr_list: &Vec<S>,         // evaluation of \widetilde{Z}(r) on each instance
-    blind_Zr_opt: Option<&S>, // specifies a blind for Zr
     transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
+    _random_tape: &mut RandomTape<S>,
   ) -> Vec<PolyEvalProof<S>> {
     <Transcript as ProofTranscript<S>>::append_protocol_name(
       transcript,
@@ -611,31 +560,10 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     }
 
     let mut proof_list = Vec::new();
-    for i in 0..LZ_list.len() {
-      let L = &L_list[i];
-      let L_size = L.len();
-
-      let default_blinds = PolyCommitmentBlinds {
-        blinds: vec![S::field_zero(); L_size],
-      };
-      let blinds = blinds_opt.map_or(&default_blinds, |p| p);
-      assert_eq!(blinds.blinds.len(), L_size);
-      let blind_Zr = blind_Zr_opt.map_or(&zero, |p| p);
-      let LZ_blind: S = (0..L.len()).map(|i| blinds.blinds[i] * L[i]).sum();
-
-      // a dot product proof of size R_size
-      let proof = DotProductProofLog::prove(
-        transcript,
-        random_tape,
-        &LZ_list[i],
-        &LZ_blind,
-        &R_list[i],
-        &Zc_list[i],
-        blind_Zr,
-      );
-      proof_list.push(PolyEvalProof { proof });
+    for v in LZ_list.into_iter() {
+      proof_list.push(PolyEvalProof { v });
     }
-
+    
     proof_list
   }
 
@@ -700,13 +628,11 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     poly_list: &Vec<&DensePolynomial<S>>,
     num_proofs_list: &Vec<usize>,
     num_inputs_list: &Vec<usize>,
-    blinds_opt: Option<&PolyCommitmentBlinds<S>>,
     rq: &[S],
     ry: &[S],
     Zr_list: &Vec<S>,
-    blind_Zr_opt: Option<&S>,
     transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
+    _random_tape: &mut RandomTape<S>,
   ) -> Vec<PolyEvalProof<S>> {
     <Transcript as ProofTranscript<S>>::append_protocol_name(
       transcript,
@@ -771,32 +697,8 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     }
 
     let mut proof_list = Vec::new();
-
-    for i in 0..LZ_list.len() {
-      let L = &L_list[i];
-      let L_size = L.len();
-      let default_blinds = PolyCommitmentBlinds {
-        blinds: vec![S::field_zero(); L_size],
-      };
-      let blinds = blinds_opt.map_or(&default_blinds, |p| p);
-
-      assert_eq!(blinds.blinds.len(), L_size);
-
-      let blind_Zr = blind_Zr_opt.map_or(&zero, |p| p);
-      let LZ_blind: S = (0..L.len()).map(|i| blinds.blinds[i] * L[i]).sum();
-
-      // a dot product proof of size R_size
-      let proof = DotProductProofLog::prove(
-        transcript,
-        random_tape,
-        &LZ_list[i],
-        &LZ_blind,
-        &R_list[i],
-        &Zc_list[i],
-        blind_Zr,
-      );
-
-      proof_list.push(PolyEvalProof { proof });
+    for v in LZ_list.into_iter() {
+      proof_list.push(PolyEvalProof{ v });
     }
 
     proof_list
@@ -871,7 +773,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     for i in 0..LZ_list.len() {
       let R = &R_list[i];
 
-      proof_list[i].proof.verify(R.len(), transcript, R)?;
+      proof_list[i].verify(transcript, R)?;
     }
 
     Ok(())
@@ -883,7 +785,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     r: &S,       // point at which the polynomial is evaluated
     Zr: &Vec<S>, // evaluation of \widetilde{Z}(r)
     transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
+    _random_tape: &mut RandomTape<S>,
   ) -> PolyEvalProof<S> {
     <Transcript as ProofTranscript<S>>::append_protocol_name(
       transcript,
@@ -904,7 +806,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     let R_size = right_num_vars.pow2();
 
     // compute R = <1, r, r^2, ...>
-    let R = {
+    let _R = {
       let mut r_base = S::field_one();
       let mut R = Vec::new();
       for _ in 0..R_size {
@@ -951,18 +853,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
       c = c * c_base;
     }
 
-    // a dot product proof of size R_size
-    let proof = DotProductProofLog::prove(
-      transcript,
-      random_tape,
-      &LZ_comb,
-      &zero,
-      &R,
-      &Zr_comb,
-      &zero,
-    );
-
-    PolyEvalProof { proof }
+    PolyEvalProof { v: LZ_comb }
   }
 
   pub fn verify_uni_batched_instances(
@@ -1021,7 +912,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
       c = c * c_base;
     }
 
-    self.proof.verify(R.len(), transcript, &R)
+    self.verify(transcript, &R)
   }
 }
 
@@ -1049,7 +940,7 @@ mod tests {
       .collect::<Vec<Scalar>>();
 
     // compute dot product between LZ and R
-    DotProductProofLog::compute_dotproduct(&LZ, &R)
+    DensePolynomial::compute_dotproduct(&LZ, &R)
   }
 
   #[test]

@@ -204,7 +204,6 @@ impl<S: SpartanExtensionField> IOProofs<S> {
     // batch prove all proofs
     let proofs = PolyEvalProof::prove_batched_points(
       exec_poly_inputs,
-      None,
       [
         vec![
           0,                                                                             // input valid
@@ -230,7 +229,6 @@ impl<S: SpartanExtensionField> IOProofs<S> {
         live_input,
       ]
       .concat(),
-      None,
       transcript,
       random_tape,
     );
@@ -2199,10 +2197,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
         .collect();
       let proof_eval_perm_poly_prod_list = PolyEvalProof::prove_batched_instances(
         &perm_poly_w3_prover.poly_w,
-        None,
         r_list,
         &perm_poly_poly_list,
-        None,
         transcript,
         &mut random_tape,
       );

@@ -106,10 +106,8 @@ impl<S: SpartanExtensionField> DerefsEvalProof<S> {
 
     let proof_derefs = PolyEvalProof::prove(
       joint_poly,
-      None,
       &r_joint,
       &eval_joint,
-      None,
       transcript,
       random_tape,
     );
@@ -764,10 +762,8 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
 
     let proof_ops = PolyEvalProof::prove(
       &dense.comb_ops,
-      None,
       &r_joint_ops,
       &joint_claim_eval_ops,
-      None,
       transcript,
       random_tape,
     );
@@ -791,10 +787,8 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
 
     let proof_mem = PolyEvalProof::prove(
       &dense.comb_mem,
-      None,
       &r_joint_mem,
       &joint_claim_eval_mem,
-      None,
       transcript,
       random_tape,
     );

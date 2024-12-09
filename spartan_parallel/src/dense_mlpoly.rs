@@ -322,12 +322,14 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   pub fn prove(
     _poly: &DensePolynomial<S>,
     _r: &[S], // point at which the polynomial is evaluated
-    _Zr: &S, // evaluation of \widetilde{Z}(r)
+    _Zr: &S,  // evaluation of \widetilde{Z}(r)
     _transcript: &mut Transcript,
     _random_tape: &mut RandomTape<S>,
   ) -> PolyEvalProof<S> {
     // TODO: Alternative evaluation proof scheme
-    PolyEvalProof { _phantom: S::field_zero() }
+    PolyEvalProof {
+      _phantom: S::field_zero(),
+    }
   }
 
   pub fn verify(
@@ -431,7 +433,9 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     _random_tape: &mut RandomTape<S>,
   ) -> PolyEvalProof<S> {
     // TODO: Alternative evaluation proof scheme
-    PolyEvalProof { _phantom: S::field_zero() }
+    PolyEvalProof {
+      _phantom: S::field_zero(),
+    }
   }
 
   pub fn verify_uni_batched_instances(

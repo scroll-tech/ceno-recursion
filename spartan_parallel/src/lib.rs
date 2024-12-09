@@ -26,7 +26,6 @@ mod errors;
 /// R1CS instance used by libspartan
 pub mod instance;
 mod math;
-mod nizk;
 mod product_tree;
 mod r1csinstance;
 mod r1csproof;
@@ -194,7 +193,6 @@ impl<S: SpartanExtensionField> IOProofs<S> {
     // batch prove all proofs
     let proofs = PolyEvalProof::prove_batched_points(
       exec_poly_inputs,
-      None,
       [
         vec![
           0,                                                                             // input valid
@@ -220,7 +218,6 @@ impl<S: SpartanExtensionField> IOProofs<S> {
         live_input,
       ]
       .concat(),
-      None,
       transcript,
       random_tape,
     );
@@ -602,7 +599,7 @@ pub struct SNARK<S: SpartanExtensionField> {
   perm_poly_poly_list: Vec<S>,
   proof_eval_perm_poly_prod_list: Vec<PolyEvalProof<S>>,
 
-  shift_proof: ShiftProofs<S>,
+  // shift_proof: ShiftProofs<S>,
   io_proof: IOProofs<S>,
 }
 
@@ -1853,7 +1850,6 @@ impl<S: SpartanExtensionField> SNARK<S> {
           block_wit_secs,
           &block_inst.inst,
           transcript,
-          &mut random_tape,
         )
       };
 
@@ -1968,7 +1964,6 @@ impl<S: SpartanExtensionField> SNARK<S> {
           ],
           &pairwise_check_inst.inst,
           transcript,
-          &mut random_tape,
         )
       };
 
@@ -2095,7 +2090,6 @@ impl<S: SpartanExtensionField> SNARK<S> {
           ],
           &perm_root_inst.inst,
           transcript,
-          &mut random_tape,
         )
       };
 
@@ -2196,10 +2190,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
         .collect();
       let proof_eval_perm_poly_prod_list = PolyEvalProof::prove_batched_instances(
         &perm_poly_w3_prover.poly_w,
-        None,
         r_list,
         &perm_poly_poly_list,
-        None,
         transcript,
         &mut random_tape,
       );
@@ -2261,6 +2253,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
         shifted_polys.push(&vir_mem_addr_w3_shifted_prover.poly_w[0]);
         header_len_list.push(6);
       }
+      /*
       let shift_proof = ShiftProofs::prove(
         orig_polys,
         shifted_polys,
@@ -2269,6 +2262,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
         &mut random_tape,
       );
       shift_proof
+      */
     };
     timer_proof.stop();
 
@@ -2315,7 +2309,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       perm_poly_poly_list,
       proof_eval_perm_poly_prod_list,
 
-      shift_proof,
+      // shift_proof,
       io_proof,
     }
   }
@@ -3257,9 +3251,11 @@ impl<S: SpartanExtensionField> SNARK<S> {
         header_len_list.push(6);
       }
 
+      /*
       self
         .shift_proof
         .verify(poly_size_list, shift_size_list, header_len_list, transcript)?;
+      */
     }
     timer_proof.stop();
 

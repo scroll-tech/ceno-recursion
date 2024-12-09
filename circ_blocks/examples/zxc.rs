@@ -1,8 +1,8 @@
 // TODO: Might want to simplify Liveness Analysis & PMR now that scope changes are handled in optimization
 
 const PRINT_PROOF: bool = false;
-const INLINE_SPARTAN_PROOF: bool = false;
-const TOTAL_NUM_VARS_BOUND: usize = 100000000;
+const INLINE_SPARTAN_PROOF: bool = true;
+const TOTAL_NUM_VARS_BOUND: usize = 10000000000;
 
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};

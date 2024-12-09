@@ -262,15 +262,8 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       &poly_Cz.index(0, 0, 0, 0),
     );
 
-    let (Az_blind, Bz_blind, Cz_blind, prod_Az_Bz_blind) = (
-      random_tape.random_scalar(b"Az_blind"),
-      random_tape.random_scalar(b"Bz_blind"),
-      random_tape.random_scalar(b"Cz_blind"),
-      random_tape.random_scalar(b"prod_Az_Bz_blind"),
-    );
-
     // prove the final step of sum-check #1
-    let taus_bound_rx = tau_claim;
+    let _taus_bound_rx = tau_claim;
 
     // Separate the result rx into rp, rq, and rx
     let (rx_rev, rq_rev) = rx.split_at(num_rounds_x);
@@ -345,7 +338,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let mut eq_p_rp_poly = DensePolynomial::new(EqPolynomial::new(rp).evals());
 
     // Sumcheck 2: (rA + rB + rC) * Z * eq(p) = e
-    let (sc_proof_phase2, ry, claims_phase2) = R1CSProof::prove_phase_two(
+    let (sc_proof_phase2, ry, _claims_phase2) = R1CSProof::prove_phase_two(
       num_rounds_y + num_rounds_w + num_rounds_p,
       num_rounds_y,
       num_rounds_w,
@@ -579,7 +572,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let (rq_rev, rp_round1) = rq_rev.split_at(num_rounds_q);
     let rx: Vec<S> = rx_rev.iter().copied().rev().collect();
     let rq_rev = rq_rev.to_vec();
-    let rq: Vec<S> = rq_rev.iter().copied().rev().collect();
+    let _rq: Vec<S> = rq_rev.iter().copied().rev().collect();
     let rp_round1 = rp_round1.to_vec();
 
     // taus_bound_rx is really taus_bound_rx_rq_rp
@@ -595,7 +588,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       .map(|i| rx_rev[i] * tau_x[i] + (S::field_one() - rx_rev[i]) * (S::field_one() - tau_x[i]))
       .product();
     let _taus_bound_rx = taus_bound_rp * taus_bound_rq * taus_bound_rx;
-    
+
     // derive three public challenges and then derive a joint claim
     let r_A: S = transcript.challenge_scalar(b"challenge_Az");
     let r_B: S = transcript.challenge_scalar(b"challenge_Bz");

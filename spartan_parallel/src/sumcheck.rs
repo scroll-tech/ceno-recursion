@@ -332,7 +332,6 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     poly_C: &mut DensePolynomialPqx<S>,
     comb_func: F,
     transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
   ) -> (Self, Vec<S>, Vec<S>)
   where
     F: Fn(&S, &S, &S) -> S,
@@ -522,7 +521,6 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     poly_D: &mut DensePolynomialPqx<S>,
     comb_func: F,
     transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
   ) -> (Self, Vec<S>, Vec<S>)
   where
     F: Fn(&S, &S, &S, &S) -> S,

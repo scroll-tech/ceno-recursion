@@ -1,6 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 use super::custom_dense_mlpoly::DensePolynomialPqx;
-use super::dense_mlpoly::{DensePolynomial, EqPolynomial, PolyEvalProof};
+use super::dense_mlpoly::{DensePolynomial, EqPolynomial};
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::r1csinstance::R1CSInstance;
@@ -19,7 +19,6 @@ pub struct R1CSProof<S: SpartanExtensionField> {
   sc_proof_phase1: SumcheckInstanceProof<S>,
   sc_proof_phase2: SumcheckInstanceProof<S>,
   claims_phase2: (S, S, S),
-  // debug_zk
   // proof_eval_vars_at_ry_list: Vec<PolyEvalProof<S>>,
 }
 
@@ -38,7 +37,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     evals_Bz: &mut DensePolynomialPqx<S>,
     evals_Cz: &mut DensePolynomialPqx<S>,
     transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
   ) -> (SumcheckInstanceProof<S>, Vec<S>, Vec<S>) {
     let comb_func = |poly_A_comp: &S, poly_B_comp: &S, poly_C_comp: &S, poly_D_comp: &S| -> S {
       *poly_A_comp * (*poly_B_comp * *poly_C_comp - *poly_D_comp)
@@ -61,7 +59,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
         evals_Cz,
         comb_func,
         transcript,
-        random_tape,
       );
 
     (sc_proof_phase_one, r, claims)
@@ -80,7 +77,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     evals_ABC: &mut DensePolynomialPqx<S>,
     evals_z: &mut DensePolynomialPqx<S>,
     transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
   ) -> (SumcheckInstanceProof<S>, Vec<S>, Vec<S>) {
     let comb_func = |poly_A_comp: &S, poly_B_comp: &S, poly_C_comp: &S| -> S {
       *poly_A_comp * *poly_B_comp * *poly_C_comp
@@ -99,7 +95,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       evals_z,
       comb_func,
       transcript,
-      random_tape,
     );
 
     (sc_proof_phase_two, r, claims)
@@ -131,7 +126,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     // INSTANCES
     inst: &R1CSInstance<S>,
     transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
   ) -> (R1CSProof<S>, [Vec<S>; 4]) {
     let timer_prove = Timer::new("R1CSProof::prove");
     <Transcript as ProofTranscript<S>>::append_protocol_name(
@@ -243,7 +237,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       &mut poly_Bz,
       &mut poly_Cz,
       transcript,
-      random_tape,
     );
 
     assert_eq!(poly_tau_p.len(), 1);
@@ -351,7 +344,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       &mut ABC_poly,
       &mut Z_poly,
       transcript,
-      random_tape,
     );
     timer_sc_proof_phase2.stop();
 
@@ -507,7 +499,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
         sc_proof_phase1,
         sc_proof_phase2,
         claims_phase2: (*Az_claim, *Bz_claim, *Cz_claim),
-        // debug_zk
         // proof_eval_vars_at_ry_list,
       },
       [rp, rq_rev, rx, [rw, ry].concat()],

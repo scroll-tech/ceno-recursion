@@ -1854,7 +1854,6 @@ impl<S: SpartanExtensionField> SNARK<S> {
           block_wit_secs,
           &block_inst.inst,
           transcript,
-          &mut random_tape,
         )
       };
 
@@ -1969,7 +1968,6 @@ impl<S: SpartanExtensionField> SNARK<S> {
           ],
           &pairwise_check_inst.inst,
           transcript,
-          &mut random_tape,
         )
       };
 
@@ -2096,7 +2094,6 @@ impl<S: SpartanExtensionField> SNARK<S> {
           ],
           &perm_root_inst.inst,
           transcript,
-          &mut random_tape,
         )
       };
 

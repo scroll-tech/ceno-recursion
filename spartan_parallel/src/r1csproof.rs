@@ -20,9 +20,6 @@ pub struct R1CSProof<S: SpartanExtensionField> {
   sc_proof_phase2: SumcheckInstanceProof<S>,
   claims_phase2: (S, S, S),
   // debug_zk
-  // pok_claims_phase2: (KnowledgeProof<S>, ProductProof<S>),
-  // proof_eq_sc_phase1: EqualityProof<S>,
-  // proof_eq_sc_phase2: EqualityProof<S>,
   // proof_eval_vars_at_ry_list: Vec<PolyEvalProof<S>>,
 }
 
@@ -272,38 +269,8 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       random_tape.random_scalar(b"prod_Az_Bz_blind"),
     );
 
-    // debug_zk
-    // let pok_Cz_claim = { KnowledgeProof::prove(transcript, random_tape, Cz_claim, &Cz_blind) };
-
-    // debug_zk
-    // let proof_prod = {
-    //   let prod = *Az_claim * *Bz_claim;
-    //   ProductProof::prove(
-    //     transcript,
-    //     random_tape,
-    //     Az_claim,
-    //     &Az_blind,
-    //     Bz_claim,
-    //     &Bz_blind,
-    //     &prod,
-    //     &prod_Az_Bz_blind,
-    //   )
-    // };
-
     // prove the final step of sum-check #1
     let taus_bound_rx = tau_claim;
-
-    let blind_expected_claim_postsc1 = *taus_bound_rx * (prod_Az_Bz_blind - Cz_blind);
-    let claim_post_phase1 = (*Az_claim * *Bz_claim - *Cz_claim) * *taus_bound_rx;
-
-    // debug_zk
-    // let proof_eq_sc_phase1 = EqualityProof::prove(
-    //   transcript,
-    //   random_tape,
-    //   &claim_post_phase1,
-    //   &blind_expected_claim_postsc1,
-    //   &claim_post_phase1,
-    // );
 
     // Separate the result rx into rp, rq, and rx
     let (rx_rev, rq_rev) = rx.split_at(num_rounds_x);
@@ -540,23 +507,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let poly_vars = DensePolynomial::new(eval_vars_comb_list);
     let _eval_vars_at_ry = poly_vars.evaluate(&rp);
 
-    // prove the final step of sum-check #2
-    let blind_expected_claim_postsc2 = S::field_zero();
-    let claim_post_phase2 = claims_phase2[0] * claims_phase2[1] * claims_phase2[2];
-
-    // debug_zk
-    // let proof_eq_sc_phase2 = EqualityProof::prove(
-    //   transcript,
-    //   random_tape,
-    //   &claim_post_phase2,
-    //   &blind_expected_claim_postsc2,
-    //   &claim_post_phase2,
-    // );
-
     timer_prove.stop();
-
-    // debug_zk
-    // let pok_claims_phase2 = (pok_Cz_claim, proof_prod);
 
     (
       R1CSProof {
@@ -564,9 +515,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
         sc_proof_phase2,
         claims_phase2: (*Az_claim, *Bz_claim, *Cz_claim),
         // debug_zk
-        // pok_claims_phase2,
-        // proof_eq_sc_phase1,
-        // proof_eq_sc_phase2,
         // proof_eval_vars_at_ry_list,
       },
       [rp, rq_rev, rx, [rw, ry].concat()],
@@ -626,14 +574,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       transcript,
     )?;
 
-    // debug_zk
-    // perform the intermediate sum-check test with claimed Az, Bz, and Cz
-    // let (pok_Cz_claim, proof_prod) = &self.pok_claims_phase2;
-
-    // debug_zk
-    // pok_Cz_claim.verify(transcript)?;
-    // proof_prod.verify(transcript)?;
-
     // Separate the result rx into rp_round1, rq, and rx
     let (rx_rev, rq_rev) = rx.split_at(num_rounds_x);
     let (rq_rev, rp_round1) = rq_rev.split_at(num_rounds_q);
@@ -655,11 +595,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       .map(|i| rx_rev[i] * tau_x[i] + (S::field_one() - rx_rev[i]) * (S::field_one() - tau_x[i]))
       .product();
     let _taus_bound_rx = taus_bound_rp * taus_bound_rq * taus_bound_rx;
-
-    // debug_zk
-    // verify proof that expected_claim_post_phase1 == claim_post_phase1
-    // self.proof_eq_sc_phase1.verify(transcript)?;
-
+    
     // derive three public challenges and then derive a joint claim
     let r_A: S = transcript.challenge_scalar(b"challenge_Az");
     let r_B: S = transcript.challenge_scalar(b"challenge_Bz");
@@ -765,10 +701,6 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     }
 
     timer_commit_opening.stop();
-
-    // debug_zk
-    // verify proof that expected_claim_post_phase2 == claim_post_phase2
-    // self.proof_eq_sc_phase2.verify(transcript)?;
 
     Ok([rp, rq_rev, rx, [rw, ry].concat()])
   }

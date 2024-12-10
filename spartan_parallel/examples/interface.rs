@@ -5,9 +5,8 @@ use std::io::{BufRead, Read};
 use std::{default, env};
 use std::{fs::File, io::BufReader};
 
-use libspartan::{
-  instance::Instance, InputsAssignment, MemsAssignment, SNARKGens, VarsAssignment, SNARK,
-};
+use libspartan::scalar::{ScalarExt2, SpartanExtensionField};
+use libspartan::{instance::Instance, InputsAssignment, MemsAssignment, VarsAssignment, SNARK};
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::time::*;
@@ -53,7 +52,7 @@ impl CompileTimeKnowledge {
 
 // Everything provided by the prover
 #[derive(Serialize, Deserialize)]
-struct RunTimeKnowledge {
+struct RunTimeKnowledge<S: SpartanExtensionField> {
   block_max_num_proofs: usize,
   block_num_proofs: Vec<usize>,
   consis_num_proofs: usize,
@@ -62,13 +61,13 @@ struct RunTimeKnowledge {
   total_num_phy_mem_accesses: usize,
   total_num_vir_mem_accesses: usize,
 
-  block_vars_matrix: Vec<Vec<VarsAssignment>>,
-  exec_inputs: Vec<InputsAssignment>,
-  init_phy_mems_list: Vec<MemsAssignment>,
-  init_vir_mems_list: Vec<MemsAssignment>,
-  addr_phy_mems_list: Vec<MemsAssignment>,
-  addr_vir_mems_list: Vec<MemsAssignment>,
-  addr_ts_bits_list: Vec<MemsAssignment>,
+  block_vars_matrix: Vec<Vec<VarsAssignment<S>>>,
+  exec_inputs: Vec<InputsAssignment<S>>,
+  init_phy_mems_list: Vec<MemsAssignment<S>>,
+  init_vir_mems_list: Vec<MemsAssignment<S>>,
+  addr_phy_mems_list: Vec<MemsAssignment<S>>,
+  addr_vir_mems_list: Vec<MemsAssignment<S>>,
+  addr_ts_bits_list: Vec<MemsAssignment<S>>,
 
   input: Vec<[u8; 32]>,
   input_stack: Vec<[u8; 32]>,
@@ -77,8 +76,8 @@ struct RunTimeKnowledge {
   output_exec_num: usize,
 }
 
-impl RunTimeKnowledge {
-  fn deserialize_from_file(benchmark_name: String) -> RunTimeKnowledge {
+impl<S: SpartanExtensionField + for<'de> serde::de::Deserialize<'de>> RunTimeKnowledge<S> {
+  fn deserialize_from_file(benchmark_name: String) -> RunTimeKnowledge<S> {
     let file_name = format!("../zok_tests/inputs/{}_bin.rtk", benchmark_name);
     let mut f = File::open(file_name).unwrap();
     let mut content: Vec<u8> = Vec::new();
@@ -92,7 +91,8 @@ fn main() {
   // let ctk = CompileTimeKnowledge::read_from_file(benchmark_name.to_string()).unwrap();
   let ctk = CompileTimeKnowledge::deserialize_from_file(benchmark_name.to_string());
   // let rtk = RunTimeKnowledge::read_from_file(benchmark_name.to_string()).unwrap();
-  let rtk = RunTimeKnowledge::deserialize_from_file(benchmark_name.to_string());
+  let rtk: RunTimeKnowledge<ScalarExt2> =
+    RunTimeKnowledge::deserialize_from_file(benchmark_name.to_string());
 
   // --
   // INSTANCE PREPROCESSING
@@ -166,45 +166,16 @@ fn main() {
   // COMMITMENT PREPROCESSING
   // --
   println!("Producing Public Parameters...");
-  // produce public parameters
-  let block_gens = SNARKGens::new(
-    block_num_cons,
-    block_num_vars,
-    block_num_instances_bound,
-    block_num_non_zero_entries,
-  );
-  let pairwise_check_gens = SNARKGens::new(
-    pairwise_check_num_cons,
-    4 * pairwise_check_num_vars,
-    3,
-    pairwise_check_num_non_zero_entries,
-  );
-  let perm_root_gens = SNARKGens::new(
-    perm_root_num_cons,
-    8 * num_ios,
-    1,
-    perm_root_num_non_zero_entries,
-  );
-  // Only use one version of gens_r1cs_sat
-  let vars_gens = SNARKGens::new(
-    block_num_cons,
-    TOTAL_NUM_VARS_BOUND,
-    block_num_instances_bound.next_power_of_two(),
-    block_num_non_zero_entries,
-  )
-  .gens_r1cs_sat;
 
   // create a commitment to the R1CS instance
   println!("Comitting Circuits...");
   // block_comm_map records the sparse_polys committed in each commitment
   // Note that A, B, C are committed separately, so sparse_poly[3*i+2] corresponds to poly C of instance i
-  let (block_comm_map, block_comm_list, block_decomm_list) =
-    SNARK::multi_encode(&block_inst, &block_gens);
+  let (block_comm_map, block_comm_list, block_decomm_list) = SNARK::multi_encode(&block_inst);
   println!("Finished Block");
-  let (pairwise_check_comm, pairwise_check_decomm) =
-    SNARK::encode(&pairwise_check_inst, &pairwise_check_gens);
+  let (pairwise_check_comm, pairwise_check_decomm) = SNARK::encode(&pairwise_check_inst);
   println!("Finished Pairwise");
-  let (perm_root_comm, perm_root_decomm) = SNARK::encode(&perm_root_inst, &perm_root_gens);
+  let (perm_root_comm, perm_root_decomm) = SNARK::encode(&perm_root_inst);
   println!("Finished Perm");
 
   // --
@@ -247,7 +218,6 @@ fn main() {
     &block_comm_map,
     &block_comm_list,
     &block_decomm_list,
-    &block_gens,
     rtk.consis_num_proofs,
     rtk.total_num_init_phy_mem_accesses,
     rtk.total_num_init_vir_mem_accesses,
@@ -256,7 +226,6 @@ fn main() {
     &mut pairwise_check_inst,
     &pairwise_check_comm,
     &pairwise_check_decomm,
-    &pairwise_check_gens,
     block_vars_matrix,
     rtk.exec_inputs,
     rtk.init_phy_mems_list,
@@ -267,8 +236,6 @@ fn main() {
     &perm_root_inst,
     &perm_root_comm,
     &perm_root_decomm,
-    &perm_root_gens,
-    &vars_gens,
     &mut prover_transcript,
   );
 
@@ -303,7 +270,6 @@ fn main() {
       block_num_cons,
       &block_comm_map,
       &block_comm_list,
-      &block_gens,
       rtk.consis_num_proofs,
       rtk.total_num_init_phy_mem_accesses,
       rtk.total_num_init_vir_mem_accesses,
@@ -311,11 +277,8 @@ fn main() {
       rtk.total_num_vir_mem_accesses,
       pairwise_check_num_cons,
       &pairwise_check_comm,
-      &pairwise_check_gens,
       perm_root_num_cons,
       &perm_root_comm,
-      &perm_root_gens,
-      &vars_gens,
       &mut verifier_transcript
     )
     .is_ok());

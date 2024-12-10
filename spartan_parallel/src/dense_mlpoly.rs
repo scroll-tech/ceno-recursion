@@ -3,7 +3,6 @@ use crate::scalar::SpartanExtensionField;
 
 use super::errors::ProofVerifyError;
 use super::math::Math;
-use super::nizk::DotProductProofLog;
 use super::random::RandomTape;
 use super::transcript::ProofTranscript;
 use core::ops::Index;
@@ -19,10 +18,6 @@ pub struct DensePolynomial<S: SpartanExtensionField> {
   num_vars: usize, // the number of variables in the multilinear polynomial
   len: usize,
   Z: Vec<S>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
-}
-
-pub struct PolyCommitmentBlinds<S: SpartanExtensionField> {
-  pub(crate) blinds: Vec<S>,
 }
 
 pub struct EqPolynomial<S: SpartanExtensionField> {
@@ -258,7 +253,12 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     assert_eq!(r.len(), self.get_num_vars());
     let chis = EqPolynomial::new(r.to_vec()).evals();
     assert_eq!(chis.len(), self.Z.len());
-    DotProductProofLog::compute_dotproduct(&self.Z, &chis)
+    Self::compute_dotproduct(&self.Z, &chis)
+  }
+
+  fn compute_dotproduct(a: &[S], b: &[S]) -> S {
+    assert_eq!(a.len(), b.len());
+    (0..a.len()).map(|i| a[i] * b[i]).sum()
   }
 
   fn vec(&self) -> &Vec<S> {
@@ -311,7 +311,7 @@ impl<S: SpartanExtensionField> Index<usize> for DensePolynomial<S> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PolyEvalProof<S: SpartanExtensionField> {
-  proof: DotProductProofLog<S>,
+  _phantom: S,
 }
 
 impl<S: SpartanExtensionField> PolyEvalProof<S> {
@@ -320,52 +320,16 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   }
 
   pub fn prove(
-    poly: &DensePolynomial<S>,
-    blinds_opt: Option<&PolyCommitmentBlinds<S>>,
-    r: &[S],                  // point at which the polynomial is evaluated
-    Zr: &S,                   // evaluation of \widetilde{Z}(r)
-    blind_Zr_opt: Option<&S>, // specifies a blind for Zr
-    transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
+    _poly: &DensePolynomial<S>,
+    _r: &[S], // point at which the polynomial is evaluated
+    _Zr: &S,  // evaluation of \widetilde{Z}(r)
+    _transcript: &mut Transcript,
+    _random_tape: &mut RandomTape<S>,
   ) -> PolyEvalProof<S> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      PolyEvalProof::<S>::protocol_name(),
-    );
-
-    // assert vectors are of the right size
-    assert_eq!(poly.get_num_vars(), r.len());
-
-    let (left_num_vars, right_num_vars) = EqPolynomial::<S>::compute_factored_lens(r.len());
-    let L_size = left_num_vars.pow2();
-    let R_size = right_num_vars.pow2();
-
-    let default_blinds = PolyCommitmentBlinds {
-      blinds: vec![S::field_zero(); L_size],
-    };
-    let blinds = blinds_opt.map_or(&default_blinds, |p| p);
-
-    assert_eq!(blinds.blinds.len(), L_size);
-
-    let zero = S::field_zero();
-    let blind_Zr = blind_Zr_opt.map_or(&zero, |p| p);
-
-    // compute the L and R vectors
-    let eq = EqPolynomial::new(r.to_vec());
-    let (L, R) = eq.compute_factored_evals();
-    assert_eq!(L.len(), L_size);
-    assert_eq!(R.len(), R_size);
-
-    // compute the vector underneath L*Z and the L*blinds
-    // compute vector-matrix product between L and Z viewed as a matrix
-    let LZ = poly.bound(&L);
-    let LZ_blind: S = (0..L.len()).map(|i| blinds.blinds[i] * L[i]).sum();
-
-    // a dot product proof of size R_size
-    let proof =
-      DotProductProofLog::prove(transcript, random_tape, &LZ, &LZ_blind, &R, Zr, blind_Zr);
-
-    PolyEvalProof { proof }
+    // TODO: Alternative evaluation proof scheme
+    PolyEvalProof {
+      _phantom: S::field_zero(),
+    }
   }
 
   pub fn verify(
@@ -373,18 +337,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     transcript: &mut Transcript,
     r: &[S], // point at which the polynomial is evaluated
   ) -> Result<(), ProofVerifyError> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      PolyEvalProof::<S>::protocol_name(),
-    );
-
-    // compute L and R
-    let eq = EqPolynomial::new(r.to_vec());
-    let (L, R) = eq.compute_factored_evals();
-
-    let _ = self.proof.verify(R.len(), transcript, &R);
-
-    // TODO: Alternative PCS Verification
+    // TODO: Alternative evaluation proof scheme
     Ok(())
   }
 
@@ -394,634 +347,105 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     r: &[S], // point at which the polynomial is evaluated
     _Zr: &S, // evaluation \widetilde{Z}(r)
   ) -> Result<(), ProofVerifyError> {
-    self.verify(transcript, r);
-
-    // TODO: Alternative PCS Verification
-    Ok(())
+    self.verify(transcript, r)
   }
 
   // Evaluation of multiple points on the same instance
   pub fn prove_batched_points(
-    poly: &DensePolynomial<S>,
-    blinds_opt: Option<&PolyCommitmentBlinds<S>>,
-    r_list: Vec<Vec<S>>,      // point at which the polynomial is evaluated
-    Zr_list: Vec<S>,          // evaluation of \widetilde{Z}(r) on each point
-    blind_Zr_opt: Option<&S>, // specifies a blind for Zr
-    transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
+    _poly: &DensePolynomial<S>,
+    _r_list: Vec<Vec<S>>, // point at which the polynomial is evaluated
+    _Zr_list: Vec<S>,     // evaluation of \widetilde{Z}(r) on each point
+    _transcript: &mut Transcript,
+    _random_tape: &mut RandomTape<S>,
   ) -> Vec<PolyEvalProof<S>> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      PolyEvalProof::<S>::protocol_name(),
-    );
-
-    // assert vectors are of the right size
-    assert_eq!(r_list.len(), Zr_list.len());
-    for r in &r_list {
-      assert_eq!(poly.get_num_vars(), r.len());
-    }
-
-    let (left_num_vars, right_num_vars) = EqPolynomial::<S>::compute_factored_lens(r_list[0].len());
-    let L_size = left_num_vars.pow2();
-    let R_size = right_num_vars.pow2();
-
-    let default_blinds = PolyCommitmentBlinds {
-      blinds: vec![S::field_zero(); L_size],
-    };
-    let blinds = blinds_opt.map_or(&default_blinds, |p| p);
-
-    assert_eq!(blinds.blinds.len(), L_size);
-
-    let zero = S::field_zero();
-    let blind_Zr = blind_Zr_opt.map_or(&zero, |p| p);
-
-    // compute the L and R vectors
-    // We can perform batched opening if L is the same, so we regroup the proofs by L vector
-    // Map from the left half of the r to index in L_list
-    let mut index_map: HashMap<Vec<S>, usize> = HashMap::new();
-    let mut L_list: Vec<Vec<S>> = Vec::new();
-    let mut R_list: Vec<Vec<S>> = Vec::new();
-    let mut Zc_list: Vec<S> = Vec::new();
-
-    let c_base: S = transcript.challenge_scalar(b"challenge_c");
-    let mut c = S::field_one();
-    for i in 0..r_list.len() {
-      let eq = EqPolynomial::new(r_list[i].to_vec());
-      let (Li, Ri) = eq.compute_factored_evals();
-      assert_eq!(Li.len(), L_size);
-      assert_eq!(Ri.len(), R_size);
-      if let Some(index) = index_map.get(&r_list[i][..left_num_vars]) {
-        // L already exist
-        // generate coefficient for RLC
-        c = c * c_base;
-        R_list[*index] = (0..R_size).map(|j| R_list[*index][j] + c * Ri[j]).collect();
-        Zc_list[*index] = Zc_list[*index] + c * Zr_list[i];
-      } else {
-        let next_index = L_list.len();
-        index_map.insert(r_list[i][..left_num_vars].to_vec(), next_index);
-        L_list.push(Li);
-        R_list.push(Ri);
-        Zc_list.push(Zr_list[i]);
-      }
-    }
-
-    let mut proof_list = Vec::new();
-    for i in 0..L_list.len() {
-      let L = &L_list[i];
-      let R = &R_list[i];
-      // compute the vector underneath L*Z and the L*blinds
-      // compute vector-matrix product between L and Z viewed as a matrix
-      let LZ = poly.bound(L);
-      let LZ_blind: S = (0..L.len()).map(|i| blinds.blinds[i] * L[i]).sum();
-
-      // a dot product proof of size R_size
-      let proof = DotProductProofLog::prove(
-        transcript,
-        random_tape,
-        &LZ,
-        &LZ_blind,
-        R,
-        &Zc_list[i],
-        blind_Zr,
-      );
-      proof_list.push(proof);
-    }
-
-    proof_list
-      .iter()
-      .map(|proof| PolyEvalProof {
-        proof: proof.clone(),
-      })
-      .collect()
+    // TODO: Alternative evaluation proof scheme
+    vec![]
   }
 
   pub fn verify_plain_batched_points(
-    proof_list: &Vec<PolyEvalProof<S>>,
-    transcript: &mut Transcript,
-    r_list: Vec<Vec<S>>, // point at which the polynomial is evaluated
-    Zr_list: Vec<S>,     // commitment to \widetilde{Z}(r) on each point
+    _proof_list: &Vec<PolyEvalProof<S>>,
+    _transcript: &mut Transcript,
+    _r_list: Vec<Vec<S>>, // point at which the polynomial is evaluated
+    _Zr_list: Vec<S>,     // commitment to \widetilde{Z}(r) on each point
   ) -> Result<(), ProofVerifyError> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      PolyEvalProof::<S>::protocol_name(),
-    );
-
-    let (left_num_vars, _) = EqPolynomial::<S>::compute_factored_lens(r_list[0].len());
-
-    // compute the L and R
-    // We can perform batched opening if L is the same, so we regroup the proofs by L vector
-    // Map from the left half of the r to index in L_list
-    let mut index_map: HashMap<Vec<S>, usize> = HashMap::new();
-    let mut L_list: Vec<Vec<S>> = Vec::new();
-    let mut R_list: Vec<Vec<S>> = Vec::new();
-    let mut Zc_list: Vec<S> = Vec::new();
-
-    let c_base: S = transcript.challenge_scalar(b"challenge_c");
-    let mut c = S::field_one();
-    for i in 0..r_list.len() {
-      let eq = EqPolynomial::new(r_list[i].to_vec());
-      let (Li, Ri) = eq.compute_factored_evals();
-      if let Some(index) = index_map.get(&r_list[i][..left_num_vars]) {
-        // L already exist
-        // generate coefficient for RLC
-        c = c * c_base;
-        R_list[*index] = (0..Ri.len())
-          .map(|j| R_list[*index][j] + c * Ri[j])
-          .collect();
-        Zc_list[*index] = Zc_list[*index] + c * Zr_list[i];
-      } else {
-        let next_index = L_list.len();
-        index_map.insert(r_list[i][..left_num_vars].to_vec(), next_index);
-        L_list.push(Li);
-        R_list.push(Ri);
-        Zc_list.push(Zr_list[i]);
-      }
-    }
-    assert_eq!(L_list.len(), proof_list.len());
-
+    // TODO: Alternative evaluation proof scheme
     Ok(())
   }
 
   // Evaluation on multiple instances, each at different point
   // Size of each instance might be different, but all are larger than the evaluation point
   pub fn prove_batched_instances(
-    poly_list: &Vec<DensePolynomial<S>>, // list of instances
-    blinds_opt: Option<&PolyCommitmentBlinds<S>>,
-    r_list: Vec<&Vec<S>>,     // point at which the polynomial is evaluated
-    Zr_list: &Vec<S>,         // evaluation of \widetilde{Z}(r) on each instance
-    blind_Zr_opt: Option<&S>, // specifies a blind for Zr
-    transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
+    _poly_list: &Vec<DensePolynomial<S>>, // list of instances
+    _r_list: Vec<&Vec<S>>,                // point at which the polynomial is evaluated
+    _Zr_list: &Vec<S>,                    // evaluation of \widetilde{Z}(r) on each instance
+    _transcript: &mut Transcript,
+    _random_tape: &mut RandomTape<S>,
   ) -> Vec<PolyEvalProof<S>> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      PolyEvalProof::<S>::protocol_name(),
-    );
-
-    // assert vectors are of the right size
-    assert_eq!(poly_list.len(), r_list.len());
-    assert_eq!(poly_list.len(), Zr_list.len());
-
-    // We need one proof per poly size & R
-    let mut index_map: HashMap<(usize, Vec<S>), usize> = HashMap::new();
-    let mut LZ_list: Vec<Vec<S>> = Vec::new();
-    let mut Zc_list = Vec::new();
-    let mut L_list: Vec<Vec<S>> = Vec::new();
-    let mut R_list: Vec<Vec<S>> = Vec::new();
-
-    // generate coefficient for RLC
-    let c_base: S = transcript.challenge_scalar(b"challenge_c");
-    let mut c = S::field_one();
-    let zero = S::field_zero();
-    for i in 0..poly_list.len() {
-      let poly = &poly_list[i];
-      let num_vars = poly.get_num_vars();
-
-      // compute L and R
-      let (L, R) = {
-        let r = r_list[i];
-        // pad or trim r to correct length
-        let r = {
-          if num_vars >= r.len() {
-            [vec![zero; num_vars - r.len()], r.to_vec()].concat()
-          } else {
-            r[r.len() - num_vars..].to_vec()
-          }
-        };
-        let eq = EqPolynomial::new(r);
-        eq.compute_factored_evals()
-      };
-
-      if let Some(index) = index_map.get(&(num_vars, R.clone())) {
-        c = c * c_base;
-        let LZ = poly.bound(&L);
-        LZ_list[*index] = (0..LZ.len())
-          .map(|j| LZ_list[*index][j] + c * LZ[j])
-          .collect();
-        Zc_list[*index] = Zc_list[*index] + c * Zr_list[i];
-      } else {
-        index_map.insert((num_vars, R.clone()), LZ_list.len());
-        Zc_list.push(Zr_list[i]);
-        // compute a weighted sum of commitments and L
-        let LZ = poly.bound(&L);
-        L_list.push(L);
-        R_list.push(R);
-        LZ_list.push(LZ);
-      }
-    }
-
-    let mut proof_list = Vec::new();
-    for i in 0..LZ_list.len() {
-      let L = &L_list[i];
-      let L_size = L.len();
-
-      let default_blinds = PolyCommitmentBlinds {
-        blinds: vec![S::field_zero(); L_size],
-      };
-      let blinds = blinds_opt.map_or(&default_blinds, |p| p);
-      assert_eq!(blinds.blinds.len(), L_size);
-      let blind_Zr = blind_Zr_opt.map_or(&zero, |p| p);
-      let LZ_blind: S = (0..L.len()).map(|i| blinds.blinds[i] * L[i]).sum();
-
-      // a dot product proof of size R_size
-      let proof = DotProductProofLog::prove(
-        transcript,
-        random_tape,
-        &LZ_list[i],
-        &LZ_blind,
-        &R_list[i],
-        &Zc_list[i],
-        blind_Zr,
-      );
-      proof_list.push(PolyEvalProof { proof });
-    }
-
-    proof_list
+    // TODO: Alternative evaluation proof scheme
+    vec![]
   }
 
   pub fn verify_plain_batched_instances(
-    proof_list: &Vec<PolyEvalProof<S>>,
-    transcript: &mut Transcript,
-    r_list: Vec<&Vec<S>>,       // point at which the polynomial is evaluated
-    Zr_list: &Vec<S>,           // commitment to \widetilde{Z}(r) of each instance
-    num_vars_list: &Vec<usize>, // size of each polynomial
+    _proof_list: &Vec<PolyEvalProof<S>>,
+    _transcript: &mut Transcript,
+    _r_list: Vec<&Vec<S>>,       // point at which the polynomial is evaluated
+    _Zr_list: &Vec<S>,           // commitment to \widetilde{Z}(r) of each instance
+    _num_vars_list: &Vec<usize>, // size of each polynomial
   ) -> Result<(), ProofVerifyError> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      PolyEvalProof::<S>::protocol_name(),
-    );
-
-    // We need one proof per poly size + L size
-    let mut index_map: HashMap<(usize, Vec<S>), usize> = HashMap::new();
-    let mut Zc_list = Vec::new();
-    let mut L_list: Vec<Vec<S>> = Vec::new();
-    let mut R_list: Vec<Vec<S>> = Vec::new();
-
-    // generate coefficient for RLC
-    let c_base: S = transcript.challenge_scalar(b"challenge_c");
-    let mut c = S::field_one();
-    let zero = S::field_zero();
-
-    for i in 0..r_list.len() {
-      let num_vars = num_vars_list[i];
-
-      // compute L and R
-      let (L, R) = {
-        let r = r_list[i];
-        // pad or trim r to correct length
-        let r = {
-          if num_vars >= r.len() {
-            [vec![zero; num_vars - r.len()], r.to_vec()].concat()
-          } else {
-            r[r.len() - num_vars..].to_vec()
-          }
-        };
-        let eq = EqPolynomial::new(r);
-        eq.compute_factored_evals()
-      };
-
-      if let Some(index) = index_map.get(&(num_vars, R.clone())) {
-        c = c * c_base;
-        Zc_list[*index] = Zc_list[*index] + c * Zr_list[i];
-      } else {
-        Zc_list.push(Zr_list[i]);
-        // compute a weighted sum of commitments and L
-        L_list.push(L);
-        R_list.push(R);
-      }
-    }
-
+    // TODO: Alternative evaluation proof scheme
     Ok(())
   }
 
   // Like prove_batched_instances, but r is divided into rq ++ ry
   // Each polynomial is supplemented with num_proofs and num_inputs
   pub fn prove_batched_instances_disjoint_rounds(
-    poly_list: &Vec<&DensePolynomial<S>>,
-    num_proofs_list: &Vec<usize>,
-    num_inputs_list: &Vec<usize>,
-    blinds_opt: Option<&PolyCommitmentBlinds<S>>,
-    rq: &[S],
-    ry: &[S],
-    Zr_list: &Vec<S>,
-    blind_Zr_opt: Option<&S>,
-    transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
+    _poly_list: &Vec<&DensePolynomial<S>>,
+    _num_proofs_list: &Vec<usize>,
+    _num_inputs_list: &Vec<usize>,
+    _rq: &[S],
+    _ry: &[S],
+    _Zr_list: &Vec<S>,
+    _transcript: &mut Transcript,
+    _random_tape: &mut RandomTape<S>,
   ) -> Vec<PolyEvalProof<S>> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      PolyEvalProof::<S>::protocol_name(),
-    );
-
-    // assert vectors are of the right size
-    assert_eq!(poly_list.len(), Zr_list.len());
-
-    // We need one proof per (num_proofs, num_inputs) pair
-    let mut index_map: HashMap<(usize, usize), usize> = HashMap::new();
-    let mut LZ_list: Vec<Vec<S>> = Vec::new();
-    let mut Zc_list = Vec::new();
-    let mut L_list: Vec<Vec<S>> = Vec::new();
-    let mut R_list = Vec::new();
-
-    // generate coefficient for RLC
-    let c_base: S = transcript.challenge_scalar(b"challenge_c");
-    let mut c = S::field_one();
-    let zero = S::field_zero();
-    for i in 0..poly_list.len() {
-      let poly = poly_list[i];
-      let num_proofs = num_proofs_list[i];
-      let num_inputs = num_inputs_list[i];
-      if let Some(index) = index_map.get(&(num_proofs, num_inputs)) {
-        c = c * c_base;
-        let L = &L_list[*index].to_vec();
-        let LZ = poly.bound(&L);
-        LZ_list[*index] = (0..LZ.len())
-          .map(|j| LZ_list[*index][j] + c * LZ[j])
-          .collect();
-        Zc_list[*index] = Zc_list[*index] + c * Zr_list[i];
-      } else {
-        index_map.insert((num_proofs, num_inputs), LZ_list.len());
-        Zc_list.push(Zr_list[i]);
-        let num_vars_q = num_proofs.log_2();
-        let num_vars_y = num_inputs.log_2();
-        // pad or trim rq and ry to correct length
-        let (L, R) = {
-          let ry_short = {
-            if num_vars_y >= ry.len() {
-              let ry_pad = &vec![zero; num_vars_y - ry.len()];
-              [ry_pad, ry].concat()
-            }
-            // Else ry_short is the last w.num_inputs[p].log_2() entries of ry
-            // thus, to obtain the actual ry, need to multiply by (1 - ry2)(1 - ry3)..., which is ry_factors[num_rounds_y - w.num_inputs[p]]
-            else {
-              ry[ry.len() - num_vars_y..].to_vec()
-            }
-          };
-          let rq_short = rq[rq.len() - num_vars_q..].to_vec();
-          let r = [rq_short, ry_short.clone()].concat();
-          let eq = EqPolynomial::new(r);
-          eq.compute_factored_evals()
-        };
-        // compute a weighted sum of commitments and L
-        let LZ = poly.bound(&L);
-        L_list.push(L);
-        R_list.push(R);
-        LZ_list.push(LZ);
-      }
-    }
-
-    let mut proof_list = Vec::new();
-
-    for i in 0..LZ_list.len() {
-      let L = &L_list[i];
-      let L_size = L.len();
-      let default_blinds = PolyCommitmentBlinds {
-        blinds: vec![S::field_zero(); L_size],
-      };
-      let blinds = blinds_opt.map_or(&default_blinds, |p| p);
-
-      assert_eq!(blinds.blinds.len(), L_size);
-
-      let blind_Zr = blind_Zr_opt.map_or(&zero, |p| p);
-      let LZ_blind: S = (0..L.len()).map(|i| blinds.blinds[i] * L[i]).sum();
-
-      // a dot product proof of size R_size
-      let proof = DotProductProofLog::prove(
-        transcript,
-        random_tape,
-        &LZ_list[i],
-        &LZ_blind,
-        &R_list[i],
-        &Zc_list[i],
-        blind_Zr,
-      );
-
-      proof_list.push(PolyEvalProof { proof });
-    }
-
-    proof_list
+    // TODO: Alternative evaluation proof scheme
+    vec![]
   }
 
   pub fn verify_batched_instances_disjoint_rounds(
-    proof_list: &Vec<PolyEvalProof<S>>,
-    num_proofs_list: &Vec<usize>,
-    num_inputs_list: &Vec<usize>,
-    transcript: &mut Transcript,
-    rq: &[S],
-    ry: &[S],
+    _proof_list: &Vec<PolyEvalProof<S>>,
+    _num_proofs_list: &Vec<usize>,
+    _num_inputs_list: &Vec<usize>,
+    _transcript: &mut Transcript,
+    _rq: &[S],
+    _ry: &[S],
   ) -> Result<(), ProofVerifyError> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      PolyEvalProof::<S>::protocol_name(),
-    );
-
-    // We need one proof per poly size
-    let mut index_map: HashMap<(usize, usize), usize> = HashMap::new();
-    let mut LZ_list: Vec<S> = Vec::new();
-    let mut L_list = Vec::new();
-    let mut R_list = Vec::new();
-
-    // generate coefficient for RLC
-    let c_base: S = transcript.challenge_scalar(b"challenge_c");
-    let mut c = S::field_one();
-    let zero = S::field_zero();
-
-    for i in 0..num_proofs_list.len() {
-      let num_proofs = num_proofs_list[i];
-      let num_inputs = num_inputs_list[i];
-      if let Some(index) = index_map.get(&(num_proofs, num_inputs)) {
-        c = c * c_base;
-        let _L = &L_list[*index];
-
-        let LZ = S::field_zero();
-        LZ_list[*index] = LZ_list[*index] + c * LZ;
-      } else {
-        index_map.insert((num_proofs, num_inputs), LZ_list.len());
-        let num_vars_q = num_proofs.log_2();
-        let num_vars_y = num_inputs.log_2();
-        // pad or trim rq and ry to correct length
-        let (L, R) = {
-          let ry_short = {
-            if num_vars_y >= ry.len() {
-              let ry_pad = &vec![zero; num_vars_y - ry.len()];
-              [ry_pad, ry].concat()
-            }
-            // Else ry_short is the last w.num_inputs[p].log_2() entries of ry
-            // thus, to obtain the actual ry, need to multiply by (1 - ry2)(1 - ry3)..., which is ry_factors[num_rounds_y - w.num_inputs[p]]
-            else {
-              ry[ry.len() - num_vars_y..].to_vec()
-            }
-          };
-          let rq_short = rq[rq.len() - num_vars_q..].to_vec();
-          let r = [rq_short, ry_short.clone()].concat();
-          let eq = EqPolynomial::new(r);
-          eq.compute_factored_evals()
-        };
-        // compute a weighted sum of commitments and L
-        let LZ = S::field_zero();
-        L_list.push(L);
-        R_list.push(R);
-        LZ_list.push(LZ);
-      }
-    }
-
-    assert_eq!(LZ_list.len(), proof_list.len());
-
-    // Verify proofs
-    for i in 0..LZ_list.len() {
-      let R = &R_list[i];
-
-      proof_list[i].proof.verify(R.len(), transcript, R)?;
-    }
-
+    // TODO: Alternative evaluation proof scheme
     Ok(())
   }
 
   // Treat the polynomial(s) as univariate and open on a single point
   pub fn prove_uni_batched_instances(
-    poly_list: &Vec<&DensePolynomial<S>>,
-    r: &S,       // point at which the polynomial is evaluated
-    Zr: &Vec<S>, // evaluation of \widetilde{Z}(r)
-    transcript: &mut Transcript,
-    random_tape: &mut RandomTape<S>,
+    _poly_list: &Vec<&DensePolynomial<S>>,
+    _r: &S,       // point at which the polynomial is evaluated
+    _Zr: &Vec<S>, // evaluation of \widetilde{Z}(r)
+    _transcript: &mut Transcript,
+    _random_tape: &mut RandomTape<S>,
   ) -> PolyEvalProof<S> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      PolyEvalProof::<S>::protocol_name(),
-    );
-
-    let max_num_vars = poly_list.iter().fold(0, |m, p| {
-      if p.get_num_vars() > m {
-        p.get_num_vars()
-      } else {
-        m
-      }
-    });
-    let zero = S::field_zero();
-
-    // L differs depending on size of the polynomial, but R always stay the same
-    let (_, right_num_vars) = EqPolynomial::<S>::compute_factored_lens(max_num_vars);
-    let R_size = right_num_vars.pow2();
-
-    // compute R = <1, r, r^2, ...>
-    let R = {
-      let mut r_base = S::field_one();
-      let mut R = Vec::new();
-      for _ in 0..R_size {
-        R.push(r_base);
-        r_base = r_base * *r;
-      }
-      R
-    };
-    let mut L_map: HashMap<usize, Vec<S>> = HashMap::new();
-
-    // compute the vector underneath L*Z
-    // compute vector-matrix product between L and Z viewed as a matrix
-    let c_base: S = transcript.challenge_scalar(b"challenge_c");
-    let mut c = S::field_one();
-    let mut LZ_comb = vec![zero; R_size];
-    let mut Zr_comb = zero;
-
-    for i in 0..poly_list.len() {
-      let poly = &poly_list[i];
-      let num_vars = poly.get_num_vars();
-      let L = if let Some(L) = L_map.get(&num_vars) {
-        L
-      } else {
-        let (left_num_vars, right_num_vars) = EqPolynomial::<S>::compute_factored_lens(num_vars);
-        let L_size = left_num_vars.pow2();
-        let R_size = right_num_vars.pow2();
-        let r_base = (0..R_size).fold(S::field_one(), |p, _| p * *r);
-        // L is 1, r^k, r^2k, ...
-        let mut l_base = S::field_one();
-        let mut L = Vec::new();
-        for _ in 0..L_size {
-          L.push(l_base);
-          l_base = l_base * r_base;
-        }
-        L_map.insert(num_vars, L.clone());
-        L_map.get(&num_vars).unwrap()
-      };
-
-      let LZ = poly.bound(&L);
-      LZ_comb = (0..R_size)
-        .map(|i| LZ_comb[i] + if i < LZ.len() { c * LZ[i] } else { zero })
-        .collect();
-      Zr_comb = Zr_comb + c * Zr[i];
-      c = c * c_base;
+    // TODO: Alternative evaluation proof scheme
+    PolyEvalProof {
+      _phantom: S::field_zero(),
     }
-
-    // a dot product proof of size R_size
-    let proof = DotProductProofLog::prove(
-      transcript,
-      random_tape,
-      &LZ_comb,
-      &zero,
-      &R,
-      &Zr_comb,
-      &zero,
-    );
-
-    PolyEvalProof { proof }
   }
 
   pub fn verify_uni_batched_instances(
     &self,
-    transcript: &mut Transcript,
-    r: &S, // point at which the polynomial is evaluated
-    poly_size: Vec<usize>,
+    _transcript: &mut Transcript,
+    _r: &S, // point at which the polynomial is evaluated
+    _poly_size: Vec<usize>,
   ) -> Result<(), ProofVerifyError> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
-      transcript,
-      PolyEvalProof::<S>::protocol_name(),
-    );
-
-    let max_poly_size = poly_size.iter().fold(0, |m, i| if *i > m { *i } else { m });
-    // compute L and R
-    let (_, right_num_vars) =
-      EqPolynomial::<S>::compute_factored_lens(max_poly_size.next_power_of_two().log_2());
-    let R_size = right_num_vars.pow2();
-
-    // compute R = <1, r, r^2, ...>
-    let R = {
-      let mut r_base = S::field_one();
-      let mut R = Vec::new();
-      for _ in 0..R_size {
-        R.push(r_base);
-        r_base = r_base * *r;
-      }
-      R
-    };
-    let mut L_map: HashMap<usize, Vec<S>> = HashMap::new();
-
-    // compute a weighted sum of commitments and L
-    let c_base: S = transcript.challenge_scalar(b"challenge_c");
-    let mut c = S::field_one();
-
-    for i in 0..poly_size.len() {
-      let num_vars = poly_size[i].next_power_of_two().log_2();
-      let _L = if let Some(L) = L_map.get(&num_vars) {
-        L
-      } else {
-        let (left_num_vars, right_num_vars) = EqPolynomial::<S>::compute_factored_lens(num_vars);
-        let L_size = left_num_vars.pow2();
-        let R_size = right_num_vars.pow2();
-        let r_base = (0..R_size).fold(S::field_one(), |p, _| p * *r);
-        // L is 1, r^k, r^2k, ...
-        let mut l_base = S::field_one();
-        let mut L = Vec::new();
-        for _ in 0..L_size {
-          L.push(l_base);
-          l_base = l_base * r_base;
-        }
-        L_map.insert(num_vars, L.clone());
-        L_map.get(&num_vars).unwrap()
-      };
-
-      c = c * c_base;
-    }
-
-    self.proof.verify(R.len(), transcript, &R)
+    // TODO: Alternative evaluation proof scheme
+    Ok(())
   }
 }
 
@@ -1049,7 +473,7 @@ mod tests {
       .collect::<Vec<Scalar>>();
 
     // compute dot product between LZ and R
-    DotProductProofLog::compute_dotproduct(&LZ, &R)
+    DensePolynomial::compute_dotproduct(&LZ, &R)
   }
 
   #[test]

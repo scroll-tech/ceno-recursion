@@ -21,11 +21,11 @@ extern crate rayon;
 
 mod custom_dense_mlpoly;
 mod dense_mlpoly;
-mod mle;
 mod errors;
 /// R1CS instance used by libspartan
 pub mod instance;
 mod math;
+mod mle;
 mod product_tree;
 mod r1csinstance;
 mod r1csproof;
@@ -46,11 +46,13 @@ use std::{
 
 use dense_mlpoly::{DensePolynomial, PolyEvalProof};
 use errors::{ProofVerifyError, R1CSError};
+use goldilocks::SmallField;
 use halo2curves::serde::SerdeObject;
 use instance::Instance;
 use itertools::Itertools;
 use math::Math;
 use merlin::Transcript;
+use mle::Ext;
 use r1csinstance::{R1CSCommitment, R1CSDecommitment, R1CSEvalProof, R1CSInstance};
 use r1csproof::R1CSProof;
 use random::RandomTape;
@@ -87,10 +89,12 @@ impl<S: SpartanExtensionField> Assignment<S> {
   /// Constructs a new `Assignment` from a vector
   pub fn new(assignment: &[[u8; 32]]) -> Result<Assignment<S>, R1CSError> {
     let bytes_to_scalar = |vec: &[[u8; 32]]| -> Result<Vec<S::BaseField>, R1CSError> {
-      vec
-        .into_iter()
-        .map(|v| S::BaseField::from_raw_bytes(v).ok_or(R1CSError::InvalidScalar))
-        .collect()
+      Ok(
+        vec
+          .into_iter()
+          .map(|v| S::BaseField::from_raw_bytes_unchecked(v))
+          .collect::<Vec<S::BaseField>>(),
+      )
     };
     let assignment_scalar = bytes_to_scalar(assignment);
 
@@ -100,7 +104,10 @@ impl<S: SpartanExtensionField> Assignment<S> {
   /// Write the assignment into a file
   pub fn write(&self, f: &File) -> std::io::Result<()> {
     for assg in &self.assignment {
-      write_bytes(f, &assg.to_bytes())?;
+      let mut padded = [0; 32];
+      padded[..8].copy_from_slice(&assg.to_raw_bytes());
+
+      write_bytes(f, &padded)?;
     }
     Ok(())
   }
@@ -142,7 +149,7 @@ struct IOProofs<S: SpartanExtensionField> {
 impl<S: SpartanExtensionField> IOProofs<S> {
   // Given the polynomial in execution order, generate all proofs
   fn prove(
-    exec_poly_inputs: &DensePolynomial<S>,
+    exec_poly_inputs: &DensePolynomial<S, Ext>,
 
     num_ios: usize,
     num_inputs_unpadded: usize,
@@ -314,8 +321,8 @@ struct ShiftProofs<S: SpartanExtensionField> {
 
 impl<S: SpartanExtensionField> ShiftProofs<S> {
   fn prove(
-    orig_polys: Vec<&DensePolynomial<S>>,
-    shifted_polys: Vec<&DensePolynomial<S>>,
+    orig_polys: Vec<&DensePolynomial<S, Ext>>,
+    shifted_polys: Vec<&DensePolynomial<S, Ext>>,
     // For each orig_poly, how many entries at the front of proof 0 are non-zero?
     header_len_list: Vec<usize>,
     transcript: &mut Transcript,
@@ -410,11 +417,11 @@ struct ProverWitnessSecInfo<S: SpartanExtensionField> {
   // num_instances x num_proofs x num_inputs hypermatrix for all values
   w_mat: Vec<Vec<Vec<S>>>,
   // One dense polynomial per instance
-  poly_w: Vec<DensePolynomial<S>>,
+  poly_w: Vec<DensePolynomial<S, Ext>>,
 }
 
 impl<S: SpartanExtensionField> ProverWitnessSecInfo<S> {
-  fn new(w_mat: Vec<Vec<Vec<S>>>, poly_w: Vec<DensePolynomial<S>>) -> ProverWitnessSecInfo<S> {
+  fn new(w_mat: Vec<Vec<Vec<S>>>, poly_w: Vec<DensePolynomial<S, Ext>>) -> ProverWitnessSecInfo<S> {
     ProverWitnessSecInfo {
       num_inputs: w_mat.iter().map(|i| i[0].len()).collect(),
       w_mat,
@@ -843,38 +850,70 @@ impl<S: SpartanExtensionField> SNARK<S> {
     // unwrap the assignments
     let mut block_vars_mat = block_vars_mat
       .into_iter()
-      .map(|a| 
-        a.into_iter().map(|v| 
-          v.assignment
-            .into_iter()
-            .map(|a| S::from_base(&a))
-            .collect::<Vec<S>>())
-            .collect::<Vec<Vec<S>>>()
-      )
+      .map(|a| {
+        a.into_iter()
+          .map(|v| {
+            v.assignment
+              .into_iter()
+              .map(|a| S::from_base(&a))
+              .collect::<Vec<S>>()
+          })
+          .collect::<Vec<Vec<S>>>()
+      })
       .collect::<Vec<Vec<Vec<S>>>>();
     let mut exec_inputs_list = exec_inputs_list
       .into_iter()
-      .map(|v| v.assignment.into_iter().map(|a| S::from_base(&a)).collect::<Vec<S>>())
+      .map(|v| {
+        v.assignment
+          .into_iter()
+          .map(|a| S::from_base(&a))
+          .collect::<Vec<S>>()
+      })
       .collect::<Vec<Vec<S>>>();
     let mut init_phy_mems_list = init_phy_mems_list
       .into_iter()
-      .map(|v| v.assignment.into_iter().map(|a| S::from_base(&a)).collect::<Vec<S>>())
+      .map(|v| {
+        v.assignment
+          .into_iter()
+          .map(|a| S::from_base(&a))
+          .collect::<Vec<S>>()
+      })
       .collect::<Vec<Vec<S>>>();
     let mut init_vir_mems_list = init_vir_mems_list
       .into_iter()
-      .map(|v| v.assignment.into_iter().map(|a| S::from_base(&a)).collect::<Vec<S>>())
+      .map(|v| {
+        v.assignment
+          .into_iter()
+          .map(|a| S::from_base(&a))
+          .collect::<Vec<S>>()
+      })
       .collect::<Vec<Vec<S>>>();
     let mut addr_phy_mems_list = addr_phy_mems_list
       .into_iter()
-      .map(|v| v.assignment.into_iter().map(|a| S::from_base(&a)).collect::<Vec<S>>())
+      .map(|v| {
+        v.assignment
+          .into_iter()
+          .map(|a| S::from_base(&a))
+          .collect::<Vec<S>>()
+      })
       .collect::<Vec<Vec<S>>>();
     let mut addr_vir_mems_list = addr_vir_mems_list
       .into_iter()
-      .map(|v| v.assignment.into_iter().map(|a| S::from_base(&a)).collect::<Vec<S>>())
+      .map(|v| {
+        v.assignment
+          .into_iter()
+          .map(|a| S::from_base(&a))
+          .collect::<Vec<S>>()
+      })
       .collect::<Vec<Vec<S>>>();
     let mut addr_ts_bits_list = addr_ts_bits_list
       .into_iter()
-      .map(|v| v.assignment.into_iter().map(|a| S::from_base(&a)).collect::<Vec<S>>())
+      .map(|v| {
+        v.assignment
+          .into_iter()
+          .map(|a| S::from_base(&a))
+          .collect::<Vec<S>>()
+      })
       .collect::<Vec<Vec<S>>>();
 
     // --
@@ -2162,7 +2201,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       // PHY_MEM_BLOCK takes r = 4, VIR_MEM_BLOCK takes r = 6, everything else takes r = 2
       let perm_poly_poly_list: Vec<S> = (0..inst_map.len())
         .map(|i| {
-          let p: &DensePolynomial<S> = &perm_poly_w3_prover.poly_w[i];
+          let p: &DensePolynomial<S, Ext> = &perm_poly_w3_prover.poly_w[i];
           let i = inst_map[i];
           if i == vm_bl_id {
             p[6]

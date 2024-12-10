@@ -314,6 +314,7 @@ dependencies = [
  "gmp-mpfr-sys",
  "good_lp",
  "group 0.12.1",
+ "halo2curves",
  "ieee754",
  "im",
  "itertools 0.10.5",

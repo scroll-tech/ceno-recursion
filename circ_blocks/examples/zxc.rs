@@ -12,6 +12,7 @@ use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
 use circ::target::r1cs::ProverData;
 use circ::target::r1cs::{Lc, VarType};
 use core::cmp::min;
+use halo2curves::serde::SerdeObject;
 use libspartan::scalar::{ScalarExt2, SpartanExtensionField};
 use rug::Integer;
 
@@ -32,7 +33,6 @@ use libspartan::{
 };
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
-use std::time::*;
 use std::time::*;
 
 // How many reserved variables (EXCLUDING V) are in front of the actual input / output?
@@ -437,7 +437,10 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
             for exec in block {
                 writeln!(&mut f, "EXEC {}", exec_counter)?;
                 for assg in &exec.assignment {
-                    write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                    let mut padded = [0; 32];
+                    padded[..8].copy_from_slice(&assg.to_raw_bytes());
+
+                    write!(&mut f, "{} ", bytes_to_integer(&padded))?;
                 }
                 writeln!(&mut f)?;
                 exec_counter += 1;
@@ -449,7 +452,10 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
         for exec in &self.exec_inputs {
             writeln!(&mut f, "EXEC {}", exec_counter)?;
             for assg in &exec.assignment {
-                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                let mut padded = [0; 32];
+                padded[..8].copy_from_slice(&assg.to_raw_bytes());
+
+                write!(&mut f, "{} ", bytes_to_integer(&padded))?;
             }
             writeln!(&mut f)?;
             exec_counter += 1;
@@ -459,7 +465,10 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
         for addr in &self.init_phy_mems_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
             for assg in &addr.assignment {
-                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                let mut padded = [0; 32];
+                padded[..8].copy_from_slice(&assg.to_raw_bytes());
+
+                write!(&mut f, "{} ", bytes_to_integer(&padded))?;
             }
             writeln!(&mut f)?;
             addr_counter += 1;
@@ -469,7 +478,10 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
         for addr in &self.init_vir_mems_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
             for assg in &addr.assignment {
-                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                let mut padded = [0; 32];
+                padded[..8].copy_from_slice(&assg.to_raw_bytes());
+
+                write!(&mut f, "{} ", bytes_to_integer(&padded))?;
             }
             writeln!(&mut f)?;
             addr_counter += 1;
@@ -479,7 +491,10 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
         for addr in &self.addr_phy_mems_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
             for assg in &addr.assignment {
-                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                let mut padded = [0; 32];
+                padded[..8].copy_from_slice(&assg.to_raw_bytes());
+
+                write!(&mut f, "{} ", bytes_to_integer(&padded))?;
             }
             writeln!(&mut f)?;
             addr_counter += 1;
@@ -489,7 +504,10 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
         for addr in &self.addr_vir_mems_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
             for assg in &addr.assignment {
-                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                let mut padded = [0; 32];
+                padded[..8].copy_from_slice(&assg.to_raw_bytes());
+
+                write!(&mut f, "{} ", bytes_to_integer(&padded))?;
             }
             writeln!(&mut f)?;
             addr_counter += 1;
@@ -499,7 +517,10 @@ impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
         for addr in &self.addr_ts_bits_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
             for assg in &addr.assignment {
-                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                let mut padded = [0; 32];
+                padded[..8].copy_from_slice(&assg.to_raw_bytes());
+
+                write!(&mut f, "{} ", bytes_to_integer(&padded))?;
             }
             writeln!(&mut f)?;
             addr_counter += 1;

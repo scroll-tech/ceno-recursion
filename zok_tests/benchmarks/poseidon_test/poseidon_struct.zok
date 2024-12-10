@@ -1,3 +1,5 @@
+from "poseidon_const" import REPETITION
+
 struct Digest {
     field[4] elements
 }
@@ -1678,7 +1680,7 @@ def main() -> field:
         state11: 0
     }
     field cumulated_hash = 0
-    for u32 i in 0..1000000 do
+    for u32 i in 0..REPETITION do
         PoseidonState hashes = poseidon(inputs)
         cumulated_hash = cumulated_hash + hashes.state0 + hashes.state1 + hashes.state2 + hashes.state3 + hashes.state4 + hashes.state5 + hashes.state6 + hashes.state7 + hashes.state8 + hashes.state9 + hashes.state10 + hashes.state11
     endfor

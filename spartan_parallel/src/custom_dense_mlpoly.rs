@@ -1,10 +1,10 @@
 #![allow(clippy::too_many_arguments)]
 use std::cmp::min;
 
-use crate::dense_mlpoly::DensePolynomial;
-use crate::scalar::SpartanExtensionField;
-
 use super::math::Math;
+use crate::dense_mlpoly::DensePolynomial;
+use crate::mle::Ext;
+use crate::scalar::SpartanExtensionField;
 
 const MODE_P: usize = 1;
 const MODE_Q: usize = 2;
@@ -328,7 +328,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   }
 
   // Convert to a (p, q_rev, x_rev) regular dense poly of form (p, q, x)
-  pub fn to_dense_poly(&self) -> DensePolynomial<S> {
+  pub fn to_dense_poly(&self) -> DensePolynomial<S, Ext> {
     let mut Z_poly =
       vec![
         S::field_zero();

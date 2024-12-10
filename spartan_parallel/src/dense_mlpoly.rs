@@ -1,23 +1,24 @@
 #![allow(clippy::too_many_arguments)]
-use crate::scalar::SpartanExtensionField;
-
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::random::RandomTape;
 use super::transcript::ProofTranscript;
+use crate::mle::{Base, Ext, MLEType, MLE};
+use crate::scalar::SpartanExtensionField;
 use core::ops::Index;
+use ff::Field;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, process::Output};
 
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
-pub struct DensePolynomial<S: SpartanExtensionField> {
+pub struct DensePolynomial<S: SpartanExtensionField, T: MLEType> {
   num_vars: usize, // the number of variables in the multilinear polynomial
   len: usize,
-  Z: Vec<S>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
+  Z: MLE<S, T>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
 }
 
 pub struct EqPolynomial<S: SpartanExtensionField> {
@@ -114,7 +115,7 @@ impl<S: SpartanExtensionField> IdentityPolynomial<S> {
   }
 }
 
-impl<S: SpartanExtensionField> DensePolynomial<S> {
+impl<S: SpartanExtensionField> DensePolynomial<S, Ext> {
   pub fn new(mut Z: Vec<S>) -> Self {
     // If length of Z is not a power of 2, append Z with 0
     let zero = S::field_zero();
@@ -122,7 +123,7 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     DensePolynomial {
       num_vars: Z.len().log_2(),
       len: Z.len(),
-      Z,
+      Z: MLE::<S, Ext>::new(Z),
     }
   }
 
@@ -134,11 +135,7 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     self.len
   }
 
-  pub fn clone(&self) -> DensePolynomial<S> {
-    DensePolynomial::new(self.Z[0..self.len].to_vec())
-  }
-
-  pub fn split(&self, idx: usize) -> (DensePolynomial<S>, DensePolynomial<S>) {
+  pub fn split(&self, idx: usize) -> (DensePolynomial<S, Ext>, DensePolynomial<S, Ext>) {
     assert!(idx < self.len());
     (
       DensePolynomial::new(self.Z[..idx].to_vec()),
@@ -253,7 +250,7 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     assert_eq!(r.len(), self.get_num_vars());
     let chis = EqPolynomial::new(r.to_vec()).evals();
     assert_eq!(chis.len(), self.Z.len());
-    Self::compute_dotproduct(&self.Z, &chis)
+    Self::compute_dotproduct(&self.Z[0..], &chis)
   }
 
   fn compute_dotproduct(a: &[S], b: &[S]) -> S {
@@ -262,10 +259,10 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
   }
 
   fn vec(&self) -> &Vec<S> {
-    &self.Z
+    &self.Z.inner_ref()
   }
 
-  pub fn extend(&mut self, other: &DensePolynomial<S>) {
+  pub fn extend(&mut self, other: &DensePolynomial<S, Ext>) {
     // TODO: allow extension even when some vars are bound
     assert_eq!(self.Z.len(), self.len);
     let other_vec = other.vec();
@@ -276,9 +273,9 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     assert_eq!(self.Z.len(), self.len);
   }
 
-  pub fn merge<'a, I>(polys: I) -> DensePolynomial<S>
+  pub fn merge<'a, I>(polys: I) -> DensePolynomial<S, Ext>
   where
-    I: IntoIterator<Item = DensePolynomial<S>>,
+    I: IntoIterator<Item = DensePolynomial<S, Ext>>,
   {
     let mut Z: Vec<S> = Vec::new();
     for poly in polys.into_iter() {
@@ -300,12 +297,34 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
   }
 }
 
-impl<S: SpartanExtensionField> Index<usize> for DensePolynomial<S> {
+impl<S: SpartanExtensionField> DensePolynomial<S, Base> {
+  pub fn new_from_base(mut Z: Vec<S::BaseField>) -> Self {
+    // If length of Z is not a power of 2, append Z with 0
+    let zero = S::BaseField::ZERO;
+    Z.extend(vec![zero; Z.len().next_power_of_two() - Z.len()]);
+    DensePolynomial {
+      num_vars: Z.len().log_2(),
+      len: Z.len(),
+      Z: MLE::<S, Base>::new(Z),
+    }
+  }
+}
+
+impl<S: SpartanExtensionField> Index<usize> for DensePolynomial<S, Ext> {
   type Output = S;
 
   #[inline(always)]
-  fn index(&self, _index: usize) -> &S {
-    &(self.Z[_index])
+  fn index(&self, index: usize) -> &Self::Output {
+    &(self.Z[index])
+  }
+}
+
+impl<S: SpartanExtensionField> Index<usize> for DensePolynomial<S, Base> {
+  type Output = S::BaseField;
+
+  #[inline(always)]
+  fn index(&self, index: usize) -> &Self::Output {
+    &(self.Z[index])
   }
 }
 
@@ -320,7 +339,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   }
 
   pub fn prove(
-    _poly: &DensePolynomial<S>,
+    _poly: &DensePolynomial<S, Ext>,
     _r: &[S], // point at which the polynomial is evaluated
     _Zr: &S,  // evaluation of \widetilde{Z}(r)
     _transcript: &mut Transcript,
@@ -352,7 +371,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 
   // Evaluation of multiple points on the same instance
   pub fn prove_batched_points(
-    _poly: &DensePolynomial<S>,
+    _poly: &DensePolynomial<S, Ext>,
     _r_list: Vec<Vec<S>>, // point at which the polynomial is evaluated
     _Zr_list: Vec<S>,     // evaluation of \widetilde{Z}(r) on each point
     _transcript: &mut Transcript,
@@ -375,9 +394,9 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   // Evaluation on multiple instances, each at different point
   // Size of each instance might be different, but all are larger than the evaluation point
   pub fn prove_batched_instances(
-    _poly_list: &Vec<DensePolynomial<S>>, // list of instances
-    _r_list: Vec<&Vec<S>>,                // point at which the polynomial is evaluated
-    _Zr_list: &Vec<S>,                    // evaluation of \widetilde{Z}(r) on each instance
+    _poly_list: &Vec<DensePolynomial<S, Ext>>, // list of instances
+    _r_list: Vec<&Vec<S>>,                     // point at which the polynomial is evaluated
+    _Zr_list: &Vec<S>,                         // evaluation of \widetilde{Z}(r) on each instance
     _transcript: &mut Transcript,
     _random_tape: &mut RandomTape<S>,
   ) -> Vec<PolyEvalProof<S>> {
@@ -399,7 +418,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   // Like prove_batched_instances, but r is divided into rq ++ ry
   // Each polynomial is supplemented with num_proofs and num_inputs
   pub fn prove_batched_instances_disjoint_rounds(
-    _poly_list: &Vec<&DensePolynomial<S>>,
+    _poly_list: &Vec<&DensePolynomial<S, Ext>>,
     _num_proofs_list: &Vec<usize>,
     _num_inputs_list: &Vec<usize>,
     _rq: &[S],
@@ -426,7 +445,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 
   // Treat the polynomial(s) as univariate and open on a single point
   pub fn prove_uni_batched_instances(
-    _poly_list: &Vec<&DensePolynomial<S>>,
+    _poly_list: &Vec<&DensePolynomial<S, Ext>>,
     _r: &S,       // point at which the polynomial is evaluated
     _Zr: &Vec<S>, // evaluation of \widetilde{Z}(r)
     _transcript: &mut Transcript,

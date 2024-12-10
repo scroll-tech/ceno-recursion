@@ -42,10 +42,17 @@ struct CompileTimeKnowledge {
 
 impl CompileTimeKnowledge {
   fn deserialize_from_file(benchmark_name: String) -> CompileTimeKnowledge {
-    let file_name = format!("../zok_tests/constraints/{}_bin.ctk", benchmark_name);
-    let mut f = File::open(file_name).unwrap();
+    // Input can be provided through multiple files, use i to determine the next file label
+    let mut i = 0;
+    let mut file_name = format!("../zok_tests/constraints/{benchmark_name}_bin_{i}.ctk");
     let mut content: Vec<u8> = Vec::new();
-    f.read_to_end(&mut content).unwrap();
+    while let Ok(mut f) = File::open(file_name) {
+      let mut new_content: Vec<u8> = Vec::new();
+      f.read_to_end(&mut new_content).unwrap();
+      content.extend(new_content);
+      i += 1;
+      file_name = format!("../zok_tests/constraints/{benchmark_name}_bin_{i}.ctk");
+    }
     bincode::deserialize(&content).unwrap()
   }
 }
@@ -78,10 +85,17 @@ struct RunTimeKnowledge<S: SpartanExtensionField> {
 
 impl<S: SpartanExtensionField + for<'de> serde::de::Deserialize<'de>> RunTimeKnowledge<S> {
   fn deserialize_from_file(benchmark_name: String) -> RunTimeKnowledge<S> {
-    let file_name = format!("../zok_tests/inputs/{}_bin.rtk", benchmark_name);
-    let mut f = File::open(file_name).unwrap();
+    // Input can be provided through multiple files, use i to determine the next file label
+    let mut i = 0;
+    let mut file_name = format!("../zok_tests/inputs/{benchmark_name}_bin_{i}.rtk");
     let mut content: Vec<u8> = Vec::new();
-    f.read_to_end(&mut content).unwrap();
+    while let Ok(mut f) = File::open(file_name) {
+      let mut new_content: Vec<u8> = Vec::new();
+      f.read_to_end(&mut new_content).unwrap();
+      content.extend(new_content);
+      i += 1;
+      file_name = format!("../zok_tests/inputs/{benchmark_name}_bin_{i}.rtk");
+    }
     bincode::deserialize(&content).unwrap()
   }
 }

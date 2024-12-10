@@ -3,6 +3,7 @@
 const PRINT_PROOF: bool = false;
 const INLINE_SPARTAN_PROOF: bool = true;
 const TOTAL_NUM_VARS_BOUND: usize = 10000000000;
+const MAX_FILE_SIZE: usize = 1073741824;
 
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
@@ -32,7 +33,6 @@ use libspartan::{
 };
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
-use std::time::*;
 use std::time::*;
 
 // How many reserved variables (EXCLUDING V) are in front of the actual input / output?
@@ -239,12 +239,17 @@ struct CompileTimeKnowledge {
 }
 
 impl CompileTimeKnowledge {
-    fn serialize_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
-        let file_name = format!("../zok_tests/constraints/{benchmark_name}_bin.ctk");
-        create_dir_all(Path::new(&file_name).parent().unwrap())?;
-        let mut f = File::create(file_name)?;
+    fn serialize_to_file(&self, benchmark_name: String, max_file_size: usize) -> std::io::Result<()> {
         let content = bincode::serialize(&self).unwrap();
-        f.write(&content)?;
+        println!("CTK SIZE: {}", content.len());
+        for i in 0..content.len().div_ceil(max_file_size) {
+            let file_name = format!("../zok_tests/constraints/{benchmark_name}_bin_{i}.ctk");
+            create_dir_all(Path::new(&file_name).parent().unwrap())?;
+            let mut f = File::create(file_name)?;
+            let head = max_file_size * i;
+            let tail = min(max_file_size * (i + 1), content.len());
+            f.write(&content[head..tail])?;
+        }
         Ok(())
     }
 
@@ -378,12 +383,17 @@ struct RunTimeKnowledge<S: SpartanExtensionField> {
 }
 
 impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
-    fn serialize_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
-        let file_name = format!("../zok_tests/inputs/{benchmark_name}_bin.rtk");
-        create_dir_all(Path::new(&file_name).parent().unwrap())?;
-        let mut f = File::create(file_name)?;
+    fn serialize_to_file(&self, benchmark_name: String, max_file_size: usize) -> std::io::Result<()> {
         let content = bincode::serialize(&self).unwrap();
-        f.write(&content)?;
+        println!("RTK SIZE: {}", content.len());
+        for i in 0..content.len().div_ceil(max_file_size) {
+            let file_name = format!("../zok_tests/inputs/{benchmark_name}_bin_{i}.rtk");
+            create_dir_all(Path::new(&file_name).parent().unwrap())?;
+            let mut f = File::create(file_name)?;
+            let head = max_file_size * i;
+            let tail = min(max_file_size * (i + 1), content.len());
+            f.write(&content[head..tail])?;
+        }
         Ok(())
     }
 
@@ -1589,13 +1599,13 @@ fn main() {
         ctk.write_to_file(benchmark_name.to_string()).unwrap();
         rtk.write_to_file(benchmark_name.to_string()).unwrap();
     }
-    if !INLINE_SPARTAN_PROOF {
-        // --
-        // Write CTK, RTK to file
-        // --
-        ctk.serialize_to_file(benchmark_name.to_string()).unwrap();
-        rtk.serialize_to_file(benchmark_name.to_string()).unwrap();
-    } else {
+   
+    // --
+    // Write CTK, RTK to file
+    // --
+    ctk.serialize_to_file(benchmark_name.to_string(), MAX_FILE_SIZE).unwrap();
+    rtk.serialize_to_file(benchmark_name.to_string(), MAX_FILE_SIZE).unwrap();
+    if INLINE_SPARTAN_PROOF {
         run_spartan_proof(ctk, rtk);
     }
 

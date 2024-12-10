@@ -349,10 +349,6 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     PolyEvalProof {
       _phantom: S::field_zero(),
     }
-    // TODO: Alternative evaluation proof scheme
-    PolyEvalProof {
-      _phantom: S::field_zero(),
-    }
   }
 
   pub fn verify(
@@ -360,7 +356,6 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     transcript: &mut Transcript,
     r: &[S], // point at which the polynomial is evaluated
   ) -> Result<(), ProofVerifyError> {
-    // TODO: Alternative evaluation proof scheme
     // TODO: Alternative evaluation proof scheme
     Ok(())
   }
@@ -384,15 +379,9 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   ) -> Vec<PolyEvalProof<S>> {
     // TODO: Alternative evaluation proof scheme
     vec![]
-    // TODO: Alternative evaluation proof scheme
-    vec![]
   }
 
   pub fn verify_plain_batched_points(
-    _proof_list: &Vec<PolyEvalProof<S>>,
-    _transcript: &mut Transcript,
-    _r_list: Vec<Vec<S>>, // point at which the polynomial is evaluated
-    _Zr_list: Vec<S>,     // commitment to \widetilde{Z}(r) on each point
     _proof_list: &Vec<PolyEvalProof<S>>,
     _transcript: &mut Transcript,
     _r_list: Vec<Vec<S>>, // point at which the polynomial is evaluated

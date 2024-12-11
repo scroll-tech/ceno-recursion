@@ -1527,6 +1527,7 @@ mod tests {
     let mut prover_transcript = Transcript::new(b"example");
     let proof = SparseMatPolyEvalProof::prove(
       &dense,
+      Scalar::one(),
       &rx,
       &ry,
       &evals,
@@ -1536,7 +1537,7 @@ mod tests {
 
     let mut verifier_transcript = Transcript::new(b"example");
     assert!(proof
-      .verify(&poly_comm, &rx, &ry, &evals, &mut verifier_transcript,)
+      .verify(&poly_comm, Scalar::one(), &rx, &ry, &evals, &mut verifier_transcript,)
       .is_ok());
   }
 }

@@ -26,7 +26,8 @@ pub struct R1CSInstance<S: SpartanExtensionField> {
   // num_cons and num_vars need to be power of 2
   max_num_cons: usize,
   num_cons: Vec<usize>,
-  num_vars: usize,
+  max_num_vars: usize,
+  num_vars: Vec<usize>,
   // List of individual A, B, C for matrix multiplication
   A_list: Vec<SparseMatPolynomial<S>>,
   B_list: Vec<SparseMatPolynomial<S>>,
@@ -69,14 +70,15 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     num_instances: usize,
     max_num_cons: usize,
     num_cons: Vec<usize>,
-    num_vars: usize,
+    max_num_vars: usize,
+    num_vars: Vec<usize>,
     A_list: &Vec<Vec<(usize, usize, S)>>,
     B_list: &Vec<Vec<(usize, usize, S)>>,
     C_list: &Vec<Vec<(usize, usize, S)>>,
   ) -> R1CSInstance<S> {
     Timer::print(&format!("number_of_instances {num_instances}"));
     Timer::print(&format!("number_of_constraints {max_num_cons}"));
-    Timer::print(&format!("number_of_variables {num_vars}"));
+    Timer::print(&format!("number_of_variables {max_num_vars}"));
     // Timer::print(&format!("number_non-zero_entries_A {}", A.len()));
     // Timer::print(&format!("number_non-zero_entries_B {}", B.len()));
     // Timer::print(&format!("number_non-zero_entries_C {}", C.len()));
@@ -89,7 +91,11 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     }
 
     // check that num_vars is a power of 2
-    assert_eq!(num_vars.next_power_of_two(), num_vars);
+    assert_eq!(max_num_vars.next_power_of_two(), max_num_vars);
+    for v in &num_vars {
+      assert_eq!(v.next_power_of_two(), *v);
+      assert!(*v <= max_num_vars);
+    }
 
     // check that length of A_list, B_list, C_list are the same
     assert_eq!(A_list.len(), B_list.len());
@@ -97,7 +103,7 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
 
     // no errors, so create polynomials
     let num_poly_vars_x = max_num_cons.log_2();
-    let num_poly_vars_y = num_vars.log_2();
+    let num_poly_vars_y = max_num_vars.log_2();
 
     let mut poly_A_list = Vec::new();
     let mut poly_B_list = Vec::new();
@@ -153,7 +159,8 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
       num_instances,
       max_num_cons,
       num_cons: num_cons.clone(),
-      num_vars,
+      max_num_vars,
+      num_vars: num_vars.clone(),
       A_list: poly_A_list,
       B_list: poly_B_list,
       C_list: poly_C_list,
@@ -183,7 +190,11 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
   }
 
   pub fn get_num_vars(&self) -> usize {
-    self.num_vars
+    self.max_num_vars
+  }
+
+  pub fn get_inst_num_vars(&self) -> &Vec<usize> {
+    &self.num_vars
   }
 
   pub fn get_num_cons(&self) -> usize {
@@ -290,7 +301,7 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
   ) -> (Vec<S>, Vec<S>, Vec<S>) {
     assert!(self.num_instances == 1 || self.num_instances == num_instances);
     assert_eq!(num_rows, self.max_num_cons);
-    assert_eq!(num_cols, self.num_vars);
+    assert_eq!(num_cols, self.max_num_vars);
 
     let mut evals_A_list = Vec::new();
     let mut evals_B_list = Vec::new();
@@ -342,7 +353,7 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
   ) {
     assert!(self.num_instances == 1 || self.num_instances == num_instances);
     assert_eq!(num_rows, &self.num_cons);
-    assert_eq!(num_segs.next_power_of_two() * max_num_cols, self.num_vars);
+    assert_eq!(num_segs.next_power_of_two() * max_num_cols, self.max_num_vars);
 
     let mut evals_A_list = Vec::new();
     let mut evals_B_list = Vec::new();
@@ -438,13 +449,12 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     (evals[0], evals[1], evals[2])
   }
 
-  // Group all instances with the similar NNZ (round to the next power of eight) together
+  // Group all instances with the similar num_vars (round to the next power of four) together
   // Output.0 records the label of instances included within each commitment
-  // Note that we do not group A, B, C together
-  pub fn next_power_of_eight(val: usize) -> usize {
+  pub fn next_power_of_four(val: usize) -> usize {
     let mut base = 1;
     while base < val {
-      base *= 8;
+      base *= 4;
     }
     return base;
   }
@@ -456,67 +466,51 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     Vec<R1CSCommitment<S>>,
     Vec<R1CSDecommitment<S>>,
   ) {
-    let mut nnz_size: HashMap<usize, usize> = HashMap::new();
+    let mut vars_size: HashMap<usize, usize> = HashMap::new();
     let mut label_map: Vec<Vec<usize>> = Vec::new();
     let mut sparse_polys_list: Vec<Vec<&SparseMatPolynomial<S>>> = Vec::new();
     let mut max_num_cons_list: Vec<usize> = Vec::new();
+    let mut max_num_vars_list: Vec<usize> = Vec::new();
 
+    // Group the instances based on number of variables, separated by orders of 2^256
     for i in 0..self.num_instances {
-      // A_list
-      let A_len = Self::next_power_of_eight(self.A_list[i].get_num_nz_entries());
-      if let Some(index) = nnz_size.get(&A_len) {
+      let var_len = Self::next_power_of_four(self.num_vars[i]);
+      // A_list, B_list, C_list
+      if let Some(index) = vars_size.get(&var_len) {
         label_map[*index].push(3 * i);
         sparse_polys_list[*index].push(&self.A_list[i]);
-        max_num_cons_list[*index] = max(max_num_cons_list[*index], self.num_cons[i]);
-      } else {
-        let next_label = nnz_size.len();
-        nnz_size.insert(A_len, next_label);
-        label_map.push(vec![3 * i]);
-        sparse_polys_list.push(vec![&self.A_list[i]]);
-        max_num_cons_list.push(self.num_cons[i]);
-      }
-      // B_list
-      let B_len = Self::next_power_of_eight(self.B_list[i].get_num_nz_entries());
-      if let Some(index) = nnz_size.get(&B_len) {
         label_map[*index].push(3 * i + 1);
         sparse_polys_list[*index].push(&self.B_list[i]);
-        max_num_cons_list[*index] = max(max_num_cons_list[*index], self.num_cons[i]);
-      } else {
-        let next_label = nnz_size.len();
-        nnz_size.insert(B_len, next_label);
-        label_map.push(vec![3 * i + 1]);
-        sparse_polys_list.push(vec![&self.B_list[i]]);
-        max_num_cons_list.push(self.num_cons[i]);
-      }
-      // C_list
-      let C_len = Self::next_power_of_eight(self.C_list[i].get_num_nz_entries());
-      if let Some(index) = nnz_size.get(&C_len) {
         label_map[*index].push(3 * i + 2);
         sparse_polys_list[*index].push(&self.C_list[i]);
         max_num_cons_list[*index] = max(max_num_cons_list[*index], self.num_cons[i]);
+        max_num_vars_list[*index] = max(max_num_vars_list[*index], self.num_vars[i]);
       } else {
-        let next_label = nnz_size.len();
-        nnz_size.insert(C_len, next_label);
+        let next_label = vars_size.len();
+        vars_size.insert(var_len, next_label);
+        label_map.push(vec![3 * i]);
+        sparse_polys_list.push(vec![&self.A_list[i]]);
+        label_map.push(vec![3 * i + 1]);
+        sparse_polys_list.push(vec![&self.B_list[i]]);
         label_map.push(vec![3 * i + 2]);
         sparse_polys_list.push(vec![&self.C_list[i]]);
         max_num_cons_list.push(self.num_cons[i]);
+        max_num_vars_list.push(self.num_vars[i]);
       }
     }
 
-    println!("nnz_size: {:?}", nnz_size);
     let mut r1cs_comm_list = Vec::new();
     let mut r1cs_decomm_list = Vec::new();
-    println!("NUM_SP: {}", sparse_polys_list.len());
-    for (sparse_polys, max_num_cons) in zip(sparse_polys_list, max_num_cons_list) {
+    for ((sparse_polys, max_num_cons), max_num_vars) in zip(zip(sparse_polys_list, max_num_cons_list), max_num_vars_list) {
       let (comm, dense) = SparseMatPolynomial::multi_commit(&sparse_polys);
       let r1cs_comm = R1CSCommitment {
         num_cons: max_num_cons.next_power_of_two(),
-        num_vars: self.num_vars,
+        num_vars: max_num_vars,
         comm,
       };
       let r1cs_decomm = R1CSDecommitment {
         num_cons: max_num_cons.next_power_of_two(),
-        num_vars: self.num_vars,
+        num_vars: max_num_vars,
         dense
       };
 
@@ -539,13 +533,13 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     let (comm, dense) = SparseMatPolynomial::multi_commit(&sparse_polys);
     let r1cs_comm = R1CSCommitment {
       num_cons: self.num_instances * self.max_num_cons,
-      num_vars: self.num_vars,
+      num_vars: self.max_num_vars,
       comm,
     };
 
     let r1cs_decomm = R1CSDecommitment {
       num_cons: self.num_instances * self.max_num_cons,
-      num_vars: self.num_vars,
+      num_vars: self.max_num_vars,
       dense
     };
 

@@ -20,21 +20,31 @@ impl<S: SpartanExtensionField> Instance<S> {
     num_instances: usize,
     max_num_cons: usize,
     num_cons: Vec<usize>,
-    num_vars: usize,
+    max_num_vars: usize,
+    num_vars: Vec<usize>,
     A: &Vec<Vec<(usize, usize, [u8; 32])>>,
     B: &Vec<Vec<(usize, usize, [u8; 32])>>,
     C: &Vec<Vec<(usize, usize, [u8; 32])>>,
   ) -> Result<Instance<S>, R1CSError> {
-    let (num_vars_padded, max_num_cons_padded, num_cons_padded) = {
-      let num_vars_padded = {
-        let mut num_vars_padded = num_vars;
+    let (max_num_vars_padded, num_vars_padded, max_num_cons_padded, num_cons_padded) = {
+      let max_num_vars_padded = {
+        let mut max_num_vars_padded = max_num_vars;
 
         // ensure that num_vars_padded a power of two
-        if num_vars_padded.next_power_of_two() != num_vars_padded {
-          num_vars_padded = num_vars_padded.next_power_of_two();
+        if max_num_vars_padded.next_power_of_two() != max_num_vars_padded {
+          max_num_vars_padded = max_num_vars_padded.next_power_of_two();
         }
-        num_vars_padded
+        max_num_vars_padded
       };
+
+      let mut num_vars_padded = Vec::new();
+      for i in 0..num_vars.len() {
+        if num_vars[i] == 0 || num_vars[i] == 1 {
+          num_vars_padded.push(2);
+        } else {
+          num_vars_padded.push(num_vars[i].next_power_of_two());
+        }
+      }
 
       let max_num_cons_padded = {
         let mut max_num_cons_padded = max_num_cons;
@@ -60,7 +70,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         }
       }
 
-      (num_vars_padded, max_num_cons_padded, num_cons_padded)
+      (max_num_vars_padded, num_vars_padded, max_num_cons_padded, num_cons_padded)
     };
 
     let bytes_to_scalar =
@@ -74,8 +84,8 @@ impl<S: SpartanExtensionField> Instance<S> {
           }
 
           // col must be smaller than num_vars
-          if col >= num_vars {
-            println!("COL: {}, NUM_VARS: {}", col, num_vars);
+          if col >= num_vars[b] {
+            println!("COL: {}, NUM_VARS: {}", col, num_vars[b]);
             return Err(R1CSError::InvalidIndex);
           }
 
@@ -83,8 +93,8 @@ impl<S: SpartanExtensionField> Instance<S> {
           if val.is_some().unwrap_u8() == 1 {
             // if col >= num_vars, it means that it is referencing a 1 or input in the satisfying
             // assignment
-            if col >= num_vars {
-              mat.push((row, col + num_vars_padded - num_vars, val.unwrap()));
+            if col >= num_vars[b] {
+              mat.push((row, col + num_vars_padded[b] - num_vars[b], val.unwrap()));
             } else {
               mat.push((row, col, val.unwrap()));
             }
@@ -97,7 +107,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         // we do not need to pad otherwise because the dummy constraints are implicit in the sum-check protocol
         if num_cons[b] == 0 || num_cons[b] == 1 {
           for i in tups.len()..num_cons_padded[b] {
-            mat.push((i, num_vars, S::field_zero()));
+            mat.push((i, num_vars[b], S::field_zero()));
           }
         }
 
@@ -132,6 +142,7 @@ impl<S: SpartanExtensionField> Instance<S> {
       num_instances,
       max_num_cons_padded,
       num_cons_padded,
+      max_num_vars_padded,
       num_vars_padded,
       &A_scalar_list,
       &B_scalar_list,
@@ -674,6 +685,7 @@ impl<S: SpartanExtensionField> Instance<S> {
       block_max_num_cons,
       block_num_cons,
       block_num_vars,
+      vec![block_num_vars; num_instances],
       &A_list,
       &B_list,
       &C_list,
@@ -1048,6 +1060,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         pairwise_check_max_num_cons,
         pairwise_check_num_cons,
         4 * pairwise_check_num_vars,
+        vec![4 * pairwise_check_num_vars; 3],
         &A_list,
         &B_list,
         &C_list,
@@ -1299,6 +1312,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         perm_root_num_cons,
         vec![perm_root_num_cons],
         8 * num_vars,
+        vec![8 * num_vars],
         &A_list,
         &B_list,
         &C_list,

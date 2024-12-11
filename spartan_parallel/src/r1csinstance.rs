@@ -1,3 +1,4 @@
+use std::cmp::{max, min};
 use std::collections::HashMap;
 
 use crate::scalar::SpartanExtensionField;
@@ -14,6 +15,7 @@ use super::sparse_mlpoly::{
 };
 use super::timer::Timer;
 use flate2::{write::ZlibEncoder, Compression};
+use std::iter::zip;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
@@ -47,6 +49,8 @@ impl<S: SpartanExtensionField> AppendToTranscript for R1CSCommitment<S> {
 }
 
 pub struct R1CSDecommitment<S: SpartanExtensionField> {
+  num_cons: usize,
+  num_vars: usize,
   dense: MultiSparseMatPolynomialAsDense<S>,
 }
 
@@ -455,6 +459,7 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     let mut nnz_size: HashMap<usize, usize> = HashMap::new();
     let mut label_map: Vec<Vec<usize>> = Vec::new();
     let mut sparse_polys_list: Vec<Vec<&SparseMatPolynomial<S>>> = Vec::new();
+    let mut max_num_cons_list: Vec<usize> = Vec::new();
 
     for i in 0..self.num_instances {
       // A_list
@@ -462,46 +467,58 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
       if let Some(index) = nnz_size.get(&A_len) {
         label_map[*index].push(3 * i);
         sparse_polys_list[*index].push(&self.A_list[i]);
+        max_num_cons_list[*index] = max(max_num_cons_list[*index], self.num_cons[i]);
       } else {
         let next_label = nnz_size.len();
         nnz_size.insert(A_len, next_label);
         label_map.push(vec![3 * i]);
         sparse_polys_list.push(vec![&self.A_list[i]]);
+        max_num_cons_list.push(self.num_cons[i]);
       }
       // B_list
       let B_len = Self::next_power_of_eight(self.B_list[i].get_num_nz_entries());
       if let Some(index) = nnz_size.get(&B_len) {
         label_map[*index].push(3 * i + 1);
         sparse_polys_list[*index].push(&self.B_list[i]);
+        max_num_cons_list[*index] = max(max_num_cons_list[*index], self.num_cons[i]);
       } else {
         let next_label = nnz_size.len();
         nnz_size.insert(B_len, next_label);
         label_map.push(vec![3 * i + 1]);
         sparse_polys_list.push(vec![&self.B_list[i]]);
+        max_num_cons_list.push(self.num_cons[i]);
       }
       // C_list
       let C_len = Self::next_power_of_eight(self.C_list[i].get_num_nz_entries());
       if let Some(index) = nnz_size.get(&C_len) {
         label_map[*index].push(3 * i + 2);
         sparse_polys_list[*index].push(&self.C_list[i]);
+        max_num_cons_list[*index] = max(max_num_cons_list[*index], self.num_cons[i]);
       } else {
         let next_label = nnz_size.len();
         nnz_size.insert(C_len, next_label);
         label_map.push(vec![3 * i + 2]);
         sparse_polys_list.push(vec![&self.C_list[i]]);
+        max_num_cons_list.push(self.num_cons[i]);
       }
     }
 
+    println!("nnz_size: {:?}", nnz_size);
     let mut r1cs_comm_list = Vec::new();
     let mut r1cs_decomm_list = Vec::new();
-    for sparse_polys in sparse_polys_list {
+    println!("NUM_SP: {}", sparse_polys_list.len());
+    for (sparse_polys, max_num_cons) in zip(sparse_polys_list, max_num_cons_list) {
       let (comm, dense) = SparseMatPolynomial::multi_commit(&sparse_polys);
       let r1cs_comm = R1CSCommitment {
-        num_cons: self.num_instances * self.max_num_cons,
+        num_cons: max_num_cons.next_power_of_two(),
         num_vars: self.num_vars,
         comm,
       };
-      let r1cs_decomm = R1CSDecommitment { dense };
+      let r1cs_decomm = R1CSDecommitment {
+        num_cons: max_num_cons.next_power_of_two(),
+        num_vars: self.num_vars,
+        dense
+      };
 
       r1cs_comm_list.push(r1cs_comm);
       r1cs_decomm_list.push(r1cs_decomm);
@@ -526,7 +543,11 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
       comm,
     };
 
-    let r1cs_decomm = R1CSDecommitment { dense };
+    let r1cs_decomm = R1CSDecommitment {
+      num_cons: self.num_instances * self.max_num_cons,
+      num_vars: self.num_vars,
+      dense
+    };
 
     (r1cs_comm, r1cs_decomm)
   }
@@ -547,8 +568,15 @@ impl<S: SpartanExtensionField> R1CSEvalProof<S> {
     random_tape: &mut RandomTape<S>,
   ) -> R1CSEvalProof<S> {
     let timer = Timer::new("R1CSEvalProof::prove");
+    println!("RX_LEN: {}, RY_LEN: {}", rx.len(), ry.len());
+    println!("NUM_CONS: {}, NUM_VARS: {}", decomm.num_cons, decomm.num_vars);
+    let rx_header = rx[..rx.len() - min(rx.len(), decomm.num_cons.log_2())].iter().fold(
+      S::field_one(), |c, i| c * (S::field_one() - i.clone())
+    );
+    let rx_short = &rx[rx.len() - min(rx.len(), decomm.num_cons.log_2())..];
+    // let ry_short = &ry[..min(ry.len(), decomm.num_vars.log_2())];
     let proof =
-      SparseMatPolyEvalProof::prove(&decomm.dense, rx, ry, evals, transcript, random_tape);
+      SparseMatPolyEvalProof::prove(&decomm.dense, rx_header, rx_short, ry, evals, transcript, random_tape);
     timer.stop();
 
     R1CSEvalProof { proof }
@@ -562,6 +590,11 @@ impl<S: SpartanExtensionField> R1CSEvalProof<S> {
     evals: &Vec<S>,
     transcript: &mut Transcript,
   ) -> Result<(), ProofVerifyError> {
-    self.proof.verify(&comm.comm, rx, ry, evals, transcript)
+    let rx_header = rx[..rx.len() - min(rx.len(), comm.num_cons.log_2())].iter().fold(
+      S::field_one(), |c, i| c * (S::field_one() - i.clone())
+    );
+    let rx_short = &rx[rx.len() - min(rx.len(), comm.num_cons.log_2())..];
+    // let ry_short = &ry[..min(ry.len(), comm.num_vars.log_2())];
+    self.proof.verify(&comm.comm, rx_header, rx_short, ry, evals, transcript)
   }
 }

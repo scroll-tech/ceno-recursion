@@ -347,7 +347,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
     // compute vector-matrix product between L and Z viewed as a matrix
     let LZ = poly.bound(&L);
 
-    PolyEvalProof { v: LZ }
+    PolyEvalProof { v: Vec::new() }
   }
 
   pub fn verify(
@@ -440,7 +440,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
       // compute vector-matrix product between L and Z viewed as a matrix
       let LZ = poly.bound(L);
 
-      proof_list.push(PolyEvalProof{ v: LZ });
+      proof_list.push(PolyEvalProof{ v: Vec::new() });
     }
 
     proof_list
@@ -555,7 +555,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
         let LZ = poly.bound(&L);
         L_list.push(L);
         R_list.push(R);
-        LZ_list.push(LZ);
+        LZ_list.push(Vec::new());
       }
     }
 

@@ -607,11 +607,11 @@ pub struct SNARK<S: SpartanExtensionField> {
   perm_root_r1cs_eval_proof: R1CSEvalProof<S>,
 
   // Product proof for permutation
-  perm_poly_poly_list: Vec<S>,
-  proof_eval_perm_poly_prod_list: Vec<PolyEvalProof<S>>,
+  // perm_poly_poly_list: Vec<S>,
+  // proof_eval_perm_poly_prod_list: Vec<PolyEvalProof<S>>,
 
   // shift_proof: ShiftProofs<S>,
-  io_proof: IOProofs<S>,
+  // io_proof: IOProofs<S>,
 }
 
 // Sort block_num_proofs and record where each entry is
@@ -649,7 +649,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
   }
 
   // Computes proof size by commitment / non-commitment
-  fn compute_size(&self) -> (usize, usize, usize) {
+  fn compute_size(&self) -> (usize, usize, usize, usize) {
     /*
     let commit_size = bincode::serialize(&self.block_comm_vars_list).unwrap().len()
                            + bincode::serialize(&self.exec_comm_inputs).unwrap().len()
@@ -683,29 +683,27 @@ impl<S: SpartanExtensionField> SNARK<S> {
                            + bincode::serialize(&self.vir_mem_addr_comm_w3).unwrap().len()
                            + bincode::serialize(&self.vir_mem_addr_comm_w3_shifted).unwrap().len();
     */
-    let dense_commit_size = 0;
-    
-    let sparse_commit_size = bincode::serialize(&self.block_r1cs_eval_proof_list).unwrap().len()
-                                  + bincode::serialize(&self.pairwise_check_r1cs_eval_proof).unwrap().len()
-                                  + bincode::serialize(&self.perm_root_r1cs_eval_proof).unwrap().len()
-                                  + bincode::serialize(&self.proof_eval_perm_poly_prod_list).unwrap().len();
+    let dense_commit_size = 0;                              
 
-    let noncommit_size = bincode::serialize(&self.block_r1cs_sat_proof).unwrap().len()
+    let block_proof_size = bincode::serialize(&self.block_r1cs_sat_proof).unwrap().len()
                               + bincode::serialize(&self.block_inst_evals_bound_rp).unwrap().len()
                               + bincode::serialize(&self.block_inst_evals_list).unwrap().len()
+                              + bincode::serialize(&self.block_r1cs_eval_proof_list).unwrap().len();
 
-                              + bincode::serialize(&self.pairwise_check_r1cs_sat_proof).unwrap().len()
+    let pairwise_proof_size = bincode::serialize(&self.pairwise_check_r1cs_sat_proof).unwrap().len()
                               + bincode::serialize(&self.pairwise_check_inst_evals_bound_rp).unwrap().len()
                               + bincode::serialize(&self.pairwise_check_inst_evals_list).unwrap().len()
+                              + bincode::serialize(&self.pairwise_check_r1cs_eval_proof).unwrap().len();
 
-                              + bincode::serialize(&self.perm_root_r1cs_sat_proof).unwrap().len()
+    let perm_proof_size = bincode::serialize(&self.perm_root_r1cs_sat_proof).unwrap().len()
                               + bincode::serialize(&self.perm_root_inst_evals).unwrap().len()
-
-                              + bincode::serialize(&self.perm_poly_poly_list).unwrap().len()
+                              + bincode::serialize(&self.perm_root_r1cs_eval_proof).unwrap().len();
+                              // + bincode::serialize(&self.perm_poly_poly_list).unwrap().len()
+                              // + bincode::serialize(&self.proof_eval_perm_poly_prod_list).unwrap().len();
 
                               // + bincode::serialize(&self.shift_proof).unwrap().len()
-                              + bincode::serialize(&self.io_proof).unwrap().len();
-    (dense_commit_size, sparse_commit_size, noncommit_size)
+    // let io_proof_size = bincode::serialize(&self.io_proof).unwrap().len();
+    (dense_commit_size, block_proof_size, pairwise_proof_size, perm_proof_size)
   }
 
   /// A public computation to create a commitment to a list of R1CS instances
@@ -2233,6 +2231,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     // --
     // PERM_PRODUCT_PROOF
     // --
+    /*
     let timer_proof = Timer::new("Perm Product");
     // Record the prod of exec, blocks, mem_block, & mem_addr
     let (perm_poly_poly_list, proof_eval_perm_poly_prod_list) = {
@@ -2349,7 +2348,6 @@ impl<S: SpartanExtensionField> SNARK<S> {
         shifted_polys.push(&vir_mem_addr_w3_shifted_prover.poly_w[0]);
         header_len_list.push(6);
       }
-      /*
       let shift_proof = ShiftProofs::prove(
         orig_polys,
         shifted_polys,
@@ -2358,7 +2356,6 @@ impl<S: SpartanExtensionField> SNARK<S> {
         &mut random_tape,
       );
       shift_proof
-      */
     };
     timer_proof.stop();
 
@@ -2384,6 +2381,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       &mut random_tape,
     );
     timer_proof.stop();
+    */
 
     timer_prove.stop();
 
@@ -2402,11 +2400,11 @@ impl<S: SpartanExtensionField> SNARK<S> {
       perm_root_inst_evals,
       perm_root_r1cs_eval_proof,
 
-      perm_poly_poly_list,
-      proof_eval_perm_poly_prod_list,
+      // perm_poly_poly_list,
+      // proof_eval_perm_poly_prod_list,
 
       // shift_proof,
-      io_proof,
+      // io_proof,
     }
   }
 
@@ -2457,7 +2455,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
 
     transcript: &mut Transcript,
   ) -> Result<(), ProofVerifyError> {
-    let (_, _, sumcheck_size) = self.compute_size();
+    let (_, block_size, pairwise_size, perm_size) = self.compute_size();
     let meta_size = 
       // usize
       19 * std::mem::size_of::<usize>() +
@@ -3174,6 +3172,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     // --
     // PERM_PRODUCT_PROOF
     // --
+    /*
     {
       let timer_eval_opening = Timer::new("Perm Product");
       // Verify prod of exec, blocks, mem_block, & mem_addr
@@ -3368,10 +3367,13 @@ impl<S: SpartanExtensionField> SNARK<S> {
       transcript,
     )?;
     timer_proof.stop();
+    */
 
     timer_verify.stop();
 
-    println!("SUMCHECK SIZE: {} bytes", sumcheck_size);
+    println!("BLOCK SUMCHECK SIZE: {} bytes", block_size);
+    println!("PAIRWISE SUMCHECK SIZE: {} bytes", pairwise_size);
+    println!("PERM SUMCHECK SIZE: {} bytes", perm_size);
     println!("META SIZE: {} bytes", meta_size);
 
     Ok(())

@@ -655,14 +655,14 @@ impl<S: SpartanExtensionField> PolyEvalNetwork<S> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct HashLayerProof<S: SpartanExtensionField> {
+pub struct HashLayerProof<S: SpartanExtensionField> {
   eval_row: (Vec<S>, Vec<S>, S),
   eval_col: (Vec<S>, Vec<S>, S),
   eval_val: Vec<S>,
   eval_derefs: (Vec<S>, Vec<S>),
-  proof_ops: PolyEvalProof<S>,
-  proof_mem: PolyEvalProof<S>,
-  proof_derefs: DerefsEvalProof<S>,
+  pub proof_ops: PolyEvalProof<S>,
+  pub proof_mem: PolyEvalProof<S>,
+  pub proof_derefs: DerefsEvalProof<S>,
 }
 
 impl<S: SpartanExtensionField> HashLayerProof<S> {
@@ -980,12 +980,12 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct ProductLayerProof<S: SpartanExtensionField> {
+pub struct ProductLayerProof<S: SpartanExtensionField> {
   eval_row: (S, Vec<S>, Vec<S>, S),
   eval_col: (S, Vec<S>, Vec<S>, S),
   eval_val: (Vec<S>, Vec<S>),
-  proof_mem: ProductCircuitEvalProofBatched<S>,
-  proof_ops: ProductCircuitEvalProofBatched<S>,
+  pub proof_mem: ProductCircuitEvalProofBatched<S>,
+  pub proof_ops: ProductCircuitEvalProofBatched<S>,
 }
 
 impl<S: SpartanExtensionField> ProductLayerProof<S> {
@@ -998,6 +998,7 @@ impl<S: SpartanExtensionField> ProductLayerProof<S> {
     col_prod_layer: &mut ProductLayer<S>,
     dense: &MultiSparseMatPolynomialAsDense<S>,
     derefs: &Derefs<S>,
+    r_header: S,
     eval: &[S],
     transcript: &mut Transcript,
   ) -> (Self, Vec<S>, Vec<S>) {
@@ -1072,7 +1073,7 @@ impl<S: SpartanExtensionField> ProductLayerProof<S> {
       S::append_field_to_transcript(b"claim_eval_dotp_left", transcript, eval_dotp_left);
       S::append_field_to_transcript(b"claim_eval_dotp_right", transcript, eval_dotp_right);
 
-      assert_eq!(eval_dotp_left + eval_dotp_right, eval[i]);
+      assert_eq!(r_header * (eval_dotp_left + eval_dotp_right), eval[i]);
 
       eval_dotp_left_vec.push(eval_dotp_left);
       eval_dotp_right_vec.push(eval_dotp_right);
@@ -1149,9 +1150,14 @@ impl<S: SpartanExtensionField> ProductLayerProof<S> {
     &self,
     num_ops: usize,
     num_cells: usize,
+    r_header: S,
     eval: &[S],
     transcript: &mut Transcript,
   ) -> Result<(Vec<S>, Vec<S>, Vec<S>, Vec<S>, Vec<S>), ProofVerifyError> {
+    let proof_mem_len = bincode::serialize(&self.proof_mem).unwrap().len();
+    let proof_ops_len = bincode::serialize(&self.proof_ops).unwrap().len();
+    println!("PROOF_MEM: {}, PROOF_OPS: {}", proof_mem_len, proof_ops_len);
+
     <Transcript as ProofTranscript<S>>::append_protocol_name(
       transcript,
       ProductLayerProof::<S>::protocol_name(),
@@ -1195,7 +1201,7 @@ impl<S: SpartanExtensionField> ProductLayerProof<S> {
     assert_eq!(eval_dotp_left.len(), num_instances);
     let mut claims_dotp_circuit: Vec<S> = Vec::new();
     for i in 0..num_instances {
-      assert_eq!(eval_dotp_left[i] + eval_dotp_right[i], eval[i]);
+      assert_eq!(r_header * (eval_dotp_left[i] + eval_dotp_right[i]), eval[i]);
       S::append_field_to_transcript(b"claim_eval_dotp_left", transcript, eval_dotp_left[i]);
       S::append_field_to_transcript(b"claim_eval_dotp_right", transcript, eval_dotp_right[i]);
 
@@ -1235,9 +1241,9 @@ impl<S: SpartanExtensionField> ProductLayerProof<S> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct PolyEvalNetworkProof<S: SpartanExtensionField> {
-  proof_prod_layer: ProductLayerProof<S>,
-  proof_hash_layer: HashLayerProof<S>,
+pub struct PolyEvalNetworkProof<S: SpartanExtensionField> {
+  pub proof_prod_layer: ProductLayerProof<S>,
+  pub proof_hash_layer: HashLayerProof<S>,
 }
 
 impl<S: SpartanExtensionField> PolyEvalNetworkProof<S> {
@@ -1249,6 +1255,7 @@ impl<S: SpartanExtensionField> PolyEvalNetworkProof<S> {
     network: &mut PolyEvalNetwork<S>,
     dense: &MultiSparseMatPolynomialAsDense<S>,
     derefs: &Derefs<S>,
+    r_header: S,
     evals: &[S],
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
@@ -1263,6 +1270,7 @@ impl<S: SpartanExtensionField> PolyEvalNetworkProof<S> {
       &mut network.col_layers.prod_layer,
       dense,
       derefs,
+      r_header,
       evals,
       transcript,
     );
@@ -1285,6 +1293,7 @@ impl<S: SpartanExtensionField> PolyEvalNetworkProof<S> {
   pub fn verify(
     &self,
     comm: &SparseMatPolyCommitment<S>,
+    r_header: S,
     evals: &[S],
     rx: &[S],
     ry: &[S],
@@ -1307,7 +1316,7 @@ impl<S: SpartanExtensionField> PolyEvalNetworkProof<S> {
 
     let (claims_mem, rand_mem, mut claims_ops, claims_dotp, rand_ops) = self
       .proof_prod_layer
-      .verify(num_ops, num_cells, evals, transcript)?;
+      .verify(num_ops, num_cells, r_header, evals, transcript)?;
     assert_eq!(claims_mem.len(), 4);
     assert_eq!(claims_ops.len(), 4 * num_instances);
     assert_eq!(claims_dotp.len(), 3 * num_instances);
@@ -1347,7 +1356,7 @@ impl<S: SpartanExtensionField> PolyEvalNetworkProof<S> {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SparseMatPolyEvalProof<S: SpartanExtensionField> {
-  poly_eval_network_proof: PolyEvalNetworkProof<S>,
+  pub poly_eval_network_proof: PolyEvalNetworkProof<S>,
 }
 
 impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
@@ -1375,12 +1384,17 @@ impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
 
   pub fn prove(
     dense: &MultiSparseMatPolynomialAsDense<S>,
+    r_header: S,
     rx: &[S], // point at which the polynomial is evaluated
     ry: &[S],
     evals: &[S], // a vector evaluation of \widetilde{M}(r = (rx,ry)) for each M
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
   ) -> SparseMatPolyEvalProof<S> {
+    println!("NNZ_LEN: {}", dense.val[0].len());
+    println!("RX_LEN: {}", rx.len());
+    println!("RY_LEN: {}", ry.len());
+    println!("EVALS_LEN: {}", evals.len());
     <Transcript as ProofTranscript<S>>::append_protocol_name(
       transcript,
       SparseMatPolyEvalProof::<S>::protocol_name(),
@@ -1421,7 +1435,7 @@ impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
 
       let timer_eval_network = Timer::new("evalproof_layered_network");
       let poly_eval_network_proof =
-        PolyEvalNetworkProof::prove(&mut net, dense, &derefs, evals, transcript, random_tape);
+        PolyEvalNetworkProof::prove(&mut net, dense, &derefs, r_header, evals, transcript, random_tape);
       timer_eval_network.stop();
 
       poly_eval_network_proof
@@ -1435,6 +1449,7 @@ impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
   pub fn verify(
     &self,
     comm: &SparseMatPolyCommitment<S>,
+    r_header: S,
     rx: &[S], // point at which the polynomial is evaluated
     ry: &[S],
     evals: &[S], // evaluation of \widetilde{M}(r = (rx,ry))
@@ -1456,6 +1471,7 @@ impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
 
     self.poly_eval_network_proof.verify(
       comm,
+      r_header, 
       evals,
       &rx_ext,
       &ry_ext,

@@ -1,6 +1,7 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::needless_range_loop)]
+use crate::mle::{Base, Ext};
 use crate::scalar::SpartanExtensionField;
 
 use super::dense_mlpoly::DensePolynomial;
@@ -12,6 +13,7 @@ use super::random::RandomTape;
 use super::timer::Timer;
 use super::transcript::{AppendToTranscript, ProofTranscript};
 use core::cmp::Ordering;
+use ff::Field;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
@@ -19,11 +21,11 @@ use serde::{Deserialize, Serialize};
 pub struct SparseMatEntry<S: SpartanExtensionField> {
   row: usize,
   col: usize,
-  val: S,
+  val: S::BaseField,
 }
 
 impl<S: SpartanExtensionField> SparseMatEntry<S> {
-  pub fn new(row: usize, col: usize, val: S) -> Self {
+  pub fn new(row: usize, col: usize, val: S::BaseField) -> Self {
     SparseMatEntry { row, col, val }
   }
 }
@@ -36,13 +38,16 @@ pub struct SparseMatPolynomial<S: SpartanExtensionField> {
 }
 
 pub struct Derefs<S: SpartanExtensionField> {
-  row_ops_val: Vec<DensePolynomial<S>>,
-  col_ops_val: Vec<DensePolynomial<S>>,
-  comb: DensePolynomial<S>,
+  row_ops_val: Vec<DensePolynomial<S, Ext>>,
+  col_ops_val: Vec<DensePolynomial<S, Ext>>,
+  comb: DensePolynomial<S, Ext>,
 }
 
 impl<S: SpartanExtensionField> Derefs<S> {
-  pub fn new(row_ops_val: Vec<DensePolynomial<S>>, col_ops_val: Vec<DensePolynomial<S>>) -> Self {
+  pub fn new(
+    row_ops_val: Vec<DensePolynomial<S, Ext>>,
+    col_ops_val: Vec<DensePolynomial<S, Ext>>,
+  ) -> Self {
     assert_eq!(row_ops_val.len(), col_ops_val.len());
 
     let ret_row_ops_val = row_ops_val.clone();
@@ -74,7 +79,7 @@ impl<S: SpartanExtensionField> DerefsEvalProof<S> {
   }
 
   fn prove_single(
-    joint_poly: &DensePolynomial<S>,
+    joint_poly: &DensePolynomial<S, Ext>,
     r: &[S],
     evals: Vec<S>,
     transcript: &mut Transcript,
@@ -187,9 +192,9 @@ impl<S: SpartanExtensionField> DerefsEvalProof<S> {
 #[derive(Clone)]
 struct AddrTimestamps<S: SpartanExtensionField> {
   ops_addr_usize: Vec<Vec<usize>>,
-  ops_addr: Vec<DensePolynomial<S>>,
-  read_ts: Vec<DensePolynomial<S>>,
-  audit_ts: DensePolynomial<S>,
+  ops_addr: Vec<DensePolynomial<S, Base>>,
+  read_ts: Vec<DensePolynomial<S, Base>>,
+  audit_ts: DensePolynomial<S, Base>,
 }
 
 impl<S: SpartanExtensionField> AddrTimestamps<S> {
@@ -199,8 +204,8 @@ impl<S: SpartanExtensionField> AddrTimestamps<S> {
     }
 
     let mut audit_ts = vec![0usize; num_cells];
-    let mut ops_addr_vec: Vec<DensePolynomial<S>> = Vec::new();
-    let mut read_ts_vec: Vec<DensePolynomial<S>> = Vec::new();
+    let mut ops_addr_vec: Vec<DensePolynomial<S, Base>> = Vec::new();
+    let mut read_ts_vec: Vec<DensePolynomial<S, Base>> = Vec::new();
     for ops_addr_inst in ops_addr.iter() {
       let mut read_ts = vec![0usize; num_ops];
 
@@ -228,7 +233,7 @@ impl<S: SpartanExtensionField> AddrTimestamps<S> {
     }
   }
 
-  fn deref_mem(addr: &[usize], mem_val: &[S]) -> DensePolynomial<S> {
+  fn deref_mem(addr: &[usize], mem_val: &[S]) -> DensePolynomial<S, Ext> {
     DensePolynomial::new(
       (0..addr.len())
         .map(|i| {
@@ -239,20 +244,20 @@ impl<S: SpartanExtensionField> AddrTimestamps<S> {
     )
   }
 
-  pub fn deref(&self, mem_val: &[S]) -> Vec<DensePolynomial<S>> {
+  pub fn deref(&self, mem_val: &[S]) -> Vec<DensePolynomial<S, Ext>> {
     (0..self.ops_addr.len())
       .map(|i| AddrTimestamps::deref_mem(&self.ops_addr_usize[i], mem_val))
-      .collect::<Vec<DensePolynomial<S>>>()
+      .collect::<Vec<DensePolynomial<S, Ext>>>()
   }
 }
 
 pub struct MultiSparseMatPolynomialAsDense<S: SpartanExtensionField> {
   batch_size: usize,
-  val: Vec<DensePolynomial<S>>,
+  val: Vec<DensePolynomial<S, Base>>,
   row: AddrTimestamps<S>,
   col: AddrTimestamps<S>,
-  comb_ops: DensePolynomial<S>,
-  comb_mem: DensePolynomial<S>,
+  comb_ops: DensePolynomial<S, Base>,
+  comb_mem: DensePolynomial<S, Base>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -260,6 +265,7 @@ pub struct SparseMatPolyCommitment<S: SpartanExtensionField> {
   batch_size: usize,
   num_ops: usize,
   num_mem_cells: usize,
+  // TODO: add mpcs commitment
   _phantom: S,
 }
 
@@ -284,11 +290,11 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
     self.M.len().next_power_of_two()
   }
 
-  fn sparse_to_dense_vecs(&self, N: usize) -> (Vec<usize>, Vec<usize>, Vec<S>) {
+  fn sparse_to_dense_vecs(&self, N: usize) -> (Vec<usize>, Vec<usize>, Vec<S::BaseField>) {
     assert!(N >= self.get_num_nz_entries());
     let mut ops_row: Vec<usize> = vec![0; N];
     let mut ops_col: Vec<usize> = vec![0; N];
-    let mut val: Vec<S> = vec![S::field_zero(); N];
+    let mut val: Vec<S::BaseField> = vec![S::BaseField::ZERO; N];
 
     for i in 0..self.M.len() {
       ops_row[i] = self.M[i].row;
@@ -314,7 +320,7 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
 
     let mut ops_row_vec: Vec<Vec<usize>> = Vec::new();
     let mut ops_col_vec: Vec<Vec<usize>> = Vec::new();
-    let mut val_vec: Vec<DensePolynomial<S>> = Vec::new();
+    let mut val_vec: Vec<DensePolynomial<S, Ext>> = Vec::new();
     for poly in sparse_polys {
       let (ops_row, ops_col, val) = poly.sparse_to_dense_vecs(N);
       ops_row_vec.push(ops_row);
@@ -502,16 +508,16 @@ struct Layers<S: SpartanExtensionField> {
 impl<S: SpartanExtensionField> Layers<S> {
   fn build_hash_layer(
     eval_table: &[S],
-    addrs_vec: &[DensePolynomial<S>],
-    derefs_vec: &[DensePolynomial<S>],
-    read_ts_vec: &[DensePolynomial<S>],
-    audit_ts: &DensePolynomial<S>,
+    addrs_vec: &[DensePolynomial<S, Ext>],
+    derefs_vec: &[DensePolynomial<S, Ext>],
+    read_ts_vec: &[DensePolynomial<S, Ext>],
+    audit_ts: &DensePolynomial<S, Ext>,
     r_mem_check: &(S, S),
   ) -> (
-    DensePolynomial<S>,
-    Vec<DensePolynomial<S>>,
-    Vec<DensePolynomial<S>>,
-    DensePolynomial<S>,
+    DensePolynomial<S, Ext>,
+    Vec<DensePolynomial<S, Ext>>,
+    Vec<DensePolynomial<S, Ext>>,
+    DensePolynomial<S, Ext>,
   ) {
     let (r_hash, r_multiset_check) = r_mem_check;
 
@@ -539,8 +545,8 @@ impl<S: SpartanExtensionField> Layers<S> {
     );
 
     // hash read and write that depends on #instances
-    let mut poly_read_hashed_vec: Vec<DensePolynomial<S>> = Vec::new();
-    let mut poly_write_hashed_vec: Vec<DensePolynomial<S>> = Vec::new();
+    let mut poly_read_hashed_vec: Vec<DensePolynomial<S, Ext>> = Vec::new();
+    let mut poly_write_hashed_vec: Vec<DensePolynomial<S, Ext>> = Vec::new();
     for i in 0..addrs_vec.len() {
       let (addrs, derefs, read_ts) = (&addrs_vec[i], &derefs_vec[i], &read_ts_vec[i]);
       assert_eq!(addrs.len(), derefs.len());
@@ -578,7 +584,7 @@ impl<S: SpartanExtensionField> Layers<S> {
   pub fn new(
     eval_table: &[S],
     addr_timestamps: &AddrTimestamps<S>,
-    poly_ops_val: &[DensePolynomial<S>],
+    poly_ops_val: &[DensePolynomial<S, Ext>],
     r_mem_check: &(S, S),
   ) -> Self {
     let (poly_init_hashed, poly_read_hashed_vec, poly_write_hashed_vec, poly_audit_hashed) =

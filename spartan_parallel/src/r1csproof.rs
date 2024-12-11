@@ -8,6 +8,7 @@ use super::random::RandomTape;
 use super::sumcheck::SumcheckInstanceProof;
 use super::timer::Timer;
 use super::transcript::ProofTranscript;
+use crate::mle::Ext;
 use crate::scalar::SpartanExtensionField;
 use crate::{ProverWitnessSecInfo, VerifierWitnessSecInfo};
 use merlin::Transcript;
@@ -30,9 +31,9 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     num_rounds_p: usize,
     num_proofs: &Vec<usize>,
     num_cons: &Vec<usize>,
-    evals_tau_p: &mut DensePolynomial<S>,
-    evals_tau_q: &mut DensePolynomial<S>,
-    evals_tau_x: &mut DensePolynomial<S>,
+    evals_tau_p: &mut DensePolynomial<S, Ext>,
+    evals_tau_q: &mut DensePolynomial<S, Ext>,
+    evals_tau_x: &mut DensePolynomial<S, Ext>,
     evals_Az: &mut DensePolynomialPqx<S>,
     evals_Bz: &mut DensePolynomialPqx<S>,
     evals_Cz: &mut DensePolynomialPqx<S>,
@@ -73,7 +74,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     num_witness_secs: usize,
     num_inputs: Vec<usize>,
     claim: &S,
-    evals_eq: &mut DensePolynomial<S>,
+    evals_eq: &mut DensePolynomial<S, Ext>,
     evals_ABC: &mut DensePolynomialPqx<S>,
     evals_z: &mut DensePolynomialPqx<S>,
     transcript: &mut Transcript,

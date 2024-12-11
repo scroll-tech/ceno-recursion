@@ -29,6 +29,7 @@ thiserror = "1"
 bellman = { git = "https://github.com/alex-ozdemir/bellman.git", branch = "mirage", optional = true }
 rayon = { version = "1", optional = true }
 ff = { version = "0.12", optional = true }
+halo2curves = "0.1.0"
 fxhash = "0.2"
 good_lp = { version = "1.10", features = [
   "lp-solvers",

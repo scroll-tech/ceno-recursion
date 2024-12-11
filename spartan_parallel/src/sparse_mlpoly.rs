@@ -1,7 +1,7 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::needless_range_loop)]
-use crate::mle::Ext;
+use crate::mle::{Base, Ext};
 use crate::scalar::SpartanExtensionField;
 
 use super::dense_mlpoly::DensePolynomial;
@@ -192,9 +192,9 @@ impl<S: SpartanExtensionField> DerefsEvalProof<S> {
 #[derive(Clone)]
 struct AddrTimestamps<S: SpartanExtensionField> {
   ops_addr_usize: Vec<Vec<usize>>,
-  ops_addr: Vec<DensePolynomial<S, Ext>>,
-  read_ts: Vec<DensePolynomial<S, Ext>>,
-  audit_ts: DensePolynomial<S, Ext>,
+  ops_addr: Vec<DensePolynomial<S, Base>>,
+  read_ts: Vec<DensePolynomial<S, Base>>,
+  audit_ts: DensePolynomial<S, Base>,
 }
 
 impl<S: SpartanExtensionField> AddrTimestamps<S> {
@@ -204,8 +204,8 @@ impl<S: SpartanExtensionField> AddrTimestamps<S> {
     }
 
     let mut audit_ts = vec![0usize; num_cells];
-    let mut ops_addr_vec: Vec<DensePolynomial<S, Ext>> = Vec::new();
-    let mut read_ts_vec: Vec<DensePolynomial<S, Ext>> = Vec::new();
+    let mut ops_addr_vec: Vec<DensePolynomial<S, Base>> = Vec::new();
+    let mut read_ts_vec: Vec<DensePolynomial<S, Base>> = Vec::new();
     for ops_addr_inst in ops_addr.iter() {
       let mut read_ts = vec![0usize; num_ops];
 
@@ -253,11 +253,11 @@ impl<S: SpartanExtensionField> AddrTimestamps<S> {
 
 pub struct MultiSparseMatPolynomialAsDense<S: SpartanExtensionField> {
   batch_size: usize,
-  val: Vec<DensePolynomial<S, Ext>>,
+  val: Vec<DensePolynomial<S, Base>>,
   row: AddrTimestamps<S>,
   col: AddrTimestamps<S>,
-  comb_ops: DensePolynomial<S, Ext>,
-  comb_mem: DensePolynomial<S, Ext>,
+  comb_ops: DensePolynomial<S, Base>,
+  comb_mem: DensePolynomial<S, Base>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

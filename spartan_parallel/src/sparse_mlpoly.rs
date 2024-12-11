@@ -13,6 +13,7 @@ use super::random::RandomTape;
 use super::timer::Timer;
 use super::transcript::{AppendToTranscript, ProofTranscript};
 use core::cmp::Ordering;
+use ff::Field;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
@@ -20,11 +21,11 @@ use serde::{Deserialize, Serialize};
 pub struct SparseMatEntry<S: SpartanExtensionField> {
   row: usize,
   col: usize,
-  val: S,
+  val: S::BaseField,
 }
 
 impl<S: SpartanExtensionField> SparseMatEntry<S> {
-  pub fn new(row: usize, col: usize, val: S) -> Self {
+  pub fn new(row: usize, col: usize, val: S::BaseField) -> Self {
     SparseMatEntry { row, col, val }
   }
 }
@@ -264,6 +265,7 @@ pub struct SparseMatPolyCommitment<S: SpartanExtensionField> {
   batch_size: usize,
   num_ops: usize,
   num_mem_cells: usize,
+  // TODO: add mpcs commitment
   _phantom: S,
 }
 
@@ -288,11 +290,11 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
     self.M.len().next_power_of_two()
   }
 
-  fn sparse_to_dense_vecs(&self, N: usize) -> (Vec<usize>, Vec<usize>, Vec<S>) {
+  fn sparse_to_dense_vecs(&self, N: usize) -> (Vec<usize>, Vec<usize>, Vec<S::BaseField>) {
     assert!(N >= self.get_num_nz_entries());
     let mut ops_row: Vec<usize> = vec![0; N];
     let mut ops_col: Vec<usize> = vec![0; N];
-    let mut val: Vec<S> = vec![S::field_zero(); N];
+    let mut val: Vec<S::BaseField> = vec![S::BaseField::ZERO; N];
 
     for i in 0..self.M.len() {
       ops_row[i] = self.M[i].row;

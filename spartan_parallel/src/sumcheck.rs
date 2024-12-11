@@ -2,6 +2,7 @@
 #![allow(clippy::type_complexity)]
 use crate::custom_dense_mlpoly::DensePolynomialPqx;
 use crate::math::Math;
+use crate::mle::Ext;
 use crate::scalar::SpartanExtensionField;
 
 use super::dense_mlpoly::DensePolynomial;
@@ -73,9 +74,9 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
   pub fn prove_cubic<F>(
     claim: &S,
     num_rounds: usize,
-    poly_A: &mut DensePolynomial<S>,
-    poly_B: &mut DensePolynomial<S>,
-    poly_C: &mut DensePolynomial<S>,
+    poly_A: &mut DensePolynomial<S, Ext>,
+    poly_B: &mut DensePolynomial<S, Ext>,
+    poly_C: &mut DensePolynomial<S, Ext>,
     comb_func: F,
     transcript: &mut Transcript,
   ) -> (Self, Vec<S>, Vec<S>)
@@ -147,14 +148,14 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     claim: &S,
     num_rounds: usize,
     poly_vec_par: (
-      &mut Vec<&mut DensePolynomial<S>>,
-      &mut Vec<&mut DensePolynomial<S>>,
-      &mut DensePolynomial<S>,
+      &mut Vec<&mut DensePolynomial<S, Ext>>,
+      &mut Vec<&mut DensePolynomial<S, Ext>>,
+      &mut DensePolynomial<S, Ext>,
     ),
     poly_vec_seq: (
-      &mut Vec<&mut DensePolynomial<S>>,
-      &mut Vec<&mut DensePolynomial<S>>,
-      &mut Vec<&mut DensePolynomial<S>>,
+      &mut Vec<&mut DensePolynomial<S, Ext>>,
+      &mut Vec<&mut DensePolynomial<S, Ext>>,
+      &mut Vec<&mut DensePolynomial<S, Ext>>,
     ),
     coeffs: &[S],
     comb_func: F,
@@ -327,7 +328,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     single_inst: bool, // indicates whether poly_B only has one instance
     num_witness_secs: usize,
     mut num_inputs: Vec<usize>,
-    poly_A: &mut DensePolynomial<S>,
+    poly_A: &mut DensePolynomial<S, Ext>,
     poly_B: &mut DensePolynomialPqx<S>,
     poly_C: &mut DensePolynomialPqx<S>,
     comb_func: F,
@@ -513,9 +514,9 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     num_rounds_p: usize,
     mut num_proofs: Vec<usize>,
     mut num_cons: Vec<usize>,
-    poly_Ap: &mut DensePolynomial<S>,
-    poly_Aq: &mut DensePolynomial<S>,
-    poly_Ax: &mut DensePolynomial<S>,
+    poly_Ap: &mut DensePolynomial<S, Ext>,
+    poly_Aq: &mut DensePolynomial<S, Ext>,
+    poly_Ax: &mut DensePolynomial<S, Ext>,
     poly_B: &mut DensePolynomialPqx<S>,
     poly_C: &mut DensePolynomialPqx<S>,
     poly_D: &mut DensePolynomialPqx<S>,

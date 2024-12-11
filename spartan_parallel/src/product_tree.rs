@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use crate::mle::Ext;
 use crate::scalar::SpartanExtensionField;
 
 use super::dense_mlpoly::DensePolynomial;
@@ -11,15 +12,15 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 pub struct ProductCircuit<S: SpartanExtensionField> {
-  left_vec: Vec<DensePolynomial<S>>,
-  right_vec: Vec<DensePolynomial<S>>,
+  left_vec: Vec<DensePolynomial<S, Ext>>,
+  right_vec: Vec<DensePolynomial<S, Ext>>,
 }
 
 impl<S: SpartanExtensionField> ProductCircuit<S> {
   fn compute_layer(
-    inp_left: &DensePolynomial<S>,
-    inp_right: &DensePolynomial<S>,
-  ) -> (DensePolynomial<S>, DensePolynomial<S>) {
+    inp_left: &DensePolynomial<S, Ext>,
+    inp_right: &DensePolynomial<S, Ext>,
+  ) -> (DensePolynomial<S, Ext>, DensePolynomial<S, Ext>) {
     let len = inp_left.len() + inp_right.len();
     let outp_left = (0..len / 4)
       .map(|i| inp_left[i] * inp_right[i])
@@ -34,9 +35,9 @@ impl<S: SpartanExtensionField> ProductCircuit<S> {
     )
   }
 
-  pub fn new(poly: &DensePolynomial<S>) -> Self {
-    let mut left_vec: Vec<DensePolynomial<S>> = Vec::new();
-    let mut right_vec: Vec<DensePolynomial<S>> = Vec::new();
+  pub fn new(poly: &DensePolynomial<S, Ext>) -> Self {
+    let mut left_vec: Vec<DensePolynomial<S, Ext>> = Vec::new();
+    let mut right_vec: Vec<DensePolynomial<S, Ext>> = Vec::new();
 
     let num_layers = poly.len().log_2();
     let (outp_left, outp_right) = poly.split(poly.len() / 2);
@@ -66,16 +67,16 @@ impl<S: SpartanExtensionField> ProductCircuit<S> {
 
 #[derive(Clone)]
 pub struct DotProductCircuit<S: SpartanExtensionField> {
-  left: DensePolynomial<S>,
-  right: DensePolynomial<S>,
-  weight: DensePolynomial<S>,
+  left: DensePolynomial<S, Ext>,
+  right: DensePolynomial<S, Ext>,
+  weight: DensePolynomial<S, Ext>,
 }
 
 impl<S: SpartanExtensionField> DotProductCircuit<S> {
   pub fn new(
-    left: DensePolynomial<S>,
-    right: DensePolynomial<S>,
-    weight: DensePolynomial<S>,
+    left: DensePolynomial<S, Ext>,
+    right: DensePolynomial<S, Ext>,
+    weight: DensePolynomial<S, Ext>,
   ) -> Self {
     assert_eq!(left.len(), right.len());
     assert_eq!(left.len(), weight.len());
@@ -281,8 +282,8 @@ impl<S: SpartanExtensionField> ProductCircuitEvalProofBatched<S> {
         *poly_A_comp * *poly_B_comp * *poly_C_comp
       };
 
-      let mut poly_A_batched_par: Vec<&mut DensePolynomial<S>> = Vec::new();
-      let mut poly_B_batched_par: Vec<&mut DensePolynomial<S>> = Vec::new();
+      let mut poly_A_batched_par: Vec<&mut DensePolynomial<S, Ext>> = Vec::new();
+      let mut poly_B_batched_par: Vec<&mut DensePolynomial<S, Ext>> = Vec::new();
       for prod_circuit in prod_circuit_vec.iter_mut() {
         poly_A_batched_par.push(&mut prod_circuit.left_vec[layer_id]);
         poly_B_batched_par.push(&mut prod_circuit.right_vec[layer_id])
@@ -294,9 +295,9 @@ impl<S: SpartanExtensionField> ProductCircuitEvalProofBatched<S> {
       );
 
       // prepare sequential instances that don't share poly_C
-      let mut poly_A_batched_seq: Vec<&mut DensePolynomial<S>> = Vec::new();
-      let mut poly_B_batched_seq: Vec<&mut DensePolynomial<S>> = Vec::new();
-      let mut poly_C_batched_seq: Vec<&mut DensePolynomial<S>> = Vec::new();
+      let mut poly_A_batched_seq: Vec<&mut DensePolynomial<S, Ext>> = Vec::new();
+      let mut poly_B_batched_seq: Vec<&mut DensePolynomial<S, Ext>> = Vec::new();
+      let mut poly_C_batched_seq: Vec<&mut DensePolynomial<S, Ext>> = Vec::new();
       if layer_id == 0 && !dotp_circuit_vec.is_empty() {
         // add additional claims
         for item in dotp_circuit_vec.iter() {

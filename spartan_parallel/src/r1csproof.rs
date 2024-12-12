@@ -662,12 +662,14 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
           p
         }
       };
-      let c = |i: usize| 
+      let c = |i: usize| {
         if witness_secs[i].num_inputs[wit_sec_p(i)] >= max_num_inputs {
           self.eval_vars_at_ry_list[i][wit_sec_p(i)]
         } else {
-          self.eval_vars_at_ry_list[i][wit_sec_p(i)] * ry_factors[num_rounds_y - witness_secs[i].num_inputs[wit_sec_p(i)].log_2()]
-        };
+          self.eval_vars_at_ry_list[i][wit_sec_p(i)]
+            * ry_factors[num_rounds_y - witness_secs[i].num_inputs[wit_sec_p(i)].log_2()]
+        }
+      };
       let prefix_list = match num_witness_secs.next_power_of_two() {
         1 => {
           vec![S::field_one()]
@@ -699,7 +701,8 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
           panic!("Unsupported num_witness_secs: {}", num_witness_secs);
         }
       };
-      let mut eval_vars_comb = (1..num_witness_secs).fold(prefix_list[0] * c(0), |s, i| s + prefix_list[i] * c(i));
+      let mut eval_vars_comb =
+        (1..num_witness_secs).fold(prefix_list[0] * c(0), |s, i| s + prefix_list[i] * c(i));
       for q in 0..(num_rounds_q - num_proofs[p].log_2()) {
         eval_vars_comb *= S::field_one() - rq[q];
       }
@@ -707,8 +710,9 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     }
 
     let EQ_p = &EqPolynomial::new(rp.clone()).evals()[..num_instances];
-    let expected_eval_vars_at_ry = zip(EQ_p, expected_eval_vars_list).fold(S::field_zero(), |s, (a, b)| s + *a * b);
-  
+    let expected_eval_vars_at_ry =
+      zip(EQ_p, expected_eval_vars_list).fold(S::field_zero(), |s, (a, b)| s + *a * b);
+
     assert_eq!(expected_eval_vars_at_ry, self.eval_vars_at_ry);
 
     timer_commit_opening.stop();

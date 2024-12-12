@@ -1308,16 +1308,29 @@ fn run_spartan_proof<S: SpartanExtensionField>(
     println!("Generating Circuits...");
     // --
     // BLOCK INSTANCES
+    // block_inst is used by sumcheck. Every block has the same number of variables
     let (block_num_vars, block_num_cons, block_num_non_zero_entries, mut block_inst) =
-        Instance::gen_block_inst::<true>(
-            block_num_instances_bound,
-            num_vars,
-            &ctk.args,
-            num_inputs_unpadded,
-            &block_num_phy_ops,
-            &block_num_vir_ops,
-            &ctk.num_vars_per_block,
-            &rtk.block_num_proofs,
+        Instance::gen_block_inst::<true, false>(
+        block_num_instances_bound,
+        num_vars,
+        &ctk.args,
+        num_inputs_unpadded,
+        &block_num_phy_ops,
+        &block_num_vir_ops,
+        &ctk.num_vars_per_block,
+        &rtk.block_num_proofs,
+        );
+    // block_inst is used by commitment. Every block has different number of variables
+    let (_, _, _, block_inst_for_commit) =
+        Instance::<S>::gen_block_inst::<true, true>(
+        block_num_instances_bound,
+        num_vars,
+        &ctk.args,
+        num_inputs_unpadded,
+        &block_num_phy_ops,
+        &block_num_vir_ops,
+        &ctk.num_vars_per_block,
+        &rtk.block_num_proofs,
         );
     println!("Finished Block");
 
@@ -1355,7 +1368,7 @@ fn run_spartan_proof<S: SpartanExtensionField>(
     println!("Comitting Circuits...");
     // block_comm_map records the sparse_polys committed in each commitment
     // Note that A, B, C are committed separately, so sparse_poly[3*i+2] corresponds to poly C of instance i
-    let (block_comm_map, block_comm_list, block_decomm_list) = SNARK::multi_encode(&block_inst);
+    let (block_comm_map, block_comm_list, block_decomm_list) = SNARK::multi_encode(&block_inst_for_commit);
     println!("Finished Block");
     let (pairwise_check_comm, pairwise_check_decomm) = SNARK::encode(&pairwise_check_inst);
     println!("Finished Pairwise");

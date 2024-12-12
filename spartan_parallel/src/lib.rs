@@ -1957,9 +1957,9 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let timer_eval = Timer::new("eval_sparse_polys");
 
       // Per instance evaluation is unsorted
-      let inst_evals_list = block_inst_unsorted.inst.multi_evaluate(&rx, &ry);
+      let inst_evals_list = block_inst_unsorted.inst.multi_evaluate::<true>(&rx, &ry);
       // RP-bound evaluation is sorted
-      let (_, inst_evals_bound_rp) = block_inst.inst.multi_evaluate_bound_rp(&rp, &rx, &ry);
+      let (_, inst_evals_bound_rp) = block_inst.inst.multi_evaluate_bound_rp::<true>(&rp, &rx, &ry);
       timer_eval.stop();
 
       for r in &inst_evals_list {
@@ -1975,7 +1975,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let r1cs_eval_proof_list = {
         let mut r1cs_eval_proof_list = Vec::new();
         for i in 0..block_comm_list.len() {
-          let proof = R1CSEvalProof::prove(
+          let proof = R1CSEvalProof::prove::<true>(
             &block_decomm_list[i].decomm,
             &rx,
             &ry,
@@ -2076,11 +2076,11 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let timer_eval = Timer::new("eval_sparse_polys");
 
       // Per instance evaluation is unsorted
-      let inst_evals_list = pairwise_check_inst_unsorted.inst.multi_evaluate(&rx, &ry);
+      let inst_evals_list = pairwise_check_inst_unsorted.inst.multi_evaluate::<false>(&rx, &ry);
       // RP-bound evaluation is sorted
       let (_, inst_evals_bound_rp) = pairwise_check_inst
         .inst
-        .multi_evaluate_bound_rp(&rp, &rx, &ry);
+        .multi_evaluate_bound_rp::<false>(&rp, &rx, &ry);
       timer_eval.stop();
 
       for r in &inst_evals_list {
@@ -2093,7 +2093,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let _: S = transcript.challenge_scalar(b"challenge_c2");
 
       let r1cs_eval_proof = {
-        let proof = R1CSEvalProof::prove(
+        let proof = R1CSEvalProof::prove::<false>(
           &pairwise_check_decomm.decomm,
           &rx,
           &ry,
@@ -2210,7 +2210,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       timer_eval.stop();
 
       let r1cs_eval_proof = {
-        let proof = R1CSEvalProof::prove(
+        let proof = R1CSEvalProof::prove::<false>(
           &perm_root_decomm.decomm,
           &rx,
           &ry,
@@ -2979,7 +2979,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
         .collect();
 
       for i in 0..block_comm_list.len() {
-        self.block_r1cs_eval_proof_list[i].verify(
+        self.block_r1cs_eval_proof_list[i].verify::<true>(
           &block_comm_list[i].comm,
           &rx,
           &ry,
@@ -3072,7 +3072,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
         })
         .collect();
 
-      self.pairwise_check_r1cs_eval_proof.verify(
+      self.pairwise_check_r1cs_eval_proof.verify::<false>(
         &pairwise_check_comm.comm,
         &rx,
         &ry,
@@ -3159,7 +3159,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
         S::append_field_to_transcript(tag, transcript, *val);
       }
       let [_, _, rx, ry] = perm_block_root_challenges;
-      self.perm_root_r1cs_eval_proof.verify(
+      self.perm_root_r1cs_eval_proof.verify::<false>(
         &perm_root_comm.comm,
         &rx,
         &ry,

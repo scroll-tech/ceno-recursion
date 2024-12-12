@@ -102,9 +102,6 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     assert_eq!(B_list.len(), C_list.len());
 
     // no errors, so create polynomials
-    let num_poly_vars_x = max_num_cons.log_2();
-    let num_poly_vars_y = max_num_vars.log_2();
-
     let mut poly_A_list = Vec::new();
     let mut poly_B_list = Vec::new();
     let mut poly_C_list = Vec::new();
@@ -114,6 +111,9 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     let mut mat_C = Vec::new();
 
     for inst in 0..A_list.len() {
+      let num_poly_vars_x = num_cons[inst].log_2();
+      let num_poly_vars_y = num_vars[inst].log_2();
+
       let A = &A_list[inst];
       let B = &B_list[inst];
       let C = &C_list[inst];
@@ -389,21 +389,45 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     (evals_A_list, evals_B_list, evals_C_list)
   }
 
-  pub fn multi_evaluate(&self, rx: &[S], ry: &[S]) -> Vec<S> {
+  // If IS_BLOCK, ry is truncated starting at the third entry
+  pub fn multi_evaluate<const IS_BLOCK: bool>(&self, rx: &[S], ry: &[S]) -> Vec<S> {
     let mut eval_list = Vec::new();
     // Evaluate each individual poly on [rx, ry]
     for i in 0..self.num_instances {
+      let num_cons = self.num_cons[i];
+      let num_vars = self.num_vars[i];
+      let rx_header = rx[..rx.len() - min(rx.len(), num_cons.log_2())].iter().fold(
+        S::field_one(), |c, i| c * (S::field_one() - i.clone())
+      );
+      let rx_short = &rx[rx.len() - min(rx.len(), num_cons.log_2())..];
+      let ry_skip_len = ry.len() - min(ry.len(), num_vars.log_2());
+      let (ry_header, ry_short) = {
+        if IS_BLOCK {
+          let ry_header = ry[3..3 + ry_skip_len].iter().fold(
+            S::field_one(), |c, i| c * (S::field_one() - i.clone())
+          );
+          let ry_short = [ry[..3].to_vec(), ry[3 + ry_skip_len..].to_vec()].concat();
+          (ry_header, ry_short)
+        } else {
+          let ry_header = ry[0..ry_skip_len].iter().fold(
+            S::field_one(), |c, i| c * (S::field_one() - i.clone())
+          );
+          let ry_short = ry[ry_skip_len..].to_vec();
+          (ry_header, ry_short)
+        }
+      };
+
       let evals = SparseMatPolynomial::multi_evaluate(
         &[&self.A_list[i], &self.B_list[i], &self.C_list[i]],
-        rx,
-        ry,
+        rx_short,
+        &ry_short,
       );
-      eval_list.extend(evals.clone());
+      eval_list.extend(evals.into_iter().map(|i| rx_header * ry_header * i));
     }
     eval_list
   }
 
-  pub fn multi_evaluate_bound_rp(
+  pub fn multi_evaluate_bound_rp<const IS_BLOCK: bool>(
     &self,
     rp: &[S],
     rx: &[S],
@@ -418,11 +442,35 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     let mut eval_list = Vec::new();
     // Evaluate each individual poly on [rx, ry]
     for i in 0..self.num_instances {
+      let num_cons = self.num_cons[i];
+      let num_vars = self.num_vars[i];
+      let rx_header = rx[..rx.len() - min(rx.len(), num_cons.log_2())].iter().fold(
+        S::field_one(), |c, i| c * (S::field_one() - i.clone())
+      );
+      let rx_short = &rx[rx.len() - min(rx.len(), num_cons.log_2())..];
+      let ry_skip_len = ry.len() - min(ry.len(), num_vars.log_2());
+      let (ry_header, ry_short) = {
+        if IS_BLOCK {
+          let ry_header = ry[3..3 + ry_skip_len].iter().fold(
+            S::field_one(), |c, i| c * (S::field_one() - i.clone())
+          );
+          let ry_short = [ry[..3].to_vec(), ry[3 + ry_skip_len..].to_vec()].concat();
+          (ry_header, ry_short)
+        } else {
+          let ry_header = ry[0..ry_skip_len].iter().fold(
+            S::field_one(), |c, i| c * (S::field_one() - i.clone())
+          );
+          let ry_short = ry[ry_skip_len..].to_vec();
+          (ry_header, ry_short)
+        }
+      };
+
       let evals = SparseMatPolynomial::multi_evaluate(
         &[&self.A_list[i], &self.B_list[i], &self.C_list[i]],
-        rx,
-        ry,
+        rx_short,
+        &ry_short,
       );
+      let evals: Vec<S> = evals.into_iter().map(|i| rx_header * ry_header * i).collect();
       eval_list.extend(evals.clone());
       a_evals.push(evals[0]);
       b_evals.push(evals[1]);
@@ -449,16 +497,6 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     (evals[0], evals[1], evals[2])
   }
 
-  // Group all instances with the similar num_vars (round to the next power of four) together
-  // Output.0 records the label of instances included within each commitment
-  pub fn next_power_of_four(val: usize) -> usize {
-    let mut base = 1;
-    while base < val {
-      base *= 4;
-    }
-    return base;
-  }
-
   pub fn multi_commit(
     &self,
   ) -> (
@@ -472,9 +510,11 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     let mut max_num_cons_list: Vec<usize> = Vec::new();
     let mut max_num_vars_list: Vec<usize> = Vec::new();
 
-    // Group the instances based on number of variables, separated by orders of 2^256
+    // Group the instances based on number of variables, which are already orders of 2^4
     for i in 0..self.num_instances {
-      let var_len = Self::next_power_of_four(self.num_vars[i]);
+      println!("I: {}, NUM_CONS: {}, NUM_VARS: {}", i, self.num_cons[i], self.num_vars[i]);
+
+      let var_len = self.num_vars[i];
       // A_list, B_list, C_list
       if let Some(index) = vars_size.get(&var_len) {
         label_map[*index].push(3 * i);
@@ -488,12 +528,8 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
       } else {
         let next_label = vars_size.len();
         vars_size.insert(var_len, next_label);
-        label_map.push(vec![3 * i]);
-        sparse_polys_list.push(vec![&self.A_list[i]]);
-        label_map.push(vec![3 * i + 1]);
-        sparse_polys_list.push(vec![&self.B_list[i]]);
-        label_map.push(vec![3 * i + 2]);
-        sparse_polys_list.push(vec![&self.C_list[i]]);
+        label_map.push(vec![3 * i, 3 * i + 1, 3 * i + 2]);
+        sparse_polys_list.push(vec![&self.A_list[i], &self.B_list[i], &self.C_list[i]]);
         max_num_cons_list.push(self.num_cons[i]);
         max_num_vars_list.push(self.num_vars[i]);
       }
@@ -553,7 +589,8 @@ pub struct R1CSEvalProof<S: SpartanExtensionField> {
 }
 
 impl<S: SpartanExtensionField> R1CSEvalProof<S> {
-  pub fn prove(
+  // If is BLOCK, separate the first 3 entries of ry out (corresponding to the 5 segments of witnesses)
+  pub fn prove<const IS_BLOCK: bool>(
     decomm: &R1CSDecommitment<S>,
     rx: &[S], // point at which the polynomial is evaluated
     ry: &[S],
@@ -564,19 +601,36 @@ impl<S: SpartanExtensionField> R1CSEvalProof<S> {
     let timer = Timer::new("R1CSEvalProof::prove");
     println!("RX_LEN: {}, RY_LEN: {}", rx.len(), ry.len());
     println!("NUM_CONS: {}, NUM_VARS: {}", decomm.num_cons, decomm.num_vars);
-    let rx_header = rx[..rx.len() - min(rx.len(), decomm.num_cons.log_2())].iter().fold(
+    let rx_skip_len = rx.len() - min(rx.len(), decomm.num_cons.log_2());
+    let rx_header = rx[..rx_skip_len].iter().fold(
       S::field_one(), |c, i| c * (S::field_one() - i.clone())
     );
-    let rx_short = &rx[rx.len() - min(rx.len(), decomm.num_cons.log_2())..];
+    let rx_short = &rx[rx_skip_len..];
+    let ry_skip_len = ry.len() - min(ry.len(), decomm.num_vars.log_2());
+    let (ry_header, ry_short) = {
+      if IS_BLOCK {
+        let ry_header = ry[3..3 + ry_skip_len].iter().fold(
+          S::field_one(), |c, i| c * (S::field_one() - i.clone())
+        );
+        let ry_short = [ry[..3].to_vec(), ry[3 + ry_skip_len..].to_vec()].concat();
+        (ry_header, ry_short)
+      } else {
+        let ry_header = ry[0..ry_skip_len].iter().fold(
+          S::field_one(), |c, i| c * (S::field_one() - i.clone())
+        );
+        let ry_short = ry[ry_skip_len..].to_vec();
+        (ry_header, ry_short)
+      }
+    };
     // let ry_short = &ry[..min(ry.len(), decomm.num_vars.log_2())];
     let proof =
-      SparseMatPolyEvalProof::prove(&decomm.dense, rx_header, rx_short, ry, evals, transcript, random_tape);
+      SparseMatPolyEvalProof::prove(&decomm.dense, rx_header * ry_header, rx_short, &ry_short, evals, transcript, random_tape);
     timer.stop();
 
     R1CSEvalProof { proof }
   }
 
-  pub fn verify(
+  pub fn verify<const IS_BLOCK: bool>(
     &self,
     comm: &R1CSCommitment<S>,
     rx: &[S], // point at which the R1CS matrix polynomials are evaluated
@@ -588,7 +642,22 @@ impl<S: SpartanExtensionField> R1CSEvalProof<S> {
       S::field_one(), |c, i| c * (S::field_one() - i.clone())
     );
     let rx_short = &rx[rx.len() - min(rx.len(), comm.num_cons.log_2())..];
-    // let ry_short = &ry[..min(ry.len(), comm.num_vars.log_2())];
-    self.proof.verify(&comm.comm, rx_header, rx_short, ry, evals, transcript)
+    let ry_skip_len = ry.len() - min(ry.len(), comm.num_vars.log_2());
+    let (ry_header, ry_short) = {
+      if IS_BLOCK {
+        let ry_header = ry[3..3 + ry_skip_len].iter().fold(
+          S::field_one(), |c, i| c * (S::field_one() - i.clone())
+        );
+        let ry_short = [ry[..3].to_vec(), ry[3 + ry_skip_len..].to_vec()].concat();
+        (ry_header, ry_short)
+      } else {
+        let ry_header = ry[0..ry_skip_len].iter().fold(
+          S::field_one(), |c, i| c * (S::field_one() - i.clone())
+        );
+        let ry_short = ry[ry_skip_len..].to_vec();
+        (ry_header, ry_short)
+      }
+    };
+    self.proof.verify(&comm.comm, rx_header * ry_header, rx_short, &ry_short, evals, transcript)
   }
 }

@@ -599,8 +599,6 @@ impl<S: SpartanExtensionField> R1CSEvalProof<S> {
     random_tape: &mut RandomTape<S>,
   ) -> R1CSEvalProof<S> {
     let timer = Timer::new("R1CSEvalProof::prove");
-    println!("RX_LEN: {}, RY_LEN: {}", rx.len(), ry.len());
-    println!("NUM_CONS: {}, NUM_VARS: {}", decomm.num_cons, decomm.num_vars);
     let rx_skip_len = rx.len() - min(rx.len(), decomm.num_cons.log_2());
     let rx_header = rx[..rx_skip_len].iter().fold(
       S::field_one(), |c, i| c * (S::field_one() - i.clone())

@@ -1154,10 +1154,6 @@ impl<S: SpartanExtensionField> ProductLayerProof<S> {
     eval: &[S],
     transcript: &mut Transcript,
   ) -> Result<(Vec<S>, Vec<S>, Vec<S>, Vec<S>, Vec<S>), ProofVerifyError> {
-    let proof_mem_len = bincode::serialize(&self.proof_mem).unwrap().len();
-    let proof_ops_len = bincode::serialize(&self.proof_ops).unwrap().len();
-    println!("PROOF_MEM: {}, PROOF_OPS: {}", proof_mem_len, proof_ops_len);
-
     <Transcript as ProofTranscript<S>>::append_protocol_name(
       transcript,
       ProductLayerProof::<S>::protocol_name(),
@@ -1391,10 +1387,6 @@ impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
     transcript: &mut Transcript,
     random_tape: &mut RandomTape<S>,
   ) -> SparseMatPolyEvalProof<S> {
-    println!("NNZ_LEN: {}", dense.val[0].len());
-    println!("RX_LEN: {}", rx.len());
-    println!("RY_LEN: {}", ry.len());
-    println!("EVALS_LEN: {}", evals.len());
     <Transcript as ProofTranscript<S>>::append_protocol_name(
       transcript,
       SparseMatPolyEvalProof::<S>::protocol_name(),

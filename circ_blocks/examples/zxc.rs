@@ -1,8 +1,9 @@
 // TODO: Might want to simplify Liveness Analysis & PMR now that scope changes are handled in optimization
 
 const PRINT_PROOF: bool = false;
-const INLINE_SPARTAN_PROOF: bool = false;
-const TOTAL_NUM_VARS_BOUND: usize = 100000000;
+const INLINE_SPARTAN_PROOF: bool = true;
+const TOTAL_NUM_VARS_BOUND: usize = 10000000000;
+const MAX_FILE_SIZE: usize = 1073741824;
 
 use circ::front::zsharp::{self, ZSharpFE};
 use circ::front::{FrontEnd, Mode};
@@ -32,7 +33,6 @@ use libspartan::{
 };
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
-use std::time::*;
 use std::time::*;
 
 // How many reserved variables (EXCLUDING V) are in front of the actual input / output?
@@ -239,12 +239,17 @@ struct CompileTimeKnowledge {
 }
 
 impl CompileTimeKnowledge {
-    fn serialize_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
-        let file_name = format!("../zok_tests/constraints/{benchmark_name}_bin.ctk");
-        create_dir_all(Path::new(&file_name).parent().unwrap())?;
-        let mut f = File::create(file_name)?;
+    fn serialize_to_file(&self, benchmark_name: String, max_file_size: usize) -> std::io::Result<()> {
         let content = bincode::serialize(&self).unwrap();
-        f.write(&content)?;
+        println!("CTK SIZE: {}", content.len());
+        for i in 0..content.len().div_ceil(max_file_size) {
+            let file_name = format!("../zok_tests/constraints/{benchmark_name}_bin_{i}.ctk");
+            create_dir_all(Path::new(&file_name).parent().unwrap())?;
+            let mut f = File::create(file_name)?;
+            let head = max_file_size * i;
+            let tail = min(max_file_size * (i + 1), content.len());
+            f.write(&content[head..tail])?;
+        }
         Ok(())
     }
 
@@ -378,12 +383,17 @@ struct RunTimeKnowledge<S: SpartanExtensionField> {
 }
 
 impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
-    fn serialize_to_file(&self, benchmark_name: String) -> std::io::Result<()> {
-        let file_name = format!("../zok_tests/inputs/{benchmark_name}_bin.rtk");
-        create_dir_all(Path::new(&file_name).parent().unwrap())?;
-        let mut f = File::create(file_name)?;
+    fn serialize_to_file(&self, benchmark_name: String, max_file_size: usize) -> std::io::Result<()> {
         let content = bincode::serialize(&self).unwrap();
-        f.write(&content)?;
+        println!("RTK SIZE: {}", content.len());
+        for i in 0..content.len().div_ceil(max_file_size) {
+            let file_name = format!("../zok_tests/inputs/{benchmark_name}_bin_{i}.rtk");
+            create_dir_all(Path::new(&file_name).parent().unwrap())?;
+            let mut f = File::create(file_name)?;
+            let head = max_file_size * i;
+            let tail = min(max_file_size * (i + 1), content.len());
+            f.write(&content[head..tail])?;
+        }
         Ok(())
     }
 
@@ -1298,16 +1308,29 @@ fn run_spartan_proof<S: SpartanExtensionField>(
     println!("Generating Circuits...");
     // --
     // BLOCK INSTANCES
+    // block_inst is used by sumcheck. Every block has the same number of variables
     let (block_num_vars, block_num_cons, block_num_non_zero_entries, mut block_inst) =
-        Instance::gen_block_inst::<true>(
-            block_num_instances_bound,
-            num_vars,
-            &ctk.args,
-            num_inputs_unpadded,
-            &block_num_phy_ops,
-            &block_num_vir_ops,
-            &ctk.num_vars_per_block,
-            &rtk.block_num_proofs,
+        Instance::gen_block_inst::<true, false>(
+        block_num_instances_bound,
+        num_vars,
+        &ctk.args,
+        num_inputs_unpadded,
+        &block_num_phy_ops,
+        &block_num_vir_ops,
+        &ctk.num_vars_per_block,
+        &rtk.block_num_proofs,
+        );
+    // block_inst is used by commitment. Every block has different number of variables
+    let (_, _, _, block_inst_for_commit) =
+        Instance::<S>::gen_block_inst::<true, true>(
+        block_num_instances_bound,
+        num_vars,
+        &ctk.args,
+        num_inputs_unpadded,
+        &block_num_phy_ops,
+        &block_num_vir_ops,
+        &ctk.num_vars_per_block,
+        &rtk.block_num_proofs,
         );
     println!("Finished Block");
 
@@ -1345,7 +1368,7 @@ fn run_spartan_proof<S: SpartanExtensionField>(
     println!("Comitting Circuits...");
     // block_comm_map records the sparse_polys committed in each commitment
     // Note that A, B, C are committed separately, so sparse_poly[3*i+2] corresponds to poly C of instance i
-    let (block_comm_map, block_comm_list, block_decomm_list) = SNARK::multi_encode(&block_inst);
+    let (block_comm_map, block_comm_list, block_decomm_list) = SNARK::multi_encode(&block_inst_for_commit);
     println!("Finished Block");
     let (pairwise_check_comm, pairwise_check_decomm) = SNARK::encode(&pairwise_check_inst);
     println!("Finished Pairwise");
@@ -1589,13 +1612,13 @@ fn main() {
         ctk.write_to_file(benchmark_name.to_string()).unwrap();
         rtk.write_to_file(benchmark_name.to_string()).unwrap();
     }
-    if !INLINE_SPARTAN_PROOF {
-        // --
-        // Write CTK, RTK to file
-        // --
-        ctk.serialize_to_file(benchmark_name.to_string()).unwrap();
-        rtk.serialize_to_file(benchmark_name.to_string()).unwrap();
-    } else {
+   
+    // --
+    // Write CTK, RTK to file
+    // --
+    ctk.serialize_to_file(benchmark_name.to_string(), MAX_FILE_SIZE).unwrap();
+    rtk.serialize_to_file(benchmark_name.to_string(), MAX_FILE_SIZE).unwrap();
+    if INLINE_SPARTAN_PROOF {
         run_spartan_proof(ctk, rtk);
     }
 

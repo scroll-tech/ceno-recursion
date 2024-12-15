@@ -1,9 +1,21 @@
 use std::cmp::max;
+use std::collections::HashMap;
 
 use crate::errors::R1CSError;
 use crate::math::Math;
 use crate::scalar::SpartanExtensionField;
 use crate::R1CSInstance;
+
+const GROUP_POWER_SCALE: usize = 16;
+// Group all instances with the similar num_vars (round to the next power of four) together
+// Output.0 records the label of instances included within each commitment
+fn next_group_size(val: usize) -> usize {
+  let mut base = 1;
+  while base < val {
+    base *= GROUP_POWER_SCALE;
+  }
+  return base;
+}
 
 /// `Instance` holds the description of R1CS matrices and a hash of the matrices
 #[derive(Clone)]
@@ -20,21 +32,31 @@ impl<S: SpartanExtensionField> Instance<S> {
     num_instances: usize,
     max_num_cons: usize,
     num_cons: Vec<usize>,
-    num_vars: usize,
+    max_num_vars: usize,
+    num_vars: Vec<usize>,
     A: &Vec<Vec<(usize, usize, [u8; 32])>>,
     B: &Vec<Vec<(usize, usize, [u8; 32])>>,
     C: &Vec<Vec<(usize, usize, [u8; 32])>>,
   ) -> Result<Instance<S>, R1CSError> {
-    let (num_vars_padded, max_num_cons_padded, num_cons_padded) = {
-      let num_vars_padded = {
-        let mut num_vars_padded = num_vars;
+    let (max_num_vars_padded, num_vars_padded, max_num_cons_padded, num_cons_padded) = {
+      let max_num_vars_padded = {
+        let mut max_num_vars_padded = max_num_vars;
 
         // ensure that num_vars_padded a power of two
-        if num_vars_padded.next_power_of_two() != num_vars_padded {
-          num_vars_padded = num_vars_padded.next_power_of_two();
+        if max_num_vars_padded.next_power_of_two() != max_num_vars_padded {
+          max_num_vars_padded = max_num_vars_padded.next_power_of_two();
         }
-        num_vars_padded
+        max_num_vars_padded
       };
+
+      let mut num_vars_padded = Vec::new();
+      for i in 0..num_vars.len() {
+        if num_vars[i] == 0 || num_vars[i] == 1 {
+          num_vars_padded.push(2);
+        } else {
+          num_vars_padded.push(num_vars[i].next_power_of_two());
+        }
+      }
 
       let max_num_cons_padded = {
         let mut max_num_cons_padded = max_num_cons;
@@ -60,7 +82,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         }
       }
 
-      (num_vars_padded, max_num_cons_padded, num_cons_padded)
+      (max_num_vars_padded, num_vars_padded, max_num_cons_padded, num_cons_padded)
     };
 
     let bytes_to_scalar =
@@ -74,8 +96,8 @@ impl<S: SpartanExtensionField> Instance<S> {
           }
 
           // col must be smaller than num_vars
-          if col >= num_vars {
-            println!("COL: {}, NUM_VARS: {}", col, num_vars);
+          if col >= num_vars[b] {
+            println!("COL: {}, NUM_VARS: {}", col, num_vars[b]);
             return Err(R1CSError::InvalidIndex);
           }
 
@@ -83,8 +105,8 @@ impl<S: SpartanExtensionField> Instance<S> {
           if val.is_some().unwrap_u8() == 1 {
             // if col >= num_vars, it means that it is referencing a 1 or input in the satisfying
             // assignment
-            if col >= num_vars {
-              mat.push((row, col + num_vars_padded - num_vars, val.unwrap()));
+            if col >= num_vars[b] {
+              mat.push((row, col + num_vars_padded[b] - num_vars[b], val.unwrap()));
             } else {
               mat.push((row, col, val.unwrap()));
             }
@@ -97,7 +119,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         // we do not need to pad otherwise because the dummy constraints are implicit in the sum-check protocol
         if num_cons[b] == 0 || num_cons[b] == 1 {
           for i in tups.len()..num_cons_padded[b] {
-            mat.push((i, num_vars, S::field_zero()));
+            mat.push((i, num_vars[b], S::field_zero()));
           }
         }
 
@@ -132,6 +154,7 @@ impl<S: SpartanExtensionField> Instance<S> {
       num_instances,
       max_num_cons_padded,
       num_cons_padded,
+      max_num_vars_padded,
       num_vars_padded,
       &A_scalar_list,
       &B_scalar_list,
@@ -243,7 +266,9 @@ impl<S: SpartanExtensionField> Instance<S> {
   /// - VMR3 = r^3 * VT
   /// - VMC = (1 or VMC[i-1]) * (tau - VA - VMR1 - VMR2 - VMR3)
   /// The final product is stored in X = MC[NV - 1]
-  pub fn gen_block_inst<const PRINT_SIZE: bool>(
+  /// 
+  /// If in COMMIT_MODE, commit instance by num_vars_per_block, rounded to the nearest power of four
+  pub fn gen_block_inst<const PRINT_SIZE: bool, const COMMIT_MODE: bool>(
     num_instances: usize,
     num_vars: usize,
     args: &Vec<
@@ -262,6 +287,24 @@ impl<S: SpartanExtensionField> Instance<S> {
     block_num_proofs: &Vec<usize>,
   ) -> (usize, usize, usize, Instance<S>) {
     assert_eq!(num_instances, args.len());
+
+    let num_vars_padded_per_block = if COMMIT_MODE {
+      // If in commit mode, group all R1CS with num_vars within a power of 2^4
+      // For every padded group size, mark the actual maximum num_vars of each group
+      let mut max_size_per_group: HashMap<usize, usize> = HashMap::new();
+      for num_vars in num_vars_per_block {
+        if let Some(val) = max_size_per_group.get(&next_group_size(*num_vars)) {
+          if num_vars.next_power_of_two() > *val {
+            max_size_per_group.insert(next_group_size(*num_vars), num_vars.next_power_of_two());
+          }
+        } else {
+          max_size_per_group.insert(next_group_size(*num_vars), num_vars.next_power_of_two());
+        }
+      }
+      num_vars_per_block.iter().map(|i| max_size_per_group.get(&next_group_size(*i)).unwrap().clone()).collect()
+    } else {
+      vec![num_vars; num_instances]
+    };
 
     if PRINT_SIZE {
       println!("\n\n--\nBLOCK INSTS");
@@ -293,43 +336,43 @@ impl<S: SpartanExtensionField> Instance<S> {
     let V_VL = |b: usize, i: usize| io_width + 2 * num_phy_ops[b] + 4 * i + 2;
     let V_VT = |b: usize, i: usize| io_width + 2 * num_phy_ops[b] + 4 * i + 3;
     // in CHALLENGES, not used if !has_mem_op
-    let V_tau = num_vars;
-    let V_r = |i: usize| num_vars + i;
+    let V_tau = |b: usize| num_vars_padded_per_block[b];
+    let V_r = |b: usize, i: usize| num_vars_padded_per_block[b] + i;
     // in BLOCK_W2 / INPUT_W2
-    let V_input_dot_prod = |i: usize| {
+    let V_input_dot_prod = |b: usize, i: usize| {
       if i == 0 {
         V_input(0)
       } else {
-        2 * num_vars + 2 + i
+        2 * num_vars_padded_per_block[b] + 2 + i
       }
     };
-    let V_output_dot_prod = |i: usize| 2 * num_vars + 2 + (num_inputs_unpadded - 1) + i;
+    let V_output_dot_prod = |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 + (num_inputs_unpadded - 1) + i;
     // in BLOCK_W2 / PHY_W2
-    let V_PMR = |i: usize| 2 * num_vars + 2 * num_inputs_unpadded + 2 * i;
-    let V_PMC = |i: usize| 2 * num_vars + 2 * num_inputs_unpadded + 2 * i + 1;
+    let V_PMR = |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * i;
+    let V_PMC = |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * i + 1;
     // in BLOCK_W2 / VIR_W2
     let V_VMR1 =
-      |b: usize, i: usize| 2 * num_vars + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i;
+      |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i;
     let V_VMR2 =
-      |b: usize, i: usize| 2 * num_vars + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i + 1;
+      |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i + 1;
     let V_VMR3 =
-      |b: usize, i: usize| 2 * num_vars + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i + 2;
+      |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i + 2;
     let V_VMC =
-      |b: usize, i: usize| 2 * num_vars + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i + 3;
+      |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i + 3;
     // in BLOCK_W3
-    let V_v = 3 * num_vars;
-    let V_x = 3 * num_vars + 1;
-    let V_pi = 3 * num_vars + 2;
-    let V_d = 3 * num_vars + 3;
-    let V_Pp = 3 * num_vars + 4;
-    let V_Pd = 3 * num_vars + 5;
-    let V_Vp = 3 * num_vars + 6;
-    let V_Vd = 3 * num_vars + 7;
+    let V_v = |b: usize| 3 * num_vars_padded_per_block[b];
+    let V_x = |b: usize| 3 * num_vars_padded_per_block[b] + 1;
+    let V_pi = |b: usize| 3 * num_vars_padded_per_block[b] + 2;
+    let V_d = |b: usize| 3 * num_vars_padded_per_block[b] + 3;
+    let V_Pp = |b: usize| 3 * num_vars_padded_per_block[b] + 4;
+    let V_Pd = |b: usize| 3 * num_vars_padded_per_block[b] + 5;
+    let V_Vp = |b: usize| 3 * num_vars_padded_per_block[b] + 6;
+    let V_Vd = |b: usize| 3 * num_vars_padded_per_block[b] + 7;
     // in BLOCK_W3_SHIFTED
-    let V_sv = 4 * num_vars;
-    let V_spi = 4 * num_vars + 2;
-    let V_Psp = 4 * num_vars + 4;
-    let V_Vsp = 4 * num_vars + 6;
+    let V_sv = |b: usize| 4 * num_vars_padded_per_block[b];
+    let V_spi = |b: usize| 4 * num_vars_padded_per_block[b] + 2;
+    let V_Psp = |b: usize| 4 * num_vars_padded_per_block[b] + 4;
+    let V_Vsp = |b: usize| 4 * num_vars_padded_per_block[b] + 6;
 
     // Variable used by printing
     let mut total_inst_commit_size = 0;
@@ -374,8 +417,8 @@ impl<S: SpartanExtensionField> Instance<S> {
               C,
               counter,
               vec![(V_input(i), 1)],
-              vec![(V_r(i), 1)],
-              vec![(V_input_dot_prod(i), 1)],
+              vec![(V_r(b, i), 1)],
+              vec![(V_input_dot_prod(b, i), 1)],
             );
             counter += 1;
           }
@@ -387,8 +430,8 @@ impl<S: SpartanExtensionField> Instance<S> {
               C,
               counter,
               vec![(V_output(i), 1)],
-              vec![(V_r(i + num_inputs_unpadded - 1), 1)],
-              vec![(V_output_dot_prod(i), 1)],
+              vec![(V_r(b, i + num_inputs_unpadded - 1), 1)],
+              vec![(V_output_dot_prod(b, i), 1)],
             );
             counter += 1;
           }
@@ -400,7 +443,7 @@ impl<S: SpartanExtensionField> Instance<S> {
             counter,
             vec![],
             vec![],
-            vec![(V_valid, 1), (V_v, -1)],
+            vec![(V_valid, 1), (V_v(b), -1)],
           );
           counter += 1;
           // x[k]
@@ -410,14 +453,14 @@ impl<S: SpartanExtensionField> Instance<S> {
             C,
             counter,
             [
-              vec![(V_tau, 1)],
+              vec![(V_tau(b), 1)],
               (0..2 * num_inputs_unpadded - 2)
-                .map(|i| (V_input_dot_prod(i), -1))
+                .map(|i| (V_input_dot_prod(b, i), -1))
                 .collect(),
             ]
             .concat(),
             vec![(V_cnst, 1)],
-            vec![(V_x, 1)],
+            vec![(V_x(b), 1)],
           );
           counter += 1;
           // D[k] = x[k] * (pi[k + 1] + (1 - v[k + 1]))
@@ -426,9 +469,9 @@ impl<S: SpartanExtensionField> Instance<S> {
             B,
             C,
             counter,
-            vec![(V_x, 1)],
-            vec![(V_spi, 1), (V_cnst, 1), (V_sv, -1)],
-            vec![(V_d, 1)],
+            vec![(V_x(b), 1)],
+            vec![(V_spi(b), 1), (V_cnst, 1), (V_sv(b), -1)],
+            vec![(V_d(b), 1)],
           );
           counter += 1;
           // pi[k] = v[k] * D[k]
@@ -437,9 +480,9 @@ impl<S: SpartanExtensionField> Instance<S> {
             B,
             C,
             counter,
-            vec![(V_v, 1)],
-            vec![(V_d, 1)],
-            vec![(V_pi, 1)],
+            vec![(V_v(b), 1)],
+            vec![(V_d(b), 1)],
+            vec![(V_pi(b), 1)],
           );
           counter += 1;
 
@@ -458,9 +501,9 @@ impl<S: SpartanExtensionField> Instance<S> {
             B,
             C,
             counter,
-            vec![(V_r(1), 1)],
+            vec![(V_r(b, 1), 1)],
             vec![(V_PD(i), 1)],
-            vec![(V_PMR(i), 1)],
+            vec![(V_PMR(b, i), 1)],
           );
           counter += 1;
           // PMC = (1 or PMC[i-1]) * (tau - PA - PMR)
@@ -471,8 +514,8 @@ impl<S: SpartanExtensionField> Instance<S> {
               C,
               counter,
               vec![(V_cnst, 1)],
-              vec![(V_tau, 1), (V_PA(i), -1), (V_PMR(i), -1)],
-              vec![(V_PMC(i), 1)],
+              vec![(V_tau(b), 1), (V_PA(i), -1), (V_PMR(b, i), -1)],
+              vec![(V_PMC(b, i), 1)],
             );
           } else {
             (A, B, C) = Instance::<S>::gen_constr(
@@ -480,9 +523,9 @@ impl<S: SpartanExtensionField> Instance<S> {
               B,
               C,
               counter,
-              vec![(V_PMC(i - 1), 1)],
-              vec![(V_tau, 1), (V_PA(i), -1), (V_PMR(i), -1)],
-              vec![(V_PMC(i), 1)],
+              vec![(V_PMC(b, i - 1), 1)],
+              vec![(V_tau(b), 1), (V_PA(i), -1), (V_PMR(b, i), -1)],
+              vec![(V_PMC(b, i), 1)],
             );
           }
           counter += 1;
@@ -498,10 +541,10 @@ impl<S: SpartanExtensionField> Instance<S> {
           vec![if num_phy_ops[b] == 0 {
             (V_cnst, 1)
           } else {
-            (V_PMC(num_phy_ops[b] - 1), 1)
+            (V_PMC(b, num_phy_ops[b] - 1), 1)
           }],
-          vec![(V_Psp, 1), (V_cnst, 1), (V_sv, -1)],
-          vec![(V_Pd, 1)],
+          vec![(V_Psp(b), 1), (V_cnst, 1), (V_sv(b), -1)],
+          vec![(V_Pd(b), 1)],
         );
         counter += 1;
         // Pp
@@ -510,9 +553,9 @@ impl<S: SpartanExtensionField> Instance<S> {
           B,
           C,
           counter,
-          vec![(V_v, 1)],
-          vec![(V_Pd, 1)],
-          vec![(V_Pp, 1)],
+          vec![(V_v(b), 1)],
+          vec![(V_Pd(b), 1)],
+          vec![(V_Pp(b), 1)],
         );
         counter += 1;
 
@@ -528,7 +571,7 @@ impl<S: SpartanExtensionField> Instance<S> {
             B,
             C,
             counter,
-            vec![(V_r(1), 1)],
+            vec![(V_r(b, 1), 1)],
             vec![(V_VD(b, i), 1)],
             vec![(V_VMR1(b, i), 1)],
           );
@@ -539,7 +582,7 @@ impl<S: SpartanExtensionField> Instance<S> {
             B,
             C,
             counter,
-            vec![(V_r(2), 1)],
+            vec![(V_r(b, 2), 1)],
             vec![(V_VL(b, i), 1)],
             vec![(V_VMR2(b, i), 1)],
           );
@@ -550,7 +593,7 @@ impl<S: SpartanExtensionField> Instance<S> {
             B,
             C,
             counter,
-            vec![(V_r(3), 1)],
+            vec![(V_r(b, 3), 1)],
             vec![(V_VT(b, i), 1)],
             vec![(V_VMR3(b, i), 1)],
           );
@@ -564,7 +607,7 @@ impl<S: SpartanExtensionField> Instance<S> {
               counter,
               vec![(V_cnst, 1)],
               vec![
-                (V_tau, 1),
+                (V_tau(b), 1),
                 (V_VA(b, i), -1),
                 (V_VMR1(b, i), -1),
                 (V_VMR2(b, i), -1),
@@ -580,7 +623,7 @@ impl<S: SpartanExtensionField> Instance<S> {
               counter,
               vec![(V_VMC(b, i - 1), 1)],
               vec![
-                (V_tau, 1),
+                (V_tau(b), 1),
                 (V_VA(b, i), -1),
                 (V_VMR1(b, i), -1),
                 (V_VMR2(b, i), -1),
@@ -604,8 +647,8 @@ impl<S: SpartanExtensionField> Instance<S> {
           } else {
             (V_VMC(b, num_vir_ops[b] - 1), 1)
           }],
-          vec![(V_Vsp, 1), (V_cnst, 1), (V_sv, -1)],
-          vec![(V_Vd, 1)],
+          vec![(V_Vsp(b), 1), (V_cnst, 1), (V_sv(b), -1)],
+          vec![(V_Vd(b), 1)],
         );
         counter += 1;
         // Vp
@@ -614,9 +657,9 @@ impl<S: SpartanExtensionField> Instance<S> {
           B,
           C,
           counter,
-          vec![(V_v, 1)],
-          vec![(V_Vd, 1)],
-          vec![(V_Vp, 1)],
+          vec![(V_v(b), 1)],
+          vec![(V_Vd(b), 1)],
+          vec![(V_Vp(b), 1)],
         );
         counter += 1;
 
@@ -668,12 +711,32 @@ impl<S: SpartanExtensionField> Instance<S> {
       println!("Total Cons Exec Size: {}", total_cons_exec_size);
     }
 
+    // Set num_cons of R1CS of the same num_vars to be the same
+    let num_cons_padded_per_block = {
+      if COMMIT_MODE {
+        let mut max_cons_per_group: HashMap<usize, usize> = HashMap::new();
+        for i in 0..num_instances {
+          if let Some(num_cons) = max_cons_per_group.get(&num_vars_padded_per_block[i]) {
+            if *num_cons < block_num_cons[i] {
+              max_cons_per_group.insert(num_vars_padded_per_block[i], block_num_cons[i]);
+            }
+          } else {
+            max_cons_per_group.insert(num_vars_padded_per_block[i], block_num_cons[i]);
+          }
+        }
+        num_vars_padded_per_block.iter().map(|i| max_cons_per_group.get(i).unwrap().clone()).collect()
+      } else {
+        block_num_cons
+      }
+    };
+
     let block_num_vars = 8 * num_vars;
     let block_inst = Instance::new(
       num_instances,
       block_max_num_cons,
-      block_num_cons,
+      num_cons_padded_per_block,
       block_num_vars,
+      num_vars_padded_per_block.into_iter().map(|i| 8 * i).collect(),
       &A_list,
       &B_list,
       &C_list,
@@ -1046,8 +1109,9 @@ impl<S: SpartanExtensionField> Instance<S> {
       let pairwise_check_inst = Instance::new(
         3,
         pairwise_check_max_num_cons,
-        pairwise_check_num_cons,
+        vec![pairwise_check_max_num_cons; 3],
         4 * pairwise_check_num_vars,
+        vec![4 * pairwise_check_num_vars; 3],
         &A_list,
         &B_list,
         &C_list,
@@ -1299,6 +1363,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         perm_root_num_cons,
         vec![perm_root_num_cons],
         8 * num_vars,
+        vec![8 * num_vars],
         &A_list,
         &B_list,
         &C_list,

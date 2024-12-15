@@ -42,10 +42,17 @@ struct CompileTimeKnowledge {
 
 impl CompileTimeKnowledge {
   fn deserialize_from_file(benchmark_name: String) -> CompileTimeKnowledge {
-    let file_name = format!("../zok_tests/constraints/{}_bin.ctk", benchmark_name);
-    let mut f = File::open(file_name).unwrap();
+    // Input can be provided through multiple files, use i to determine the next file label
+    let mut i = 0;
+    let mut file_name = format!("../zok_tests/constraints/{benchmark_name}_bin_{i}.ctk");
     let mut content: Vec<u8> = Vec::new();
-    f.read_to_end(&mut content).unwrap();
+    while let Ok(mut f) = File::open(file_name) {
+      let mut new_content: Vec<u8> = Vec::new();
+      f.read_to_end(&mut new_content).unwrap();
+      content.extend(new_content);
+      i += 1;
+      file_name = format!("../zok_tests/constraints/{benchmark_name}_bin_{i}.ctk");
+    }
     bincode::deserialize(&content).unwrap()
   }
 }
@@ -78,10 +85,17 @@ struct RunTimeKnowledge<S: SpartanExtensionField> {
 
 impl<S: SpartanExtensionField + for<'de> serde::de::Deserialize<'de>> RunTimeKnowledge<S> {
   fn deserialize_from_file(benchmark_name: String) -> RunTimeKnowledge<S> {
-    let file_name = format!("../zok_tests/inputs/{}_bin.rtk", benchmark_name);
-    let mut f = File::open(file_name).unwrap();
+    // Input can be provided through multiple files, use i to determine the next file label
+    let mut i = 0;
+    let mut file_name = format!("../zok_tests/inputs/{benchmark_name}_bin_{i}.rtk");
     let mut content: Vec<u8> = Vec::new();
-    f.read_to_end(&mut content).unwrap();
+    while let Ok(mut f) = File::open(file_name) {
+      let mut new_content: Vec<u8> = Vec::new();
+      f.read_to_end(&mut new_content).unwrap();
+      content.extend(new_content);
+      i += 1;
+      file_name = format!("../zok_tests/inputs/{benchmark_name}_bin_{i}.rtk");
+    }
     bincode::deserialize(&content).unwrap()
   }
 }
@@ -121,8 +135,21 @@ fn main() {
   println!("Generating Circuits...");
   // --
   // BLOCK INSTANCES
+  // block_inst is used by sumcheck. Every block has the same number of variables
   let (block_num_vars, block_num_cons, block_num_non_zero_entries, mut block_inst) =
-    Instance::gen_block_inst::<true>(
+    Instance::gen_block_inst::<true, false>(
+      block_num_instances_bound,
+      num_vars,
+      &ctk.args,
+      num_inputs_unpadded,
+      &block_num_phy_ops,
+      &block_num_vir_ops,
+      &ctk.num_vars_per_block,
+      &rtk.block_num_proofs,
+    );
+  // block_inst is used by commitment. Every block has different number of variables
+  let (_, _, _, block_inst_for_commit) =
+    Instance::<ScalarExt2>::gen_block_inst::<true, true>(
       block_num_instances_bound,
       num_vars,
       &ctk.args,
@@ -171,7 +198,7 @@ fn main() {
   println!("Comitting Circuits...");
   // block_comm_map records the sparse_polys committed in each commitment
   // Note that A, B, C are committed separately, so sparse_poly[3*i+2] corresponds to poly C of instance i
-  let (block_comm_map, block_comm_list, block_decomm_list) = SNARK::multi_encode(&block_inst);
+  let (block_comm_map, block_comm_list, block_decomm_list) = SNARK::multi_encode(&block_inst_for_commit);
   println!("Finished Block");
   let (pairwise_check_comm, pairwise_check_decomm) = SNARK::encode(&pairwise_check_inst);
   println!("Finished Pairwise");

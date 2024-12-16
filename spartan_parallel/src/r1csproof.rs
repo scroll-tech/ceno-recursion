@@ -27,7 +27,7 @@ pub struct R1CSProof<S: SpartanExtensionField> {
   // proof_eval_vars_at_ry_list: Vec<PolyEvalProof<S>>,
 }
 
-impl<S: SpartanExtensionField> R1CSProof<S> {
+impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
   fn prove_phase_one(
     num_rounds: usize,
     num_rounds_x_max: usize,

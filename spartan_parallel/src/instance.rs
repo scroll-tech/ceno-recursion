@@ -26,7 +26,7 @@ pub struct Instance<S: SpartanExtensionField> {
   pub digest: Vec<u8>,
 }
 
-impl<S: SpartanExtensionField> Instance<S> {
+impl<S: SpartanExtensionField + Send + Sync> Instance<S> {
   /// Constructs a new `Instance` and an associated satisfying assignment
   pub fn new(
     num_instances: usize,

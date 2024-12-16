@@ -357,7 +357,7 @@ impl CompileTimeKnowledge {
 }
 
 #[derive(Serialize, Deserialize)]
-struct RunTimeKnowledge<S: SpartanExtensionField> {
+struct RunTimeKnowledge<S: SpartanExtensionField + Send + Sync> {
     block_max_num_proofs: usize,
     block_num_proofs: Vec<usize>,
     consis_num_proofs: usize,
@@ -382,7 +382,7 @@ struct RunTimeKnowledge<S: SpartanExtensionField> {
     output_exec_num: usize,
 }
 
-impl<S: SpartanExtensionField> RunTimeKnowledge<S> {
+impl<S: SpartanExtensionField + Send + Sync> RunTimeKnowledge<S> {
     fn serialize_to_file(&self, benchmark_name: String, max_file_size: usize) -> std::io::Result<()> {
         let content = bincode::serialize(&self).unwrap();
         println!("RTK SIZE: {}", content.len());
@@ -842,7 +842,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 // --
 // Generate witnesses and others
 // --
-fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
+fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField + Send + Sync>(
     path: PathBuf,
     options: &Options,
     entry_regs: Vec<Integer>,
@@ -1277,7 +1277,7 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
     }
 }
 
-fn run_spartan_proof<S: SpartanExtensionField>(
+fn run_spartan_proof<S: SpartanExtensionField + Send + Sync>(
     ctk: CompileTimeKnowledge,
     rtk: RunTimeKnowledge<S>,
 ) {

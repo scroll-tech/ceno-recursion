@@ -1,3 +1,5 @@
+use rayon::prelude::*;
+
 use std::cmp::{max, min};
 use std::collections::HashMap;
 
@@ -66,7 +68,7 @@ impl<S: SpartanExtensionField> R1CSCommitment<S> {
   }
 }
 
-impl<S: SpartanExtensionField> R1CSInstance<S> {
+impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
   pub fn new(
     num_instances: usize,
     max_num_cons: usize,

@@ -14,8 +14,9 @@ use super::timer::Timer;
 use super::transcript::{AppendToTranscript, ProofTranscript};
 use core::cmp::Ordering;
 use merlin::Transcript;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SparseMatEntry<S: SpartanExtensionField> {
@@ -415,20 +416,19 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
     p: usize,
     q: usize,
   ) -> Vec<S> {
+    let res = Arc::new(Mutex::new(vec![S::field_zero(); num_rows]));
+
     (0..inst.A_list[p_inst].M.len())
-      .map(|i| {
+      .into_par_iter()
+      .for_each(|i| {
         let row = inst.A_list[p_inst].M[i].row;
         let col = inst.A_list[p_inst].M[i].col;
-        let val = &inst.A_list[p_inst].M[i].val;
-        (
-          row,
-          *val * z_mat[p][q][col / max_num_cols][col % max_num_cols],
-        )
-      })
-      .fold(vec![S::field_zero(); num_rows], |mut Mz, (r, v)| {
-        Mz[r] = Mz[r] + v;
-        Mz
-      })
+        let val = inst.A_list[p_inst].M[i].val;
+        let mut Mz = res.lock().unwrap();
+        Mz[row] += val * z_mat[p][q][col / max_num_cols][col % max_num_cols]
+      });
+    let vec = res.lock().unwrap();
+    vec.clone()
   }
 
   // Z is consisted of vector segments

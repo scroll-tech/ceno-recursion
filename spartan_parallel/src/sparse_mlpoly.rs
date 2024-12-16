@@ -743,7 +743,7 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
     S::append_field_vector_to_transcript(b"claim_evals_ops", transcript, &evals_ops);
     let challenges_ops =
       transcript.challenge_vector(b"challenge_combine_n_to_one", evals_ops.len().log_2());
-      
+
     let mut poly_evals_ops = DensePolynomial::new(evals_ops);
     for i in (0..challenges_ops.len()).rev() {
       poly_evals_ops.bound_poly_var_bot(&challenges_ops[i]);
@@ -1421,8 +1421,15 @@ impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
       timer_build_network.stop();
 
       let timer_eval_network = Timer::new("evalproof_layered_network");
-      let poly_eval_network_proof =
-        PolyEvalNetworkProof::prove(&mut net, dense, &derefs, r_header, evals, transcript, random_tape);
+      let poly_eval_network_proof = PolyEvalNetworkProof::prove(
+        &mut net,
+        dense,
+        &derefs,
+        r_header,
+        evals,
+        transcript,
+        random_tape,
+      );
       timer_eval_network.stop();
 
       poly_eval_network_proof
@@ -1458,7 +1465,7 @@ impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
 
     self.poly_eval_network_proof.verify(
       comm,
-      r_header, 
+      r_header,
       evals,
       &rx_ext,
       &ry_ext,
@@ -1524,7 +1531,14 @@ mod tests {
 
     let mut verifier_transcript = Transcript::new(b"example");
     assert!(proof
-      .verify(&poly_comm, Scalar::one(), &rx, &ry, &evals, &mut verifier_transcript,)
+      .verify(
+        &poly_comm,
+        Scalar::one(),
+        &rx,
+        &ry,
+        &evals,
+        &mut verifier_transcript,
+      )
       .is_ok());
   }
 }

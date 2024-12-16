@@ -82,7 +82,12 @@ impl<S: SpartanExtensionField + Send + Sync> Instance<S> {
         }
       }
 
-      (max_num_vars_padded, num_vars_padded, max_num_cons_padded, num_cons_padded)
+      (
+        max_num_vars_padded,
+        num_vars_padded,
+        max_num_cons_padded,
+        num_cons_padded,
+      )
     };
 
     let bytes_to_scalar =
@@ -266,7 +271,7 @@ impl<S: SpartanExtensionField + Send + Sync> Instance<S> {
   /// - VMR3 = r^3 * VT
   /// - VMC = (1 or VMC[i-1]) * (tau - VA - VMR1 - VMR2 - VMR3)
   /// The final product is stored in X = MC[NV - 1]
-  /// 
+  ///
   /// If in COMMIT_MODE, commit instance by num_vars_per_block, rounded to the nearest power of four
   pub fn gen_block_inst<const PRINT_SIZE: bool, const COMMIT_MODE: bool>(
     num_instances: usize,
@@ -301,7 +306,15 @@ impl<S: SpartanExtensionField + Send + Sync> Instance<S> {
           max_size_per_group.insert(next_group_size(*num_vars), num_vars.next_power_of_two());
         }
       }
-      num_vars_per_block.iter().map(|i| max_size_per_group.get(&next_group_size(*i)).unwrap().clone()).collect()
+      num_vars_per_block
+        .iter()
+        .map(|i| {
+          max_size_per_group
+            .get(&next_group_size(*i))
+            .unwrap()
+            .clone()
+        })
+        .collect()
     } else {
       vec![num_vars; num_instances]
     };
@@ -346,19 +359,26 @@ impl<S: SpartanExtensionField + Send + Sync> Instance<S> {
         2 * num_vars_padded_per_block[b] + 2 + i
       }
     };
-    let V_output_dot_prod = |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 + (num_inputs_unpadded - 1) + i;
+    let V_output_dot_prod =
+      |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 + (num_inputs_unpadded - 1) + i;
     // in BLOCK_W2 / PHY_W2
-    let V_PMR = |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * i;
-    let V_PMC = |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * i + 1;
+    let V_PMR =
+      |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * i;
+    let V_PMC =
+      |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * i + 1;
     // in BLOCK_W2 / VIR_W2
-    let V_VMR1 =
-      |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i;
-    let V_VMR2 =
-      |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i + 1;
-    let V_VMR3 =
-      |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i + 2;
-    let V_VMC =
-      |b: usize, i: usize| 2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i + 3;
+    let V_VMR1 = |b: usize, i: usize| {
+      2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i
+    };
+    let V_VMR2 = |b: usize, i: usize| {
+      2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i + 1
+    };
+    let V_VMR3 = |b: usize, i: usize| {
+      2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i + 2
+    };
+    let V_VMC = |b: usize, i: usize| {
+      2 * num_vars_padded_per_block[b] + 2 * num_inputs_unpadded + 2 * num_phy_ops[b] + 4 * i + 3
+    };
     // in BLOCK_W3
     let V_v = |b: usize| 3 * num_vars_padded_per_block[b];
     let V_x = |b: usize| 3 * num_vars_padded_per_block[b] + 1;
@@ -724,7 +744,10 @@ impl<S: SpartanExtensionField + Send + Sync> Instance<S> {
             max_cons_per_group.insert(num_vars_padded_per_block[i], block_num_cons[i]);
           }
         }
-        num_vars_padded_per_block.iter().map(|i| max_cons_per_group.get(i).unwrap().clone()).collect()
+        num_vars_padded_per_block
+          .iter()
+          .map(|i| max_cons_per_group.get(i).unwrap().clone())
+          .collect()
       } else {
         block_num_cons
       }
@@ -736,7 +759,10 @@ impl<S: SpartanExtensionField + Send + Sync> Instance<S> {
       block_max_num_cons,
       num_cons_padded_per_block,
       block_num_vars,
-      num_vars_padded_per_block.into_iter().map(|i| 8 * i).collect(),
+      num_vars_padded_per_block
+        .into_iter()
+        .map(|i| 8 * i)
+        .collect(),
       &A_list,
       &B_list,
       &C_list,

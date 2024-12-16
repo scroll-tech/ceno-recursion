@@ -1,6 +1,7 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::needless_range_loop)]
+use crate::r1csinstance::R1CSInstance;
 use crate::scalar::SpartanExtensionField;
 
 use super::dense_mlpoly::DensePolynomial;
@@ -403,19 +404,84 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
 
   // Z is consisted of vector segments
   // Z[i] contains entries i * max_num_cols ~ i * max_num_cols + num_cols
-  pub fn multiply_vec_disjoint_rounds(
-    &self,
+  // Operation for A_list
+  pub fn multiply_vec_disjoint_rounds_a(
+    inst: Arc<R1CSInstance<S>>,
+    p_inst: usize,
     num_rows: usize,
     max_num_cols: usize,
     _num_cols: usize,
-    z: &Vec<Vec<S>>,
+    z_mat: Arc<Vec<Vec<Vec<Vec<S>>>>>,
+    p: usize,
+    q: usize,
   ) -> Vec<S> {
-    (0..self.M.len())
+    (0..inst.A_list[p_inst].M.len())
       .map(|i| {
-        let row = self.M[i].row;
-        let col = self.M[i].col;
-        let val = &self.M[i].val;
-        (row, *val * z[col / max_num_cols][col % max_num_cols])
+        let row = inst.A_list[p_inst].M[i].row;
+        let col = inst.A_list[p_inst].M[i].col;
+        let val = &inst.A_list[p_inst].M[i].val;
+        (
+          row,
+          *val * z_mat[p][q][col / max_num_cols][col % max_num_cols],
+        )
+      })
+      .fold(vec![S::field_zero(); num_rows], |mut Mz, (r, v)| {
+        Mz[r] = Mz[r] + v;
+        Mz
+      })
+  }
+
+  // Z is consisted of vector segments
+  // Z[i] contains entries i * max_num_cols ~ i * max_num_cols + num_cols
+  // Operation for B_list
+  pub fn multiply_vec_disjoint_rounds_b(
+    inst: Arc<R1CSInstance<S>>,
+    p_inst: usize,
+    num_rows: usize,
+    max_num_cols: usize,
+    _num_cols: usize,
+    z_mat: Arc<Vec<Vec<Vec<Vec<S>>>>>,
+    p: usize,
+    q: usize,
+  ) -> Vec<S> {
+    (0..inst.B_list[p_inst].M.len())
+      .map(|i| {
+        let row = inst.B_list[p_inst].M[i].row;
+        let col = inst.B_list[p_inst].M[i].col;
+        let val = &inst.B_list[p_inst].M[i].val;
+        (
+          row,
+          *val * z_mat[p][q][col / max_num_cols][col % max_num_cols],
+        )
+      })
+      .fold(vec![S::field_zero(); num_rows], |mut Mz, (r, v)| {
+        Mz[r] = Mz[r] + v;
+        Mz
+      })
+  }
+
+  // Z is consisted of vector segments
+  // Z[i] contains entries i * max_num_cols ~ i * max_num_cols + num_cols
+  // Operation for C_list
+  pub fn multiply_vec_disjoint_rounds_c(
+    inst: Arc<R1CSInstance<S>>,
+    p_inst: usize,
+    num_rows: usize,
+    max_num_cols: usize,
+    _num_cols: usize,
+    z_mat: Arc<Vec<Vec<Vec<Vec<S>>>>>,
+    p: usize,
+    q: usize,
+  ) -> Vec<S> {
+    (0..inst.C_list[p_inst].M.len())
+      .map(|i| {
+        let row = inst.C_list[p_inst].M[i].row;
+        let col = inst.C_list[p_inst].M[i].col;
+        let val = &inst.C_list[p_inst].M[i].val;
+        (
+          row,
+          *val * z_mat[p][q][col / max_num_cols][col % max_num_cols],
+        )
       })
       .fold(vec![S::field_zero(); num_rows], |mut Mz, (r, v)| {
         Mz[r] = Mz[r] + v;
@@ -744,7 +810,7 @@ impl<S: SpartanExtensionField> HashLayerProof<S> {
     S::append_field_vector_to_transcript(b"claim_evals_ops", transcript, &evals_ops);
     let challenges_ops =
       transcript.challenge_vector(b"challenge_combine_n_to_one", evals_ops.len().log_2());
-      
+
     let mut poly_evals_ops = DensePolynomial::new(evals_ops);
     for i in (0..challenges_ops.len()).rev() {
       poly_evals_ops.bound_poly_var_bot(&challenges_ops[i]);
@@ -1422,8 +1488,15 @@ impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
       timer_build_network.stop();
 
       let timer_eval_network = Timer::new("evalproof_layered_network");
-      let poly_eval_network_proof =
-        PolyEvalNetworkProof::prove(&mut net, dense, &derefs, r_header, evals, transcript, random_tape);
+      let poly_eval_network_proof = PolyEvalNetworkProof::prove(
+        &mut net,
+        dense,
+        &derefs,
+        r_header,
+        evals,
+        transcript,
+        random_tape,
+      );
       timer_eval_network.stop();
 
       poly_eval_network_proof
@@ -1459,7 +1532,7 @@ impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
 
     self.poly_eval_network_proof.verify(
       comm,
-      r_header, 
+      r_header,
       evals,
       &rx_ext,
       &ry_ext,
@@ -1525,7 +1598,14 @@ mod tests {
 
     let mut verifier_transcript = Transcript::new(b"example");
     assert!(proof
-      .verify(&poly_comm, Scalar::one(), &rx, &ry, &evals, &mut verifier_transcript,)
+      .verify(
+        &poly_comm,
+        Scalar::one(),
+        &rx,
+        &ry,
+        &evals,
+        &mut verifier_transcript,
+      )
       .is_ok());
   }
 }

@@ -15,13 +15,13 @@ use super::sparse_mlpoly::{
 };
 use super::timer::Timer;
 use flate2::{write::ZlibEncoder, Compression};
-use std::iter::zip;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
+use std::iter::zip;
 
-use threadpool::ThreadPool;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use threadpool::ThreadPool;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct R1CSInstance<S: SpartanExtensionField> {
@@ -33,9 +33,9 @@ pub struct R1CSInstance<S: SpartanExtensionField> {
   max_num_vars: usize,
   num_vars: Vec<usize>,
   // List of individual A, B, C for matrix multiplication
-  A_list: Vec<SparseMatPolynomial<S>>,
-  B_list: Vec<SparseMatPolynomial<S>>,
-  C_list: Vec<SparseMatPolynomial<S>>,
+  pub A_list: Vec<SparseMatPolynomial<S>>,
+  pub B_list: Vec<SparseMatPolynomial<S>>,
+  pub C_list: Vec<SparseMatPolynomial<S>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -235,9 +235,12 @@ impl<S: SpartanExtensionField + 'static> R1CSInstance<S> {
     assert!(inst.num_instances == 1 || inst.num_instances == num_instances);
     assert_eq!(max_num_cons, inst.max_num_cons);
 
-    let Az: Arc<Mutex<Vec<Vec<Vec<Vec<S>>>>>> = Arc::new(Mutex::new(vec![Vec::new(); num_instances]));
-    let Bz: Arc<Mutex<Vec<Vec<Vec<Vec<S>>>>>> = Arc::new(Mutex::new(vec![Vec::new(); num_instances]));
-    let Cz: Arc<Mutex<Vec<Vec<Vec<Vec<S>>>>>> = Arc::new(Mutex::new(vec![Vec::new(); num_instances]));
+    let Az: Arc<Mutex<Vec<Vec<Vec<Vec<S>>>>>> =
+      Arc::new(Mutex::new(vec![Vec::new(); num_instances]));
+    let Bz: Arc<Mutex<Vec<Vec<Vec<Vec<S>>>>>> =
+      Arc::new(Mutex::new(vec![Vec::new(); num_instances]));
+    let Cz: Arc<Mutex<Vec<Vec<Vec<Vec<S>>>>>> =
+      Arc::new(Mutex::new(vec![Vec::new(); num_instances]));
 
     let pool = ThreadPool::new(1000);
 
@@ -249,46 +252,71 @@ impl<S: SpartanExtensionField + 'static> R1CSInstance<S> {
       let nips = num_inputs[p];
       let ncons = num_cons[p_inst];
 
-      let Az = Arc::clone(&Az);
-      let Bz = Arc::clone(&Bz);
-      let Cz = Arc::clone(&Cz);
-      let inst = Arc::clone(&inst);
-      let z_mat = Arc::clone(&z_mat);
+      let mut arc_Az = Az.lock().unwrap();
+      arc_Az[p] = vec![vec![]; nps];
+      let mut arc_Bz = Bz.lock().unwrap();
+      arc_Bz[p] = vec![vec![]; nps];
+      let mut arc_Cz = Cz.lock().unwrap();
+      arc_Cz[p] = vec![vec![]; nps];
 
-      // debug_parallel
-      print!("num_instances: {:?}, num_proofs: {:?}", num_instances, nps);
-
-      pool.execute(move || {
-        let z_list = &z_mat[p];
-  
-        for q in 0..nps {
-          let z = &z_list[q];
-  
-          let mut Az = Az.lock().unwrap();
-          Az[p].push(vec![inst.A_list[p_inst].multiply_vec_disjoint_rounds(
+      for q in 0..nps {
+        let arc_Az = Arc::clone(&Az);
+        let arc_inst = Arc::clone(&inst);
+        let arc_z_mat = Arc::clone(&z_mat);
+        pool.execute(move || {
+          let new_a_list = vec![SparseMatPolynomial::multiply_vec_disjoint_rounds_a(
+            arc_inst,
+            p_inst,
             ncons.clone(),
             max_num_inputs,
             nips,
-            z,
-          )]);
+            arc_z_mat,
+            p,
+            q,
+          )];
 
-          let mut Bz = Bz.lock().unwrap();
-          Bz[p].push(vec![inst.B_list[p_inst].multiply_vec_disjoint_rounds(
+          let mut Az = arc_Az.lock().unwrap();
+          Az[p][q] = new_a_list;
+        });
+
+        let arc_Bz = Arc::clone(&Bz);
+        let arc_inst = Arc::clone(&inst);
+        let arc_z_mat = Arc::clone(&z_mat);
+        pool.execute(move || {
+          let new_b_list = vec![SparseMatPolynomial::multiply_vec_disjoint_rounds_b(
+            arc_inst,
+            p_inst,
             ncons.clone(),
             max_num_inputs,
             nips,
-            z,
-          )]);
+            arc_z_mat,
+            p,
+            q,
+          )];
 
-          let mut Cz = Cz.lock().unwrap();
-          Cz[p].push(vec![inst.C_list[p_inst].multiply_vec_disjoint_rounds(
+          let mut Bz = arc_Bz.lock().unwrap();
+          Bz[p][q] = new_b_list;
+        });
+
+        let arc_Cz = Arc::clone(&Cz);
+        let arc_inst = Arc::clone(&inst);
+        let arc_z_mat = Arc::clone(&z_mat);
+        pool.execute(move || {
+          let new_c_list = vec![SparseMatPolynomial::multiply_vec_disjoint_rounds_c(
+            arc_inst,
+            p_inst,
             ncons.clone(),
             max_num_inputs,
             nips,
-            z,
-          )]);
-        }
-      });
+            arc_z_mat,
+            p,
+            q,
+          )];
+
+          let mut Cz = arc_Cz.lock().unwrap();
+          Cz[p][q] = new_c_list;
+        });
+      }
     }
 
     pool.join();
@@ -383,7 +411,10 @@ impl<S: SpartanExtensionField + 'static> R1CSInstance<S> {
   ) {
     assert!(inst.num_instances == 1 || inst.num_instances == num_instances);
     assert_eq!(num_rows, &inst.num_cons);
-    assert_eq!(num_segs.next_power_of_two() * max_num_cols, inst.max_num_vars);
+    assert_eq!(
+      num_segs.next_power_of_two() * max_num_cols,
+      inst.max_num_vars
+    );
 
     let mut evals_A_list = Vec::new();
     let mut evals_B_list = Vec::new();
@@ -426,22 +457,22 @@ impl<S: SpartanExtensionField + 'static> R1CSInstance<S> {
     for i in 0..self.num_instances {
       let num_cons = self.num_cons[i];
       let num_vars = self.num_vars[i];
-      let rx_header = rx[..rx.len() - min(rx.len(), num_cons.log_2())].iter().fold(
-        S::field_one(), |c, i| c * (S::field_one() - i.clone())
-      );
+      let rx_header = rx[..rx.len() - min(rx.len(), num_cons.log_2())]
+        .iter()
+        .fold(S::field_one(), |c, i| c * (S::field_one() - i.clone()));
       let rx_short = &rx[rx.len() - min(rx.len(), num_cons.log_2())..];
       let ry_skip_len = ry.len() - min(ry.len(), num_vars.log_2());
       let (ry_header, ry_short) = {
         if IS_BLOCK {
-          let ry_header = ry[3..3 + ry_skip_len].iter().fold(
-            S::field_one(), |c, i| c * (S::field_one() - i.clone())
-          );
+          let ry_header = ry[3..3 + ry_skip_len]
+            .iter()
+            .fold(S::field_one(), |c, i| c * (S::field_one() - i.clone()));
           let ry_short = [ry[..3].to_vec(), ry[3 + ry_skip_len..].to_vec()].concat();
           (ry_header, ry_short)
         } else {
-          let ry_header = ry[0..ry_skip_len].iter().fold(
-            S::field_one(), |c, i| c * (S::field_one() - i.clone())
-          );
+          let ry_header = ry[0..ry_skip_len]
+            .iter()
+            .fold(S::field_one(), |c, i| c * (S::field_one() - i.clone()));
           let ry_short = ry[ry_skip_len..].to_vec();
           (ry_header, ry_short)
         }
@@ -474,22 +505,22 @@ impl<S: SpartanExtensionField + 'static> R1CSInstance<S> {
     for i in 0..inst.num_instances {
       let num_cons = inst.num_cons[i];
       let num_vars = inst.num_vars[i];
-      let rx_header = rx[..rx.len() - min(rx.len(), num_cons.log_2())].iter().fold(
-        S::field_one(), |c, i| c * (S::field_one() - i.clone())
-      );
+      let rx_header = rx[..rx.len() - min(rx.len(), num_cons.log_2())]
+        .iter()
+        .fold(S::field_one(), |c, i| c * (S::field_one() - i.clone()));
       let rx_short = &rx[rx.len() - min(rx.len(), num_cons.log_2())..];
       let ry_skip_len = ry.len() - min(ry.len(), num_vars.log_2());
       let (ry_header, ry_short) = {
         if IS_BLOCK {
-          let ry_header = ry[3..3 + ry_skip_len].iter().fold(
-            S::field_one(), |c, i| c * (S::field_one() - i.clone())
-          );
+          let ry_header = ry[3..3 + ry_skip_len]
+            .iter()
+            .fold(S::field_one(), |c, i| c * (S::field_one() - i.clone()));
           let ry_short = [ry[..3].to_vec(), ry[3 + ry_skip_len..].to_vec()].concat();
           (ry_header, ry_short)
         } else {
-          let ry_header = ry[0..ry_skip_len].iter().fold(
-            S::field_one(), |c, i| c * (S::field_one() - i.clone())
-          );
+          let ry_header = ry[0..ry_skip_len]
+            .iter()
+            .fold(S::field_one(), |c, i| c * (S::field_one() - i.clone()));
           let ry_short = ry[ry_skip_len..].to_vec();
           (ry_header, ry_short)
         }
@@ -500,7 +531,10 @@ impl<S: SpartanExtensionField + 'static> R1CSInstance<S> {
         rx_short,
         &ry_short,
       );
-      let evals: Vec<S> = evals.into_iter().map(|i| rx_header * ry_header * i).collect();
+      let evals: Vec<S> = evals
+        .into_iter()
+        .map(|i| rx_header * ry_header * i)
+        .collect();
       eval_list.extend(evals.clone());
       a_evals.push(evals[0]);
       b_evals.push(evals[1]);
@@ -542,7 +576,10 @@ impl<S: SpartanExtensionField + 'static> R1CSInstance<S> {
 
     // Group the instances based on number of variables, which are already orders of 2^4
     for i in 0..self.num_instances {
-      println!("I: {}, NUM_CONS: {}, NUM_VARS: {}", i, self.num_cons[i], self.num_vars[i]);
+      println!(
+        "I: {}, NUM_CONS: {}, NUM_VARS: {}",
+        i, self.num_cons[i], self.num_vars[i]
+      );
 
       let var_len = self.num_vars[i];
       // A_list, B_list, C_list
@@ -567,7 +604,9 @@ impl<S: SpartanExtensionField + 'static> R1CSInstance<S> {
 
     let mut r1cs_comm_list = Vec::new();
     let mut r1cs_decomm_list = Vec::new();
-    for ((sparse_polys, max_num_cons), max_num_vars) in zip(zip(sparse_polys_list, max_num_cons_list), max_num_vars_list) {
+    for ((sparse_polys, max_num_cons), max_num_vars) in
+      zip(zip(sparse_polys_list, max_num_cons_list), max_num_vars_list)
+    {
       let (comm, dense) = SparseMatPolynomial::multi_commit(&sparse_polys);
       let r1cs_comm = R1CSCommitment {
         num_cons: max_num_cons.next_power_of_two(),
@@ -577,7 +616,7 @@ impl<S: SpartanExtensionField + 'static> R1CSInstance<S> {
       let r1cs_decomm = R1CSDecommitment {
         num_cons: max_num_cons.next_power_of_two(),
         num_vars: max_num_vars,
-        dense
+        dense,
       };
 
       r1cs_comm_list.push(r1cs_comm);
@@ -606,7 +645,7 @@ impl<S: SpartanExtensionField + 'static> R1CSInstance<S> {
     let r1cs_decomm = R1CSDecommitment {
       num_cons: self.num_instances * self.max_num_cons,
       num_vars: self.max_num_vars,
-      dense
+      dense,
     };
 
     (r1cs_comm, r1cs_decomm)
@@ -630,29 +669,36 @@ impl<S: SpartanExtensionField> R1CSEvalProof<S> {
   ) -> R1CSEvalProof<S> {
     let timer = Timer::new("R1CSEvalProof::prove");
     let rx_skip_len = rx.len() - min(rx.len(), decomm.num_cons.log_2());
-    let rx_header = rx[..rx_skip_len].iter().fold(
-      S::field_one(), |c, i| c * (S::field_one() - i.clone())
-    );
+    let rx_header = rx[..rx_skip_len]
+      .iter()
+      .fold(S::field_one(), |c, i| c * (S::field_one() - i.clone()));
     let rx_short = &rx[rx_skip_len..];
     let ry_skip_len = ry.len() - min(ry.len(), decomm.num_vars.log_2());
     let (ry_header, ry_short) = {
       if IS_BLOCK {
-        let ry_header = ry[3..3 + ry_skip_len].iter().fold(
-          S::field_one(), |c, i| c * (S::field_one() - i.clone())
-        );
+        let ry_header = ry[3..3 + ry_skip_len]
+          .iter()
+          .fold(S::field_one(), |c, i| c * (S::field_one() - i.clone()));
         let ry_short = [ry[..3].to_vec(), ry[3 + ry_skip_len..].to_vec()].concat();
         (ry_header, ry_short)
       } else {
-        let ry_header = ry[0..ry_skip_len].iter().fold(
-          S::field_one(), |c, i| c * (S::field_one() - i.clone())
-        );
+        let ry_header = ry[0..ry_skip_len]
+          .iter()
+          .fold(S::field_one(), |c, i| c * (S::field_one() - i.clone()));
         let ry_short = ry[ry_skip_len..].to_vec();
         (ry_header, ry_short)
       }
     };
     // let ry_short = &ry[..min(ry.len(), decomm.num_vars.log_2())];
-    let proof =
-      SparseMatPolyEvalProof::prove(&decomm.dense, rx_header * ry_header, rx_short, &ry_short, evals, transcript, random_tape);
+    let proof = SparseMatPolyEvalProof::prove(
+      &decomm.dense,
+      rx_header * ry_header,
+      rx_short,
+      &ry_short,
+      evals,
+      transcript,
+      random_tape,
+    );
     timer.stop();
 
     R1CSEvalProof { proof }
@@ -666,26 +712,33 @@ impl<S: SpartanExtensionField> R1CSEvalProof<S> {
     evals: &Vec<S>,
     transcript: &mut Transcript,
   ) -> Result<(), ProofVerifyError> {
-    let rx_header = rx[..rx.len() - min(rx.len(), comm.num_cons.log_2())].iter().fold(
-      S::field_one(), |c, i| c * (S::field_one() - i.clone())
-    );
+    let rx_header = rx[..rx.len() - min(rx.len(), comm.num_cons.log_2())]
+      .iter()
+      .fold(S::field_one(), |c, i| c * (S::field_one() - i.clone()));
     let rx_short = &rx[rx.len() - min(rx.len(), comm.num_cons.log_2())..];
     let ry_skip_len = ry.len() - min(ry.len(), comm.num_vars.log_2());
     let (ry_header, ry_short) = {
       if IS_BLOCK {
-        let ry_header = ry[3..3 + ry_skip_len].iter().fold(
-          S::field_one(), |c, i| c * (S::field_one() - i.clone())
-        );
+        let ry_header = ry[3..3 + ry_skip_len]
+          .iter()
+          .fold(S::field_one(), |c, i| c * (S::field_one() - i.clone()));
         let ry_short = [ry[..3].to_vec(), ry[3 + ry_skip_len..].to_vec()].concat();
         (ry_header, ry_short)
       } else {
-        let ry_header = ry[0..ry_skip_len].iter().fold(
-          S::field_one(), |c, i| c * (S::field_one() - i.clone())
-        );
+        let ry_header = ry[0..ry_skip_len]
+          .iter()
+          .fold(S::field_one(), |c, i| c * (S::field_one() - i.clone()));
         let ry_short = ry[ry_skip_len..].to_vec();
         (ry_header, ry_short)
       }
     };
-    self.proof.verify(&comm.comm, rx_header * ry_header, rx_short, &ry_short, evals, transcript)
+    self.proof.verify(
+      &comm.comm,
+      rx_header * ry_header,
+      rx_short,
+      &ry_short,
+      evals,
+      transcript,
+    )
   }
 }

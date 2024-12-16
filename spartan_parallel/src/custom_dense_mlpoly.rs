@@ -41,7 +41,7 @@ pub fn rev_bits(q: usize, max_num_proofs: usize) -> usize {
 impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   // Assume z_mat is of form (p, q_rev, x), construct DensePoly
   pub fn new(
-    z_mat: &Vec<Vec<Vec<Vec<S>>>>,
+    z_mat: Vec<Vec<Vec<Vec<S>>>>,
     num_proofs: Vec<usize>,
     max_num_proofs: usize,
     num_inputs: Vec<usize>,
@@ -56,7 +56,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
       num_witness_secs,
       num_inputs,
       max_num_inputs,
-      Z: z_mat.clone(),
+      Z: z_mat,
     }
   }
 

@@ -15,6 +15,9 @@ use zeroize::Zeroize;
 #[derive(Clone, Copy, Eq, Serialize, Deserialize, Hash, Debug)]
 pub struct Scalar(Goldilocks);
 
+unsafe impl Send for Scalar {}
+unsafe impl Sync for Scalar {}
+
 impl SpartanExtensionField for Scalar {
   type InnerType = Goldilocks;
   type BaseField = Goldilocks;

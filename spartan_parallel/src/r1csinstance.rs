@@ -1,3 +1,5 @@
+use rayon::prelude::*;
+
 use std::cmp::{max, min};
 use std::collections::HashMap;
 
@@ -65,7 +67,7 @@ impl<S: SpartanExtensionField> R1CSCommitment<S> {
   }
 }
 
-impl<S: SpartanExtensionField> R1CSInstance<S> {
+impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
   pub fn new(
     num_instances: usize,
     max_num_cons: usize,
@@ -243,6 +245,31 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
       Az.push(Vec::new());
       Bz.push(Vec::new());
       Cz.push(Vec::new());
+      Az[p] = (0..num_proofs[p]).into_par_iter().map(|q|
+        vec![self.A_list[p_inst].multiply_vec_disjoint_rounds(
+          num_cons[p_inst].clone(),
+          max_num_inputs,
+          num_inputs[p],
+          &z_list[q],
+        )]
+      ).collect();
+      Bz[p] = (0..num_proofs[p]).into_par_iter().map(|q|
+        vec![self.B_list[p_inst].multiply_vec_disjoint_rounds(
+          num_cons[p_inst].clone(),
+          max_num_inputs,
+          num_inputs[p],
+          &z_list[q],
+        )]
+      ).collect();
+      Cz[p] = (0..num_proofs[p]).into_par_iter().map(|q|
+        vec![self.C_list[p_inst].multiply_vec_disjoint_rounds(
+          num_cons[p_inst].clone(),
+          max_num_inputs,
+          num_inputs[p],
+          &z_list[q],
+        )]
+      ).collect();
+      /*
       for q in 0..num_proofs[p] {
         let z = &z_list[q];
 
@@ -265,6 +292,7 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
           z,
         )]);
       }
+      */
     }
 
     (

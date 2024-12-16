@@ -18,6 +18,7 @@ use flate2::{write::ZlibEncoder, Compression};
 use std::iter::zip;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
+use rayon::prelude::*;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct R1CSInstance<S: SpartanExtensionField> {
@@ -243,28 +244,31 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
       Az.push(Vec::new());
       Bz.push(Vec::new());
       Cz.push(Vec::new());
-      for q in 0..num_proofs[p] {
-        let z = &z_list[q];
 
-        Az[p].push(vec![self.A_list[p_inst].multiply_vec_disjoint_rounds(
+      Az[p] = (0..num_proofs[p]).into_par_iter().map(|q|
+        vec![self.A_list[p_inst].multiply_vec_disjoint_rounds(
           num_cons[p_inst].clone(),
           max_num_inputs,
           num_inputs[p],
-          z,
-        )]);
-        Bz[p].push(vec![self.B_list[p_inst].multiply_vec_disjoint_rounds(
+          &z_list[q],
+        )]
+      ).collect();
+      Bz[p] = (0..num_proofs[p]).into_par_iter().map(|q|
+        vec![self.B_list[p_inst].multiply_vec_disjoint_rounds(
           num_cons[p_inst].clone(),
           max_num_inputs,
           num_inputs[p],
-          z,
-        )]);
-        Cz[p].push(vec![self.C_list[p_inst].multiply_vec_disjoint_rounds(
+          &z_list[q],
+        )]
+      ).collect();
+      Cz[p] = (0..num_proofs[p]).into_par_iter().map(|q|
+        vec![self.C_list[p_inst].multiply_vec_disjoint_rounds(
           num_cons[p_inst].clone(),
           max_num_inputs,
           num_inputs[p],
-          z,
-        )]);
-      }
+          &z_list[q],
+        )]
+      ).collect();
     }
 
     (

@@ -14,6 +14,7 @@ use super::transcript::{AppendToTranscript, ProofTranscript};
 use core::cmp::Ordering;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SparseMatEntry<S: SpartanExtensionField> {

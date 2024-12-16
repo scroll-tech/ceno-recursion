@@ -19,6 +19,9 @@ use std::iter::zip;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
+use std::sync::{Arc, Mutex};
+use std::thread;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct R1CSInstance<S: SpartanExtensionField> {
   // num_instances DOES NOT need to be a power of 2!
@@ -65,7 +68,7 @@ impl<S: SpartanExtensionField> R1CSCommitment<S> {
   }
 }
 
-impl<S: SpartanExtensionField> R1CSInstance<S> {
+impl<S: SpartanExtensionField + 'static> R1CSInstance<S> {
   pub fn new(
     num_instances: usize,
     max_num_cons: usize,
@@ -214,7 +217,7 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
   // Az(p, q, x) <- A(p, x) * z(p, q, x), where we require p for A and z are the same
   // Return Az, Bz, Cz as DensePolynomialPqx
   pub fn multiply_vec_block(
-    &self,
+    inst: Arc<Self>,
     num_instances: usize,
     num_proofs: Vec<usize>,
     max_num_proofs: usize,
@@ -222,50 +225,77 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     max_num_inputs: usize,
     max_num_cons: usize,
     num_cons: Vec<usize>,
-    z_mat: &Vec<Vec<Vec<Vec<S>>>>,
+    z_mat: Arc<Vec<Vec<Vec<Vec<S>>>>>,
   ) -> (
     DensePolynomialPqx<S>,
     DensePolynomialPqx<S>,
     DensePolynomialPqx<S>,
   ) {
-    assert!(self.num_instances == 1 || self.num_instances == num_instances);
-    assert_eq!(max_num_cons, self.max_num_cons);
-    let mut Az = Vec::new();
-    let mut Bz = Vec::new();
-    let mut Cz = Vec::new();
+    assert!(inst.num_instances == 1 || inst.num_instances == num_instances);
+    assert_eq!(max_num_cons, inst.max_num_cons);
+
+    let Az: Arc<Mutex<Vec<Vec<Vec<Vec<S>>>>>> = Arc::new(Mutex::new(vec![Vec::new(); num_instances]));
+    let Bz: Arc<Mutex<Vec<Vec<Vec<Vec<S>>>>>> = Arc::new(Mutex::new(vec![Vec::new(); num_instances]));
+    let Cz: Arc<Mutex<Vec<Vec<Vec<Vec<S>>>>>> = Arc::new(Mutex::new(vec![Vec::new(); num_instances]));
+
+    let mut instance_threads = vec![];
 
     // Non-zero instances
     for p in 0..num_instances {
-      let p_inst = if self.num_instances == 1 { 0 } else { p };
-
-      let z_list = &z_mat[p];
+      let p_inst = if inst.num_instances == 1 { 0 } else { p };
       assert!(num_proofs[p] <= max_num_proofs);
-      Az.push(Vec::new());
-      Bz.push(Vec::new());
-      Cz.push(Vec::new());
-      for q in 0..num_proofs[p] {
-        let z = &z_list[q];
+      let nps = num_proofs[p];
+      let nips = num_inputs[p];
+      let ncons = num_cons[p_inst];
 
-        Az[p].push(vec![self.A_list[p_inst].multiply_vec_disjoint_rounds(
-          num_cons[p_inst].clone(),
-          max_num_inputs,
-          num_inputs[p],
-          z,
-        )]);
-        Bz[p].push(vec![self.B_list[p_inst].multiply_vec_disjoint_rounds(
-          num_cons[p_inst].clone(),
-          max_num_inputs,
-          num_inputs[p],
-          z,
-        )]);
-        Cz[p].push(vec![self.C_list[p_inst].multiply_vec_disjoint_rounds(
-          num_cons[p_inst].clone(),
-          max_num_inputs,
-          num_inputs[p],
-          z,
-        )]);
-      }
+      let Az = Arc::clone(&Az);
+      let Bz = Arc::clone(&Bz);
+      let Cz = Arc::clone(&Cz);
+      let inst = Arc::clone(&inst);
+      let z_mat = Arc::clone(&z_mat);
+
+      let inst_handle = thread::spawn(move || {
+        let z_list = &z_mat[p];
+  
+        for q in 0..nps {
+          let z = &z_list[q];
+  
+          let mut Az = Az.lock().unwrap();
+          Az[p].push(vec![inst.A_list[p_inst].multiply_vec_disjoint_rounds(
+            ncons.clone(),
+            max_num_inputs,
+            nips,
+            z,
+          )]);
+
+          let mut Bz = Bz.lock().unwrap();
+          Bz[p].push(vec![inst.B_list[p_inst].multiply_vec_disjoint_rounds(
+            ncons.clone(),
+            max_num_inputs,
+            nips,
+            z,
+          )]);
+
+          let mut Cz = Cz.lock().unwrap();
+          Cz[p].push(vec![inst.C_list[p_inst].multiply_vec_disjoint_rounds(
+            ncons.clone(),
+            max_num_inputs,
+            nips,
+            z,
+          )]);
+        }
+      });
+
+      instance_threads.push(inst_handle);
     }
+
+    for h in instance_threads {
+      h.join().unwrap();
+    }
+
+    let Az = Az.lock().unwrap();
+    let Bz = Bz.lock().unwrap();
+    let Cz = Cz.lock().unwrap();
 
     (
       DensePolynomialPqx::new_rev(
@@ -338,7 +368,7 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
   // Store the result in a vector divided into num_segs segments
   // output[p][q][w] stores entry w * max_num_cols ~ w * max_num_cols + num_cols of the original vector
   pub fn compute_eval_table_sparse_disjoint_rounds(
-    &self,
+    inst: Arc<Self>,
     num_instances: usize,
     num_rows: &Vec<usize>,
     num_segs: usize,
@@ -351,30 +381,30 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     Vec<Vec<Vec<Vec<S>>>>,
     Vec<Vec<Vec<Vec<S>>>>,
   ) {
-    assert!(self.num_instances == 1 || self.num_instances == num_instances);
-    assert_eq!(num_rows, &self.num_cons);
-    assert_eq!(num_segs.next_power_of_two() * max_num_cols, self.max_num_vars);
+    assert!(inst.num_instances == 1 || inst.num_instances == num_instances);
+    assert_eq!(num_rows, &inst.num_cons);
+    assert_eq!(num_segs.next_power_of_two() * max_num_cols, inst.max_num_vars);
 
     let mut evals_A_list = Vec::new();
     let mut evals_B_list = Vec::new();
     let mut evals_C_list = Vec::new();
-    // Length of output follows self.num_instances NOT num_instances!!!
-    for p in 0..self.num_instances {
-      let evals_A = self.A_list[p].compute_eval_table_sparse_disjoint_rounds(
+    // Length of output follows inst.num_instances NOT num_instances!!!
+    for p in 0..inst.num_instances {
+      let evals_A = inst.A_list[p].compute_eval_table_sparse_disjoint_rounds(
         evals,
         num_rows[p],
         num_segs,
         max_num_cols,
         num_cols[p],
       );
-      let evals_B = self.B_list[p].compute_eval_table_sparse_disjoint_rounds(
+      let evals_B = inst.B_list[p].compute_eval_table_sparse_disjoint_rounds(
         evals,
         num_rows[p],
         num_segs,
         max_num_cols,
         num_cols[p],
       );
-      let evals_C = self.C_list[p].compute_eval_table_sparse_disjoint_rounds(
+      let evals_C = inst.C_list[p].compute_eval_table_sparse_disjoint_rounds(
         evals,
         num_rows[p],
         num_segs,
@@ -428,7 +458,7 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
   }
 
   pub fn multi_evaluate_bound_rp<const IS_BLOCK: bool>(
-    &self,
+    inst: &Self,
     rp: &[S],
     rx: &[S],
     ry: &[S],
@@ -441,9 +471,9 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
     let mut c_evals = Vec::new();
     let mut eval_list = Vec::new();
     // Evaluate each individual poly on [rx, ry]
-    for i in 0..self.num_instances {
-      let num_cons = self.num_cons[i];
-      let num_vars = self.num_vars[i];
+    for i in 0..inst.num_instances {
+      let num_cons = inst.num_cons[i];
+      let num_vars = inst.num_vars[i];
       let rx_header = rx[..rx.len() - min(rx.len(), num_cons.log_2())].iter().fold(
         S::field_one(), |c, i| c * (S::field_one() - i.clone())
       );
@@ -466,7 +496,7 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
       };
 
       let evals = SparseMatPolynomial::multi_evaluate(
-        &[&self.A_list[i], &self.B_list[i], &self.C_list[i]],
+        &[&inst.A_list[i], &inst.B_list[i], &inst.C_list[i]],
         rx_short,
         &ry_short,
       );
@@ -486,11 +516,11 @@ impl<S: SpartanExtensionField> R1CSInstance<S> {
   }
 
   // Used if there is only one instance
-  pub fn evaluate(&self, rx: &[S], ry: &[S]) -> (S, S, S) {
-    assert_eq!(self.num_instances, 1);
+  pub fn evaluate(inst: &Self, rx: &[S], ry: &[S]) -> (S, S, S) {
+    assert_eq!(inst.num_instances, 1);
 
     let evals = SparseMatPolynomial::multi_evaluate(
-      &[&self.A_list[0], &self.B_list[0], &self.C_list[0]],
+      &[&inst.A_list[0], &inst.B_list[0], &inst.C_list[0]],
       rx,
       ry,
     );

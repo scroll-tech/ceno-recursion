@@ -1277,7 +1277,7 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField>(
     }
 }
 
-fn run_spartan_proof<S: SpartanExtensionField>(
+fn run_spartan_proof<S: SpartanExtensionField + 'static>(
     ctk: CompileTimeKnowledge,
     rtk: RunTimeKnowledge<S>,
 ) {
@@ -1411,7 +1411,7 @@ fn run_spartan_proof<S: SpartanExtensionField>(
         block_num_instances_bound,
         rtk.block_max_num_proofs,
         &block_num_proofs,
-        &mut block_inst,
+        block_inst,
         &block_comm_map,
         &block_comm_list,
         &block_decomm_list,
@@ -1420,7 +1420,7 @@ fn run_spartan_proof<S: SpartanExtensionField>(
         rtk.total_num_init_vir_mem_accesses,
         rtk.total_num_phy_mem_accesses,
         rtk.total_num_vir_mem_accesses,
-        &mut pairwise_check_inst,
+        pairwise_check_inst,
         &pairwise_check_comm,
         &pairwise_check_decomm,
         block_vars_matrix,
@@ -1430,7 +1430,7 @@ fn run_spartan_proof<S: SpartanExtensionField>(
         rtk.addr_phy_mems_list,
         rtk.addr_vir_mems_list,
         rtk.addr_ts_bits_list,
-        &perm_root_inst,
+        perm_root_inst,
         &perm_root_comm,
         &perm_root_decomm,
         &mut prover_transcript,

@@ -14,6 +14,7 @@ use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::iter::zip;
+use std::sync::Arc;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct R1CSProof<S: SpartanExtensionField> {
@@ -27,7 +28,7 @@ pub struct R1CSProof<S: SpartanExtensionField> {
   // proof_eval_vars_at_ry_list: Vec<PolyEvalProof<S>>,
 }
 
-impl<S: SpartanExtensionField> R1CSProof<S> {
+impl<S: SpartanExtensionField + 'static> R1CSProof<S> {
   fn prove_phase_one(
     num_rounds: usize,
     num_rounds_x_max: usize,
@@ -129,7 +130,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     // POLY_W: one dense polynomial per instance
     witness_secs: Vec<&ProverWitnessSecInfo<S>>,
     // INSTANCES
-    inst: &R1CSInstance<S>,
+    inst: Arc<R1CSInstance<S>>,
     transcript: &mut Transcript,
   ) -> (R1CSProof<S>, [Vec<S>; 4]) {
     let timer_prove = Timer::new("R1CSProof::prove");
@@ -214,7 +215,9 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let mut poly_tau_p = DensePolynomial::new(EqPolynomial::new(tau_p).evals());
     let mut poly_tau_q = DensePolynomial::new(EqPolynomial::new(tau_q).evals());
     let mut poly_tau_x = DensePolynomial::new(EqPolynomial::new(tau_x).evals());
-    let (mut poly_Az, mut poly_Bz, mut poly_Cz) = inst.multiply_vec_block(
+    let arc_z_mat = Arc::new(z_mat);
+    let (mut poly_Az, mut poly_Bz, mut poly_Cz) = R1CSInstance::multiply_vec_block(
+      inst.clone(),
       num_instances,
       num_proofs.clone(),
       max_num_proofs,
@@ -222,7 +225,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       max_num_inputs,
       num_cons,
       block_num_cons.clone(),
-      &z_mat,
+      arc_z_mat.clone(),
     );
     timer_tmp.stop();
 
@@ -287,7 +290,8 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let evals_ABC = {
       // compute the initial evaluation table for R(\tau, x)
       let evals_rx = EqPolynomial::new(rx.clone()).evals();
-      let (evals_A, evals_B, evals_C) = inst.compute_eval_table_sparse_disjoint_rounds(
+      let (evals_A, evals_B, evals_C) = R1CSInstance::compute_eval_table_sparse_disjoint_rounds(
+        inst.clone(),
         num_instances,
         inst.get_inst_num_cons(),
         num_witness_secs,
@@ -322,7 +326,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
     let timer_tmp = Timer::new("prove_z_gen");
     // Construct a p * q * len(z) matrix Z and bound it to r_q
     let mut Z_poly = DensePolynomialPqx::new_rev(
-      &z_mat,
+      arc_z_mat.as_ref(),
       num_proofs.clone(),
       max_num_proofs,
       num_inputs.clone(),

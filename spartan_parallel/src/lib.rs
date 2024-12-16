@@ -56,6 +56,7 @@ use scalar::SpartanExtensionField;
 use serde::{Deserialize, Serialize};
 use timer::Timer;
 use transcript::{AppendToTranscript, ProofTranscript};
+use std::sync::Arc;
 
 const INIT_PHY_MEM_WIDTH: usize = 4;
 const INIT_VIR_MEM_WIDTH: usize = 4;
@@ -643,7 +644,7 @@ impl PartialEq for InstanceSortHelper {
 }
 impl Eq for InstanceSortHelper {}
 
-impl<S: SpartanExtensionField> SNARK<S> {
+impl<S: SpartanExtensionField + 'static> SNARK<S> {
   fn protocol_name() -> &'static [u8] {
     b"Spartan SNARK proof"
   }
@@ -859,7 +860,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     block_num_instances_bound: usize,
     block_max_num_proofs: usize,
     block_num_proofs: &Vec<usize>,
-    block_inst: &mut Instance<S>,
+    mut block_inst: Instance<S>,
     block_comm_map: &Vec<Vec<usize>>,
     block_comm_list: &Vec<ComputationCommitment<S>>,
     block_decomm_list: &Vec<ComputationDecommitment<S>>,
@@ -869,7 +870,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     total_num_init_vir_mem_accesses: usize,
     total_num_phy_mem_accesses: usize,
     total_num_vir_mem_accesses: usize,
-    pairwise_check_inst: &mut Instance<S>,
+    mut pairwise_check_inst: Instance<S>,
     pairwise_check_comm: &ComputationCommitment<S>,
     pairwise_check_decomm: &ComputationDecommitment<S>,
 
@@ -881,7 +882,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     addr_vir_mems_list: Vec<MemsAssignment<S>>,
     addr_ts_bits_list: Vec<MemsAssignment<S>>,
 
-    perm_root_inst: &Instance<S>,
+    perm_root_inst: Instance<S>,
     perm_root_comm: &ComputationCommitment<S>,
     perm_root_decomm: &ComputationDecommitment<S>,
     transcript: &mut Transcript,
@@ -1930,6 +1931,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       &block_w3_shifted_prover,
     ];
 
+    let arc_block_inst = Arc::new(block_inst.inst);
     let (block_r1cs_sat_proof, block_challenges) = {
       let (proof, block_challenges) = {
         R1CSProof::prove(
@@ -1939,7 +1941,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
           num_vars,
           &block_num_vars,
           block_wit_secs,
-          &block_inst.inst,
+          arc_block_inst.clone(),
           transcript,
         )
       };
@@ -1958,7 +1960,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       // Per instance evaluation is unsorted
       let inst_evals_list = block_inst_unsorted.inst.multi_evaluate::<true>(&rx, &ry);
       // RP-bound evaluation is sorted
-      let (_, inst_evals_bound_rp) = block_inst.inst.multi_evaluate_bound_rp::<true>(&rp, &rx, &ry);
+      let (_, inst_evals_bound_rp) = R1CSInstance::multi_evaluate_bound_rp::<true>(arc_block_inst.as_ref(), &rp, &rx, &ry);
       timer_eval.stop();
 
       for r in &inst_evals_list {
@@ -2038,6 +2040,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       }
       ProverWitnessSecInfo::concat(components)
     };
+    let arc_pairwise_check_inst = Arc::new(pairwise_check_inst.inst);
     let pairwise_num_instances = pairwise_prover.w_mat.len();
     let pairwise_num_proofs: Vec<usize> = pairwise_prover.w_mat.iter().map(|i| i.len()).collect();
     let (pairwise_check_r1cs_sat_proof, pairwise_check_challenges) = {
@@ -2053,7 +2056,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
             &pairwise_shifted_prover,
             &addr_ts_bits_prover,
           ],
-          &pairwise_check_inst.inst,
+          arc_pairwise_check_inst.clone(),
           transcript,
         )
       };
@@ -2076,9 +2079,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       // Per instance evaluation is unsorted
       let inst_evals_list = pairwise_check_inst_unsorted.inst.multi_evaluate::<false>(&rx, &ry);
       // RP-bound evaluation is sorted
-      let (_, inst_evals_bound_rp) = pairwise_check_inst
-        .inst
-        .multi_evaluate_bound_rp::<false>(&rp, &rx, &ry);
+      let (_, inst_evals_bound_rp) = R1CSInstance::multi_evaluate_bound_rp::<false>(arc_pairwise_check_inst.as_ref(), &rp, &rx, &ry);
       timer_eval.stop();
 
       for r in &inst_evals_list {
@@ -2161,6 +2162,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       &phy_mem_addr_w3_shifted_prover,
       &vir_mem_addr_w3_shifted_prover,
     ]);
+    let arc_perm_root_inst = Arc::new(perm_root_inst.inst);
     let perm_root_num_instances = perm_root_w1_prover.w_mat.len();
     let perm_root_num_proofs: Vec<usize> =
       perm_root_w1_prover.w_mat.iter().map(|i| i.len()).collect();
@@ -2179,7 +2181,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
             &perm_root_w3_prover,
             &perm_root_w3_shifted_prover,
           ],
-          &perm_root_inst.inst,
+          arc_perm_root_inst.clone(),
           transcript,
         )
       };
@@ -2193,10 +2195,9 @@ impl<S: SpartanExtensionField> SNARK<S> {
     // Final evaluation on PERM_ROOT
     let (perm_root_inst_evals, perm_root_r1cs_eval_proof) = {
       let [_, _, rx, ry] = perm_root_challenges;
-      let inst = perm_root_inst;
       let timer_eval = Timer::new("eval_sparse_polys");
       let inst_evals = {
-        let (Ar, Br, Cr) = inst.inst.evaluate(&rx, &ry);
+        let (Ar, Br, Cr) = R1CSInstance::evaluate(arc_perm_root_inst.as_ref(), &rx, &ry);
 
         for (val, tag) in [(Ar, b"Ar_claim"), (Br, b"Br_claim"), (Cr, b"Cr_claim")].into_iter() {
           S::append_field_to_transcript(tag, transcript, val);

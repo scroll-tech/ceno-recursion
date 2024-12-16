@@ -19,6 +19,7 @@ use std::iter::zip;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
+use threadpool::ThreadPool;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -238,7 +239,7 @@ impl<S: SpartanExtensionField + 'static> R1CSInstance<S> {
     let Bz: Arc<Mutex<Vec<Vec<Vec<Vec<S>>>>>> = Arc::new(Mutex::new(vec![Vec::new(); num_instances]));
     let Cz: Arc<Mutex<Vec<Vec<Vec<Vec<S>>>>>> = Arc::new(Mutex::new(vec![Vec::new(); num_instances]));
 
-    let mut instance_threads = vec![];
+    let pool = ThreadPool::new(1000);
 
     // Non-zero instances
     for p in 0..num_instances {
@@ -254,7 +255,10 @@ impl<S: SpartanExtensionField + 'static> R1CSInstance<S> {
       let inst = Arc::clone(&inst);
       let z_mat = Arc::clone(&z_mat);
 
-      let inst_handle = thread::spawn(move || {
+      // debug_parallel
+      print!("num_instances: {:?}, num_proofs: {:?}", num_instances, nps);
+
+      pool.execute(move || {
         let z_list = &z_mat[p];
   
         for q in 0..nps {
@@ -285,13 +289,9 @@ impl<S: SpartanExtensionField + 'static> R1CSInstance<S> {
           )]);
         }
       });
-
-      instance_threads.push(inst_handle);
     }
 
-    for h in instance_threads {
-      h.join().unwrap();
-    }
+    pool.join();
 
     let Az = Az.lock().unwrap();
     let Bz = Bz.lock().unwrap();

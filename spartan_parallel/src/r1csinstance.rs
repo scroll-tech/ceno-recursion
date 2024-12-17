@@ -3,6 +3,7 @@ use rayon::prelude::*;
 use std::cmp::{max, min};
 use std::collections::HashMap;
 
+use crate::custom_dense_mlpoly::rev_bits;
 use crate::scalar::SpartanExtensionField;
 use crate::transcript::AppendToTranscript;
 
@@ -250,8 +251,13 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
 
       Az[p] = (0..num_proofs[p])
         .into_par_iter()
-        .map(|q| {
+        .map(|q_rev| {
+          // Reverse the bits of q
+          let q_step = max_num_proofs / num_proofs[p];
+          let q = rev_bits(q_rev * q_step, max_num_proofs);
+
           vec![self.A_list[p_inst].multiply_vec_disjoint_rounds(
+            max_num_cons,
             num_cons[p_inst].clone(),
             max_num_inputs,
             num_inputs[p],
@@ -261,8 +267,13 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
         .collect();
       Bz[p] = (0..num_proofs[p])
         .into_par_iter()
-        .map(|q| {
+        .map(|q_rev| {
+          // Reverse the bits of q
+          let q_step = max_num_proofs / num_proofs[p];
+          let q = rev_bits(q_rev * q_step, max_num_proofs);
+
           vec![self.B_list[p_inst].multiply_vec_disjoint_rounds(
+            max_num_cons,
             num_cons[p_inst].clone(),
             max_num_inputs,
             num_inputs[p],
@@ -272,8 +283,13 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
         .collect();
       Cz[p] = (0..num_proofs[p])
         .into_par_iter()
-        .map(|q| {
+        .map(|q_rev| {
+          // Reverse the bits of q
+          let q_step = max_num_proofs / num_proofs[p];
+          let q = rev_bits(q_rev * q_step, max_num_proofs);
+          
           vec![self.C_list[p_inst].multiply_vec_disjoint_rounds(
+            max_num_cons,
             num_cons[p_inst].clone(),
             max_num_inputs,
             num_inputs[p],
@@ -284,22 +300,22 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
     }
 
     (
-      DensePolynomialPqx::new_rev(
-        &Az,
+      DensePolynomialPqx::new(
+        Az,
         num_proofs.clone(),
         max_num_proofs,
         num_cons.clone(),
         max_num_cons,
       ),
-      DensePolynomialPqx::new_rev(
-        &Bz,
+      DensePolynomialPqx::new(
+        Bz,
         num_proofs.clone(),
         max_num_proofs,
         num_cons.clone(),
         max_num_cons,
       ),
-      DensePolynomialPqx::new_rev(
-        &Cz,
+      DensePolynomialPqx::new(
+        Cz,
         num_proofs,
         max_num_proofs,
         num_cons.clone(),

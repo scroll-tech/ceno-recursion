@@ -1,6 +1,7 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::needless_range_loop)]
+use crate::custom_dense_mlpoly::rev_bits;
 use crate::scalar::SpartanExtensionField;
 
 use super::dense_mlpoly::DensePolynomial;
@@ -403,21 +404,27 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
   // Z is consisted of vector segments
   // Z[i] contains entries i * max_num_cols ~ i * max_num_cols + num_cols
   pub fn multiply_vec_disjoint_rounds(
-    &self,
-    num_rows: usize,
-    max_num_cols: usize,
-    _num_cols: usize,
-    z: &Vec<Vec<S>>,
+    &self, 
+    max_num_rows: usize,
+    num_rows: usize, 
+    max_num_cols: usize, 
+    _num_cols: usize, 
+    z: &Vec<Vec<S>>
   ) -> Vec<S> {
+    let step_r = max_num_rows / num_rows;
     (0..self.M.len())
       .map(|i| {
         let row = self.M[i].row;
         let col = self.M[i].col;
-        let val = &self.M[i].val;
-        (row, *val * z[col / max_num_cols][col % max_num_cols])
+        let val = self.M[i].val.clone();
+        (row, val * z[col / max_num_cols][col % max_num_cols])
       })
       .fold(vec![S::field_zero(); num_rows], |mut Mz, (r, v)| {
-        Mz[r] = Mz[r] + v;
+        // Reverse the bits of r. r_rev is a multiple of step_r
+        let r_rev = rev_bits(r, max_num_rows);
+        // Now r_rev is between 0 to num_inputs[p]
+        let r_rev = r_rev / step_r;
+        Mz[r_rev] += v;
         Mz
       })
   }

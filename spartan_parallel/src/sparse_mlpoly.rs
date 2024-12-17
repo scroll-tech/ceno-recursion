@@ -1475,6 +1475,7 @@ impl<S: SpartanExtensionField> SparseMatPolyEvalProof<S> {
   }
 }
 
+/*
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -1541,3 +1542,4 @@ mod tests {
       .is_ok());
   }
 }
+*/

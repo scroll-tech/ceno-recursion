@@ -1,8 +1,8 @@
-mod fp;
+// mod fp;
 mod fp2;
 
 use ff::Field;
-pub use fp::Scalar;
+// pub use fp::Scalar;
 pub use fp2::ScalarExt2;
 use goldilocks::ExtensionField;
 use merlin::Transcript;
@@ -17,6 +17,8 @@ use std::{
 };
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zeroize::Zeroize;
+use ff_ext::ExtensionField as CenoExtensionField;
+use halo2curves::serde::SerdeObject;
 
 /// Trait describing the field element
 /// Wraps around Goldilocks field towers from ceno-goldilocks
@@ -51,7 +53,7 @@ pub trait SpartanExtensionField:
   + Sync
 {
   /// Inner Goldilocks extension field
-  type InnerType: ExtensionField + Field + Send + Sync;
+  type InnerType: ExtensionField + Field + Send + Sync + CenoExtensionField + SerdeObject;
 
   /// Basefield for conserving computational resources
   type BaseField: Field + Send + Sync;
@@ -180,11 +182,11 @@ pub trait SpartanExtensionField:
   }
 }
 
-impl<'a> From<&'a Scalar> for [u8; 32] {
-  fn from(value: &'a Scalar) -> [u8; 32] {
-    value.to_bytes()
-  }
-}
+// impl<'a> From<&'a Scalar> for [u8; 32] {
+//   fn from(value: &'a Scalar) -> [u8; 32] {
+//     value.to_bytes()
+//   }
+// }
 
 /// macro_rules! impl_add_binop_specify_output
 #[macro_export]

@@ -10,10 +10,25 @@ use super::timer::Timer;
 use super::transcript::ProofTranscript;
 use crate::scalar::SpartanExtensionField;
 use crate::{ProverWitnessSecInfo, VerifierWitnessSecInfo};
+use ff_ext::ExtensionField;
+use goldilocks::GoldilocksExt2;
 use merlin::Transcript;
+use multilinear_extensions::mle::DenseMultilinearExtension;
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::iter::zip;
+use std::sync::Arc;
+use multilinear_extensions::{
+  mle::IntoMLE,
+  virtual_poly::VPAuxInfo,
+  virtual_poly_v2::{ArcMultilinearExtension, VirtualPolynomialV2},
+};
+use std::iter;
+use ceno_zkvm::virtual_polys::VirtualPolynomials;
+use sumcheck::structs::{IOPProverStateV2, IOPVerifierState};
+use ff::Field;
+use halo2curves::serde::SerdeObject;
+use transcript::BasicTranscript;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct R1CSProof<S: SpartanExtensionField> {
@@ -206,9 +221,9 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       num_witness_secs.log_2(),
       max_num_inputs.log_2(),
     );
-    let tau_p = transcript.challenge_vector(b"challenge_tau_p", num_rounds_p);
-    let tau_q = transcript.challenge_vector(b"challenge_tau_q", num_rounds_q);
-    let tau_x = transcript.challenge_vector(b"challenge_tau_x", num_rounds_x);
+    let tau_p: Vec<S> = transcript.challenge_vector(b"challenge_tau_p", num_rounds_p);
+    let tau_q: Vec<S> = transcript.challenge_vector(b"challenge_tau_q", num_rounds_q);
+    let tau_x: Vec<S> = transcript.challenge_vector(b"challenge_tau_x", num_rounds_x);
 
     // compute the initial evaluation table for R(\tau, x)
     let mut poly_tau_p = DensePolynomial::new(EqPolynomial::new(tau_p).evals());
@@ -225,6 +240,70 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       &z_mat,
     );
     timer_tmp.stop();
+
+    // == test: ceno_verifier_bench ==
+    let B = poly_Az.to_dense_poly();
+    let C = poly_Bz.to_dense_poly();
+    let D = poly_Cz.to_dense_poly();
+
+    let z_len = B.Z.len();
+    let tau_pqx_len = poly_tau_p.Z.len() + poly_tau_q.Z.len() + poly_tau_x.Z.len();
+    let A = DensePolynomial::new(
+      poly_tau_p.clone().Z
+        .into_iter()
+        .chain(poly_tau_q.clone().Z)
+        .chain(poly_tau_x.clone().Z)
+        .chain(iter::repeat(S::field_zero()).take(z_len - tau_pqx_len))
+        .collect()
+      );
+
+    let arc_A: ArcMultilinearExtension<'_, GoldilocksExt2> = Arc::new(
+      A.Z.iter().cloned().map(|s| 
+        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
+      )
+      .collect::<Vec<GoldilocksExt2>>()
+      .into_mle()
+    );
+    let arc_B: ArcMultilinearExtension<'_, GoldilocksExt2> = Arc::new(
+      B.Z.iter().cloned().map(|s| 
+        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
+      )
+      .collect::<Vec<GoldilocksExt2>>()
+      .into_mle()
+    );
+    let arc_C: ArcMultilinearExtension<'_, GoldilocksExt2> = Arc::new(
+      C.Z.iter().cloned().map(|s| 
+        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
+      )
+      .collect::<Vec<GoldilocksExt2>>()
+      .into_mle()
+    );
+    let arc_D: ArcMultilinearExtension<'_, GoldilocksExt2> = Arc::new(
+      D.Z.iter().cloned().map(|s| 
+        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
+      )
+      .collect::<Vec<GoldilocksExt2>>()
+      .into_mle()
+    );
+
+    let max_num_vars = 22;
+    let num_threads = 8;
+    let virtual_polys: VirtualPolynomialV2<'_, GoldilocksExt2> = VirtualPolynomialV2::new(max_num_vars);
+
+    let mut virtual_polys = VirtualPolynomials::<GoldilocksExt2>::new(num_threads, max_num_vars);
+    virtual_polys.add_mle_list(vec![&arc_A, &arc_B, &arc_C], GoldilocksExt2::ONE);
+    virtual_polys.add_mle_list(vec![&arc_A, &arc_D], GoldilocksExt2::ZERO - GoldilocksExt2::ONE);
+
+    let mut ceno_transcript = BasicTranscript::new(b"test");
+
+    let timer_tmp = Timer::new("=> prove_sum_check with ceno: IOPProverStateV2::prove_batch_polys");
+    let (sumcheck_proofs, _) = IOPProverStateV2::prove_batch_polys(
+      num_threads,
+      virtual_polys.get_batched_polys(),
+      &mut ceno_transcript,
+    );
+    timer_tmp.stop();
+    // == test: ceno_verifier_bench ==
 
     // Sumcheck 1: (Az * Bz - Cz) * eq(x, q, p) = 0
     let timer_tmp = Timer::new("prove_sum_check");

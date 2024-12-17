@@ -257,6 +257,14 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
         .collect()
       );
 
+    print!(
+      "=> poly_A,B,C,D num_variables: {:?}, {:?}, {:?}, {:?}",
+      A.get_num_vars(),
+      B.get_num_vars(),
+      C.get_num_vars(),
+      D.get_num_vars(),
+    );
+
     let arc_A: ArcMultilinearExtension<'_, GoldilocksExt2> = Arc::new(
       A.Z.iter().cloned().map(|s| 
         GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())

@@ -408,7 +408,7 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
     max_num_rows: usize,
     num_rows: usize, 
     max_num_cols: usize, 
-    _num_cols: usize, 
+    num_cols: usize, 
     z: &Vec<Vec<S>>
   ) -> Vec<S> {
     let step_r = max_num_rows / num_rows;
@@ -417,7 +417,12 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
         let row = self.M[i].row;
         let col = self.M[i].col;
         let val = self.M[i].val.clone();
-        (row, val * z[col / max_num_cols][col % max_num_cols])
+        let w = col / max_num_cols;
+        let y = col % max_num_cols;
+        // Z expresses y in reverse bits order, so have to find the correct y
+        let y_step = max_num_cols / num_cols;
+        let y_rev = rev_bits(y, max_num_cols) / y_step;
+        (row, val * z[w][y_rev])
       })
       .fold(vec![S::field_zero(); num_rows], |mut Mz, (r, v)| {
         // Reverse the bits of r. r_rev is a multiple of step_r

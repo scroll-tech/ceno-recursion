@@ -7,6 +7,7 @@ use super::r1csinstance::R1CSInstance;
 use super::sumcheck::SumcheckInstanceProof;
 use super::timer::Timer;
 use super::transcript::ProofTranscript;
+use crate::custom_dense_mlpoly::rev_bits;
 use crate::scalar::SpartanExtensionField;
 use crate::{ProverWitnessSecInfo, VerifierWitnessSecInfo};
 use merlin::Transcript;
@@ -178,22 +179,28 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
 
     // append input to variables to create a single vector z
     let timer_tmp = Timer::new("prove_z_mat_gen");
-    let mut z_mat: Vec<Vec<Vec<Vec<S>>>> = Vec::new();
-    for p in 0..num_instances {
-      z_mat.push(Vec::new());
-      for q in 0..num_proofs[p] {
-        z_mat[p].push(vec![vec![S::field_zero(); num_inputs[p]]; num_witness_secs]);
-        for w in 0..witness_secs.len() {
-          let ws = witness_secs[w];
-          let p_w = if ws.w_mat.len() == 1 { 0 } else { p };
-          let q_w = if ws.w_mat[p_w].len() == 1 { 0 } else { q };
-          // Only append the first num_inputs_entries of w_mat[p][q]
-          for i in 0..min(ws.num_inputs[p_w], num_inputs[p]) {
-            z_mat[p][q][w][i] = ws.w_mat[p_w][q_w][i];
+    let z_mat_rev = {
+      let mut z_mat: Vec<Vec<Vec<Vec<S>>>> = Vec::new();
+      for p in 0..num_instances {
+        z_mat.push(vec![vec![vec![S::field_zero(); num_inputs[p]]; num_witness_secs]; num_proofs[p]]);
+        let q_step = max_num_proofs / num_proofs[p];
+        for q in 0..num_proofs[p] {
+          let q_rev = rev_bits(q, max_num_proofs) / q_step;
+          for w in 0..witness_secs.len() {
+            let ws = witness_secs[w];
+            let p_w = if ws.w_mat.len() == 1 { 0 } else { p };
+            let q_w = if ws.w_mat[p_w].len() == 1 { 0 } else { q };
+            let y_step = max_num_inputs / num_inputs[p];
+            // Only append the first num_inputs_entries of w_mat[p][q]
+            for i in 0..min(ws.num_inputs[p_w], num_inputs[p]) {
+              let y_rev = rev_bits(i, max_num_inputs) / y_step;
+              z_mat[p][q_rev][w][y_rev] = ws.w_mat[p_w][q_w][i];
+            }
           }
         }
       }
-    }
+      z_mat
+    };
     timer_tmp.stop();
 
     // derive the verifier's challenge \tau
@@ -221,7 +228,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       max_num_inputs,
       num_cons,
       block_num_cons.clone(),
-      &z_mat,
+      &z_mat_rev,
     );
     timer_tmp.stop();
 
@@ -252,7 +259,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     timer_tmp.stop();
     timer_sc_proof_phase1.stop();
 
-    let (tau_claim, Az_claim, Bz_claim, Cz_claim) = (
+    let (_tau_claim, Az_claim, Bz_claim, Cz_claim) = (
       &(poly_tau_p[0] * poly_tau_q[0] * poly_tau_x[0]),
       &poly_Az.index(0, 0, 0, 0),
       &poly_Bz.index(0, 0, 0, 0),
@@ -320,8 +327,8 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
 
     let timer_tmp = Timer::new("prove_z_gen");
     // Construct a p * q * len(z) matrix Z and bound it to r_q
-    let mut Z_poly = DensePolynomialPqx::new_rev(
-      &z_mat,
+    let mut Z_poly = DensePolynomialPqx::new(
+      z_mat_rev,
       num_proofs.clone(),
       max_num_proofs,
       num_inputs.clone(),
@@ -586,7 +593,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     S::append_field_to_transcript(b"Cz_claim", transcript, Cz_claim);
 
     // debug_zk
-    // assert_eq!(taus_bound_rx * (Az_claim * Bz_claim - Cz_claim), claim_post_phase_1);
+    assert_eq!(taus_bound_rx * (Az_claim * Bz_claim - Cz_claim), claim_post_phase_1);
 
     // derive three public challenges and then derive a joint claim
     let r_A: S = transcript.challenge_scalar(b"challenge_Az");

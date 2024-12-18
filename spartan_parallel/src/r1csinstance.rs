@@ -251,11 +251,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
 
       Az[p] = (0..num_proofs[p])
         .into_par_iter()
-        .map(|q_rev| {
-          // Reverse the bits of q
-          let q_step = max_num_proofs / num_proofs[p];
-          let q = rev_bits(q_rev * q_step, max_num_proofs);
-
+        .map(|q| {
           vec![self.A_list[p_inst].multiply_vec_disjoint_rounds(
             max_num_cons,
             num_cons[p_inst].clone(),
@@ -267,11 +263,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
         .collect();
       Bz[p] = (0..num_proofs[p])
         .into_par_iter()
-        .map(|q_rev| {
-          // Reverse the bits of q
-          let q_step = max_num_proofs / num_proofs[p];
-          let q = rev_bits(q_rev * q_step, max_num_proofs);
-
+        .map(|q| {
           vec![self.B_list[p_inst].multiply_vec_disjoint_rounds(
             max_num_cons,
             num_cons[p_inst].clone(),
@@ -283,11 +275,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
         .collect();
       Cz[p] = (0..num_proofs[p])
         .into_par_iter()
-        .map(|q_rev| {
-          // Reverse the bits of q
-          let q_step = max_num_proofs / num_proofs[p];
-          let q = rev_bits(q_rev * q_step, max_num_proofs);
-          
+        .map(|q| {
           vec![self.C_list[p_inst].multiply_vec_disjoint_rounds(
             max_num_cons,
             num_cons[p_inst].clone(),

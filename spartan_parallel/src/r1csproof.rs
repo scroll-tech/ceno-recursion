@@ -184,17 +184,20 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       for p in 0..num_instances {
         z_mat.push(vec![vec![vec![S::field_zero(); num_inputs[p]]; num_witness_secs]; num_proofs[p]]);
         let q_step = max_num_proofs / num_proofs[p];
+
+        let y_step = max_num_inputs / num_inputs[p];
+        let y_rev_map: Vec<usize> = (0..num_inputs[p]).map(|y|
+          rev_bits(y, max_num_inputs) / y_step
+        ).collect();
         for q in 0..num_proofs[p] {
           let q_rev = rev_bits(q, max_num_proofs) / q_step;
           for w in 0..witness_secs.len() {
             let ws = witness_secs[w];
             let p_w = if ws.w_mat.len() == 1 { 0 } else { p };
             let q_w = if ws.w_mat[p_w].len() == 1 { 0 } else { q };
-            let y_step = max_num_inputs / num_inputs[p];
             // Only append the first num_inputs_entries of w_mat[p][q]
             for i in 0..min(ws.num_inputs[p_w], num_inputs[p]) {
-              let y_rev = rev_bits(i, max_num_inputs) / y_step;
-              z_mat[p][q_rev][w][y_rev] = ws.w_mat[p_w][q_w][i];
+              z_mat[p][q_rev][w][y_rev_map[i]] = ws.w_mat[p_w][q_w][i];
             }
           }
         }

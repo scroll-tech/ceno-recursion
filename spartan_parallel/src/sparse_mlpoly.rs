@@ -405,13 +405,13 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
   // Z[i] contains entries i * max_num_cols ~ i * max_num_cols + num_cols
   pub fn multiply_vec_disjoint_rounds(
     &self, 
-    max_num_rows: usize,
     num_rows: usize, 
     max_num_cols: usize, 
-    num_cols: usize, 
-    z: &Vec<Vec<S>>
+    _num_cols: usize, 
+    z: &Vec<Vec<S>>,
+    x_rev_map: &Vec<usize>,
+    y_rev_map: &Vec<usize>,
   ) -> Vec<S> {
-    let step_r = max_num_rows / num_rows;
     (0..self.M.len())
       .map(|i| {
         let row = self.M[i].row;
@@ -419,17 +419,10 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
         let val = self.M[i].val.clone();
         let w = col / max_num_cols;
         let y = col % max_num_cols;
-        // Z expresses y in reverse bits order, so have to find the correct y
-        let y_step = max_num_cols / num_cols;
-        let y_rev = rev_bits(y, max_num_cols) / y_step;
-        (row, val * z[w][y_rev])
+        (row, val * z[w][y_rev_map[y]])
       })
       .fold(vec![S::field_zero(); num_rows], |mut Mz, (r, v)| {
-        // Reverse the bits of r. r_rev is a multiple of step_r
-        let r_rev = rev_bits(r, max_num_rows);
-        // Now r_rev is between 0 to num_inputs[p]
-        let r_rev = r_rev / step_r;
-        Mz[r_rev] += v;
+        Mz[x_rev_map[r]] += v;
         Mz
       })
   }

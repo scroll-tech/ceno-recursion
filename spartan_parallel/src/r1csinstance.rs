@@ -19,10 +19,8 @@ use super::sparse_mlpoly::{
 use super::timer::Timer;
 use flate2::{write::ZlibEncoder, Compression};
 use merlin::Transcript;
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::iter::zip;
-use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct R1CSInstance<S: SpartanExtensionField> {
@@ -249,15 +247,26 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
       Bz.push(Vec::new());
       Cz.push(Vec::new());
 
+      // Map x and y to x_rev and y_rev so we don't have to do it everytime
+      let x_step = max_num_cons / num_cons[p];
+      let x_rev_map = (0..num_cons[p]).map(|x|
+        rev_bits(x, max_num_cons) / x_step
+      ).collect();
+      let y_step = max_num_inputs / num_inputs[p];
+      let y_rev_map = (0..num_inputs[p]).map(|y|
+        rev_bits(y, max_num_inputs) / y_step
+      ).collect();
+
       Az[p] = (0..num_proofs[p])
         .into_par_iter()
         .map(|q| {
           vec![self.A_list[p_inst].multiply_vec_disjoint_rounds(
-            max_num_cons,
             num_cons[p_inst].clone(),
             max_num_inputs,
             num_inputs[p],
             &z_list[q],
+            &x_rev_map,
+            &y_rev_map,
           )]
         })
         .collect();
@@ -265,11 +274,12 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
         .into_par_iter()
         .map(|q| {
           vec![self.B_list[p_inst].multiply_vec_disjoint_rounds(
-            max_num_cons,
             num_cons[p_inst].clone(),
             max_num_inputs,
             num_inputs[p],
             &z_list[q],
+            &x_rev_map,
+            &y_rev_map,
           )]
         })
         .collect();
@@ -277,11 +287,12 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
         .into_par_iter()
         .map(|q| {
           vec![self.C_list[p_inst].multiply_vec_disjoint_rounds(
-            max_num_cons,
             num_cons[p_inst].clone(),
             max_num_inputs,
             num_inputs[p],
             &z_list[q],
+            &x_rev_map,
+            &y_rev_map,
           )]
         })
         .collect();

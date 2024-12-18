@@ -14,6 +14,9 @@ use zeroize::Zeroize;
 #[derive(Clone, Copy, Eq, Serialize, Deserialize, Hash, Debug)]
 pub struct ScalarExt2(GoldilocksExt2);
 
+unsafe impl Send for ScalarExt2 {}
+unsafe impl Sync for ScalarExt2 {}
+
 impl From<GoldilocksExt2> for ScalarExt2 {
   fn from(g: GoldilocksExt2) -> Self {
     Self(g)

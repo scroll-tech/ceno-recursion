@@ -257,7 +257,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
         .collect()
       );
 
-    print!(
+    println!(
       "=> poly_A,B,C,D num_variables: {:?}, {:?}, {:?}, {:?}",
       A.get_num_vars(),
       B.get_num_vars(),
@@ -294,7 +294,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       .into_mle()
     );
 
-    let max_num_vars = 22;
+    let max_num_vars = A.get_num_vars();
     let num_threads = 8;
     let virtual_polys: VirtualPolynomialV2<'_, GoldilocksExt2> = VirtualPolynomialV2::new(max_num_vars);
 

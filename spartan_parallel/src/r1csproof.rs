@@ -25,13 +25,15 @@ use multilinear_extensions::{
 };
 use std::iter;
 use ceno_zkvm::virtual_polys::VirtualPolynomials;
-use sumcheck::structs::{IOPProverStateV2, IOPVerifierState};
+use sumcheck::structs::{IOPProof, IOPProverStateV2, IOPVerifierState};
 use ff::Field;
 use halo2curves::serde::SerdeObject;
 use transcript::BasicTranscript;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Debug)]
 pub struct R1CSProof<S: SpartanExtensionField> {
+  sc_proof_phase1_proof: IOPProof<GoldilocksExt2>,
+  sc_proof_phase1_state: IOPProverStateV2<GoldilocksExt2>,
   sc_proof_phase1: SumcheckInstanceProof<S>,
   sc_proof_phase2: SumcheckInstanceProof<S>,
   claims_phase2: (S, S, S),
@@ -305,14 +307,23 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let mut ceno_transcript = BasicTranscript::new(b"test");
 
     let timer_tmp = Timer::new("=> prove_sum_check with ceno: IOPProverStateV2::prove_batch_polys");
-    let (sumcheck_proofs, _) = IOPProverStateV2::prove_batch_polys(
+    let (sc_proof_phase1_proof, sc_proof_phase1_state) = IOPProverStateV2::prove_batch_polys(
       num_threads,
       virtual_polys.get_batched_polys(),
       &mut ceno_transcript,
     );
     timer_tmp.stop();
+    let (tau_claim, Az_claim, Bz_claim, Cz_claim) = (
+      &sc_proof_phase1_proof.point[0],
+      &sc_proof_phase1_proof.point[1],
+      &sc_proof_phase1_proof.point[2],
+      &sc_proof_phase1_proof.point[3],
+    );
+    let rx = sc_proof_phase1_state.challenges;
+    timer_sc_proof_phase1.stop();
     // == test: ceno_verifier_bench ==
 
+    /*
     // Sumcheck 1: (Az * Bz - Cz) * eq(x, q, p) = 0
     let timer_tmp = Timer::new("prove_sum_check");
     let (sc_proof_phase1, rx, _claims_phase1) = R1CSProof::prove_phase_one(
@@ -338,7 +349,6 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     assert_eq!(poly_Bz.len(), 1);
     assert_eq!(poly_Cz.len(), 1);
     timer_tmp.stop();
-    timer_sc_proof_phase1.stop();
 
     let (tau_claim, Az_claim, Bz_claim, Cz_claim) = (
       &(poly_tau_p[0] * poly_tau_q[0] * poly_tau_x[0]),
@@ -357,6 +367,19 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let rx: Vec<S> = rx_rev.iter().copied().rev().collect();
     let rq_rev = rq_rev.to_vec();
     let rq: Vec<S> = rq_rev.iter().copied().rev().collect();
+    let rp = rp.to_vec();
+    */
+
+    S::append_field_to_transcript(b"Az_claim", transcript, *Az_claim);
+    S::append_field_to_transcript(b"Bz_claim", transcript, *Bz_claim);
+    S::append_field_to_transcript(b"Cz_claim", transcript, *Cz_claim);
+
+    // Separate the result rx into rp, rq, and rx
+    let (rx, rq) = rx.split_at(num_rounds_x);
+    let (rq, rp) = rq.split_at(num_rounds_q);
+    let rx_rev: Vec<S> = rx.iter().copied().rev().collect();
+    let rq = rq.to_vec();
+    let rq_rev: Vec<S> = rq.iter().copied().rev().collect();
     let rp = rp.to_vec();
 
     // --

@@ -642,7 +642,7 @@ impl PartialEq for InstanceSortHelper {
 }
 impl Eq for InstanceSortHelper {}
 
-impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
+impl<'a, S: SpartanExtensionField + Send + Sync> SNARK<S> {
   fn protocol_name() -> &'static [u8] {
     b"Spartan SNARK proof"
   }

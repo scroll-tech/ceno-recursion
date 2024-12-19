@@ -29,11 +29,12 @@ use sumcheck::structs::{IOPProof, IOPProverStateV2, IOPVerifierState};
 use ff::Field;
 use halo2curves::serde::SerdeObject;
 use transcript::BasicTranscript;
+use std::array;
 
 #[derive(Serialize, Debug)]
 pub struct R1CSProof<S: SpartanExtensionField> {
   sc_proof_phase1_proof: IOPProof<GoldilocksExt2>,
-  sc_proof_phase1_state: IOPProverStateV2<'static, GoldilocksExt2>,
+  sc_proof_phase1_state_evals: Vec<GoldilocksExt2>,
   // sc_proof_phase1: SumcheckInstanceProof<S>,
   sc_proof_phase2: SumcheckInstanceProof<S>,
   claims_phase2: (S, S, S),
@@ -44,7 +45,7 @@ pub struct R1CSProof<S: SpartanExtensionField> {
   // proof_eval_vars_at_ry_list: Vec<PolyEvalProof<S>>,
 }
 
-impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
+impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
   fn prove_phase_one(
     num_rounds: usize,
     num_rounds_x_max: usize,
@@ -267,7 +268,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       D.get_num_vars(),
     );
 
-    let arc_A: ArcMultilinearExtension<GoldilocksExt2>  = Arc::new(
+    let arc_A: ArcMultilinearExtension<'a, GoldilocksExt2>  = Arc::new(
       A.Z.iter().cloned().map(|s| 
         GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
       )
@@ -275,21 +276,32 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       .into_mle()
     );
 
-    let arc_B: ArcMultilinearExtension<GoldilocksExt2> = Arc::new(
+    // let arc_A: [ArcMultilinearExtension<'a, GoldilocksExt2>; 2] = array::from_fn(|_| {
+    //   A.Z.iter().cloned().map(|s| 
+    //     GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
+    //   )
+    //   .collect::<Vec<GoldilocksExt2>>()
+    //   .into_mle()
+    //   .into()
+    // });
+
+    let arc_B: ArcMultilinearExtension<'a, GoldilocksExt2> = Arc::new(
       B.Z.iter().cloned().map(|s| 
         GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
       )
       .collect::<Vec<GoldilocksExt2>>()
       .into_mle()
     );
-    let arc_C: ArcMultilinearExtension<GoldilocksExt2> = Arc::new(
+
+    let arc_C: ArcMultilinearExtension<'a, GoldilocksExt2> = Arc::new(
       C.Z.iter().cloned().map(|s| 
         GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
       )
       .collect::<Vec<GoldilocksExt2>>()
       .into_mle()
     );
-    let arc_D: ArcMultilinearExtension<GoldilocksExt2> = Arc::new(
+
+    let arc_D: ArcMultilinearExtension<'a, GoldilocksExt2> = Arc::new(
       D.Z.iter().cloned().map(|s| 
         GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
       )
@@ -298,11 +310,13 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     );
 
     let max_num_vars = A.get_num_vars();
-    let num_threads = 1;
-    let mut virtual_polys: VirtualPolynomialV2<GoldilocksExt2> = VirtualPolynomialV2::new(max_num_vars);
+    let num_threads = 8;
 
-    virtual_polys.add_mle_list(vec![arc_A.clone(), arc_B, arc_C], GoldilocksExt2::ONE);
-    virtual_polys.add_mle_list(vec![arc_A, arc_D], GoldilocksExt2::ZERO - GoldilocksExt2::ONE);
+    let mut virtual_polys =
+                    VirtualPolynomials::new(num_threads, max_num_vars);
+
+    virtual_polys.add_mle_list(vec![&arc_A, &arc_B, &arc_C], GoldilocksExt2::ONE);
+    virtual_polys.add_mle_list(vec![&arc_A, &arc_D], GoldilocksExt2::ZERO - GoldilocksExt2::ONE);
 
     let mut ceno_transcript = BasicTranscript::new(b"test");
 
@@ -312,7 +326,8 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       IOPProverStateV2<GoldilocksExt2>
     ) = IOPProverStateV2::prove_batch_polys(
       num_threads,
-      vec![virtual_polys],
+      // vec![virtual_polys],
+      virtual_polys.get_batched_polys(),
       &mut ceno_transcript,
     );
     timer_tmp.stop();
@@ -614,10 +629,12 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
 
     timer_prove.stop();
 
+    let sc_proof_phase1_state_evals = sc_proof_phase1_state.get_mle_final_evaluations();
+
     (
       R1CSProof {
         sc_proof_phase1_proof,
-        sc_proof_phase1_state,
+        sc_proof_phase1_state_evals,
         // sc_proof_phase1,
         sc_proof_phase2,
         claims_phase2: (Az_claim, Bz_claim, Cz_claim),

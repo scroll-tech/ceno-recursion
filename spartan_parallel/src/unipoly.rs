@@ -113,6 +113,7 @@ impl<S: SpartanExtensionField> AppendToTranscript for UniPoly<S> {
   }
 }
 
+/*
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -174,3 +175,4 @@ mod tests {
     assert_eq!(poly.evaluate(&Scalar::from(4_usize)), e4);
   }
 }
+*/

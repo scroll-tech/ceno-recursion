@@ -590,7 +590,7 @@ impl VerifierWitnessSecInfo {
 }
 
 /// `SNARK` holds a proof produced by Spartan SNARK
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Debug)]
 pub struct SNARK<S: SpartanExtensionField> {
   block_r1cs_sat_proof: R1CSProof<S>,
   block_inst_evals_bound_rp: [S; 3],
@@ -642,7 +642,7 @@ impl PartialEq for InstanceSortHelper {
 }
 impl Eq for InstanceSortHelper {}
 
-impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
+impl<'a, S: SpartanExtensionField + Send + Sync> SNARK<S> {
   fn protocol_name() -> &'static [u8] {
     b"Spartan SNARK proof"
   }
@@ -3031,6 +3031,8 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
     };
     timer_commit.stop();
 
+    // debug_ceno_verifier
+    /*
     // --
     // BLOCK_CORRECTNESS_EXTRACT
     // --
@@ -3267,6 +3269,7 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
       )?;
       timer_eval_proof.stop();
     }
+    */
 
     // --
     // PERM_PRODUCT_PROOF

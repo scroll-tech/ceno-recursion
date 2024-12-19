@@ -357,7 +357,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
       /*
       if j == 0 {
         println!("\nNEW INSTANCE");
-        let mut expected = ZERO;
+        let mut expected = S::field_zero;
         for p in 0..min(instance_len, num_inputs.len()) {
           let p_inst = if single_inst { 0 } else { p };
           for w in 0..min(witness_secs_len, num_witness_secs) {

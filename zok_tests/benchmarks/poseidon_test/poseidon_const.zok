@@ -1,1 +1,1 @@
-const u32 REPETITION = 100
+const u32 REPETITION = 10000

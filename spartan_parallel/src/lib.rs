@@ -3031,8 +3031,6 @@ impl<'a, S: SpartanExtensionField + Send + Sync> SNARK<S> {
     };
     timer_commit.stop();
 
-    // debug_ceno_verifier
-    /*
     // --
     // BLOCK_CORRECTNESS_EXTRACT
     // --
@@ -3269,7 +3267,6 @@ impl<'a, S: SpartanExtensionField + Send + Sync> SNARK<S> {
       )?;
       timer_eval_proof.stop();
     }
-    */
 
     // --
     // PERM_PRODUCT_PROOF

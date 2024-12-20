@@ -404,7 +404,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let (rq, rx) = rq.split_at(num_rounds_q);
     let rq = rq.to_vec();
     let rq_rev: Vec<S> = rq.iter().copied().rev().collect();
-    let rp = rp.to_vec();
+    let mut rp = rp.to_vec();
 
     // --
     // PHASE 2
@@ -466,12 +466,14 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     Z_poly.bound_poly_vars_rq(&rq_rev.to_vec());
     timer_tmp.stop();
 
-    // An Eq function to match p with rp
-    let eq_p_rp_poly = DensePolynomial::new(EqPolynomial::new(rp).evals());
-
     // == test ceno_verifier_bench
     let ABC_poly = ABC_poly.to_dense_poly();
     let Z_poly = Z_poly.to_dense_poly();
+
+    // An Eq function to match p with rp
+    let max_num_vars_phase2 = ABC_poly.get_num_vars();
+    rp.extend(std::iter::repeat(S::field_one()).take(max_num_vars_phase2 - rp.len()));
+    let eq_p_rp_poly = DensePolynomial::new(EqPolynomial::new(rp).evals());
 
     println!(
       "=> ABC_poly, Z_poly, eq_p_rop_poly num_variables: {:?}, {:?}, {:?}",
@@ -496,21 +498,12 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       .into_mle()
     );
 
-    let max_num_vars_phase2 = ABC_poly.get_num_vars();
-
-    let ABC_eval_len = ABC_poly.Z.len();
-    let eq_eval_len = eq_p_rp_poly.Z.len();
-    let eq_padding = std::iter::repeat(GoldilocksExt2::ZERO).take(ABC_eval_len - eq_eval_len);
-
     let arc_C: ArcMultilinearExtension<'a, GoldilocksExt2> = Arc::new(
-      eq_p_rp_poly.Z
-        .into_iter()
-        .map(|s| 
-          GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
-        )
-        .chain(eq_padding)
-        .collect::<Vec<GoldilocksExt2>>()
-        .into_mle()
+      eq_p_rp_poly.Z.iter().clone().map(|s| 
+        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
+      )
+      .collect::<Vec<GoldilocksExt2>>()
+      .into_mle()
     );
     
     let num_threads_phase2 = 8;

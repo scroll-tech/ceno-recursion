@@ -4,38 +4,32 @@ use super::dense_mlpoly::{DensePolynomial, EqPolynomial};
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::r1csinstance::R1CSInstance;
-use super::random::RandomTape;
 use super::sumcheck::SumcheckInstanceProof;
 use super::timer::Timer;
 use super::transcript::ProofTranscript;
 use crate::scalar::SpartanExtensionField;
 use crate::{ProverWitnessSecInfo, VerifierWitnessSecInfo};
-use ff_ext::ExtensionField;
-use goldilocks::{Goldilocks, GoldilocksExt2};
+use goldilocks::GoldilocksExt2;
 use merlin::Transcript;
-use multilinear_extensions::mle::DenseMultilinearExtension;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::cmp::min;
 use std::iter::zip;
 use std::sync::Arc;
 use multilinear_extensions::{
   mle::IntoMLE,
   virtual_poly::VPAuxInfo,
-  virtual_poly_v2::{ArcMultilinearExtension, VirtualPolynomialV2},
+  virtual_poly_v2::ArcMultilinearExtension,
 };
-use std::iter;
 use ceno_zkvm::virtual_polys::VirtualPolynomials;
 use sumcheck::structs::{IOPProof, IOPProverStateV2, IOPVerifierState};
 use ff::Field;
 use halo2curves::serde::SerdeObject;
 use transcript::BasicTranscript;
-use std::array;
 
 #[derive(Serialize, Debug)]
 pub struct R1CSProof<S: SpartanExtensionField> {
   sc_proof_phase1_proof: IOPProof<GoldilocksExt2>,
-  // sc_proof_phase1: SumcheckInstanceProof<S>,
-  sc_proof_phase2: SumcheckInstanceProof<S>,
+  sc_proof_phase2_proof: IOPProof<GoldilocksExt2>,
   claims_phase2: (S, S, S),
   // Need to commit vars for short and long witnesses separately
   // The long version must exist, the short version might not
@@ -43,7 +37,9 @@ pub struct R1CSProof<S: SpartanExtensionField> {
   eval_vars_at_ry: S,
   // proof_eval_vars_at_ry_list: Vec<PolyEvalProof<S>>,
   max_num_vars: usize,
-  claim_phase_1: GoldilocksExt2,
+  claim_phase1: GoldilocksExt2,
+  max_num_vars_phase2: usize,
+  claim_phase2: GoldilocksExt2,
 }
 
 impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
@@ -237,8 +233,8 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let mut poly_tau_x = DensePolynomial::new(EqPolynomial::new(tau_x).evals());
     */
     let tau: Vec<S> = transcript.challenge_vector(b"challenge_tau", num_rounds_p + num_rounds_q + num_rounds_x);
-    let mut poly_tau = DensePolynomial::new(EqPolynomial::new(tau).evals());
-    let (mut poly_Az, mut poly_Bz, mut poly_Cz) = inst.multiply_vec_block(
+    let poly_tau = DensePolynomial::new(EqPolynomial::new(tau).evals());
+    let (poly_Az, poly_Bz, poly_Cz) = inst.multiply_vec_block(
       num_instances,
       num_proofs.clone(),
       max_num_proofs,
@@ -307,7 +303,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
 
     let mut ceno_transcript = BasicTranscript::new(b"test");
 
-    let timer_tmp = Timer::new("=> prove_sum_check with ceno: IOPProverStateV2::prove_batch_polys");
+    let timer_tmp = Timer::new("=> prove_sum_check with ceno (phase 1): IOPProverStateV2::prove_batch_polys");
     let (sc_proof_phase1_proof, sc_proof_phase1_state): (
       IOPProof<GoldilocksExt2>,
       IOPProverStateV2<GoldilocksExt2>
@@ -350,7 +346,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       
       evals.iter().sum::<GoldilocksExt2>()
     };
-    let claim_phase_1 = fn_eval(&[arc_A.clone(), arc_B.clone(), arc_C.clone(), arc_D.clone()]);
+    let claim_phase1 = fn_eval(&[arc_A.clone(), arc_B.clone(), arc_C.clone(), arc_D.clone()]);
 
     /*
     // Sumcheck 1: (Az * Bz - Cz) * eq(x, q, p) = 0
@@ -418,7 +414,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let r_A: S = transcript.challenge_scalar(b"challenge_Az");
     let r_B: S = transcript.challenge_scalar(b"challenge_Bz");
     let r_C: S = transcript.challenge_scalar(b"challenge_Cz");
-    let claim_phase2 = r_A * Az_claim + r_B * Bz_claim + r_C * Cz_claim;
+    let claim_phase2 = GoldilocksExt2::from_raw_bytes(&(r_A * Az_claim + r_B * Bz_claim + r_C * Cz_claim).inner().to_raw_bytes()).unwrap();
 
     let timer_tmp = Timer::new("prove_abc_gen");
     let evals_ABC = {
@@ -447,7 +443,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       }
       evals_ABC
     };
-    let mut ABC_poly = DensePolynomialPqx::new_rev(
+    let ABC_poly = DensePolynomialPqx::new_rev(
       &evals_ABC,
       vec![1; num_instances],
       1,
@@ -471,8 +467,71 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     timer_tmp.stop();
 
     // An Eq function to match p with rp
-    let mut eq_p_rp_poly = DensePolynomial::new(EqPolynomial::new(rp).evals());
+    let eq_p_rp_poly = DensePolynomial::new(EqPolynomial::new(rp).evals());
 
+    // == test ceno_verifier_bench
+    let ABC_poly = ABC_poly.to_dense_poly();
+    let Z_poly = Z_poly.to_dense_poly();
+
+    println!(
+      "=> ABC_poly, Z_poly, eq_p_rop_poly num_variables: {:?}, {:?}, {:?}",
+      ABC_poly.get_num_vars(),
+      Z_poly.get_num_vars(),
+      eq_p_rp_poly.get_num_vars(),
+    );
+
+    let arc_A: ArcMultilinearExtension<'a, GoldilocksExt2>  = Arc::new(
+      ABC_poly.Z.iter().cloned().map(|s| 
+        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
+      )
+      .collect::<Vec<GoldilocksExt2>>()
+      .into_mle()
+    );
+
+    let arc_B: ArcMultilinearExtension<'a, GoldilocksExt2> = Arc::new(
+      Z_poly.Z.iter().cloned().map(|s| 
+        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
+      )
+      .collect::<Vec<GoldilocksExt2>>()
+      .into_mle()
+    );
+
+    let arc_C: ArcMultilinearExtension<'a, GoldilocksExt2> = Arc::new(
+      eq_p_rp_poly.Z.iter().cloned().map(|s| 
+        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
+      )
+      .collect::<Vec<GoldilocksExt2>>()
+      .into_mle()
+    );
+
+    let max_num_vars_phase2 = eq_p_rp_poly.get_num_vars();
+    let num_threads_phase2 = 8;
+
+    let mut virtual_polys =
+        VirtualPolynomials::new(num_threads_phase2, max_num_vars_phase2);
+
+    virtual_polys.add_mle_list(vec![&arc_A, &arc_B, &arc_C], GoldilocksExt2::ONE);
+
+    let mut ceno_transcript = BasicTranscript::new(b"test");
+
+    let timer_tmp = Timer::new("=> prove_sum_check with ceno (phase 2): IOPProverStateV2::prove_batch_polys");
+    let (sc_proof_phase2_proof, _sc_proof_phase2_state): (
+      IOPProof<GoldilocksExt2>,
+      IOPProverStateV2<GoldilocksExt2>
+    ) = IOPProverStateV2::prove_batch_polys(
+      num_threads,
+      virtual_polys.get_batched_polys(),
+      &mut ceno_transcript,
+    );
+    timer_tmp.stop();
+
+    let ry: Vec<S> = 
+      sc_proof_phase2_proof.point.iter().map(|c| 
+        S::InnerType::from_raw_bytes(&c.to_raw_bytes()).unwrap().into()
+      ).rev().collect::<Vec<S>>();
+    // == test ceno_verifier_bench
+
+    /*
     // Sumcheck 2: (rA + rB + rC) * Z * eq(p) = e
     let (sc_proof_phase2, ry, _claims_phase2) = R1CSProof::prove_phase_two(
       num_rounds_y + num_rounds_w + num_rounds_p,
@@ -488,6 +547,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       &mut Z_poly,
       transcript,
     );
+    */
     timer_sc_proof_phase2.stop();
 
     // Separate ry into rp, rw, and ry
@@ -633,13 +693,15 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       R1CSProof {
         sc_proof_phase1_proof,
         // sc_proof_phase1,
-        sc_proof_phase2,
+        sc_proof_phase2_proof,
         claims_phase2: (Az_claim, Bz_claim, Cz_claim),
         eval_vars_at_ry_list: raw_eval_vars_at_ry_list,
         eval_vars_at_ry,
         // proof_eval_vars_at_ry_list,
         max_num_vars,
-        claim_phase_1,
+        claim_phase1,
+        max_num_vars_phase2,
+        claim_phase2,
       },
       [rp, rq_rev, rx.to_vec(), [rw, ry].concat()],
     )
@@ -697,7 +759,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     // == test: ceno_verifier_bench ==
     let mut ceno_transcript = BasicTranscript::new(b"test");
     let subclaim = IOPVerifierState::<GoldilocksExt2>::verify(
-        self.claim_phase_1,
+        self.claim_phase1,
         &self.sc_proof_phase1_proof,
         &VPAuxInfo {
             max_degree: 3,
@@ -760,8 +822,28 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let r_A: S = transcript.challenge_scalar(b"challenge_Az");
     let r_B: S = transcript.challenge_scalar(b"challenge_Bz");
     let r_C: S = transcript.challenge_scalar(b"challenge_Cz");
-    let claim_phase2 = r_A * Az_claim + r_B * Bz_claim + r_C * Cz_claim;
+    let claim_phase2 = GoldilocksExt2::from_raw_bytes(&(r_A * Az_claim + r_B * Bz_claim + r_C * Cz_claim).inner().to_raw_bytes()).unwrap();
 
+    // == test: ceno_verifier_bench ==
+    let mut ceno_transcript = BasicTranscript::new(b"test");
+    let subclaim = IOPVerifierState::<GoldilocksExt2>::verify(
+        claim_phase2,
+        &self.sc_proof_phase2_proof,
+        &VPAuxInfo {
+            max_degree: 3,
+            num_variables: self.max_num_vars_phase2,
+            phantom: std::marker::PhantomData,
+        },
+        &mut ceno_transcript,
+    );
+    let ry: Vec<S> = 
+      subclaim.point.iter().map(|c| 
+        S::InnerType::from_raw_bytes(&c.elements.to_raw_bytes()).unwrap().into()
+      ).rev().collect::<Vec<S>>();
+    let claim_post_phase_2: S = S::InnerType::from_raw_bytes(&subclaim.expected_evaluation.to_raw_bytes()).unwrap().into();
+    // == test: ceno_verifier_bench ==
+
+    /*
     // verify the joint claim with a sum-check protocol
     let (claim_post_phase_2, ry) = self.sc_proof_phase2.verify(
       claim_phase2,
@@ -769,6 +851,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       3,
       transcript,
     )?;
+    */
 
     // Separate ry into rp, rw, and ry
     let (ry_rev, rw) = ry.split_at(num_rounds_y);

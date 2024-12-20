@@ -1,6 +1,8 @@
 #![allow(clippy::too_many_arguments)]
 use std::cmp::min;
 
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
 use crate::dense_mlpoly::DensePolynomial;
 use crate::scalar::SpartanExtensionField;
 
@@ -244,6 +246,33 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
     }
   }
 
+  // Bound the first variable of "q" section to r
+  pub fn bound_poly_q_parallel(&mut self, r: &S) {
+    self.max_num_proofs /= 2;
+
+    for p in 0..min(self.num_instances, self.Z.len()) {
+      if self.num_proofs[p] == 1 {
+        for w in 0..min(self.num_witness_secs, self.Z[p][0].len()) {
+          for x in 0..self.num_inputs[p] {
+            self.Z[p][0][w][x] = (S::field_one() - *r) * self.Z[p][0][w][x];
+          }
+        }
+      } else {
+        self.num_proofs[p] /= 2;
+        let num_proofs = self.num_proofs[p];
+        self.Z[p] = self.Z[p][..].split_at_mut(num_proofs).into_par_iter().map(|(left, right)| {
+            for w in 0..min(self.num_witness_secs, left.len()) {
+              for x in 0..self.num_inputs[p] {
+                left[w][x] = left[w][x] + *r * (right[w][x] - left[w][x]);
+              }
+            }
+            left.clone()
+          }
+        ).collect();
+      }
+    }
+  }
+
   // Bound the first variable of "w" section to r
   pub fn bound_poly_w(&mut self, r: &S) {
     self.num_witness_secs /= 2;
@@ -301,6 +330,13 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   pub fn bound_poly_vars_rq(&mut self, r_q: &Vec<S>) {
     for r in r_q {
       self.bound_poly_q(r);
+    }
+  }
+
+  // Bound the entire "q_rev" section to r_q
+  pub fn bound_poly_vars_rq_parallel(&mut self, r_q: &Vec<S>) {
+    for r in r_q {
+      self.bound_poly_q_parallel(r);
     }
   }
 

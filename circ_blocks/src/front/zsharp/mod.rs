@@ -26,6 +26,7 @@ use std::fmt::Display;
 use std::hash::BuildHasherDefault;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::time::Instant;
 use zokrates_pest_ast as ast;
 
 use term::*;
@@ -130,12 +131,16 @@ impl ZSharpFE {
         g.file_stack_push(i.file);
         g.generics_stack_push(HashMap::new());
 
+        let block_start = Instant::now();
         let (blks, entry_bl, inputs) = g.bl_gen_entry_fn("main");
         let (blks, entry_bl, input_liveness) =
             g.optimize_block::<INTERPRET_VERBOSE>(blks, entry_bl, inputs.clone(), i.no_opt);
         let (blks, entry_bl, io_size, _, _, _, _) =
             g.process_block::<INTERPRET_VERBOSE, 1>(blks, entry_bl);
+        let block_time = block_start.elapsed();
+        println!("\n--\nBlock time: {}ms", block_time.as_millis());
 
+        let interpret_start = Instant::now();
         println!("\n\n--\nInterpretation:");
         let (
             ret,
@@ -162,7 +167,10 @@ impl ZSharpFE {
         // prover::print_state_list(&bl_exec_state);
         // let _ = prover::sort_by_block(&bl_exec_state);
         // let _ = prover::sort_by_mem(&bl_exec_state);
+        let interpret_time = interpret_start.elapsed();
+        println!("\n--\nInterpret time: {}ms", interpret_time.as_millis());
 
+        let convert_start = Instant::now();
         // A vector of all the blocks executed
         let mut block_id_list = Vec::new();
         // Convert bl_exec_state to list of String -> Value hashmaps
@@ -389,6 +397,9 @@ impl ZSharpFE {
                     .concat()
                 })
                 .collect();
+        let convert_time = convert_start.elapsed();
+        println!("\n--\nConvert time: {}ms", convert_time.as_millis());
+
         return (
             ret,
             block_id_list,

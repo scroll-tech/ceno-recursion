@@ -339,7 +339,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     );
     timer_tmp.stop();
     let timer_tmp = Timer::new("prove_z_bind");
-    Z_poly.bound_poly_vars_rq(&rq_rev.to_vec());
+    Z_poly.bound_poly_vars_rq_parallel(&rq_rev.to_vec());
     timer_tmp.stop();
 
     // An Eq function to match p with rp
@@ -595,7 +595,6 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     S::append_field_to_transcript(b"Bz_claim", transcript, Bz_claim);
     S::append_field_to_transcript(b"Cz_claim", transcript, Cz_claim);
 
-    // debug_zk
     assert_eq!(taus_bound_rx * (Az_claim * Bz_claim - Cz_claim), claim_post_phase_1);
 
     // derive three public challenges and then derive a joint claim

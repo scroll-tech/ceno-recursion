@@ -897,6 +897,7 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField + Send +
         )
     };
 
+    let gen_start = Instant::now();
     // Meta info
     // The most time any block is executed
     let mut block_max_num_proofs = 0;
@@ -936,7 +937,7 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField + Send +
     let zero = Integer::from(0);
     let one = Integer::from(1);
     // Start from entry block, compute value of witnesses
-    // Note: block_vars_matrix  are sorted by block_num_proofs, tie-breaked by block id
+    // Note: block_vars_matrix are sorted by block_num_proofs, tie-breaked by block id
     // Thus, block_vars_matrix[0] might NOT store the executions of block 0!
     let mut block_vars_matrix = vec![Vec::new(); num_blocks_live];
     let mut exec_inputs = Vec::new();
@@ -1038,14 +1039,14 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField + Send +
         .concat();
         let inputs_assignment = Assignment::new(
             &inputs
-                .iter()
+                .into_iter()
                 .map(|i| integer_to_bytes(i.clone()))
                 .collect::<Vec<[u8; 32]>>(),
         )
         .unwrap();
         let vars_assignment = Assignment::new(
             &vars
-                .iter()
+                .into_iter()
                 .map(|i| integer_to_bytes(i.clone()))
                 .collect::<Vec<[u8; 32]>>(),
         )
@@ -1055,7 +1056,10 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField + Send +
         exec_inputs.push(inputs_assignment.clone());
         block_vars_matrix[slot].push(vars_assignment);
     }
+    let gen_time = gen_start.elapsed();
+    println!("\n--\nGen time: {}ms", gen_time.as_millis());
 
+    let record_start = Instant::now();
     // Initial Physical & Virtual Memory: valid, _, addr, data (ts and ls are both 0 and are not recorded)
     let mut init_phy_mems_list = Vec::new();
     for i in 0..init_phy_mem_list.len() {
@@ -1088,7 +1092,7 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField + Send +
 
         init_vir_mems_list.push(
             Assignment::new(
-                &mem.iter()
+                &mem.into_iter()
                     .map(|i| integer_to_bytes(i.clone()))
                     .collect::<Vec<[u8; 32]>>(),
             )
@@ -1122,7 +1126,7 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField + Send +
         if i == phy_mem_list.len() - 1 {
             addr_phy_mems_list.push(
                 Assignment::new(
-                    &mem.iter()
+                    &mem.into_iter()
                         .map(|i| integer_to_bytes(i.clone()))
                         .collect::<Vec<[u8; 32]>>(),
                 )
@@ -1191,7 +1195,7 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField + Send +
         if i == vir_mem_list.len() - 1 {
             addr_vir_mems_list.push(
                 Assignment::new(
-                    &mem.iter()
+                    &mem.into_iter()
                         .map(|i| integer_to_bytes(i.clone()))
                         .collect::<Vec<[u8; 32]>>(),
                 )
@@ -1200,7 +1204,7 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField + Send +
             addr_ts_bits_list.push(
                 Assignment::new(
                     &ts_bits
-                        .iter()
+                        .into_iter()
                         .map(|i| integer_to_bytes(i.clone()))
                         .collect::<Vec<[u8; 32]>>(),
                 )
@@ -1247,18 +1251,20 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField + Send +
     println!("{:3} ", func_outputs);
 
     let func_inputs = entry_regs
-        .iter()
+        .into_iter()
         .map(|i| integer_to_bytes(i.clone()))
         .collect();
     let input_stack = entry_stacks
-        .iter()
+        .into_iter()
         .map(|i| integer_to_bytes(i.clone()))
         .collect();
     let input_mem = entry_arrays
-        .iter()
+        .into_iter()
         .map(|i| integer_to_bytes(i.clone()))
         .collect();
     let func_outputs = integer_to_bytes(func_outputs);
+    let record_time = record_start.elapsed();
+    println!("\n--\nRecord time: {}ms", record_time.as_millis());
 
     RunTimeKnowledge {
         block_max_num_proofs,
@@ -1513,6 +1519,7 @@ fn main() {
     // Obtain Inputs
     // --
     let witness_start = Instant::now();
+    let read_input_start = Instant::now();
     // Assume inputs are listed in the order of the parameters
     let mut entry_regs: Vec<Integer> = Vec::new();
     // Keep track of %SP and %AS and record initial memory state
@@ -1594,6 +1601,8 @@ fn main() {
             reader.read_line(&mut buffer).unwrap();
         }
     }
+    let read_input_time = read_input_start.elapsed();
+    println!("\n--\nRead input time: {}ms", read_input_time.as_millis());
 
     println!("INPUT: {:?}", entry_regs);
 

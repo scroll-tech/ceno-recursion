@@ -404,7 +404,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let (rq, rx) = rq.split_at(num_rounds_q);
     let rq = rq.to_vec();
     let rq_rev: Vec<S> = rq.iter().copied().rev().collect();
-    let mut rp = rp.to_vec();
+    let rp = rp.to_vec();
 
     // --
     // PHASE 2
@@ -472,11 +472,30 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
 
     // An Eq function to match p with rp
     let max_num_vars_phase2 = ABC_poly.get_num_vars();
-    rp.extend(std::iter::repeat(S::field_one()).take(max_num_vars_phase2 - rp.len()));
-    let eq_p_rp_poly = DensePolynomial::new(EqPolynomial::new(rp).evals());
+    // rp.extend(std::iter::repeat(S::field_one()).take(max_num_vars_phase2 - rp.len()));
+    // let rp = rp.into_iter().rev().collect();
+    let tmp_rp_poly = EqPolynomial::new(rp).evals();
+    // Every entry of tmp_rp_poly needs to be repeated "scale" times
+    let scale = ABC_poly.len() / tmp_rp_poly.len();
+    let eq_p_rp_poly = DensePolynomial::new(
+      tmp_rp_poly.into_iter().map(|i| vec![i; scale]).collect::<Vec<Vec<S>>>().concat()
+    );
+
+    let mut claimed_sum = S::field_zero();
+    let mut claimed_partial_sum = S::field_zero();
+    let mut a_sum = S::field_zero();
+    let mut b_sum = S::field_zero();
+    let mut c_sum = S::field_zero();
+    for (a, (b, c)) in zip(&eq_p_rp_poly.Z, zip(&ABC_poly.Z, &Z_poly.Z)) {
+      claimed_sum += a.clone() * b.clone() * c.clone();
+      claimed_partial_sum += b.clone() * c.clone();
+      a_sum += a.clone();
+      b_sum += b.clone();
+      c_sum += c.clone();
+    }
 
     println!(
-      "=> ABC_poly, Z_poly, eq_p_rop_poly num_variables: {:?}, {:?}, {:?}",
+      "=> ABC_poly, Z_poly, eq_p_rp_poly num_variables: {:?}, {:?}, {:?}",
       ABC_poly.get_num_vars(),
       Z_poly.get_num_vars(),
       eq_p_rp_poly.get_num_vars(),
@@ -552,11 +571,18 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     timer_sc_proof_phase2.stop();
 
     // Separate ry into rp, rw, and ry
+    /*
     let (ry_rev, rw) = ry.split_at(num_rounds_y);
     let (rw, rp) = rw.split_at(num_rounds_w);
     let rp = rp.to_vec();
     let rw = rw.to_vec();
     let ry: Vec<S> = ry_rev.iter().copied().rev().collect();
+    */
+    let (rp, ry) = ry.split_at(num_rounds_p);
+    let (rw, ry) = ry.split_at(num_rounds_w);
+    let rp = rp.to_vec();
+    let rw = rw.to_vec();
+    let ry = ry.to_vec();
 
     // --
     // POLY COMMIT
@@ -849,7 +875,6 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       3,
       transcript,
     )?;
-    */
 
     // Separate ry into rp, rw, and ry
     let (ry_rev, rw) = ry.split_at(num_rounds_y);
@@ -857,6 +882,14 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let rp = rp.to_vec();
     let rw = rw.to_vec();
     let ry: Vec<S> = ry_rev.iter().copied().rev().collect();
+    */
+
+    // Separate ry into rp, rw, and ry
+    let (rp, ry) = ry.split_at(num_rounds_p);
+    let (rw, ry) = ry.split_at(num_rounds_w);
+    let rp = rp.to_vec();
+    let rw = rw.to_vec();
+    let ry = ry.to_vec();
 
     // An Eq function to match p with rp
     let p_rp_poly_bound_ry: S = (0..rp.len())

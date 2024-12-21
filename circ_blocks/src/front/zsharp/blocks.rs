@@ -3183,11 +3183,11 @@ impl<'ast> ZGen<'ast> {
     }
 
     // Convert a list of blocks to circ_ir
-    pub fn bls_to_circ(&'ast self, blks: &Vec<Block>) {
+    pub fn bls_to_circ<const PROVER: bool>(&'ast self, blks: &Vec<Block>) {
         for b in blks {
             let f = &format!("Block_{}", b.name);
             self.circ_init_block(f);
-            self.bl_to_circ::<false>(&b, f);
+            self.bl_to_circ::<false, PROVER>(&b, f);
         }
     }
 
@@ -3721,7 +3721,8 @@ impl<'ast> ZGen<'ast> {
     // Convert a block to circ_ir
     // This can be done to either produce the constraints, or to estimate the size of constraints
     // In estimation mode, we rename all output variable from X -> oX, add assertion, and process the terminator
-    pub fn bl_to_circ<const ESTIMATE: bool>(&self, b: &Block, f: &str) {
+    // If in prover mode, declare all block outputs at the end of the block
+    pub fn bl_to_circ<const ESTIMATE: bool, const PROVER: bool>(&self, b: &Block, f: &str) {
         debug!("Bl to Circ: {}", b.name);
 
         // setup stack frame for entry function
@@ -3958,20 +3959,36 @@ impl<'ast> ZGen<'ast> {
 
         if let Some(r) = self.circ_exit_fn() {
             match self.mode {
-                Mode::Mpc(_) => {
-                    let ret_term = r.unwrap_term();
-                    let ret_terms = ret_term.terms();
-                    self.circ
-                        .borrow()
-                        .cir_ctx()
-                        .cs
-                        .borrow_mut()
-                        .get_mut(f)
-                        .unwrap()
-                        .outputs
-                        .extend(ret_terms);
-                }
                 Mode::Proof => {
+                    if PROVER {
+                        for (o_name, o_ty) in &b.outputs {
+                            if let Some(o_ty) = o_ty {
+                                println!("CVARS_STACK: {:?}", self.cvars_stack);
+                                println!("O_NAME: {}", o_name);
+                                let o_val = self.cvar_lookup(&o_name).unwrap();
+                                let o_var_val = self
+                                    .circ_declare_input(
+                                        &f,
+                                        o_name.to_string(),
+                                        o_ty,
+                                        ZVis::Public,
+                                        Some(o_val.clone()),
+                                        false,
+                                        &None,
+                                    )
+                                    .expect(&format!("circ_declare {o_name}"));
+                                let o_eq = eq(o_val, o_var_val).unwrap().term;
+                                let mut assertions = std::mem::take(&mut *self.assertions.borrow_mut());
+                                let o_assert = if assertions.is_empty() {
+                                    o_eq
+                                } else {
+                                    assertions.push(o_eq);
+                                    term(AND, assertions)
+                                };
+                                self.circ.borrow_mut().assert(&f, o_assert);
+                            }
+                        }
+                    }
                     let ty = ret_ty.as_ref().unwrap();
                     let name = "return".to_owned();
                     let ret_val = r.unwrap_term();
@@ -3995,28 +4012,6 @@ impl<'ast> ZGen<'ast> {
                         term(AND, assertions)
                     };
                     self.circ.borrow_mut().assert(&f, to_assert);
-                }
-                Mode::Opt => {
-                    let ret_term = r.unwrap_term();
-                    let ret_terms = ret_term.terms();
-                    assert!(
-                        ret_terms.len() == 1,
-                        "When compiling to optimize, there can only be one output"
-                    );
-                    let t = ret_terms.into_iter().next().unwrap();
-                    let t_sort = check(&t);
-                    if !matches!(t_sort, Sort::BitVector(_)) {
-                        panic!("Cannot maximize output of type {}", t_sort);
-                    }
-                    self.circ
-                        .borrow()
-                        .cir_ctx()
-                        .cs
-                        .borrow_mut()
-                        .get_mut(f)
-                        .unwrap()
-                        .outputs
-                        .push(t);
                 }
                 _ => {
                     panic!("Supported Mode!")

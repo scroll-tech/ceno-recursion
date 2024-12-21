@@ -1,0 +1,637 @@
+Options { path: "unit_tests/find_min_cobbl", skip_linred: false, circ: CircOpt { r1cs: R1csOpt { verified: false, profile: false, div_by_zero: Incomplete, lc_elim_thresh: 50 }, field: FieldOpt { builtin: Goldilocks, custom_modulus: "" }, ir: IrOpt { field_to_bv: Wrap, frequent_gc: false }, ram: RamOpt { enabled: false, range: Sort, index: Uniqueness, permutation: Msh, rom: Haboeck }, fmt: FmtOpt { use_default_field: true, hide_field: false }, zsharp: ZsharpOpt { isolate_asserts: true }, datalog: DatalogOpt { rec_limit: 5, lint_prim_rec: false }, c: COpt { sv_functions: false, assert_no_ub: false } }, action: Count, quiet: false, no_opt: false }
+Generating Compiler Time Data...
+Entry block: 0
+
+Block 0:
+Func: main, Scope: 0
+Exec Bound: 1, While Loop: false
+RO Ops: 0, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+    field %BP = 0 <Field>
+    field %TS = 0 <Field>
+Transition: -> 1
+
+Block 1:
+Func: main, Scope: 0
+Exec Bound: 1, While Loop: false
+RO Ops: 0, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+Transition: -> 2
+
+Block 2:
+Func: main, Scope: 0
+Exec Bound: 1, While Loop: false
+RO Ops: 0, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+    u32[high.main.0.0] arr.main.0.0, ro
+    u32 sum.main.0.0 = 0 <U32>
+Transition: -> 3
+
+Block 3:
+Func: main, Scope: 1
+Exec Bound: 1, While Loop: false
+RO Ops: 0, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+    u32 i.main.0.0 = 0 <U32>
+Transition: 
+    i.main.0.0 != high.main.0.0 ? -> 4 : -> 7
+
+Block 4:
+Func: main, Scope: 2
+Exec Bound: 1, While Loop: true
+RO Ops: 0, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+Transition: -> 5
+
+Block 5:
+Func: main, Scope: 3
+Exec Bound: 1, While Loop: false
+RO Ops: 1, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+    u32 sum.main.0.0 = sum.main.0.0 + i.main.0.0
+    arr.main.0.0[i.main.0.0] = sum.main.0.0 <u32>, ro
+Transition: -> 6
+
+Block 6:
+Func: main, Scope: 2
+Exec Bound: 1, While Loop: false
+RO Ops: 0, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+    i.main.0.0 = i.main.0.0 + 1 <U32>
+Transition: 
+    i.main.0.0 != high.main.0.0 ? -> 4 : -> 7
+
+Block 7:
+Func: main, Scope: 1
+Exec Bound: 1, While Loop: false
+RO Ops: 0, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+Transition: -> 8
+
+Block 8:
+Func: main, Scope: 0
+Exec Bound: 1, While Loop: false
+RO Ops: 2, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+    u32 load^0.main.0.0 = arr.main.0.0[b.main.0.0], ro
+    u32 x.main.0.0 = load^0.main.0.0
+    u32 load^0.main.0.0 = arr.main.0.0[low.main.0.0], ro
+    u32 min.main.0.0 = load^0.main.0.0
+    u32 min_idx.main.0.0 = low.main.0.0
+    u32 i.main.0.1 = low.main.0.0 + 1 <U32>
+Transition: 
+    i.main.0.1 < high.main.0.0 ? -> 9 : -> 13
+
+Block 9:
+Func: main, Scope: 1
+Exec Bound: 1, While Loop: true
+RO Ops: 1, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+    u32 load^0.main.1.0 = arr.main.0.0[i.main.0.1], ro
+Transition: 
+    load^0.main.1.0 < min.main.0.0 ? -> 10 : -> 11
+
+Block 10:
+Func: main, Scope: 2
+Exec Bound: 1, While Loop: false
+RO Ops: 1, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+    u32 load^0.main.2.0 = arr.main.0.0[i.main.0.1], ro
+    u32 min.main.0.0 = load^0.main.2.0
+    u32 min_idx.main.0.0 = i.main.0.1
+Transition: -> 12
+
+Block 11:
+Func: main, Scope: 2
+Exec Bound: 1, While Loop: false
+RO Ops: 0, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+Transition: -> 12
+
+Block 12:
+Func: main, Scope: 1
+Exec Bound: 1, While Loop: false
+RO Ops: 0, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+    u32 i.main.0.1 = i.main.0.1 + 1 <U32>
+Transition: 
+    i.main.0.1 < high.main.0.0 ? -> 9 : -> 13
+
+Block 13:
+Func: main, Scope: 0
+Exec Bound: 1, While Loop: false
+RO Ops: 0, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+    u32 %RET.main = min.main.0.0 + min_idx.main.0.0 + x.main.0.0 * c.main.0.0
+Program terminates.
+
+Block 14:
+Func: main, Scope: 0
+Exec Bound: 1, While Loop: false
+RO Ops: 0, VM Ops: 0
+Num Cons: -
+Inputs:
+Outputs:
+Instructions:
+Program terminates.
+
+
+--
+Optimization:
+
+
+--
+Post-Processing:
+Entry block: 0
+
+Block 0:
+Func: main, Scope: 0
+Exec Bound: 1, While Loop: false
+RO Ops: 0, VM Ops: 0
+Num Cons: 29
+Inputs:
+    %i1(BN): field
+    %i5(SP): field
+    %i7: u32
+    %i8: u32
+    %i9: u32
+    %i10: u32
+Outputs:
+    %o1(BN): field
+    %o7: field
+    %o8: u32
+    %o9: u32
+    %o10: u32
+    %o11: u32
+    %o12: u32
+    %o13: u32
+Instructions:
+    assert %i1(BN) == 0 <Field>
+    field %w3(SP) = %i5(SP)
+    u32 %w5 = %i7
+    u32 %w6 = %i8
+    u32 %w7 = %i9
+    u32 %w8 = %i10
+    u32[%w8] %w9, ro
+    u32 %w10 = 0 <U32>
+    u32 %w11 = 0 <U32>
+    assert %o7 == %w9
+    assert %o8 == %w6
+    assert %o9 == %w7
+    assert %o10 == %w8
+    assert %o11 == %w11
+    assert %o12 == %w5
+    assert %o13 == %w10
+    assert %o1(BN) == %w11 != %w8 ? 1 <Field> : 2 <Field>
+Transition: 
+    %w11 != %w8 ? -> 1 : -> 2
+
+Block 1:
+Func: main, Scope: 2
+Exec Bound: 1, While Loop: true
+RO Ops: 1, VM Ops: 0
+Num Cons: 94
+Inputs:
+    %i1(BN): field
+    %i7: field
+    %i8: u32
+    %i9: u32
+    %i10: u32
+    %i11: u32
+    %i12: u32
+    %i13: u32
+Outputs:
+    %o1(BN): field
+    %o7: field
+    %o8: u32
+    %o9: u32
+    %o10: u32
+    %o11: u32
+    %o12: u32
+    %o13: u32
+Instructions:
+    assert %i1(BN) == 1 <Field>
+    field %w9 = %i7
+    u32 %w6 = %i8
+    u32 %w7 = %i9
+    u32 %w8 = %i10
+    u32 %w11 = %i11
+    u32 %w5 = %i12
+    u32 %w10 = %i13
+    %w10 = %w10 + %w11
+    %w9[%w11] = %w10 <u32>, ro
+    %w11 = %w11 + 1 <U32>
+    assert %o7 == %w9
+    assert %o8 == %w6
+    assert %o9 == %w7
+    assert %o10 == %w8
+    assert %o11 == %w11
+    assert %o12 == %w5
+    assert %o13 == %w10
+    assert %o1(BN) == %w11 != %w8 ? 1 <Field> : 2 <Field>
+Transition: 
+    %w11 != %w8 ? -> 1 : -> 2
+
+Block 2:
+Func: main, Scope: 1
+Exec Bound: 1, While Loop: false
+RO Ops: 2, VM Ops: 0
+Num Cons: 82
+Inputs:
+    %i1(BN): field
+    %i7: field
+    %i8: u32
+    %i9: u32
+    %i10: u32
+    %i12: u32
+Outputs:
+    %o1(BN): field
+    %o7: field
+    %o8: u32
+    %o9: u32
+    %o10: u32
+    %o11: u32
+    %o12: u32
+    %o13: u32
+Instructions:
+    assert %i1(BN) == 2 <Field>
+    field %w9 = %i7
+    u32 %w6 = %i8
+    u32 %w7 = %i9
+    u32 %w8 = %i10
+    u32 %w5 = %i12
+    u32 %w12 = %w9[%w6], ro
+    u32 %w13 = %w12
+    u32 %w12 = %w9[%w5], ro
+    u32 %w14 = %w12
+    u32 %w15 = %w5
+    u32 %w16 = %w5 + 1 <U32>
+    assert %o7 == %w9
+    assert %o8 == %w7
+    assert %o9 == %w8
+    assert %o10 == %w16
+    assert %o11 == %w14
+    assert %o12 == %w15
+    assert %o13 == %w13
+    assert %o1(BN) == %w16 < %w8 ? 3 <Field> : 4 <Field>
+Transition: 
+    %w16 < %w8 ? -> 3 : -> 4
+
+Block 3:
+Func: main, Scope: 1
+Exec Bound: 1, While Loop: true
+RO Ops: 2, VM Ops: 0
+Num Cons: 126
+Inputs:
+    %i1(BN): field
+    %i7: field
+    %i8: u32
+    %i9: u32
+    %i10: u32
+    %i11: u32
+    %i12: u32
+    %i13: u32
+Outputs:
+    %o1(BN): field
+    %o7: field
+    %o8: u32
+    %o9: u32
+    %o10: u32
+    %o11: u32
+    %o12: u32
+    %o13: u32
+Instructions:
+    assert %i1(BN) == 3 <Field>
+    field %w9 = %i7
+    u32 %w7 = %i8
+    u32 %w8 = %i9
+    u32 %w16 = %i10
+    u32 %w14 = %i11
+    u32 %w15 = %i12
+    u32 %w13 = %i13
+    u32 %w17 = %w9[%w16], ro
+    if %w17 < %w14:
+        u32 %w18 = %w9[%w16], ro
+        %w14 = %w18
+        %w15 = %w16
+    else:
+        Dummy Load, ro
+    %w16 = %w16 + 1 <U32>
+    assert %o7 == %w9
+    assert %o8 == %w7
+    assert %o9 == %w8
+    assert %o10 == %w16
+    assert %o11 == %w14
+    assert %o12 == %w15
+    assert %o13 == %w13
+    assert %o1(BN) == %w16 < %w8 ? 3 <Field> : 4 <Field>
+Transition: 
+    %w16 < %w8 ? -> 3 : -> 4
+
+Block 4:
+Func: main, Scope: 0
+Exec Bound: 1, While Loop: false
+RO Ops: 0, VM Ops: 0
+Num Cons: 234
+Inputs:
+    %i1(BN): field
+    %i8: u32
+    %i11: u32
+    %i12: u32
+    %i13: u32
+Outputs:
+    %o1(BN): field
+    %o2(RET): u32
+Instructions:
+    assert %i1(BN) == 4 <Field>
+    u32 %w7 = %i8
+    u32 %w14 = %i11
+    u32 %w15 = %i12
+    u32 %w13 = %i13
+    u32 %w19 = %w14 + %w15 + %w13 * %w7
+    assert %o2(RET) == %w19
+    assert %o1(BN) == 5 <Field>
+Program terminates.
+
+
+--
+Circ IR:
+Optimizing IR... 
+done.
+
+--
+Read input time: 0ms
+INPUT: [0, 0, 0, 0, 0, 800]
+
+
+--
+Optimization:
+
+
+--
+Post-Processing:
+Entry block: 0
+
+Block 0:
+Func: main, Scope: 0
+Exec Bound: 1, While Loop: false
+RO Ops: 0, VM Ops: 0
+Num Cons: 29
+Inputs:
+    %i1(BN): field
+    %i5(SP): field
+    %i7: u32
+    %i8: u32
+    %i9: u32
+    %i10: u32
+Outputs:
+    %o1(BN): field
+    %o7: field
+    %o8: u32
+    %o9: u32
+    %o10: u32
+    %o11: u32
+    %o12: u32
+    %o13: u32
+Instructions:
+    assert %i1(BN) == 0 <Field>
+    field %w3(SP) = %i5(SP)
+    u32 %w5 = %i7
+    u32 %w6 = %i8
+    u32 %w7 = %i9
+    u32 %w8 = %i10
+    u32[%w8] %w9, ro
+    u32 %w10 = 0 <U32>
+    u32 %w11 = 0 <U32>
+    field %o7 = %w9
+    u32 %o8 = %w6
+    u32 %o9 = %w7
+    u32 %o10 = %w8
+    u32 %o11 = %w11
+    u32 %o12 = %w5
+    u32 %o13 = %w10
+    field %o1(BN) = %w11 != %w8 ? 1 <Field> : 2 <Field>
+Transition: 
+    %w11 != %w8 ? -> 1 : -> 2
+
+Block 1:
+Func: main, Scope: 2
+Exec Bound: 1, While Loop: true
+RO Ops: 1, VM Ops: 0
+Num Cons: 94
+Inputs:
+    %i1(BN): field
+    %i7: field
+    %i8: u32
+    %i9: u32
+    %i10: u32
+    %i11: u32
+    %i12: u32
+    %i13: u32
+Outputs:
+    %o1(BN): field
+    %o7: field
+    %o8: u32
+    %o9: u32
+    %o10: u32
+    %o11: u32
+    %o12: u32
+    %o13: u32
+Instructions:
+    assert %i1(BN) == 1 <Field>
+    field %w9 = %i7
+    u32 %w6 = %i8
+    u32 %w7 = %i9
+    u32 %w8 = %i10
+    u32 %w11 = %i11
+    u32 %w5 = %i12
+    u32 %w10 = %i13
+    %w10 = %w10 + %w11
+    %w9[%w11] = %w10 <u32>, ro
+    %w11 = %w11 + 1 <U32>
+    field %o7 = %w9
+    u32 %o8 = %w6
+    u32 %o9 = %w7
+    u32 %o10 = %w8
+    u32 %o11 = %w11
+    u32 %o12 = %w5
+    u32 %o13 = %w10
+    field %o1(BN) = %w11 != %w8 ? 1 <Field> : 2 <Field>
+Transition: 
+    %w11 != %w8 ? -> 1 : -> 2
+
+Block 2:
+Func: main, Scope: 1
+Exec Bound: 1, While Loop: false
+RO Ops: 2, VM Ops: 0
+Num Cons: 82
+Inputs:
+    %i1(BN): field
+    %i7: field
+    %i8: u32
+    %i9: u32
+    %i10: u32
+    %i12: u32
+Outputs:
+    %o1(BN): field
+    %o7: field
+    %o8: u32
+    %o9: u32
+    %o10: u32
+    %o11: u32
+    %o12: u32
+    %o13: u32
+Instructions:
+    assert %i1(BN) == 2 <Field>
+    field %w9 = %i7
+    u32 %w6 = %i8
+    u32 %w7 = %i9
+    u32 %w8 = %i10
+    u32 %w5 = %i12
+    u32 %w12 = %w9[%w6], ro
+    u32 %w13 = %w12
+    u32 %w12 = %w9[%w5], ro
+    u32 %w14 = %w12
+    u32 %w15 = %w5
+    u32 %w16 = %w5 + 1 <U32>
+    field %o7 = %w9
+    u32 %o8 = %w7
+    u32 %o9 = %w8
+    u32 %o10 = %w16
+    u32 %o11 = %w14
+    u32 %o12 = %w15
+    u32 %o13 = %w13
+    field %o1(BN) = %w16 < %w8 ? 3 <Field> : 4 <Field>
+Transition: 
+    %w16 < %w8 ? -> 3 : -> 4
+
+Block 3:
+Func: main, Scope: 1
+Exec Bound: 1, While Loop: true
+RO Ops: 2, VM Ops: 0
+Num Cons: 126
+Inputs:
+    %i1(BN): field
+    %i7: field
+    %i8: u32
+    %i9: u32
+    %i10: u32
+    %i11: u32
+    %i12: u32
+    %i13: u32
+Outputs:
+    %o1(BN): field
+    %o7: field
+    %o8: u32
+    %o9: u32
+    %o10: u32
+    %o11: u32
+    %o12: u32
+    %o13: u32
+Instructions:
+    assert %i1(BN) == 3 <Field>
+    field %w9 = %i7
+    u32 %w7 = %i8
+    u32 %w8 = %i9
+    u32 %w16 = %i10
+    u32 %w14 = %i11
+    u32 %w15 = %i12
+    u32 %w13 = %i13
+    u32 %w17 = %w9[%w16], ro
+    if %w17 < %w14:
+        u32 %w18 = %w9[%w16], ro
+        %w14 = %w18
+        %w15 = %w16
+    else:
+        Dummy Load, ro
+    %w16 = %w16 + 1 <U32>
+    field %o7 = %w9
+    u32 %o8 = %w7
+    u32 %o9 = %w8
+    u32 %o10 = %w16
+    u32 %o11 = %w14
+    u32 %o12 = %w15
+    u32 %o13 = %w13
+    field %o1(BN) = %w16 < %w8 ? 3 <Field> : 4 <Field>
+Transition: 
+    %w16 < %w8 ? -> 3 : -> 4
+
+Block 4:
+Func: main, Scope: 0
+Exec Bound: 1, While Loop: false
+RO Ops: 0, VM Ops: 0
+Num Cons: 234
+Inputs:
+    %i1(BN): field
+    %i8: u32
+    %i11: u32
+    %i12: u32
+    %i13: u32
+Outputs:
+    %o1(BN): field
+    %o2(RET): u32
+Instructions:
+    assert %i1(BN) == 4 <Field>
+    u32 %w7 = %i8
+    u32 %w14 = %i11
+    u32 %w15 = %i12
+    u32 %w13 = %i13
+    u32 %w19 = %w14 + %w15 + %w13 * %w7
+    u32 %o2(RET) = %w19
+    field %o1(BN) = 5 <Field>
+Program terminates.
+
+--
+Block time: 4ms
+
+
+--
+Interpretation:
+
+--
+Interpret time: 38ms
+
+--
+Convert time: 11ms

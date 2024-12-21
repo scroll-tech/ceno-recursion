@@ -1,7 +1,7 @@
 // TODO: Might want to simplify Liveness Analysis & PMR now that scope changes are handled in optimization
 
 const PRINT_PROOF: bool = false;
-const INLINE_SPARTAN_PROOF: bool = true;
+const INLINE_SPARTAN_PROOF: bool = false;
 const TOTAL_NUM_VARS_BOUND: usize = 10000000000;
 const MAX_FILE_SIZE: usize = 1073741824;
 
@@ -951,9 +951,15 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField + Send +
         }
         let mut evaluator = StagedWitCompEvaluator::new(&prover_data_list[id].precompute);
         let mut eval = Vec::new();
+        if i == 0 {
+            println!("INPUT: {:?}", input);
+        }
         eval.extend(evaluator.eval_stage(input).into_iter().cloned());
         // Drop the last entry of io, which is the dummy return 0
         eval.pop();
+        if i == 0 {
+            println!("EVAL: {:?}", eval);
+        }
         eval.extend(
             evaluator
                 .eval_stage(Default::default())

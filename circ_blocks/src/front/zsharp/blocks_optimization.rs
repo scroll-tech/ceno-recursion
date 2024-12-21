@@ -2763,7 +2763,7 @@ impl<'ast> ZGen<'ast> {
     fn bl_count_num_cons(&self, bl: &Block<'ast>) -> usize {
         let block_name = &format!("Pseudo_Block_{}", bl.name);
         self.circ_init_block(block_name);
-        self.bl_to_circ::<true>(bl, block_name);
+        self.bl_to_circ::<true, false>(bl, block_name);
 
         let mut cs = Computations::new();
         cs.comps = self.circ.borrow().cir_ctx().cs.borrow_mut().clone();

@@ -87,7 +87,7 @@ impl FrontEnd for ZSharpFE {
         // NOTE: The input of block 0 includes %BN, which should be removed when reasoning about function input
         let func_input_width = blks[0].get_num_inputs() - 1;
         println!("\n\n--\nCirc IR:");
-        g.bls_to_circ(&blks);
+        g.bls_to_circ::<false>(&blks);
 
         g.generics_stack_pop();
         g.file_stack_pop();
@@ -399,6 +399,15 @@ impl ZSharpFE {
                 .collect();
         let convert_time = convert_start.elapsed();
         println!("\n--\nConvert time: {}ms", convert_time.as_millis());
+
+        g.bls_to_circ::<true>(&blks);
+        g.generics_stack_pop();
+        g.file_stack_pop();
+        let mut cs = Computations::new();
+        cs.comps = g.into_circify().cir_ctx().cs.borrow_mut().clone();
+        for (name, c) in cs.comps {
+            println!("{}: {:?}", name, c);
+        }
 
         return (
             ret,
@@ -1415,7 +1424,7 @@ impl<'ast> ZGen<'ast> {
                 .map_err(|e| format!("{e}"))
             }
             ast::Statement::Assertion(e) => {
-                match self.expr_impl_::<true>(&e.expression).and_then(|v| {
+                match self.expr_impl_::<IS_CNST>(&e.expression).and_then(|v| {
                     const_bool(v)
                         .ok_or_else(|| "interpreting expr as const bool failed".to_string())
                 }) {

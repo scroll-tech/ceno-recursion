@@ -1,7 +1,12 @@
 # Spartan Parallel
 
 ## Overview
-`spartan_parallel` takes in circuits and witnesses of the blocks produced by `circ_blocks`, and generates and verifies a SNARK proof on the correct execution of the program code. One can treat `spartan_parallel` as a two-step process: first it emits 5 different (groups of, should really be number of blocks + 4) circuits based on the blocks and an execution trace, then it evokes a data-parallel proving process on those 5 circuits.
+`spartan_parallel` takes in circuits and witnesses of the blocks produced by `circ_blocks`, and generates and verifies a SNARK proof on the correct execution of the program code. The process of `spartan_parallel` can be divided into the following stages:
+- (Compile Time) Circuit preprocessing and commitment
+- (Runtime) Witness preprocessing and commitment
+- (Runtime) Sumcheck on all circuits and all instances
+- (Runtime) Opening on circuit and witness commitments
+- (Runtime) Shift and program IO proofs
 
 ## High-Level Idea
 The program is executed correctly iff all of the following holds:
@@ -9,67 +14,100 @@ The program is executed correctly iff all of the following holds:
 2. All registers (including the label of the next block) are passed correctly between blocks.
 3. The memory state (read-only and RAM) stays coherent throughout the execution.
 
-Statement 1 can be checked directly through the block-specific circuits emitted by `circ_blocks`, while statement 2 and 3 can be checked by "extracting" inputs, outputs, and memory accesses out of block witnesses and check that they are pairwise consistent. `spartan_parallel` achieves so by generating "extraction circuits" and "consistency check circuits" based on compile-time metadata (number of inputs, outputs, and number of memory accesses per block). Furthermore, all three statements require witnesses to be arranged in different orders (statement 1 by block type, statement 2 by execution time, statement 3 by memory address), `spartan_parallel` inserts "permutation circuits" to verify the permutation between all three ordering: construct three univariate polynomials and test their equivalence by evaluating on a random point. [Let me know if this does not make sense!]
+Statement 1 can be checked directly through the block-specific circuits emitted by `circ_blocks`, while statement 2 and 3 can be checked by "extracting" inputs, outputs, and memory accesses out of block witnesses and check that they are pairwise consistent. `spartan_parallel` achieves so by generating "extraction circuits" and "consistency check circuits" based on compile-time metadata (number of inputs, outputs, and number of memory accesses per block). Furthermore, all three statements require witnesses to be arranged in different orders (statement 1 by block type, statement 2 by execution time, statement 3 by memory address), `spartan_parallel` inserts "permutation circuits" to verify the permutation between all three ordering: construct three univariate polynomials and test their equivalence by evaluating on a random point. However, to ensure that the same set of witnesses are used by both block correctness check and permutation check, the prover needs to use the same commitment for both proofs. To prevent excessive commitment opening, `spartan_parallel` commits the overlapping witnesses of block correctness and permutation separately.
 
-Please refer to [instance.rs](https://github.com/Jiangkm3/spartan_parallel/blob/master/src/instance.rs) for details of the circuits.
+## Instance Preprocessing and Commitment (Compile Time)
+Relevant files: `examples/interface.rs`, `src/instance.rs`, and `src/r1csinstance.rs`
 
-## Inputs and Circuit Generation
-At preprocessing stage, `spartan_parallel` reads in the following [inputs](https://github.com/Jiangkm3/spartan_parallel/blob/master/examples/interface.rs#L45):
-- Circuits of each basic block
-- Number of inputs, outputs, and memory operations of each block, as well as where these values are stored within the witnesses.
-- Max number of registers that need to be passed from one block to another
-- Max number of read-only memory accesses within a block
-- Max number of RAM accesses within a block
+### Inputs from `circ_blocks`
+Relevant struct: `CompileTimeKnowledge` in `examples/interface.rs`
 
-Through the above inputs, `spartan_parallel` emits the following circuits during the preprocessing stage:
-1. `BLOCK_CORRECTNESS` ([link](https://github.com/Jiangkm3/spartan_parallel/blob/master/src/instance.rs#L246)): verifies the correct execution of every block and "extracts" (constructs the polynomials) inputs, outputs, and all memory values out of each block.
-2. `CONSIS_CHECK` ([link](https://github.com/Jiangkm3/spartan_parallel/blob/master/src/instance.rs#L545)): checks that when sorted in execution order, the output of the previous block matches with the input of the next block. This is performed similarly to an offline memory check.
-3. `PHY_MEM_COHERE` ([link](https://github.com/Jiangkm3/spartan_parallel/blob/master/src/instance.rs#L545)): checks that the read-only memory accesses are coherent via an offline memory check.
-4. `VIR_MEM_COHERE` ([link](https://github.com/Jiangkm3/spartan_parallel/blob/master/src/instance.rs#L545)): checks that all RAM accesses are coherent via an offline memory check.
-5. `PERM_ROOT` ([link](https://github.com/Jiangkm3/spartan_parallel/blob/master/src/instance.rs#L761)): performs permutation check by constructing the polynomials of inputs and memory entries in execution / address order (block type order is handled in `BLOCK CORRECTNESS`)
+At compile time, `spartan_parallel` reads in from `circ_blocks` through the struct `CompileTimeKnowledge`, including the R1CS circuit for each block (`args`) and all relevant metadata (number of inputs, witnesses, memory operations, etc. per block).
 
-## Verify Sumcheck in Parallel
-### Spartan Overview
-The main idea behind Spartan is to use _two sumcheck protocols_ to assert the correctness of an R1CS equation: `Az * Bz - Cz = 0`. Let `A`, `B`, `C` be circuits of size `M * N`, and subsequently `z` be a satisfying assignment of length `N`. The goal is to prove
+The circuit of each block $\mathcal{C}_i = (A, B, C)_i$ is designed to be satisfied by a witness $z_i$ of the following form:
 $$
-\forall_{x, y}, A(x, y)z(y) \cdot B(x, y)z(y) - C(x, y)z(y) = 0
+z_i = i_i || o_i || p_i || v_i || w_i
 $$
+where
+* $i_i$ and $o_i$ are the inputs and outputs of the block, and should match with the outputs and inputs of the previous and next block. $i_i$ and $o_i$ also contain the block label for the current and next block to check that the prover always executes the correct block.
+* $p_i$ records all stack accesses of the block through a list of $(addr_j, data_j)$. All $(addr_j, data_j)$ of all blocks are used to verify the coherence of a write-once memory. 
+* $v_i$ records all heap accesses of the block through a list of $(addr_j, data_j, ts_j, ls_j)$. All entries of all blocks are used to verify the coherence of a regular (write-many) memory. 
+* $w_i$ contains all other intermediate computations used by the block.
 
-Sumcheck 1 invokes `m = log(M)` rounds to prove that given `Az`, `Bz`, `Cz` supplied by the prover,
-$$
-\sum_{x\in \{0, 1\}^m} \tilde{eq}(\tau, x)(\tilde{Az}(x)\cdot \tilde{Bz}(x) - \tilde{Cz}(x)) = 0
-$$
-Sumcheck 1 reduces the above equation down to three claims: $v_a = \tilde{Az}(r_x)$, $v_b = \tilde{Bz}(r_x)$, $v_c = \tilde{Cz}(r_x)$. Sumcheck 2 then uses `n = log(N)` rounds to prove that `Az`, `Bz`, and `Cz` are computed correctly:
-$$
-r_a v_a + r_b v_b + r_c v_c = \sum_{y\in \{0, 1\}^n} (r_a\cdot \tilde{A}(r_x, y) + r_b\cdot \tilde{B}(r_x, y) + r_c\cdot \tilde{C}(r_x, y))\cdot \tilde{z}(y)
-$$
-where $r_a$, $r_b$, and $r_c$ are challenges provided by the verifier. Finally, prover opens $\tilde{A}(r_x, r_y)$, $\tilde{B}(r_x, r_y)$, $\tilde{C}(r_x, r_y)$, and $\tilde{z}(r_y)$ through polynomial commitment.
+### Expanding and Generating Circuits
+Relevant struct: `Instance` in `src/instance.rs`
 
-### Expanding Spartan to `spartan_parallel`
-We expand Spartan to support `P` circuits, each with `Q_i` satisfying assignments (equivalent to `p\P` blocks, each executed `Q_i` times). The goal is now to prove
-$$
-\forall_{i, j, x, y}, A_i(x, y)z_{i, j}(y) \cdot B_i(x, y)z_{i, j}(y) - C_i(x, y)z_{i, j}(y) = 0
-$$
+A prover of `spartan_parallel` needs to show the following:
+1. For every block $i$, the witness generated from every execution $j$ of that block $z_{i, j}$ satisfies $\mathcal{C}_i$. (_block correctness_)
+2. After permutating $(i_{i, j}, o_{i, j})$ into execution order $(i'_k, o'_k)$, we have $i'_k = o'_{k-1}$ for all $k \neq 0$. (_consistency_)
+3. After permutating $p_{i, j} = \{(addr_{i, j, 0}, data_{i, j, 0}), (addr_{i, j, 1}, data_{i, j, 1}), \dots\}$ by address into $p'_k = (addr'_k, data'_k)$, $p'_k$ satisfies (_physical mem coherence_)
+$$addr'_{k - 1} + 1 = addr'_k \vee (addr'_{k - 1} = addr'_k \wedge val'_{k - 1} = val'_k)$$
+4. After permutating $v_{i, j}$ into $v'_k$, $v'_k$ satisfies memory coherence (_virtual mem coherence_)
 
-Let `Q_max = max_i Q_i`, prover provides `Az`, `Bz`, `Cz` as $P \times Q_i \times X$ tensors. Note that they are conceptually equivalent to vectors of length $P \cdot Q_{\text{max}} \cdot X$, but the special [tensor data structure](https://github.com/Jiangkm3/spartan_parallel/blob/master/src/custom_dense_mlpoly.rs#L22) allows the prover to skip evaluations on the $Q_{\text{max}} - Q_i$ unused "zero" entries within the dense polynomial. [Sumcheck 1](https://github.com/Jiangkm3/spartan_parallel/blob/master/src/r1csproof.rs#L320) now requires `log(P) + log(Q_max) + log(X) = p + q_max + x` rounds to prove that
-$$
-\sum_{i\in \{0, 1\}^p, j\in \{0, 1\}^{q_\text{max}}, x\in \{0, 1\}^m} \tilde{eq}(\tau, i || j || x)(\tilde{Az}(i, j, x)\cdot \tilde{Bz}(i, j, x) - \tilde{Cz}(i, j, x)) = 0
-$$
-Note that to fully utilize the tensor structure and avoid the prover paying for $P\times Q_\text{max}\times X$ evaluations, this sumcheck is performed in the following order:
-1. First on bits of $X$ (most significant to least significant)
-2. Then on bits of $Q$ in _reverse order_ (from least significant to most significant)
-3. Finally on bits of $P$ (most significant to least significant)
+We note that the above steps imply the following additional procedures:
 
-This is necessary because if the evaluation begins with bits of $P$ or the most significant bit of $Q$, then the $Q_{\text{max}} - Q_i$ unused entries are no longer zero in the next round. To accomodate for the reverse evaluation in $Q$, entries $\tilde{Az}$, $\tilde{Bz}$, and $\tilde{Cz}$ are also stored in reverse-bits-of-$Q$ order. This allows the final claims to be in the correct order: $v_a = \tilde{Az}(r_i, r_j, r_x)$, $v_b = \tilde{Bz}(r_i, r_j, r_x)$, $v_c = \tilde{Cz}(r_i, r_j, r_x)$.
+5. Every $(i_{i, j}, o_{i, j}, p_{i, j}, v_{i, j})$ is correctly extracted from $z_{i, j}$
+6. The sets of $\{i_{i, j}, o_{i, j}\}$, $\{p_{i, j}\}$, $\{v_{i, j}\}$ are permutations of $\{i'_k, o'_k\}$, $\{p'_k\}$, and $\{v'_k\}$
 
+Permutations are checked via univariate polynomial evaluations. Thus step 6 can be further divided into
 
-[Sumcheck 2](https://github.com/Jiangkm3/spartan_parallel/blob/master/src/r1csproof.rs#L462) now requires `log(P) + log(Y) = p + y` rounds to check `Az`, `Bz`, and `Cz` for every `A`, `B`, and `C`. To do so, the prover first computes $\tilde{z}_{r_j}(i, y) = \tilde{z}(i, r_j, y)$, then proves:
-$$
-r_a v_a + r_b v_b + r_c v_c = \sum_{i\in \{0, 1\}^p, y\in \{0, 1\}^n} \tilde{eq}(r_i, i)\cdot (r_a\cdot \tilde{A}(i, y) + r_b\cdot \tilde{B}(i, y) + r_c\cdot \tilde{C}(i, y))\cdot \tilde{z}_{r_j}(i, y)
-$$
-Note that we cannot directly evaluate $\tilde{A}(r_p, y)$, etc. as that results in the equation becoming quadratic in terms of $r_p$. Thus an additional `p` rounds are introduced to flatten $r_p$. This introduces `p` new challenges. We denote the challenges generated in sumcheck 2 ($r_i', r_y$).
+* (6a) $RLC_{i, o} = \prod_{i, j} (\tau - f(i_{i, j}) - r\cdot f(o_{i, j}))$, where $\tau$ and $r$ are random numbers and $f$ is a random linear combination (see consistency below). Compute $RLC_p$, $RLC_v$ as well.
+* (6b) $RLC'_{i, o} = \prod_k (\tau - f(i'_k) - r\cdot f(o'_k))$. Compute $RLC'_p$, $RLC'_v$ as well.
+* (6c) Assert that $RLC_{i, o} = RLC'_{i, o}$, $RLC_p = RLC'_p$, $RLC_v = RLC'_v$.
 
-Finally, prover opens $\tilde{A}(r_i', r_x, r_y)$, $\tilde{B}(r_i', r_x, r_y)$, $\tilde{C}(r_i', r_x, r_y)$, and $\tilde{z}(r_i', r_j, r_y)$ through polynomial commitment.
+While the prover has computed $f(i'_k)$ and $f(o'_k)$ during permutation, it can use them for consistency check. We can rewrite _consistency_ as:
 
-## Batched Commitments
-Spartan currently uses Hyrax for polynomial commitment, which is easily data-parallelizable. `spartan_parallel` commits to each circuit separately (but in batch), and commits witnesses by the type of circuit (block) they are being applied to. This allows the size and number of execution of each block to be different, but at the cost of having commitment size linear to number of circuits (blocks). Thus it is of top priority to try to reduce the number of blocks emitted.
+2. $f(i'_k) = f(o'_{k-1})$ for all $k \neq 0$. (_consistency_)
+
+_Remark_: $(i'_k, o'_k)$, $p'_k$, and $v'_k$ will be padded with 0 to the next power of 2, so consistency and coherence checks will have additional constraints to handle these 0 entries.
+
+We can now generate all the circuits we need:
+
+*  A set of circuits ($\mathcal{C}'_i$) that checks step 1, 5, and 6a for each block $i$. These circuits are modified from $\mathcal{C}_i$ to add the rlc function $f$ and polynomial evaluation. As a result, its satisfying assignments $z'_{i, j}$ also requires modification from $z_{i, j}$, to the following form:
+$$z'_{i, j} = (z_{i, j}, r, rz_{i, j}, \pi_{i, j}, \pi'_{i, j})$$
+- where
+  - $r$ is the randomness used by $f$ and $\tau$
+  - $rz_{i, j}$ records intermediate computations for $\tau - f(i_{i, j}) - r\cdot f(o_{i, j})$, $\tau - f(p_{i, j})$, and $\tau - f(v_{i, j})$
+  - $\pi_{i, j}$ stores $\tau - f(i_{i, j}) - r\cdot f(o_{i, j})$, $\tau - f(p_{i, j})$, and $\tau - f(v_{i, j})$, as well as their cumulative product that forms $RLC_{i, o}$, $RLC_p$, $RLC_v$.
+  - $\pi'_{i, j}$ is a shifted version of $\pi_{i, j}$, used to help compute the cumulative product. See _shift proofs_ section.
+- To allow for each segment of $z'_{i, j}$ to be committed separately, `spartan_parallel` _conceptually_ pads each segment with 0's to the same length as $z_{i, j}$. Note that these pads are never materialized and can be skipped during actual computation. Since $z'_{i, j}$ also needs to be padded to a power of 2, this implies $|z'_{i, j}| = 8 \times |z_{i, j}|$ 
+
+* A consistency circuit $\mathcal{C}_c$ for step 2 ($f(i'_k) = f(o'_{k-1})$).
+* Stack and heap verification circuits $\mathcal{C}_p$, $\mathcal{C}_v$ for step 3 and 4.
+* A permutation circuit $\mathcal{C}_\pi$ for step 6b.
+
+Note that the verifier can check 6c efficiently without sumcheck.
+Also, $\mathcal{C}'_i$ are the larger circuits while $\mathcal{C}_c$, $\mathcal{C}_p$, $\mathcal{C}_v$, $\mathcal{C}_\pi$ are small and easily parallelizable.
+
+### Committing Circuits through Sparse Poly Commitment
+Relevant functions:
+* `next_group_size` in `src/instance.rs`
+* `gen_block_inst` in `src/instance.rs`
+* `SNARK::multi_encode` in `src/lib.rs`
+* `R1CSInstance::multi_commit` in `src/r1csinstance.rs`
+* `R1CSInstance::multi_evaluate` in `src/r1csinstance.rs`
+
+The previous steps generate in total $b + 4$ circuits of various sizes. Our circuit commitment follows the existing batched sparse polynomial commitment scheme of Spartan. However, with circuits of different sizes, we want to only pay proportional to the approximate size of each circuit. The solution is to divide circuits of different sizes into groups and commit each groups separately.
+
+Let each circuit $\mathcal{C}_i$ be of size $M_i\times N_i$ with $L_i$ non-zero entries. We assume that $M_i$ and $N_i$ are of similar sizes and $N_i$, and $L_i$ are roughly proportional to each other. 
+For each commitment, the prover pays for $O(L)$ time to generate a proof of size $O(\log(N) + \log(L))$.
+
+Our strategy is thus to group the circuits by the size of $N_i$. For each circuit $i$, the prover rounds its $N_i$ to the nearest power of 16 (or some other adjustable value) and put it in the corresponding group. For each group $j$, the prover computes the maximum $M_j$, $N_j$ and $L_j$ within the group, and batch commits every circuit of that group as $M_j \times N_j$ with $L_j$ non-zero entries.
+
+There is, however, a problem with this approach with regard to the modified block circuits $\mathcal{C}'_i$. Recall that each $\mathcal{C}'_i$ matches with an assignment $z'_{i, j}$ of 5 segments: 
+$$z'_{i, j} = (z_{i, j}, r, rz_{i, j}, \pi_{i, j}, \pi'_{i, j})$$
+each segment padded to the length of the block witness $|z_{i, j}|$. To perform the same sumcheck across all blocks, the size of all circuits needs to be _conceptually_ equivalent. (e,g, let $z_\text{max} = \max_{i, j} |z_{i, j}|$, for every block, the first variable of $r$ is always the $z_\text{max}$'th entry, the first variable of $rz_{i, j}$ is always the $2\times z_\text{max}$'th entry, etc.). However, for blocks of a different size, the padding size is different, and thus the first variable of $r$ will not be the same entry.
+
+The solution is for the prover to keep two versions of each block circuit (toggled by `COMMIT_MODE` in `gen_block_inst`). In the _sumcheck version_, every circuit is of the same $M_{\text{max}} = \max{M}$ and $N_{\text{max}} = \max{N}$. In the _commit version_, every circuit has $M$ and $N$ according to their group. Note that the prover's time and space cost to process a circuit is linear to their number of non-zero entries, which is the same for both versions. The prover can thus use the sumcheck version to perform the sumcheck of all blocks together, and use the commit version to reduce the time size of the commitment.
+
+The discrepancy between the two versions requires additional handling of commitment opening. The sumcheck produces two lists of challenges corresponding to the two dimensions of the circuit: $|rx| = \log M_{\text{max}}$, $|ry| = \log N_{\text{max}}$. On the constraint side, if $M_j < M_{\text{max}}$, the prover divides $rx \to rx_\text{pad} || rx_\text{eval}$. On the witness side, if $N_j < N_{\text{max}}$, the prover divides $ry\to ry_\text{comb} || ry_\text{pad} || ry_\text{eval}$. We describe each section:
+* $rx_\text{pad}$ has length $(\log M_{\text{max}} - \log M_j)$ are the "extra" challenges
+* $rx_\text{eval}$ has length $\log M_j$ are evaluated on the commitment
+* $ry_\text{comb}$ has length-3 is used to combine the 8 different segments of witnesses
+* $ry_\text{pad}$ has length $(\log N_{\text{max}} - 3 - \log N_j)$ are the "extra" challenges on each segment. By placing $ry_\text{comb}$ in front of $ry_\text{pad}$, the prover resolves the issue where witness segments are padded to a different length in the commit version and the sumcheck version.
+* $ry_\text{eval}$ has length $\log N_j$ are evaluated on the commitment.
+
+Thus,
+$$\mathcal{C}_\text{sumcheck}(rx || ry) =  (\prod_{r\in rx_\text{pad} || ry_\text{pad}} 1 - r) \cdot \mathcal{C}_\text{commit}(rx_\text{eval} || ry_\text{comb} || ry_\text{eval})$$
+
+So the opening is performed on $(rx_\text{eval} || ry_\text{comb} || ry_\text{eval})$, and the verifier checks the result by computing and multiplying by $\prod_{r\in rx_\text{pad} || ry_\text{pad}} (1 - r)$.

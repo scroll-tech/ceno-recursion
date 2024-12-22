@@ -49,7 +49,7 @@ We note that the above steps imply the following additional procedures:
 5. Every $(i_{i, j}, o_{i, j}, p_{i, j}, v_{i, j})$ is correctly extracted from $z_{i, j}$
 6. The sets of $\{i_{i, j}, o_{i, j}\}$, $\{p_{i, j}\}$, $\{v_{i, j}\}$ are permutations of $\{i'_k, o'_k\}$, $\{p'_k\}$, and $\{v'_k\}$
 
-Permutations are checked via univariate polynomial evaluations. Thus step 6 can be further divided into
+Permutations are checked via grand product proofs. Thus step 6 can be further divided into
 
 * (6a) $RLC_{i, o} = \prod_{i, j} (\tau - f(i_{i, j}) - r\cdot f(o_{i, j}))$, where $\tau$ and $r$ are random numbers and $f$ is a random linear combination (see consistency below). Compute $RLC_p$, $RLC_v$ as well.
 * (6b) $RLC'_{i, o} = \prod_k (\tau - f(i'_k) - r\cdot f(o'_k))$. Compute $RLC'_p$, $RLC'_v$ as well.
@@ -155,4 +155,23 @@ _XXX: we should be able to reduce the length to `total_num_phy_mem_accesses * 4`
 All witnesses are committed using regular dense polynomial commitment schemes. `block_vars_matrix`, `block_w2`, `block_w3`, and `block_w3_shifted` are committed by each type of block. We note that we can use tricks similar to circuit commitment above to batch commit and batch open witness commitments.
 
 ## Sumcheck on Circuits and Instances
-Relevant files: `src/r1csproof.rs` and `src/sumcheck.rs`
+Relevant files: `src/customdensepolynomial.rs`, `src/r1csproof.rs` and `src/sumcheck.rs`
+
+The main section of `spartan_parallel` is consisted of three proofs, each with its own sumcheck and commitment opening. Each proof handles:
+1. Block correctness and grand product on block-ordered witnesses
+2. Transition state consistency and stack and heap coherence
+3. Grand product on execution-ordered and memory-ordered witnesses
+
+_XXX: The proofs were divided due to the different sizes of the circuits. However, this problem has since been resolved and one should be able to combine all the proofs together._
+
+Without loss of generosity, we use the block correctness proof (proof 1) to illustrate details of an R1CS proof. Recall that the goal of block correctness proof is to test the satisfiability of each $z'_{i, j}$ on each modified block circuit $\mathcal{C'}_i = (A', B', C')_i$, where
+$$z'_{i, j} = (z_{i, j}, r, rz_{i, j}, \pi_{i, j}, \pi'_{i, j})$$
+We denote the following parameters for the proof:
+* $P$ (`num_instances`): number of circuits.
+* $Q_i$ (`num_proofs`): number of assignments to each circuit $i$.
+* $X$ (`num_cons`): _maximum_ number of constraints of any circuit
+* $W$ (`num_witness_secs`): number of padded segments of $z'_{i, j}$. In this case, $W = 8$.
+* $Y$ (`max_num_inputs`): _maximum_ number of witnesses of any circuit
+
+We use the lowercase version of each variable to denote their logarithmic value (e.g. $p = \log P$). Below we walkthrough the proving process of `spartan_parallel`.
+

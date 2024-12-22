@@ -16,7 +16,7 @@ The program is executed correctly iff all of the following holds:
 
 Statement 1 can be checked directly through the block-specific circuits emitted by `circ_blocks`, while statement 2 and 3 can be checked by "extracting" inputs, outputs, and memory accesses out of block witnesses and check that they are pairwise consistent. `spartan_parallel` achieves so by generating "extraction circuits" and "consistency check circuits" based on compile-time metadata (number of inputs, outputs, and number of memory accesses per block). Furthermore, all three statements require witnesses to be arranged in different orders (statement 1 by block type, statement 2 by execution time, statement 3 by memory address), `spartan_parallel` inserts "permutation circuits" to verify the permutation between all three ordering: construct three univariate polynomials and test their equivalence by evaluating on a random point. However, to ensure that the same set of witnesses are used by both block correctness check and permutation check, the prover needs to use the same commitment for both proofs. To prevent excessive commitment opening, `spartan_parallel` commits the overlapping witnesses of block correctness and permutation separately.
 
-## Instance Preprocessing and Commitment (Compile Time)
+## Circuit Preprocessing and Commitment (Compile Time)
 Relevant files: `examples/interface.rs`, `src/instance.rs`, and `src/r1csinstance.rs`
 
 ### Inputs from `circ_blocks`
@@ -137,6 +137,22 @@ Apart from the witnesses provided by each block execution, the prover also needs
   - $\pi_k$ is the cumulative product $\prod_{p \geq k}x_p$, computed as $\pi_k = v_k\cdot D_k$
   - $D_k$ is an intermediate variable: $D_k = x_k \cdot (\pi_{k+1} + (1 - v_{k+1}))$
   - $ri_k$ and $ro_k$ are only used by register transition to record the RLC of $i_k$ and $o_k$ individually
+* `block_w3_shifted`, `perm_exec_w3_shifted`, `phy_mem_w3_shifted`, `vir_mem_w3_shifted`: each $w3$ shifted by one row. This is so that $D_k$ can obtain $\pi_{k+1}$ and $v_{k+1}$ for its computation. See shift proofs section for more details.
 
 Note that all of the above witnesses have different sizes:
-* 
+* `block_vars_matrix`: `block_num_proofs[i] * num_vars_per_block[i]` for each block `i`
+* `perm_exec_w2`: `consis_num_proofs * num_ios`, where `num_ios` is the total number of inputs and outputs of a block, and is the same across all blocks.
+* `addr_phy_mems_list`, `phy_mem_w2`: `total_num_phy_mem_accesses * 4`  
+_XXX: we should be able to reduce the length to `total_num_phy_mem_accesses * 2`._
+* `addr_vir_mems_list`, `vir_mem_w2`: `total_num_vir_mem_accesses * 8`  
+_XXX: we should be able to reduce the length to `total_num_phy_mem_accesses * 4`._
+* `block_w2`: `block_num_proofs[i] * (num_ios + block_num_phy_ops[i] + block_num_vir_ops[i])`
+* `perm_exec_w3`, `perm_exec_shifted`: `consis_num_proofs * 8`
+* `phy_mem_w3`, `phy_mem_w3_shifted`: `total_num_phy_mem_accesses * 8`
+* `vir_mem_w3`, `vir_mem_w3_shifted`: `total_num_vir_mem_accesses * 8`
+* `block_w3`, `block_w3_shifted`: `block_num_proofs[i] * 8` for each block `i`
+
+All witnesses are committed using regular dense polynomial commitment schemes. `block_vars_matrix`, `block_w2`, `block_w3`, and `block_w3_shifted` are committed by each type of block. We note that we can use tricks similar to circuit commitment above to batch commit and batch open witness commitments.
+
+## Sumcheck on Circuits and Instances
+Relevant files: `src/r1csproof.rs` and `src/sumcheck.rs`

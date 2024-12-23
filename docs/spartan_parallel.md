@@ -211,4 +211,23 @@ $$\sum \tilde{\text{eq}} \cdot (\tilde{Az} \cdot \tilde{Bz} - \tilde{Cz}) = 0$$
 
 Except that $\tilde{Az}$, $\tilde{Bz}$, and $\tilde{Cz}$ are now $p + q_\text{max} + x_\text{max}$-variate polynomials, which means the sumcheck involves $p + q_\text{max} + x_\text{max}$ rounds and returns with the challenge $r = r_p || r_q || r_x$. However, we want the prover to only perform $\sum_i Q_i \cdot X_i$ computations (as opposed to $P \cdot Q_\text{max} \cdot X_\text{max}$).
 
-We first note that the bindings of the $P$ variables must take place last 
+We first note that binding the $P$ variables first can cause inefficiencies. This is because each binding on a variable of the $P$ dimension collapses two vectors on the $Q_i$ dimension, which may be of different lengths. As for a toy example, assume that a polynomial $G$ only has 2 dimensions $P\times Q_i$, and let $P = 4$ and $Q_i = [4, 4, 2, 2]$. The polynomial would thus contain 4 variables: 
+$$\tilde{G}(x_{p, 0}, x_{p, 1}, x_{q, 0}, x_{q, 1})$$
+
+Binding $x_{p, 0}$ to $r$ is equivalent to the following operations:
+$$G_0 = \langle(1 - r)\cdot G_{0, 0} + r\cdot G_{2, 0}, (1 - r)\cdot G_{0, 1} + r\cdot G_{2, 1}, (1 - r)\cdot G_{0, 2}, (1 - r)\cdot G_{0, 3}\rangle$$
+$$G_1 = \langle(1 - r)\cdot G_{1, 0} + r\cdot G_{3, 0}, (1 - r)\cdot G_{1, 1} + r\cdot G_{3, 1}, (1 - r)\cdot G_{1, 2}, (1 - r)\cdot G_{1, 3}\rangle$$
+
+Since $Q_2 = Q_3 = 2$, $G_{2, 2}, G_{2, 3}, G_{3, 2}, G_{3, 3}$ are all 0s, thus the prover does not access nor perform operations on them. As a result, in the first round, the prover's work is $\sum_i Q_i = 12$ multiplications. However, after the first round, the prover is left with $P = 2$ and $Q_i = [4, 4]$. So its work binding $x_{p, 1}$ would be 8 multiplications.
+
+Now consider the alternative of binding $x_{q, 1}$ first. All bindings are performed within the $Q$ dimension:
+$$G_0 = \langle(1 - r)\cdot G_{0, 0} + r\cdot G_{0, 1}, (1 - r)\cdot G_{0, 2} + r\cdot G_{0, 3}\rangle$$
+$$G_1 = \langle(1 - r)\cdot G_{1, 0} + r\cdot G_{1, 1}, (1 - r)\cdot G_{1, 2} + r\cdot G_{1, 3}\rangle$$
+$$G_2 = \langle(1 - r)\cdot G_{2, 0} + r\cdot G_{2, 1}\rangle$$
+$$G_3 = \langle(1 - r)\cdot G_{3, 0} + r\cdot G_{3, 1}\rangle$$
+
+This again costs 12 multiplications. However, this time it leaves us with $P = 4$ and $Q_i = [2, 2, 1, 1]$, and the next binding of $x_{q, 0}$ costs only 6 multiplications.
+
+As a result, `spartan_parallel` always performs sumcheck bindings from right to left.
+
+_XXX: `bit_reverse` was already designed to help the binding from right to left. Upon further thoughts, however, this seems unnecessary. I'm currently in the process of removing bit-reverse and opt for direct right-to-left sumcheck binding, which is also how ceno does it._

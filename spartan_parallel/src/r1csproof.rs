@@ -293,7 +293,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     );
 
     let max_num_vars = A.get_num_vars();
-    let num_threads = 8;
+    let num_threads = 32;
 
     let mut virtual_polys =
         VirtualPolynomials::new(num_threads, max_num_vars);
@@ -525,7 +525,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       .into_mle()
     );
     
-    let num_threads_phase2 = 8;
+    let num_threads_phase2 = 32;
 
     let mut virtual_polys =
         VirtualPolynomials::new(num_threads_phase2, max_num_vars_phase2);

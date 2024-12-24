@@ -3,7 +3,6 @@ use rayon::prelude::*;
 use std::cmp::{max, min};
 use std::collections::HashMap;
 
-use crate::custom_dense_mlpoly::rev_bits;
 use crate::scalar::SpartanExtensionField;
 use crate::transcript::AppendToTranscript;
 
@@ -247,16 +246,6 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
       Bz.push(Vec::new());
       Cz.push(Vec::new());
 
-      // Map x and y to x_rev and y_rev so we don't have to do it everytime
-      let x_step = max_num_cons / num_cons[p];
-      let x_rev_map = (0..num_cons[p]).map(|x|
-        rev_bits(x, max_num_cons) / x_step
-      ).collect();
-      let y_step = max_num_inputs / num_inputs[p];
-      let y_rev_map = (0..num_inputs[p]).map(|y|
-        rev_bits(y, max_num_inputs) / y_step
-      ).collect();
-
       Az[p] = (0..num_proofs[p])
         .into_par_iter()
         .map(|q| {
@@ -265,8 +254,6 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
             max_num_inputs,
             num_inputs[p],
             &z_list[q],
-            &x_rev_map,
-            &y_rev_map,
           )]
         })
         .collect();
@@ -278,8 +265,6 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
             max_num_inputs,
             num_inputs[p],
             &z_list[q],
-            &x_rev_map,
-            &y_rev_map,
           )]
         })
         .collect();
@@ -291,8 +276,6 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
             max_num_inputs,
             num_inputs[p],
             &z_list[q],
-            &x_rev_map,
-            &y_rev_map,
           )]
         })
         .collect();

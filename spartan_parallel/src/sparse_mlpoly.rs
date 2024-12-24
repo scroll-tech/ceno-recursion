@@ -1,7 +1,6 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::needless_range_loop)]
-use crate::custom_dense_mlpoly::rev_bits;
 use crate::scalar::SpartanExtensionField;
 
 use super::dense_mlpoly::DensePolynomial;
@@ -409,8 +408,6 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
     max_num_cols: usize, 
     _num_cols: usize, 
     z: &Vec<Vec<S>>,
-    x_rev_map: &Vec<usize>,
-    y_rev_map: &Vec<usize>,
   ) -> Vec<S> {
     (0..self.M.len())
       .map(|i| {
@@ -419,10 +416,10 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
         let val = self.M[i].val.clone();
         let w = col / max_num_cols;
         let y = col % max_num_cols;
-        (row, val * z[w][y_rev_map[y]])
+        (row, val * z[w][y])
       })
       .fold(vec![S::field_zero(); num_rows], |mut Mz, (r, v)| {
-        Mz[x_rev_map[r]] += v;
+        Mz[r] += v;
         Mz
       })
   }

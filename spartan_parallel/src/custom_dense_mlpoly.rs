@@ -4,8 +4,6 @@ use std::cmp::min;
 use crate::dense_mlpoly::DensePolynomial;
 use crate::scalar::SpartanExtensionField;
 
-use super::math::Math;
-
 const MODE_P: usize = 1;
 const MODE_Q: usize = 2;
 const MODE_W: usize = 3;
@@ -30,14 +28,6 @@ pub struct DensePolynomialPqx<S: SpartanExtensionField> {
                                 // The same applies to X
 }
 
-// Reverse the bits in q or x
-pub fn rev_bits(q: usize, max_num_proofs: usize) -> usize {
-  (0..max_num_proofs.log_2())
-    .rev()
-    .map(|i| q / (i.pow2()) % 2 * (max_num_proofs / i.pow2() / 2))
-    .fold(0, |a, b| a + b)
-}
-
 impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   // Assume z_mat is of form (p, q_rev, x_rev), construct DensePoly
   pub fn new(
@@ -60,57 +50,6 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
     }
   }
 
-  // Assume z_mat is in its standard form of (p, q, x)
-  // Reverse q and x and convert it to (p, q_rev, x_rev)
-  pub fn new_rev(
-    z_mat: &Vec<Vec<Vec<Vec<S>>>>,
-    num_proofs: Vec<usize>,
-    max_num_proofs: usize,
-    num_inputs: Vec<usize>,
-    max_num_inputs: usize,
-  ) -> Self {
-    let mut Z = Vec::new();
-    let num_instances = z_mat.len();
-    let num_witness_secs = z_mat[0][0].len();
-    for p in 0..num_instances {
-      Z.push(vec![
-        vec![
-          vec![S::field_zero(); num_inputs[p]];
-          num_witness_secs
-        ];
-        num_proofs[p]
-      ]);
-
-      let step_q = max_num_proofs / num_proofs[p];
-      let step_x = max_num_inputs / num_inputs[p];
-      for q in 0..num_proofs[p] {
-        // Reverse the bits of q. q_rev is a multiple of step_q
-        let q_rev = rev_bits(q, max_num_proofs);
-        // Now q_rev is between 0 to num_proofs[p]
-        let q_rev = q_rev / step_q;
-
-        for x in 0..num_inputs[p] {
-          // Reverse the bits of x. x_rev is a multiple of step_x
-          let x_rev = rev_bits(x, max_num_inputs);
-          // Now x_rev is between 0 to num_inputs[p]
-          let x_rev = x_rev / step_x;
-          for w in 0..num_witness_secs {
-            Z[p][q_rev][w][x_rev] = z_mat[p][q][w][x];
-          }
-        }
-      }
-    }
-    DensePolynomialPqx {
-      num_instances: num_instances.next_power_of_two(),
-      num_proofs,
-      max_num_proofs,
-      num_witness_secs: num_witness_secs.next_power_of_two(),
-      num_inputs,
-      max_num_inputs,
-      Z,
-    }
-  }
-
   pub fn len(&self) -> usize {
     return self.num_instances * self.max_num_proofs * self.max_num_inputs;
   }
@@ -128,228 +67,202 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
     }
   }
 
-  // Given (p, q_rev, w, x_rev) and a mode, return Z[p*][q_rev*][w*][x_rev*]
-  // Mode = 1 ==> p* is p with first bit set to 1
-  // Mode = 2 ==> q_rev* is q_rev with first bit set to 1
-  // Mode = 3 ==> w* is w with first bit set to 1
-  // Mode = 4 ==> x_rev* is x_rev with first bit set to 1
-  // Assume that first bit of the corresponding index is 0, otherwise throw out of bound exception
-  pub fn index_high(&self, p: usize, q_rev: usize, w: usize, x_rev: usize, mode: usize) -> S {
+  // Given (p, q, w, x) and a mode, return Z[p*][q*][w*][x*]
+  // Mode = 1 ==> p* = 2p for low, 2p + 1 for high
+  // Mode = 2 ==> q* = 2q for low, 2q + 1
+  // Mode = 3 ==> w* = 2w for low, 2w + 1
+  // Mode = 4 ==> x* = 2x for low, 2x + 1
+  // Assume p*, q*, w*, x*, within bound
+  pub fn index_low(&self, p: usize, q: usize, w: usize, x: usize, mode: usize) -> S {
+    let ZERO = S::field_zero();
     match mode {
-      MODE_P => {
-        if p + self.num_instances / 2 < self.Z.len() {
-          return self.Z[p + self.num_instances / 2][q_rev][w][x_rev];
-        } else {
-          return S::field_zero();
-        }
-      }
-      MODE_Q => {
-        return if self.num_proofs[p] == 1 {
-          S::field_zero()
-        } else {
-          self.Z[p][q_rev + self.num_proofs[p] / 2][w][x_rev]
-        };
-      }
-      MODE_W => {
-        if w + self.num_witness_secs / 2 < self.Z[p][q_rev].len() {
-          return self.Z[p][q_rev][w + self.num_witness_secs / 2][x_rev];
-        } else {
-          return S::field_zero();
-        }
-      }
-      MODE_X => {
-        return if self.num_inputs[p] == 1 {
-          S::field_zero()
-        } else {
-          self.Z[p][q_rev][w][x_rev + self.num_inputs[p] / 2]
-        };
-      }
-      _ => {
-        panic!(
-          "DensePolynomialPqx bound failed: unrecognized mode {}!",
-          mode
-        );
-      }
+        MODE_P => { if 2 * p >= self.Z.len() { ZERO } else { self.Z[2 * p][q][w][x] } }
+        MODE_Q => self.Z[p][2 * q][w][x],
+        MODE_W => { if 2 * w >= self.Z[p][q].len() { ZERO } else { self.Z[p][q][2 * w][x] } }
+        MODE_X => self.Z[p][q][w][2 * x],
+        _ => unreachable!()
+    }
+  }
+
+  pub fn index_high(&self, p: usize, q: usize, w: usize, x: usize, mode: usize) -> S {
+    let ZERO = S::field_zero();
+    match mode {
+        MODE_P => { if self.num_instances == 1 { self.Z[0][q][w][x] } else if 2 * p + 1 >= self.Z.len() { ZERO } else { self.Z[2 * p + 1][q][w][x] } }
+        MODE_Q => { if self.num_proofs[p] == 1 { ZERO } else { self.Z[p][2 * q + 1][w][x] } }
+        MODE_W => { if 2 * w + 1 >= self.Z[p][q].len() { ZERO } else { self.Z[p][q][2 * w + 1][x] } }
+        MODE_X => { if self.num_inputs[p] == 1 { ZERO } else { self.Z[p][q][w][2 * x + 1] } }
+        _ => unreachable!()
     }
   }
 
   // Bound a variable to r according to mode
-  // Mode = 1 ==> Bound first variable of "p" section to r
-  // Mode = 2 ==> Bound first variable of "q" section to r
-  // Mode = 3 ==> Bound first variable of "w" section to r
-  // Mode = 4 ==> Bound first variable of "x" section to r
+  // Mode = 1 ==> Bound last variable of "p" section to r
+  // Mode = 2 ==> Bound last variable of "q" section to r
+  // Mode = 3 ==> Bound last variable of "w" section to r
+  // Mode = 4 ==> Bound last variable of "x" section to r
   pub fn bound_poly(&mut self, r: &S, mode: usize) {
-    match mode {
-      MODE_P => {
-        self.bound_poly_p(r);
+      match mode {
+          MODE_P => { self.bound_poly_p(r); }
+          MODE_Q => { self.bound_poly_q(r); }
+          MODE_W => { self.bound_poly_w(r); }
+          MODE_X => { self.bound_poly_x(r); }
+          _ => { panic!("DensePolynomialPqx bound failed: unrecognized mode {}!", mode); }
       }
-      MODE_Q => {
-        self.bound_poly_q(r);
-      }
-      MODE_W => {
-        self.bound_poly_w(r);
-      }
-      MODE_X => {
-        self.bound_poly_x(r);
-      }
-      _ => {
-        panic!(
-          "DensePolynomialPqx bound failed: unrecognized mode {}!",
-          mode
-        );
-      }
-    }
   }
 
-  // Bound the first variable of "p" section to r
+  // Bound the last variable of "p" section to r
   // We are only allowed to bound "p" if we have bounded the entire q and x section
   pub fn bound_poly_p(&mut self, r: &S) {
-    assert_eq!(self.max_num_proofs, 1);
-    assert_eq!(self.max_num_inputs, 1);
-    self.num_instances /= 2;
-    for p in 0..self.num_instances {
-      for w in 0..min(self.num_witness_secs, self.Z[p][0].len()) {
-        let Z_high = if p + self.num_instances < self.Z.len() {
-          self.Z[p + self.num_instances][0][w][0]
-        } else {
-          S::field_zero()
-        };
-        self.Z[p][0][w][0] = self.Z[p][0][w][0] + *r * (Z_high - self.Z[p][0][w][0]);
+      let ZERO = S::field_zero();
+      assert_eq!(self.max_num_proofs, 1);
+      assert_eq!(self.max_num_inputs, 1);
+      self.num_instances /= 2;
+      for p in 0..self.num_instances {
+          for w in 0..min(self.num_witness_secs, self.Z[p][0].len()) {
+              let Z_low = if 2 * p < self.Z.len() { self.Z[2 * p][0][w][0] } else { ZERO };
+              let Z_high = if 2 * p + 1 < self.Z.len() { self.Z[2 * p + 1][0][w][0] } else { ZERO };
+              self.Z[p][0][w][0] = Z_low + r.clone() * (Z_high - Z_low);
+          }
       }
-    }
   }
 
-  // Bound the first variable of "q" section to r
+  // Bound the last variable of "q" section to r
   pub fn bound_poly_q(&mut self, r: &S) {
-    self.max_num_proofs /= 2;
+      let ONE = S::field_one();
+      self.max_num_proofs /= 2;
 
-    for p in 0..min(self.num_instances, self.Z.len()) {
-      if self.num_proofs[p] == 1 {
-        for w in 0..min(self.num_witness_secs, self.Z[p][0].len()) {
-          for x in 0..self.num_inputs[p] {
-            self.Z[p][0][w][x] = (S::field_one() - *r) * self.Z[p][0][w][x];
-          }
-        }
-      } else {
-        self.num_proofs[p] /= 2;
-        for q in 0..self.num_proofs[p] {
-          for w in 0..min(self.num_witness_secs, self.Z[p][q].len()) {
+      for p in 0..min(self.num_instances, self.Z.len()) {
+        if self.num_proofs[p] == 1 {
+          for w in 0..min(self.num_witness_secs, self.Z[p][0].len()) {
             for x in 0..self.num_inputs[p] {
-              self.Z[p][q][w][x] = self.Z[p][q][w][x]
-                + *r * (self.Z[p][q + self.num_proofs[p]][w][x] - self.Z[p][q][w][x]);
+              self.Z[p][0][w][x] *= ONE - r.clone();
+            }
+          }
+        } else {
+          self.num_proofs[p] /= 2;
+          for q in 0..self.num_proofs[p] {
+            for w in 0..min(self.num_witness_secs, self.Z[p][q].len()) {
+              for x in 0..self.num_inputs[p] {
+                self.Z[p][q][w][x] = self.Z[p][2 * q][w][x] + r.clone() * (self.Z[p][2 * q + 1][w][x] - self.Z[p][2 * q][w][x]);
+              }
             }
           }
         }
       }
-    }
   }
 
-  // Bound the first variable of "w" section to r
+  // Bound the last variable of "w" section to r
   pub fn bound_poly_w(&mut self, r: &S) {
+    let ZERO = S::field_zero();
     self.num_witness_secs /= 2;
 
     for p in 0..min(self.num_instances, self.Z.len()) {
       for q in 0..self.num_proofs[p] {
         for w in 0..self.num_witness_secs {
           for x in 0..self.num_inputs[p] {
-            let Z_high = if w + self.num_witness_secs < self.Z[p][q].len() {
-              self.Z[p][q][w + self.num_witness_secs][x]
-            } else {
-              S::field_zero()
-            };
-            self.Z[p][q][w][x] = self.Z[p][q][w][x] + *r * (Z_high - self.Z[p][q][w][x]);
+            let Z_low = if 2 * w < self.Z[p][q].len() { self.Z[p][q][2 * w][x] } else { ZERO };
+            let Z_high = if 2 * w + 1 < self.Z[p][q].len() { self.Z[p][q][2 * w + 1][x] } else { ZERO };
+            self.Z[p][q][w][x] = Z_low + r.clone() * (Z_high - Z_low);
           }
         }
       }
     }
-  }
+}
 
-  // Bound the first variable of "x" section to r
+  // Bound the last variable of "x" section to r
   pub fn bound_poly_x(&mut self, r: &S) {
-    self.max_num_inputs /= 2;
+      let ONE = S::field_one();
+      self.max_num_inputs /= 2;
 
-    for p in 0..min(self.num_instances, self.Z.len()) {
-      if self.num_inputs[p] == 1 {
-        for q in 0..self.num_proofs[p] {
-          for w in 0..min(self.num_witness_secs, self.Z[p][q].len()) {
-            self.Z[p][q][w][0] = (S::field_one() - *r) * self.Z[p][q][w][0];
+      for p in 0..min(self.num_instances, self.Z.len()) {
+        if self.num_inputs[p] == 1 {
+          for q in 0..self.num_proofs[p] {
+            for w in 0..min(self.num_witness_secs, self.Z[p][q].len()) {
+                self.Z[p][q][w][0] *= ONE - r.clone();
+            }
           }
-        }
-      } else {
-        self.num_inputs[p] /= 2;
-        for q in 0..self.num_proofs[p] {
-          for w in 0..min(self.num_witness_secs, self.Z[p][q].len()) {
-            for x in 0..self.num_inputs[p] {
-              self.Z[p][q][w][x] = self.Z[p][q][w][x]
-                + *r * (self.Z[p][q][w][x + self.num_inputs[p]] - self.Z[p][q][w][x]);
+        } else {
+          self.num_inputs[p] /= 2;
+          for q in 0..self.num_proofs[p] {
+            for w in 0..min(self.num_witness_secs, self.Z[p][q].len()) {
+              for x in 0..self.num_inputs[p] {
+                  self.Z[p][q][w][x] = self.Z[p][q][w][2 * x] + r.clone() * (self.Z[p][q][w][2 * x + 1] - self.Z[p][q][w][2 * x]);
+              }
             }
           }
         }
       }
-    }
   }
 
-  // Bound the entire "p" section to r_p
+  // Bound the entire "p" section to r_p in reverse
   // Must occur after r_q's are bounded
-  pub fn bound_poly_vars_rp(&mut self, r_p: &Vec<S>) {
-    for r in r_p {
-      self.bound_poly_p(r);
+  pub fn bound_poly_vars_rp(&mut self, 
+      r_p: &[S],
+    ) {
+      for r in r_p {
+        self.bound_poly_p(r);
+      }
     }
-  }
 
-  // Bound the entire "q_rev" section to r_q
-  pub fn bound_poly_vars_rq(&mut self, r_q: &Vec<S>) {
+  // Bound the entire "q" section to r_q in reverse
+  pub fn bound_poly_vars_rq(&mut self, 
+    r_q: &[S],
+  ) {
     for r in r_q {
       self.bound_poly_q(r);
     }
   }
 
-  // Bound the entire "w" section to r_w
-  pub fn bound_poly_vars_rw(&mut self, r_w: &Vec<S>) {
+  // Bound the entire "w" section to r_w in reverse
+  pub fn bound_poly_vars_rw(&mut self, 
+    r_w: &[S],
+  ) {
     for r in r_w {
       self.bound_poly_w(r);
     }
   }
 
   // Bound the entire "x_rev" section to r_x
-  pub fn bound_poly_vars_rx(&mut self, r_x: &Vec<S>) {
+  pub fn bound_poly_vars_rx(&mut self, 
+    r_x: &[S],
+  ) {
     for r in r_x {
       self.bound_poly_x(r);
     }
   }
 
-  pub fn evaluate(&self, r_p: &Vec<S>, r_q: &Vec<S>, r_w: &Vec<S>, r_x: &Vec<S>) -> S {
+  pub fn evaluate(&self,
+    rp_rev: &Vec<S>,
+    rq_rev: &Vec<S>,
+    rw_rev: &Vec<S>,
+    rx_rev: &Vec<S>,
+  ) -> S {
     let mut cl = self.clone();
-    cl.bound_poly_vars_rx(r_x);
-    cl.bound_poly_vars_rw(r_w);
-    cl.bound_poly_vars_rq(r_q);
-    cl.bound_poly_vars_rp(r_p);
-    cl.index(0, 0, 0, 0)
+    cl.bound_poly_vars_rx(rx_rev);
+    cl.bound_poly_vars_rw(rw_rev);
+    cl.bound_poly_vars_rq(rq_rev);
+    cl.bound_poly_vars_rp(rp_rev);
+    return cl.index(0, 0, 0, 0);
   }
 
   // Convert to a (p, q_rev, x_rev) regular dense poly of form (p, q, x)
   pub fn to_dense_poly(&self) -> DensePolynomial<S> {
-    let mut Z_poly =
-      vec![
-        S::field_zero();
-        self.num_instances * self.max_num_proofs * self.num_witness_secs * self.max_num_inputs
-      ];
-    for p in 0..min(self.num_instances, self.Z.len()) {
-      let step_q = self.max_num_proofs / self.num_proofs[p];
-      let step_x = self.max_num_inputs / self.num_inputs[p];
-      for q_rev in 0..self.num_proofs[p] {
-        let q = rev_bits(q_rev * step_q, self.max_num_proofs);
-        for x_rev in 0..self.num_inputs[p] {
-          let x = rev_bits(x_rev * step_x, self.max_num_inputs);
-          for w in 0..min(self.num_witness_secs, self.Z[p][q_rev].len()) {
-            Z_poly[p * self.max_num_proofs * self.num_witness_secs * self.max_num_inputs
-              + q * self.num_witness_secs * self.max_num_inputs
-              + w * self.max_num_inputs
-              + x] = self.Z[p][q_rev][w][x_rev];
+      let ZERO = S::field_zero();
+      let mut Z_poly = vec![ZERO; self.num_instances * self.max_num_proofs * self.num_witness_secs * self.max_num_inputs];
+      for p in 0..min(self.num_instances, self.Z.len()) {
+        for q in 0..self.num_proofs[p] {
+          for w in 0..min(self.num_witness_secs, self.Z[p][q].len()) {
+            for x in 0..self.num_inputs[p] {
+                Z_poly[
+                    p * self.max_num_proofs * self.num_witness_secs * self.max_num_inputs 
+                  + q * self.num_witness_secs * self.max_num_inputs 
+                  + w * self.max_num_inputs 
+                  + x
+                ] = self.Z[p][q][w][x];
+            }
           }
         }
       }
-    }
-    DensePolynomial::new(Z_poly)
+      DensePolynomial::new(Z_poly)
   }
 }

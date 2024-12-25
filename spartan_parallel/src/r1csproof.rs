@@ -11,8 +11,10 @@ use crate::scalar::SpartanExtensionField;
 use crate::{ProverWitnessSecInfo, VerifierWitnessSecInfo};
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
-use std::cmp::min;
+use std::cmp::max;
 use std::iter::zip;
+use rayon::prelude::*;
+use std::sync::{Arc, Mutex};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct R1CSProof<S: SpartanExtensionField> {
@@ -181,21 +183,36 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
 
     // append input to variables to create a single vector z
     let timer_tmp = Timer::new("prove_z_mat_gen");
-    let mut z_mat: Vec<Vec<Vec<Vec<S>>>> = Vec::new();
-    for p in 0..num_instances {
-      z_mat.push(vec![vec![vec![ZERO; num_inputs[p]]; num_witness_secs]; num_proofs[p]]);
-      for q in 0..num_proofs[p] {
-        for w in 0..witness_secs.len() {
-          let ws = witness_secs[w];
-          let p_w = if ws.w_mat.len() == 1 { 0 } else { p };
-          let q_w = if ws.w_mat[p_w].len() == 1 { 0 } else { q };
-          // Only append the first num_inputs_entries of w_mat[p][q]
-          for i in 0..min(ws.num_inputs[p_w], num_inputs[p]) {
-            z_mat[p][q][w][i] = ws.w_mat[p_w][q_w][i];
-          }
-        }
-      }
-    }
+    
+    let z_mat = (0..num_instances)
+      .into_par_iter()
+      .map(|p| {
+        (0..num_proofs[p])
+          .into_par_iter()
+          .map(|q| {
+            (0..witness_secs.len())
+              .into_par_iter()
+              .map(|w| {
+                let ws = witness_secs[w];
+                let p_w = if ws.w_mat.len() == 1 { 0 } else { p };
+                let q_w = if ws.w_mat[p_w].len() == 1 { 0 } else { q };
+
+                let r_w = if ws.num_inputs[p_w] < num_inputs[p] {
+                  let padding = std::iter::repeat(S::field_zero()).take(num_inputs[p] - ws.num_inputs[p_w]).collect::<Vec<S>>();
+                  let mut r = ws.w_mat[p_w][q_w].clone();
+                  r.extend(padding);
+                  r
+                } else {
+                  ws.w_mat[p_w][q_w].iter().take(num_inputs[p]).cloned().collect::<Vec<S>>()
+                };
+
+                r_w
+              })
+              .collect::<Vec<Vec<S>>>()
+          })
+          .collect::<Vec<Vec<Vec<S>>>>()
+      })
+      .collect::<Vec<Vec<Vec<Vec<S>>>>>();
     timer_tmp.stop();
 
     // derive the verifier's challenge \tau

@@ -3,6 +3,7 @@ use std::cmp::min;
 
 use crate::dense_mlpoly::DensePolynomial;
 use crate::scalar::SpartanExtensionField;
+use rayon::prelude::*;
 
 const MODE_P: usize = 1;
 const MODE_Q: usize = 2;
@@ -128,27 +129,27 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
 
   // Bound the last variable of "q" section to r
   pub fn bound_poly_q(&mut self, r: &S) {
-      let ONE = S::field_one();
-      self.max_num_proofs /= 2;
+    let ONE = S::field_one();
+    self.max_num_proofs /= 2;
 
-      for p in 0..min(self.num_instances, self.Z.len()) {
-        if self.num_proofs[p] == 1 {
-          for w in 0..min(self.num_witness_secs, self.Z[p][0].len()) {
-            for x in 0..self.num_inputs[p] {
-              self.Z[p][0][w][x] *= ONE - r.clone();
-            }
+    for p in 0..min(self.num_instances, self.Z.len()) {
+      if self.num_proofs[p] == 1 {
+        for w in 0..min(self.num_witness_secs, self.Z[p][0].len()) {
+          for x in 0..self.num_inputs[p] {
+            self.Z[p][0][w][x] *= ONE - r.clone();
           }
-        } else {
-          self.num_proofs[p] /= 2;
-          for q in 0..self.num_proofs[p] {
-            for w in 0..min(self.num_witness_secs, self.Z[p][q].len()) {
-              for x in 0..self.num_inputs[p] {
-                self.Z[p][q][w][x] = self.Z[p][2 * q][w][x] + r.clone() * (self.Z[p][2 * q + 1][w][x] - self.Z[p][2 * q][w][x]);
-              }
+        }
+      } else {
+        self.num_proofs[p] /= 2;
+        for q in 0..self.num_proofs[p] {
+          for w in 0..min(self.num_witness_secs, self.Z[p][q].len()) {
+            for x in 0..self.num_inputs[p] {
+              self.Z[p][q][w][x] = self.Z[p][2 * q][w][x] + r.clone() * (self.Z[p][2 * q + 1][w][x] - self.Z[p][2 * q][w][x]);
             }
           }
         }
       }
+    }
   }
 
   // Bound the last variable of "w" section to r
@@ -208,9 +209,47 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   pub fn bound_poly_vars_rq(&mut self, 
     r_q: &[S],
   ) {
-    for r in r_q {
-      self.bound_poly_q(r);
-    }
+    let ONE = S::field_one();
+    let num_instances = min(self.num_instances, self.Z.len());
+
+    self.Z = (0..num_instances)
+      .into_par_iter()
+      .map(|p| {
+        let num_proofs = self.num_proofs[p];
+        let num_witness_secs = min(self.num_witness_secs, self.Z[p][0].len());
+        let num_inputs = self.num_inputs[p];
+
+        let wit = (0..num_witness_secs).into_par_iter().map(|w| {
+          (0..num_inputs).into_par_iter().map(|x| {
+            let mut np = num_proofs;
+            let mut x_fold = (0..num_proofs).map(|q| self.Z[p][q][w][x]).collect::<Vec<S>>();
+            for r in r_q {
+              if np == 1 {
+                x_fold[0] *= ONE - *r;
+              } else {
+                np /= 2;
+                for q in 0..np {
+                  x_fold[q] = x_fold[2 * q] + *r * (x_fold[2 * q + 1] - x_fold[2 * q]);
+                }
+              }
+            }
+
+            x_fold
+          }).collect::<Vec<Vec<S>>>()
+        }).collect::<Vec<Vec<Vec<S>>>>();
+
+        (0..num_proofs)
+          .into_par_iter()
+          .map(|q| {
+            (0..wit.len()).map(|w| {
+              (0..wit[w].len()).map(|x| {
+                wit[w][x][q]
+              }).collect::<Vec<S>>()
+            }).collect::<Vec<Vec<S>>>()
+          }).collect::<Vec<Vec<Vec<S>>>>()
+      }).collect::<Vec<Vec<Vec<Vec<S>>>>>();
+    
+    self.max_num_proofs /= 2usize.pow(r_q.len() as u32);
   }
 
   // Bound the entire "w" section to r_w in reverse

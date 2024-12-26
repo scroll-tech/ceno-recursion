@@ -9,7 +9,7 @@
 - (Runtime) Shift and program IO proofs
 
 ## High-Level Idea
-The program is executed correctly iff all of the following holds:
+The program, when divided into blocks, is executed correctly iff all of the following holds:
 1. All blocks of the program are executed correctly
 2. All registers (including the label of the next block) are passed correctly between blocks.
 3. The memory state (read-only and RAM) stays coherent throughout the execution.
@@ -51,11 +51,11 @@ We note that the above steps imply the following additional procedures:
 
 Permutations are checked via grand product proofs. Thus step 6 can be further divided into
 
-* (6a) $RLC_{i, o} = \prod_{i, j} (\tau - f(i_{i, j}) - r\cdot f(o_{i, j}))$, where $\tau$ and $r$ are random numbers and $f$ is a random linear combination (see consistency below). Compute $RLC_p$, $RLC_v$ as well.
+* (6a) $RLC_{i, o} = \prod_{i, j} (\tau - f(i_{i, j}) - r\cdot f(o_{i, j}))$, where $\tau$ and $r$ are random numbers and $f$ is a random linear combination (see consistency below). Compute $RLC_p  = \prod_{i, j} (\tau - f(p_{i, j}))$, $RLC_v  = \prod_{i, j} (\tau - f(v_{i, j}))$.
 * (6b) $RLC'_{i, o} = \prod_k (\tau - f(i'_k) - r\cdot f(o'_k))$. Compute $RLC'_p$, $RLC'_v$ as well.
 * (6c) Assert that $RLC_{i, o} = RLC'_{i, o}$, $RLC_p = RLC'_p$, $RLC_v = RLC'_v$.
 
-While the prover has computed $f(i'_k)$ and $f(o'_k)$ during permutation, it can use them for consistency check. We can rewrite _consistency_ as:
+Since the prover has computed $f(i'_k)$ and $f(o'_k)$ during permutation, it can use them for consistency check. We can rewrite _consistency_ as:
 
 2. $f(i'_k) = f(o'_{k-1})$ for all $k \neq 0$. (_consistency_)
 
@@ -89,16 +89,16 @@ Also, $\mathcal{C}'_i$ are the larger circuits while $\mathcal{C}_c$, $\mathcal{
 
 The previous steps generate in total $b + 4$ circuits of various sizes. Our circuit commitment follows the existing batched sparse polynomial commitment scheme of Spartan. However, with circuits of different sizes, we want to only pay proportional to the approximate size of each circuit. The solution is to divide circuits of different sizes into groups and commit each groups separately.
 
-Let each circuit $\mathcal{C}_i$ be of size $M_i\times N_i$ with $L_i$ non-zero entries. We assume that $M_i$ and $N_i$ are of similar sizes and $N_i$, and $L_i$ are roughly proportional to each other. 
+Let each circuit $\mathcal{C}_i$ be of size $M_i\times N_i$ with $L_i$ non-zero entries. We assume that $M_i$ and $N_i$ are of similar sizes and $N_i$ and $L_i$ are roughly proportional to each other. 
 For each commitment, the prover pays for $O(L)$ time to generate a proof of size $O(\log(N) + \log(L))$.
 
 Our strategy is thus to group the circuits by the size of $N_i$. For each circuit $i$, the prover rounds its $N_i$ to the nearest power of 16 (or some other adjustable value) and put it in the corresponding group. For each group $j$, the prover computes the maximum $M_j$, $N_j$ and $L_j$ within the group, and batch commits every circuit of that group as $M_j \times N_j$ with $L_j$ non-zero entries.
 
 There is, however, a problem with this approach with regard to the modified block circuits $\mathcal{C}'_i$. Recall that each $\mathcal{C}'_i$ matches with an assignment $z'_{i, j}$ of 5 segments: 
 $$z'_{i, j} = (z_{i, j}, r, rz_{i, j}, \pi_{i, j}, \pi'_{i, j})$$
-each segment padded to the length of the block witness $|z_{i, j}|$. To perform the same sumcheck across all blocks, the size of all circuits needs to be _conceptually_ equivalent. (e,g, let $z_\text{max} = \max_{i, j} |z_{i, j}|$, for every block, the first variable of $r$ is always the $z_\text{max}$'th entry, the first variable of $rz_{i, j}$ is always the $2\times z_\text{max}$'th entry, etc.). However, for blocks of a different size, the padding size is different, and thus the first variable of $r$ will not be the same entry.
+each segment padded to the length of the block witness $|z_{i, j}|$. To perform the same sumcheck across all blocks, the size of all circuits needs to be _conceptually_ equivalent. (e,g, let $z_\text{max} = \max_{i, j} |z_{i, j}|$, for every block, $r[0] \leftrightarrow z'_{i, j}[z_\text{max}]$, $rz_{i, j}[0] \leftrightarrow z'_{i, j}[2\times z_\text{max}]$, etc.). However, for blocks of a different size, the padding size is different, and thus $r[0]$ will not always be the same entry of $z'_{i, j}$.
 
-The solution is for the prover to keep two versions of each block circuit (toggled by `COMMIT_MODE` in `gen_block_inst`). In the _sumcheck version_, every circuit is of the same $M_{\text{max}} = \max{M}$ and $N_{\text{max}} = \max{N}$. In the _commit version_, every circuit has $M$ and $N$ according to their group. Note that the prover's time and space cost to process a circuit is linear to their number of non-zero entries, which is the same for both versions. The prover can thus use the sumcheck version to perform the sumcheck of all blocks together, and use the commit version to reduce the time size of the commitment.
+The solution is to provide the prover with two versions of each block circuit (toggled by `COMMIT_MODE` in `gen_block_inst`). In the _sumcheck version_, every circuit is of the same $M_{\text{max}} = \max{M}$ and $N_{\text{max}} = \max{N}$. In the _commit version_, every circuit has $M$ and $N$ according to their group. Note that the prover's time and space cost to process a circuit is linear to their number of non-zero entries, which is the same for both versions. The prover can thus use the sumcheck version to perform the sumcheck of all blocks together, and use the commit version to reduce the time size of the commitment.
 
 The discrepancy between the two versions requires additional handling of commitment opening. The sumcheck produces two lists of challenges corresponding to the two dimensions of the circuit: $|rx| = \log M_{\text{max}}$, $|ry| = \log N_{\text{max}}$. On the constraint side, if $M_j < M_{\text{max}}$, the prover divides $rx \to rx_\text{pad} || rx_\text{eval}$. On the witness side, if $N_j < N_{\text{max}}$, the prover divides $ry\to ry_\text{comb} || ry_\text{pad} || ry_\text{eval}$. We describe each section:
 * $rx_\text{pad}$ has length $(\log M_{\text{max}} - \log M_j)$ are the "extra" challenges
@@ -154,7 +154,7 @@ _XXX: we should be able to reduce the length to `total_num_phy_mem_accesses * 4`
 
 All witnesses are committed using regular dense polynomial commitment schemes. `block_vars_matrix`, `block_w2`, `block_w3`, and `block_w3_shifted` are committed by each type of block. We note that we can use tricks similar to circuit commitment above to batch commit and batch open witness commitments.
 
-## Sumcheck on Circuits and Instances
+## Sumcheck Proof on Circuits and Instances
 > Relevant files: `src/customdensepolynomial.rs`, `src/r1csproof.rs` and `src/sumcheck.rs`
 
 The main section of `spartan_parallel` is consisted of three proofs, each with its own sumcheck and commitment opening. Each proof handles:
@@ -169,9 +169,9 @@ $$z'_{i, j} = (z_{i, j}, r, rz_{i, j}, \pi_{i, j}, \pi'_{i, j})$$
 We denote the following parameters for the proof:
 * $P$ (`num_instances`): number of circuits.
 * $Q_i$ (`num_proofs`): number of assignments to each circuit $i$.
-* $X$ (`num_cons`): _maximum_ number of constraints of any circuit
+* $X$ (`num_cons`): _maximum_ number of constraints of any circuit.
 * $W$ (`num_witness_secs`): number of padded segments of $z'_{i, j}$. In this case, $W = 8$.
-* $Y$ (`max_num_inputs`): _maximum_ number of witnesses of any circuit
+* $Y$ (`max_num_inputs`): _maximum_ number of witnesses of any circuit.
 
 We use the lowercase version of each variable to denote their logarithmic value (e.g. $p = \log P$). Below we walkthrough the proving process of `spartan_parallel`.
 
@@ -180,7 +180,7 @@ The goal of Spartan is to prove that $Az \cdot Bz - Cz = 0$. This is separated i
 $$\sum \tilde{\text{eq}} \cdot (\tilde{Az} \cdot \tilde{Bz} - \tilde{Cz}) = 0$$
 * Sumcheck 2 proves that given purported polynomial extensions $\tilde{A}, \tilde{B}, \tilde{C}, \tilde{z}$,
  $$(r_A\cdot \tilde{A} + r_B\cdot \tilde{B} + r_C\cdot \tilde{C})\cdot \tilde{z} = r_A\cdot \tilde{Az} + r_B\cdot \tilde{Bz} + r_C\cdot \tilde{Cz}$$
-For some random $r_A$, $r_B$, $r_C$.
+for some random $r_A$, $r_B$, $r_C$.
 
 To implement data-parallelism, we divide Spartan into 4 steps.
 
@@ -189,19 +189,55 @@ To implement data-parallelism, we divide Spartan into 4 steps.
 
 While in regular Spartan, $Az$ is simply a length-$X$ vector, obtained by multiplication of a $X\times Y$ matrix $A$ by a length-$Y$ vector $z$, the data-paralleled version is slightly more complicated.
 
-The prover's first task is to construct a `$P\times Q_i\times W\times Y_i` struct `z_mat` through a 4-dimensional vector. For reasons later illustrated in the sumcheck, the $Q_i$ and $Y_i$ sections of `z_mat` are stored _in bit-reverse_: let $Q_\text{max} = \max_i Q_i$, then for a circuit $i$ with $Q_i$ satisfying assignments, assignment $j$ will be stored in the entry:
-$$\text{bit\_reverse}_{q_\text{max}}(j) \cdot (Q_i / Q_\text{max})$$
-where $\text{bit\_reverse}_{q_\text{max}}(x)$ expresses $x$ using $q_\text{max}$ bits and returns the value produced by assembling the bits from right to left.
-
-For example, let $\max_i Q_i = 32$ and $Q_i = 8$ for a particular circuit $i$. The witnesses for execution 3 of the block is stored in entry $\text{bit\_reverse}_{\log 32}(3) = 11000_b = 24 * 8 / 32 = 6$.
+The prover's first task is to construct a $P\times Q_i\times W\times Y_i$ struct `z_mat` through a 4-dimensional vector. The size of $Q_i$ and $Y_i$ depends on the entry of the $P$ dimension, while the size of $W$ does not. Further, even though sumcheck requires the size of each dimension to be _conceptually_ a power of 2, `z_mat` only needs to store the entries that contain non-zero values.
 
 To obtain $Az$, $Bz$, $Cz$, the prover treats `z_mat` as $P$ counts of $Q_i \times (W \cdot Y_i)$ matrix. Since $A$, $B$, $C$ can be expressed as $P$ counts of $X_i\times (W \cdot Y_i)$ matrices, this allows the prover to perform $P$ matrix multiplications to obtain $P \times Q_i \times X_i$ tensors $Az$, $Bz$, $Cz$ and their MLE $\tilde{Az}$ (`poly_Az`), $\tilde{Bz}$, $\tilde{Cz}$. This process is described in `R1CSinstance::multiply_vec_block`. Note that:
 * Conceptually, `poly_Az` of every block $i$ has $p + q_\text{max} + x_\text{max}$ variables. However, the value of the variables indexed at $[p, p + q_\text{max} - q_i)$ and $[p + q_\text{max}, p + q_\text{max} + x_\text{max} - x_i)$ does not affect the evaluation of the polynomial.
 * Each circuit $i$ has different $Q_i$ and $X_i$, so $Az$ is expressed as a 3-dimensional vector, and the prover stores its MLE in a concise structure `DensePolynomialPqx`.
-* For efficiency of the sumcheck, the $Q_i$ and $X_i$ sections of `poly_Az` are stored in bit-reverse. Recall that the $Q_i$ and $Y_i$ sections of `z_mat` are stored in bit-reverse, this means that, during matrix multiplication:
-  - The $Q_i$ dimension is already bit-reversed in `z_mat` and does not require additional action.
-  - The $X_i$ dimension is in its natural order in $A$, and thus needs to be reversed during multiplication.
-  - The $Y_i$ dimension is in its natural order in $A$ but in bit-reverse order in `z_mat`, so the dot product requires reversing one of the two.
+
+#### Bindings on a `DensePolynomialPqx`
+> Relevant function: `DensePolynomialPqx::evaluate`
+
+`DensePolynomialPqx` is expressed as a 4-dimensional vector `Z` ($P\times Q_i\times W\times X_i$) and its relevant metadatas. However, every invocation of `DensePolynomialPqx` in the proof only uses 3 of the 4 dimensions, which are:
+* `poly_Az`, `poly_Bz`, `poly_Cz`: uses $P$, $Q_i$ and $X_i$ dimension (so $W$ dimension always have length-1)
+* `ABC_poly` binded to `rx`: uses $P$, $W$ and $X_i$ dimensions. Note that the $X_i$ dimension stores the witnesses and is actually the $Y_i$ dimension, but it behaves the same way as $X_i$.
+* `Z_poly` binded to `rq`: uses $P$, $W$ and $X_i$ dimensions, where $X_i$ is again $Y_i$.
+
+A `DensePolynomialPqx` can, however, contain all 4 dimensions. A full evaluations thus requires the binding of $p + q_\text{max} + w + x_\text{max}$ variables, which we divide into 4 sections: $r_p, r_q, r_w, r_x$.
+
+We first note that binding from left to right can cause inefficiencies. This is because each binding on a variable of the $P$ dimension merges two vectors on the $Q_i$ dimension, which may be of different lengths, into a single vector of the longer length. As for a toy example, assume that a polynomial $G$ only has 2 dimensions $P\times Q_i$, and let $P = 4$ and $Q_i = [4, 4, 2, 2]$. The polynomial would thus contain 4 variables: 
+$$\tilde{G}(x_{p, 0}, x_{p, 1}, x_{q, 0}, x_{q, 1})$$
+
+Binding $x_{p, 0}$ to $r$ is equivalent to the following operations:
+$$G_0 = \langle(1 - r)\cdot G_{0, 0} + r\cdot G_{2, 0}, (1 - r)\cdot G_{0, 1} + r\cdot G_{2, 1}, (1 - r)\cdot G_{0, 2}, (1 - r)\cdot G_{0, 3}\rangle$$
+$$G_1 = \langle(1 - r)\cdot G_{1, 0} + r\cdot G_{3, 0}, (1 - r)\cdot G_{1, 1} + r\cdot G_{3, 1}, (1 - r)\cdot G_{1, 2}, (1 - r)\cdot G_{1, 3}\rangle$$
+
+Since $Q_2 = Q_3 = 2$, $G_{2, 2}, G_{2, 3}, G_{3, 2}, G_{3, 3}$ are all 0s, thus the prover does not access nor perform operations on them. As a result, in the first round, the prover's work is $\sum_i Q_i = 12$ multiplications. However, after the first round, the prover is left with $P = 2$ and $Q_i = [4, 4]$. So its work binding $x_{p, 1}$ would be 8 multiplications.
+
+Now consider the alternative of binding $x_{q, 1}$ first. All bindings are performed within the $Q$ dimension:
+$$G_0 = \langle(1 - r)\cdot G_{0, 0} + r\cdot G_{0, 1}, (1 - r)\cdot G_{0, 2} + r\cdot G_{0, 3}\rangle$$
+$$G_1 = \langle(1 - r)\cdot G_{1, 0} + r\cdot G_{1, 1}, (1 - r)\cdot G_{1, 2} + r\cdot G_{1, 3}\rangle$$
+$$G_2 = \langle(1 - r)\cdot G_{2, 0} + r\cdot G_{2, 1}\rangle$$
+$$G_3 = \langle(1 - r)\cdot G_{3, 0} + r\cdot G_{3, 1}\rangle$$
+
+This again costs 12 multiplications. However, this time it leaves us with $P = 4$ and $Q_i = [2, 2, 1, 1]$, and the next binding of $x_{q, 0}$ costs only 6 multiplications.
+
+As a result, binding on `DensePolynomialPqx` is always performed from right to left. Binding on an $r_x$ variable, for instance, would translate to:
+```
+max_num_inputs = max_num_inputs.div_ceil(2)
+for p in 0..num_instances:
+  for q in 0..num_proofs[p]:
+    for w in 0..num_witness_secss:
+      num_inputs[p] = num_inputs[p].div_ceil(2)
+      for x in 0..num_inputs[p]:
+        Z[p][q][w][x] = (1 - r) * Z[p][q][w][2 * x]
+        if 2 * x + 1 < Z[p][q][w].len():
+          Z[p][q][w][x] += r * Z[p][q][w][2 * x + 1]
+```
+which merges entry $2x$ and $2x+1$ into entry $x$. Note that if `num_inputs[p] = 1`, then the binding simply multiplies the first and only entry by $1-r$ without further modification.
+
+
+
 
 #### Sumcheck 1
 > Relevant functions: `R1CSProof::prove_phase_one` and `SumcheckInstanceProof::prove_cubic_with_additive_term_disjoint_rounds`

@@ -191,7 +191,6 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
           .into_par_iter()
           .map(|q| {
             (0..witness_secs.len())
-              .into_par_iter()
               .map(|w| {
                 let ws = witness_secs[w];
                 let p_w = if ws.w_mat.len() == 1 { 0 } else { p };

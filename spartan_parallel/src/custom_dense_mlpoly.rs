@@ -9,7 +9,7 @@ const MODE_P: usize = 1;
 const MODE_Q: usize = 2;
 const MODE_W: usize = 3;
 const MODE_X: usize = 4;
-const NUM_MULTI_THREAD_CORES: usize = 8;
+const NUM_MULTI_THREAD_CORES: usize = 32;
 
 // Customized Dense ML Polynomials for Data-Parallelism
 // These Dense ML Polys are aimed for space-efficiency by removing the 0s for invalid (p, q, w, x) quadruple

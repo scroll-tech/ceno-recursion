@@ -236,6 +236,12 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
         let num_witness_secs = min(self.num_witness_secs, inst[0].len());
         let num_inputs = self.num_inputs[p];
 
+        // debug
+        println!("[");
+        inst.iter().for_each(|mat| println!("{:?}, ", mat[0][0]));
+        println!("]");
+        println!();
+
         if sub_levels > 0 {
           let thread_split_inst = (0..num_threads)
             .map(|_| {
@@ -247,7 +253,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
           inst = thread_split_inst
             .into_par_iter()
             .map(|mut chunk| {
-              fold(&mut chunk, r_q, 0, 1, sub_levels, num_witness_secs, num_inputs);
+              fold(&mut chunk, r_q, 0, 1, sub_levels, 0, num_witness_secs, num_inputs);
               chunk
             })
             .collect::<Vec<Vec<Vec<Vec<S>>>>>()
@@ -256,7 +262,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
 
         if final_levels > 0 {
           // aggregate the final result from sub-threads outputs using a single core
-          fold(&mut inst, r_q, 0, dist_size, final_levels, num_witness_secs, num_inputs);
+          fold(&mut inst, r_q, 0, dist_size, final_levels + sub_levels, sub_levels, num_witness_secs, num_inputs);
         }
 
         if left_over_q_len > 0 {
@@ -329,13 +335,13 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   }
 }
 
-fn fold<S: SpartanExtensionField>(proofs: &mut Vec<Vec<Vec<S>>>, r_q: &[S], idx: usize, step: usize, lvl: usize, w: usize, x: usize) {
-  if lvl > 0 {
-    fold(proofs, r_q, 2 * idx, step, lvl - 1, w, x);
-    fold(proofs, r_q, 2 * idx + step, step, lvl - 1, w, x);
+fn fold<S: SpartanExtensionField>(proofs: &mut Vec<Vec<Vec<S>>>, r_q: &[S], idx: usize, step: usize, lvl: usize, final_lvl: usize, w: usize, x: usize) {
+  if lvl > final_lvl {
+    fold(proofs, r_q, 2 * idx, step, lvl - 1, final_lvl, w, x);
+    fold(proofs, r_q, 2 * idx + step, step, lvl - 1, final_lvl, w, x);
 
-    let r1 = S::field_one() - r_q[lvl];
-    let r2 = r_q[lvl];
+    let r1 = S::field_one() - r_q[lvl - 1];
+    let r2 = r_q[lvl - 1];
 
     (0..w).for_each(|w| {
       (0..x).for_each(|x| {
@@ -343,6 +349,6 @@ fn fold<S: SpartanExtensionField>(proofs: &mut Vec<Vec<Vec<S>>>, r_q: &[S], idx:
       });
     });
   } else {
-    // level 0. do nothing
+    // base level. do nothing
   }
 }

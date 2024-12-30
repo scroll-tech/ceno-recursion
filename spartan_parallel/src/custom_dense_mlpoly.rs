@@ -9,6 +9,7 @@ const MODE_P: usize = 1;
 const MODE_Q: usize = 2;
 const MODE_W: usize = 3;
 const MODE_X: usize = 4;
+const NUM_MULTI_THREAD_CORES: usize = 8;
 
 // Customized Dense ML Polynomials for Data-Parallelism
 // These Dense ML Polys are aimed for space-efficiency by removing the 0s for invalid (p, q, w, x) quadruple
@@ -206,49 +207,71 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
     }
 
   // Bound the entire "q" section to r_q in reverse
-  pub fn bound_poly_vars_rq(&mut self, 
+  pub fn bound_poly_vars_rq(
+    &mut self, 
     r_q: &[S],
   ) {
-    let ONE = S::field_one();
-    let num_instances = min(self.num_instances, self.Z.len());
+    let Z = std::mem::take(&mut self.Z);
 
-    self.Z = (0..num_instances)
-      .into_par_iter()
-      .map(|p| {
+    self.Z = Z
+      .into_iter()
+      .enumerate()
+      .map(|(p, mut inst)| {
         let num_proofs = self.num_proofs[p];
-        let num_witness_secs = min(self.num_witness_secs, self.Z[p][0].len());
+        let dist_size = num_proofs / min(num_proofs, NUM_MULTI_THREAD_CORES); // distributed number of proofs on each thread
+        let num_threads = num_proofs / dist_size;
+
+        // To perform rigorous parallelism, both num_proofs and # threads must be powers of 2
+        // # threads must fully divide num_proofs for even distribution
+        assert!(num_proofs & (num_proofs - 1) == 0);
+        assert!(num_threads & (num_threads - 1) == 0);
+
+        // Determine parallelism levels
+        let levels = num_proofs.trailing_zeros() as usize; // total layers
+        let sub_levels = dist_size.trailing_zeros() as usize; // parallelism layers
+        let final_levels = num_threads.trailing_zeros() as usize; // single core final layers
+        let left_over_q_len = r_q.len() - levels; // if r_q.len() > log2(num_proofs)
+
+        // single proof matrix dimension W x X
+        let num_witness_secs = min(self.num_witness_secs, inst[0].len());
         let num_inputs = self.num_inputs[p];
 
-        let wit = (0..num_witness_secs).into_par_iter().map(|w| {
-          (0..num_inputs).into_par_iter().map(|x| {
-            let mut np = num_proofs;
-            let mut x_fold = (0..num_proofs).map(|q| self.Z[p][q][w][x]).collect::<Vec<S>>();
-            for r in r_q {
-              if np == 1 {
-                x_fold[0] *= ONE - *r;
-              } else {
-                np /= 2;
-                for q in 0..np {
-                  x_fold[q] = x_fold[2 * q] + *r * (x_fold[2 * q + 1] - x_fold[2 * q]);
-                }
-              }
+        if sub_levels > 0 {
+          let thread_split_inst = (0..num_threads)
+            .map(|_| {
+              inst.split_off(inst.len() - dist_size)
+            })
+            .rev()
+            .collect::<Vec<Vec<Vec<Vec<S>>>>>();
+
+          inst = thread_split_inst
+            .into_par_iter()
+            .map(|mut chunk| {
+              fold(&mut chunk, r_q, 0, 1, sub_levels, num_witness_secs, num_inputs);
+              chunk
+            })
+            .collect::<Vec<Vec<Vec<Vec<S>>>>>()
+            .into_iter().flatten().collect()
+        }
+
+        if final_levels > 0 {
+          // aggregate the final result from sub-threads outputs using a single core
+          fold(&mut inst, r_q, 0, dist_size, final_levels, num_witness_secs, num_inputs);
+        }
+
+        if left_over_q_len > 0 {
+          // the series of random challenges exceeds the total number of variables
+          let c = r_q[(r_q.len() - left_over_q_len)..r_q.len()].iter().fold(S::field_one(), |acc, n| acc * (S::field_one() - *n));
+          for w in 0..inst[0].len() {
+            for x in 0..inst[0][0].len() {
+              inst[0][w][x] *= c;
             }
+          }
+        }
 
-            x_fold
-          }).collect::<Vec<Vec<S>>>()
-        }).collect::<Vec<Vec<Vec<S>>>>();
-
-        (0..num_proofs)
-          .into_par_iter()
-          .map(|q| {
-            (0..wit.len()).map(|w| {
-              (0..wit[w].len()).map(|x| {
-                wit[w][x][q]
-              }).collect::<Vec<S>>()
-            }).collect::<Vec<Vec<S>>>()
-          }).collect::<Vec<Vec<Vec<S>>>>()
+        inst
       }).collect::<Vec<Vec<Vec<Vec<S>>>>>();
-    
+
     self.max_num_proofs /= 2usize.pow(r_q.len() as u32);
   }
 
@@ -303,5 +326,23 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
         }
       }
       DensePolynomial::new(Z_poly)
+  }
+}
+
+fn fold<S: SpartanExtensionField>(proofs: &mut Vec<Vec<Vec<S>>>, r_q: &[S], idx: usize, step: usize, lvl: usize, w: usize, x: usize) {
+  if lvl > 0 {
+    fold(proofs, r_q, 2 * idx, step, lvl - 1, w, x);
+    fold(proofs, r_q, 2 * idx + step, step, lvl - 1, w, x);
+
+    let r1 = S::field_one() - r_q[lvl];
+    let r2 = r_q[lvl];
+
+    (0..w).for_each(|w| {
+      (0..x).for_each(|x| {
+        proofs[idx][w][x] = r1 * proofs[idx * 2][w][x] + r2 * proofs[idx * 2 + step][w][x];
+      });
+    });
+  } else {
+    // level 0. do nothing
   }
 }

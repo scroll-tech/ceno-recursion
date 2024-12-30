@@ -220,7 +220,6 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
     num_instances: usize,
     num_proofs: Vec<usize>,
     max_num_proofs: usize,
-    num_inputs: Vec<usize>,
     max_num_inputs: usize,
     max_num_cons: usize,
     num_cons: Vec<usize>,
@@ -252,7 +251,6 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
           vec![self.A_list[p_inst].multiply_vec_disjoint_rounds(
             num_cons[p_inst].clone(),
             max_num_inputs,
-            num_inputs[p],
             &z_list[q],
           )]
         })
@@ -263,7 +261,6 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
           vec![self.B_list[p_inst].multiply_vec_disjoint_rounds(
             num_cons[p_inst].clone(),
             max_num_inputs,
-            num_inputs[p],
             &z_list[q],
           )]
         })
@@ -274,7 +271,6 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
           vec![self.C_list[p_inst].multiply_vec_disjoint_rounds(
             num_cons[p_inst].clone(),
             max_num_inputs,
-            num_inputs[p],
             &z_list[q],
           )]
         })
@@ -282,27 +278,9 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
     }
 
     (
-      DensePolynomialPqx::new(
-        Az,
-        num_proofs.clone(),
-        max_num_proofs,
-        num_cons.clone(),
-        max_num_cons,
-      ),
-      DensePolynomialPqx::new(
-        Bz,
-        num_proofs.clone(),
-        max_num_proofs,
-        num_cons.clone(),
-        max_num_cons,
-      ),
-      DensePolynomialPqx::new(
-        Cz,
-        num_proofs,
-        max_num_proofs,
-        num_cons.clone(),
-        max_num_cons,
-      ),
+      DensePolynomialPqx::new(Az),
+      DensePolynomialPqx::new(Bz),
+      DensePolynomialPqx::new(Cz),
     )
   }
 
@@ -357,7 +335,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
     num_rows: &Vec<usize>,
     num_segs: usize,
     max_num_cols: usize,
-    num_cols: &Vec<usize>,
+    num_cols: &Vec<Vec<usize>>,
     evals: &[S],
     // Output in p, q, w, i format, where q section has length 1
   ) -> (
@@ -372,88 +350,20 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
       self.max_num_vars
     );
 
-    (
-      (0..self.num_instances)
-        .into_par_iter()
-        .map(|p| {
-          let evals_A = self.A_list[p].compute_eval_table_sparse_disjoint_rounds(
-            evals,
-            num_rows[p],
-            num_segs,
-            max_num_cols,
-            num_cols[p],
-          );
-          vec![evals_A]
-        })
-        .collect(),
-      (0..self.num_instances)
-        .into_par_iter()
-        .map(|p| {
-          let evals_B = self.B_list[p].compute_eval_table_sparse_disjoint_rounds(
-            evals,
-            num_rows[p],
-            num_segs,
-            max_num_cols,
-            num_cols[p],
-          );
-          vec![evals_B]
-        })
-        .collect(),
-      (0..self.num_instances)
-        .into_par_iter()
-        .map(|p| {
-          let evals_C = self.C_list[p].compute_eval_table_sparse_disjoint_rounds(
-            evals,
-            num_rows[p],
-            num_segs,
-            max_num_cols,
-            num_cols[p],
-          );
-          vec![evals_C]
-        })
-        .collect(),
-    )
+    let mut evals_A_list = Vec::new();
+    let mut evals_B_list = Vec::new();
+    let mut evals_C_list = Vec::new();
+    for p in 0..self.num_instances {
+      let num_cols = *num_cols[p].iter().max().unwrap();
+      let evals_A = self.A_list[p].compute_eval_table_sparse_disjoint_rounds(evals, num_rows[p], num_segs, max_num_cols, num_cols);
+      let evals_B = self.B_list[p].compute_eval_table_sparse_disjoint_rounds(evals, num_rows[p], num_segs, max_num_cols, num_cols);
+      let evals_C = self.C_list[p].compute_eval_table_sparse_disjoint_rounds(evals, num_rows[p], num_segs, max_num_cols, num_cols);
+      evals_A_list.push(vec![evals_A]);
+      evals_B_list.push(vec![evals_B]);
+      evals_C_list.push(vec![evals_C]);
+    }
 
-    // let evals_A_list = (0..self.num_instances)
-    //   .into_par_iter()
-    //   .map(|p| {
-    //     let evals_A = self.A_list[p].compute_eval_table_sparse_disjoint_rounds(
-    //       evals,
-    //       num_rows[p],
-    //       num_segs,
-    //       max_num_cols,
-    //       num_cols[p],
-    //     );
-    //     vec![evals_A]
-    //   }).collect();
-
-    // let evals_B_list = (0..self.num_instances)
-    //   .into_par_iter()
-    //   .map(|p| {
-    //     let evals_B = self.B_list[p].compute_eval_table_sparse_disjoint_rounds(
-    //       evals,
-    //       num_rows[p],
-    //       num_segs,
-    //       max_num_cols,
-    //       num_cols[p],
-    //     );
-    //     vec![evals_B]
-    //   }).collect();
-
-    // let evals_C_list = (0..self.num_instances)
-    //   .into_par_iter()
-    //   .map(|p| {
-    //     let evals_C = self.C_list[p].compute_eval_table_sparse_disjoint_rounds(
-    //       evals,
-    //       num_rows[p],
-    //       num_segs,
-    //       max_num_cols,
-    //       num_cols[p],
-    //     );
-    //     vec![evals_C]
-    //   }).collect();
-
-    // (evals_A_list, evals_B_list, evals_C_list)
+    (evals_A_list, evals_B_list, evals_C_list)
   }
 
   // If IS_BLOCK, ry is truncated starting at the third entry

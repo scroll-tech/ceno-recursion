@@ -325,7 +325,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     num_rounds_p: usize,
     single_inst: bool, // indicates whether poly_B only has one instance
     num_witness_secs: usize,
-    mut num_inputs: Vec<usize>,
+    mut num_inputs: Vec<Vec<usize>>,
     poly_A: &mut DensePolynomial<S>,
     poly_B: &mut DensePolynomialPqx<S>,
     poly_C: &mut DensePolynomialPqx<S>,
@@ -362,8 +362,8 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
         for p in 0..min(instance_len, num_inputs.len()) {
           let p_inst = if single_inst { 0 } else { p };
           for w in 0..min(witness_secs_len, num_witness_secs) {
-            for y_rev in 0..inputs_len {
-              let val = poly_A[p] * poly_B.index(p_inst, 0, w, y_rev) * poly_C.index(p, 0, w, y_rev);
+            for y in 0..min(num_inputs[p_inst][w], num_inputs[p][w]) {
+              let val = poly_A[p] * poly_B.index(p_inst, 0, w, y) * poly_C.index(p, 0, w, y);
               expected += val;
             }
           }
@@ -402,11 +402,11 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
         // So min(instance_len, num_proofs.len()) suffices
         for p in 0..min(instance_len, num_inputs.len()) {
           let p_inst = if single_inst { 0 } else { p };
-          if mode == MODE_X && num_inputs[p] > 1 {
-            num_inputs[p] /= 2;
-          }
           for w in 0..min(witness_secs_len, num_witness_secs) {
-            for y in 0..num_inputs[p] {
+            if mode == MODE_X && num_inputs[p][w] > 1 {
+              num_inputs[p][w] /= 2;
+            }
+            for y in 0..num_inputs[p][w] {
               // evaluate A, B, C on p, w, y
               let (poly_A_low, poly_A_high) = match mode {
                 MODE_X => (poly_A[p], poly_A[p]),
@@ -558,19 +558,14 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
       // Mode = 2 ==> q
       // Mode = 4 ==> x
       let mode = if j < num_rounds_x_max {
+        cons_len = cons_len.div_ceil(2);
         MODE_X
       } else if j < num_rounds_x_max + num_rounds_q_max {
+        proof_len = proof_len.div_ceil(2);
         MODE_Q
       } else {
+        instance_len = instance_len.div_ceil(2);
         MODE_P
-      };
-
-      if cons_len > 1 {
-        cons_len /= 2
-      } else if proof_len > 1 {
-        proof_len /= 2
-      } else {
-        instance_len /= 2
       };
 
       let poly = {
@@ -581,13 +576,9 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
         // We are guaranteed initially instance_len < num_proofs.len() < instance_len x 2
         // So min(instance_len, num_proofs.len()) suffices
         for p in 0..min(instance_len, num_proofs.len()) {
-          if mode == MODE_X && num_cons[p] > 1 {
-            num_cons[p] /= 2;
-          }
+          if mode == MODE_X { num_cons[p] = num_cons[p].div_ceil(2); }
           // If q > num_proofs[p], the polynomials always evaluate to 0
-          if mode == MODE_Q && num_proofs[p] > 1 {
-            num_proofs[p] /= 2;
-          }
+          if mode == MODE_Q { num_proofs[p] = num_proofs[p].div_ceil(2); }
           for q in 0..num_proofs[p] {
             for x in 0..num_cons[p] {
               // evaluate A, B, C, D on p, q, x

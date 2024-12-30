@@ -406,7 +406,6 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
     &self, 
     num_rows: usize, 
     max_num_cols: usize, 
-    _num_cols: usize, 
     z: &Vec<Vec<S>>,
   ) -> Vec<S> {
     (0..self.M.len())
@@ -416,7 +415,7 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
         let val = self.M[i].val.clone();
         let w = col / max_num_cols;
         let y = col % max_num_cols;
-        (row, val * z[w][y])
+        (row, if w < z.len() && y < z[w].len() { val * z[w][y] } else { S::field_zero() })
       })
       .fold(vec![S::field_zero(); num_rows], |mut Mz, (r, v)| {
         Mz[r] += v;

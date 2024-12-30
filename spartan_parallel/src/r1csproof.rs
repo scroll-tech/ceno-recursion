@@ -11,10 +11,9 @@ use crate::scalar::SpartanExtensionField;
 use crate::{ProverWitnessSecInfo, VerifierWitnessSecInfo};
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
-use std::cmp::max;
+use std::cmp::min;
 use std::iter::zip;
 use rayon::prelude::*;
-use std::sync::{Arc, Mutex};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct R1CSProof<S: SpartanExtensionField> {
@@ -77,7 +76,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     num_rounds_p: usize,
     single_inst: bool,
     num_witness_secs: usize,
-    num_inputs: Vec<usize>,
+    num_inputs: Vec<Vec<usize>>,
     claim: &S,
     evals_eq: &mut DensePolynomial<S>,
     evals_ABC: &mut DensePolynomialPqx<S>,
@@ -117,7 +116,6 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     num_proofs: &Vec<usize>,
     // Number of inputs of the combined Z matrix
     max_num_inputs: usize,
-    num_inputs: &Vec<usize>,
     // WITNESS_SECS
     // How many sections does each Z vector have?
     // num_witness_secs can be between 1 - 8
@@ -150,9 +148,19 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       assert_eq!(*p, p.next_power_of_two());
       assert!(*p <= max_num_proofs);
     }
-    for i in num_inputs {
-      assert_eq!(*i, i.next_power_of_two());
-      assert!(*i <= max_num_inputs);
+    // Construct num_inputs as P x W
+    // Note: w.num_inputs[p_w] might exceed max_num_inputs, but only the first max_num_inputs entries are used
+    let mut num_inputs: Vec<Vec<usize>> = (0..num_instances).map(|p| witness_secs.iter().map(|w| {
+      let p_w = if w.num_inputs.len() == 1 { 0 } else { p };
+      min(w.num_inputs[p_w], max_num_inputs)
+    }).collect()).collect();
+    // Number of inputs must be in decreasing order between witness segments
+    for p in 0..num_instances {
+      for w in (1..witness_secs.len()).rev() {
+        if num_inputs[p][w - 1] < num_inputs[p][w] {
+          num_inputs[p][w - 1] = num_inputs[p][w]
+        }
+      }
     }
     // Number of instances is either one or matches num_instances
     assert!(inst.get_num_instances() == 1 || inst.get_num_instances() == num_instances);
@@ -191,13 +199,13 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
           let p_w = if ws.w_mat.len() == 1 { 0 } else { p };
           let q_w = if ws.w_mat[p_w].len() == 1 { 0 } else { q };
 
-          let r_w = if ws.num_inputs[p_w] < num_inputs[p] {
-            let padding = std::iter::repeat(S::field_zero()).take(num_inputs[p] - ws.num_inputs[p_w]).collect::<Vec<S>>();
+          let r_w = if ws.num_inputs[p_w] < num_inputs[p][w] {
+            let padding = std::iter::repeat(S::field_zero()).take(num_inputs[p][w] - ws.num_inputs[p_w]).collect::<Vec<S>>();
             let mut r = ws.w_mat[p_w][q_w].clone();
             r.extend(padding);
             r
           } else {
-            ws.w_mat[p_w][q_w].iter().take(num_inputs[p]).cloned().collect::<Vec<S>>()
+            ws.w_mat[p_w][q_w].iter().take(num_inputs[p][w]).cloned().collect::<Vec<S>>()
           };
           r_w
         }).collect::<Vec<Vec<S>>>()
@@ -226,7 +234,6 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       num_instances,
       num_proofs.clone(),
       max_num_proofs,
-      num_inputs.clone(),
       max_num_inputs,
       num_cons,
       block_num_cons.clone(),
@@ -308,7 +315,11 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
         evals_ABC.push(vec![Vec::new()]);
         for w in 0..num_witness_secs {
           evals_ABC[p][0].push(Vec::new());
-          for i in 0..num_inputs[p] {
+          // If single instance, need to find the maximum num_inputs
+          let num_inputs = if inst.get_num_instances() == 1 { 
+            num_inputs.iter().map(|n| n[w]).max().unwrap()
+          } else { num_inputs[p][w] };
+          for i in 0..num_inputs {
             evals_ABC[p][0][w].push(
               r_A * evals_A[p][0][w][i] + r_B * evals_B[p][0][w][i] + r_C * evals_C[p][0][w][i],
             );
@@ -317,24 +328,12 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       }
       evals_ABC
     };
-    let mut ABC_poly = DensePolynomialPqx::new(
-      evals_ABC,
-      vec![1; num_instances],
-      1,
-      num_inputs.clone(),
-      max_num_inputs,
-    );
+    let mut ABC_poly = DensePolynomialPqx::new(evals_ABC);
     timer_tmp.stop();
 
     let timer_tmp = Timer::new("prove_z_gen");
     // Construct a p * q * len(z) matrix Z and bound it to r_q
-    let mut Z_poly = DensePolynomialPqx::new(
-      z_mat,
-      num_proofs.clone(),
-      max_num_proofs,
-      num_inputs.clone(),
-      max_num_inputs,
-    );
+    let mut Z_poly = DensePolynomialPqx::new(z_mat);
     timer_tmp.stop();
     let timer_tmp = Timer::new("prove_z_bind");
     Z_poly.bound_poly_vars_rq_parallel(&rq_rev);
@@ -398,34 +397,37 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       eval_vars_at_ry_list.push(Vec::new());
 
       for p in 0..wit_sec_num_instance {
-        poly_list.push(&w.poly_w[p]);
-        num_proofs_list.push(w.w_mat[p].len());
-        num_inputs_list.push(w.num_inputs[p]);
-        // Depending on w.num_inputs[p], ry_short can be two different values
-        let ry_short = {
-          // if w.num_inputs[p] >= num_inputs, need to pad 0's to the front of ry
+        if w.num_inputs[p] > 1 {
+          poly_list.push(&w.poly_w[p]);
+          num_proofs_list.push(w.w_mat[p].len());
+          num_inputs_list.push(w.num_inputs[p]);
+          // Depending on w.num_inputs[p], ry_short can be two different values
+          let ry_short = {
+            // if w.num_inputs[p] >= num_inputs, need to pad 0's to the front of ry
+            if w.num_inputs[p] >= max_num_inputs {
+              let ry_pad = vec![ZERO; w.num_inputs[p].log_2() - max_num_inputs.log_2()];
+              [ry_pad, ry.clone()].concat()
+            }
+            // Else ry_short is the last w.num_inputs[p].log_2() entries of ry
+            // thus, to obtain the actual ry, need to multiply by (1 - ry0)(1 - ry1)..., which is ry_factors[num_rounds_y - w.num_inputs[p]]
+            else {
+              ry[num_rounds_y - w.num_inputs[p].log_2()..].to_vec()
+            }
+          };
+          let rq_short = rq[num_rounds_q - num_proofs_list[num_proofs_list.len() - 1].log_2()..].to_vec();
+          let r = &[rq_short, ry_short.clone()].concat();
+          let eval_vars_at_ry = poly_list[poly_list.len() - 1].evaluate(r);
+          Zr_list.push(eval_vars_at_ry);
           if w.num_inputs[p] >= max_num_inputs {
-            let ry_pad = vec![ZERO; w.num_inputs[p].log_2() - max_num_inputs.log_2()];
-            [ry_pad, ry.clone()].concat()
+            eval_vars_at_ry_list[i].push(eval_vars_at_ry);
+          } else {
+            eval_vars_at_ry_list[i].push(eval_vars_at_ry * ry_factors[num_rounds_y - w.num_inputs[p].log_2()]);
           }
-          // Else ry_short is the last w.num_inputs[p].log_2() entries of ry
-          // thus, to obtain the actual ry, need to multiply by (1 - ry0)(1 - ry1)..., which is ry_factors[num_rounds_y - w.num_inputs[p]]
-          else {
-            ry[num_rounds_y - w.num_inputs[p].log_2()..].to_vec()
-          }
-        };
-        let rq_short =
-          rq[num_rounds_q - num_proofs_list[num_proofs_list.len() - 1].log_2()..].to_vec();
-        let r = &[rq_short, ry_short.clone()].concat();
-        let eval_vars_at_ry = poly_list[poly_list.len() - 1].evaluate(r);
-        Zr_list.push(eval_vars_at_ry);
-        if w.num_inputs[p] >= max_num_inputs {
-          eval_vars_at_ry_list[i].push(eval_vars_at_ry);
+          raw_eval_vars_at_ry_list[i].push(eval_vars_at_ry);
         } else {
-          eval_vars_at_ry_list[i]
-            .push(eval_vars_at_ry * ry_factors[num_rounds_y - w.num_inputs[p].log_2()]);
+          eval_vars_at_ry_list[i].push(ZERO);
+          raw_eval_vars_at_ry_list[i].push(ZERO);
         }
-        raw_eval_vars_at_ry_list[i].push(eval_vars_at_ry);
       }
     }
 
@@ -644,9 +646,14 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       let w = witness_secs[i];
       let wit_sec_num_instance = w.num_proofs.len();
       for p in 0..wit_sec_num_instance {
-        num_proofs_list.push(w.num_proofs[p]);
-        num_inputs_list.push(w.num_inputs[p]);
-        eval_Zr_list.push(self.eval_vars_at_ry_list[i][p]);
+        if w.num_inputs[p] > 1 {
+          // comm_list.push(&w.comm_w[p]);
+          num_proofs_list.push(w.num_proofs[p]);
+          num_inputs_list.push(w.num_inputs[p]);
+          eval_Zr_list.push(self.eval_vars_at_ry_list[i][p]);
+        } else {
+          assert_eq!(self.eval_vars_at_ry_list[i][p], ZERO);
+        }
       }
     }
 

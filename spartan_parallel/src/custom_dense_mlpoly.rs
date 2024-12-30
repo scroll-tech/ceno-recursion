@@ -303,7 +303,8 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
         inst
       }).collect::<Vec<Vec<Vec<Vec<S>>>>>();
 
-    self.max_num_proofs /= 2usize.pow(r_q.len() as u32);
+    self.max_num_proofs = 1;
+    self.num_proofs = vec![1; self.num_instances];
   }
 
   // Bound the entire "q" section to r_q in reverse

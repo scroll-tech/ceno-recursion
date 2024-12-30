@@ -235,13 +235,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
         // single proof matrix dimension W x X
         let num_witness_secs = min(self.num_witness_secs, inst[0].len());
         let num_inputs = self.num_inputs[p];
-
-        // debug
-        println!("[");
-        inst.iter().for_each(|mat| println!("{:?}, ", mat[0][0]));
-        println!("]");
-        println!();
-
+        
         if sub_levels > 0 {
           let thread_split_inst = (0..num_threads)
             .map(|_| {

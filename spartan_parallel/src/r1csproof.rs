@@ -184,34 +184,25 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     // append input to variables to create a single vector z
     let timer_tmp = Timer::new("prove_z_mat_gen");
     
-    let z_mat = (0..num_instances)
-      .into_par_iter()
-      .map(|p| {
-        (0..num_proofs[p])
-          .into_par_iter()
-          .map(|q| {
-            (0..witness_secs.len())
-              .map(|w| {
-                let ws = witness_secs[w];
-                let p_w = if ws.w_mat.len() == 1 { 0 } else { p };
-                let q_w = if ws.w_mat[p_w].len() == 1 { 0 } else { q };
+    let z_mat = (0..num_instances).map(|p| {
+      (0..num_proofs[p]).into_par_iter().map(|q| {
+        (0..witness_secs.len()).map(|w| {
+          let ws = witness_secs[w];
+          let p_w = if ws.w_mat.len() == 1 { 0 } else { p };
+          let q_w = if ws.w_mat[p_w].len() == 1 { 0 } else { q };
 
-                let r_w = if ws.num_inputs[p_w] < num_inputs[p] {
-                  let padding = std::iter::repeat(S::field_zero()).take(num_inputs[p] - ws.num_inputs[p_w]).collect::<Vec<S>>();
-                  let mut r = ws.w_mat[p_w][q_w].clone();
-                  r.extend(padding);
-                  r
-                } else {
-                  ws.w_mat[p_w][q_w].iter().take(num_inputs[p]).cloned().collect::<Vec<S>>()
-                };
-
-                r_w
-              })
-              .collect::<Vec<Vec<S>>>()
-          })
-          .collect::<Vec<Vec<Vec<S>>>>()
-      })
-      .collect::<Vec<Vec<Vec<Vec<S>>>>>();
+          let r_w = if ws.num_inputs[p_w] < num_inputs[p] {
+            let padding = std::iter::repeat(S::field_zero()).take(num_inputs[p] - ws.num_inputs[p_w]).collect::<Vec<S>>();
+            let mut r = ws.w_mat[p_w][q_w].clone();
+            r.extend(padding);
+            r
+          } else {
+            ws.w_mat[p_w][q_w].iter().take(num_inputs[p]).cloned().collect::<Vec<S>>()
+          };
+          r_w
+        }).collect::<Vec<Vec<S>>>()
+      }).collect::<Vec<Vec<Vec<S>>>>()
+    }).collect::<Vec<Vec<Vec<Vec<S>>>>>();
     timer_tmp.stop();
 
     // derive the verifier's challenge \tau
@@ -346,13 +337,14 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     );
     timer_tmp.stop();
     let timer_tmp = Timer::new("prove_z_bind");
-    Z_poly.bound_poly_vars_rq(&rq_rev);
+    Z_poly.bound_poly_vars_rq_parallel(&rq_rev);
     timer_tmp.stop();
 
     // An Eq function to match p with rp
     let mut eq_p_rp_poly = DensePolynomial::new(EqPolynomial::new(rp).evals());
 
     // Sumcheck 2: (rA + rB + rC) * Z * eq(p) = e
+    let timer_tmp = Timer::new("prove_sum_check");
     let (sc_proof_phase2, ry_rev, _claims_phase2) = R1CSProof::prove_phase_two(
       num_rounds_y + num_rounds_w + num_rounds_p,
       num_rounds_y,
@@ -367,6 +359,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       &mut Z_poly,
       transcript,
     );
+    timer_tmp.stop();
     timer_sc_proof_phase2.stop();
 
     // Separate ry into rp, rw, and ry

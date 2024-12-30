@@ -311,15 +311,8 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   pub fn bound_poly_vars_rq(&mut self, 
     r_q: &[S],
   ) {
-    let mut count = 0;
     for r in r_q {
       self.bound_poly_q(r);
-      count += 1;
-      if count == 10 {
-        for p in 0..self.Z.len() {
-          println!("SINGLE CORE: P: {}, INST0: {:?}", p, self.Z[p][0][0][0]);
-        }
-      }
     }
   }
 

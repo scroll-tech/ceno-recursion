@@ -462,12 +462,8 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       }
       evals_ABC
     };
-    let ABC_poly = DensePolynomialPqx::new_rev(
-      &evals_ABC,
-      vec![1; num_instances],
-      1,
-      num_inputs.clone(),
-      max_num_inputs,
+    let ABC_poly = DensePolynomialPqx::new(
+      evals_ABC
     );
     timer_tmp.stop();
 

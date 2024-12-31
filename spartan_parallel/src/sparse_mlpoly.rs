@@ -403,21 +403,22 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
   // Z is consisted of vector segments
   // Z[i] contains entries i * max_num_cols ~ i * max_num_cols + num_cols
   pub fn multiply_vec_disjoint_rounds(
-    &self,
-    num_rows: usize,
-    max_num_cols: usize,
-    _num_cols: usize,
+    &self, 
+    num_rows: usize, 
+    max_num_cols: usize, 
     z: &Vec<Vec<S>>,
   ) -> Vec<S> {
     (0..self.M.len())
       .map(|i| {
         let row = self.M[i].row;
         let col = self.M[i].col;
-        let val = &self.M[i].val;
-        (row, *val * z[col / max_num_cols][col % max_num_cols])
+        let val = self.M[i].val.clone();
+        let w = col / max_num_cols;
+        let y = col % max_num_cols;
+        (row, if w < z.len() && y < z[w].len() { val * z[w][y] } else { S::field_zero() })
       })
       .fold(vec![S::field_zero(); num_rows], |mut Mz, (r, v)| {
-        Mz[r] = Mz[r] + v;
+        Mz[r] += v;
         Mz
       })
   }

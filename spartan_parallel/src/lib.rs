@@ -15,8 +15,6 @@ extern crate digest;
 extern crate merlin;
 extern crate rand;
 extern crate sha3;
-
-#[cfg(feature = "multicore")]
 extern crate rayon;
 
 mod custom_dense_mlpoly;
@@ -433,11 +431,22 @@ impl<S: SpartanExtensionField> ProverWitnessSecInfo<S> {
     }
   }
 
+  // Empty ProverWitnessSecInfo
   fn dummy() -> ProverWitnessSecInfo<S> {
     ProverWitnessSecInfo {
       num_inputs: Vec::new(),
       w_mat: Vec::new(),
       poly_w: Vec::new(),
+    }
+  }
+
+  // Zero ProverWitnessSecInfo
+  fn pad() -> ProverWitnessSecInfo<S> {
+    let ZERO = S::field_zero();
+    ProverWitnessSecInfo {
+      num_inputs: vec![1],
+      w_mat: vec![vec![vec![ZERO]]],
+      poly_w: vec![DensePolynomial::new(vec![ZERO])],
     }
   }
 
@@ -528,6 +537,13 @@ impl VerifierWitnessSecInfo {
     VerifierWitnessSecInfo {
       num_inputs: Vec::new(),
       num_proofs: Vec::new(),
+    }
+  }
+
+  fn pad() -> VerifierWitnessSecInfo {
+    VerifierWitnessSecInfo {
+      num_inputs: vec![1],
+      num_proofs: vec![1],
     }
   }
 
@@ -1099,9 +1115,6 @@ impl<'a, S: SpartanExtensionField + Send + Sync> SNARK<S> {
     let index: Vec<usize> = inst_sorter.iter().map(|i| i.index).collect();
     let block_inst_unsorted = block_inst.clone();
     block_inst.sort(block_num_instances, &index);
-    let block_num_vars: Vec<usize> = (0..block_num_instances)
-      .map(|i| block_num_vars[index[i]])
-      .collect();
     let block_num_phy_ops: Vec<usize> = (0..block_num_instances)
       .map(|i| block_num_phy_ops[index[i]])
       .collect();
@@ -2021,8 +2034,8 @@ impl<'a, S: SpartanExtensionField + Send + Sync> SNARK<S> {
     let timer_proof = Timer::new("Block Correctness Extract");
     let block_wit_secs = vec![
       &block_vars_prover,
-      &perm_w0_prover,
       &block_w2_prover,
+      &perm_w0_prover,
       &block_w3_prover,
       &block_w3_shifted_prover,
     ];
@@ -2034,7 +2047,6 @@ impl<'a, S: SpartanExtensionField + Send + Sync> SNARK<S> {
           block_max_num_proofs,
           block_num_proofs,
           num_vars,
-          &block_num_vars,
           block_wit_secs,
           &block_inst.inst,
           transcript,
@@ -2118,27 +2130,28 @@ impl<'a, S: SpartanExtensionField + Send + Sync> SNARK<S> {
     .max()
     .unwrap()
     .clone();
-    let (pairwise_prover, inst_map) = ProverWitnessSecInfo::merge(vec![
+    let (pairwise_w0_prover, inst_map) = ProverWitnessSecInfo::merge(vec![
       &perm_exec_w3_prover,
       &addr_phy_mems_prover,
-      &addr_vir_mems_prover,
+      &addr_ts_bits_prover,
     ]);
-    let (pairwise_shifted_prover, _) = ProverWitnessSecInfo::merge(vec![
+    let (pairwise_w1_prover, _) = ProverWitnessSecInfo::merge(vec![
       &perm_exec_w3_shifted_prover,
       &addr_phy_mems_shifted_prover,
-      &addr_vir_mems_shifted_prover,
+      &addr_vir_mems_prover,
     ]);
-    let addr_ts_bits_prover = {
-      let mut components = vec![&perm_w0_prover; inst_map.len()];
+    let dummy_w2 = ProverWitnessSecInfo::pad();
+    let pairwise_w2_prover = {
+      let mut components = vec![&dummy_w2; inst_map.len()];
       for i in 0..inst_map.len() {
         if inst_map[i] == 2 {
-          components[i] = &addr_ts_bits_prover;
+          components[i] = &addr_vir_mems_shifted_prover;
         }
       }
       ProverWitnessSecInfo::concat(components)
     };
-    let pairwise_num_instances = pairwise_prover.w_mat.len();
-    let pairwise_num_proofs: Vec<usize> = pairwise_prover.w_mat.iter().map(|i| i.len()).collect();
+    let pairwise_num_instances = pairwise_w0_prover.w_mat.len();
+    let pairwise_num_proofs: Vec<usize> = pairwise_w0_prover.w_mat.iter().map(|i| i.len()).collect();
     let (pairwise_check_r1cs_sat_proof, pairwise_check_challenges) = {
       let (proof, pairwise_check_challenges) = {
         R1CSProof::prove(
@@ -2146,11 +2159,10 @@ impl<'a, S: SpartanExtensionField + Send + Sync> SNARK<S> {
           pairwise_size,
           &pairwise_num_proofs,
           max(8, mem_addr_ts_bits_size),
-          &vec![max(8, mem_addr_ts_bits_size); pairwise_num_instances],
           vec![
-            &pairwise_prover,
-            &pairwise_shifted_prover,
-            &addr_ts_bits_prover,
+            &pairwise_w0_prover,
+            &pairwise_w1_prover,
+            &pairwise_w2_prover,
           ],
           &pairwise_check_inst.inst,
           transcript,
@@ -2272,7 +2284,6 @@ impl<'a, S: SpartanExtensionField + Send + Sync> SNARK<S> {
           perm_size,
           &perm_root_num_proofs,
           num_ios,
-          &vec![num_ios; perm_root_num_instances],
           vec![
             &perm_w0_prover,
             &perm_root_w1_prover,
@@ -2727,9 +2738,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> SNARK<S> {
     let mut block_num_proofs: Vec<usize> = inst_sorter.iter().map(|i| i.num_exec).collect();
     // index[i] = j => the original jth entry should now be at the ith position
     let block_index: Vec<usize> = inst_sorter.iter().map(|i| i.index).collect();
-    let block_num_vars: Vec<usize> = (0..block_num_instances)
-      .map(|i| block_num_vars[block_index[i]])
-      .collect();
+    let block_num_vars: Vec<usize> = (0..block_num_instances).map(|i| block_num_vars[block_index[i]]).collect();
     let block_num_phy_ops: Vec<usize> = (0..block_num_instances)
       .map(|i| block_num_phy_ops[block_index[i]])
       .collect();
@@ -3038,8 +3047,8 @@ impl<'a, S: SpartanExtensionField + Send + Sync> SNARK<S> {
       let timer_sat_proof = Timer::new("Block Correctness Extract Sat");
       let block_wit_secs = vec![
         &block_vars_verifier,
-        &perm_w0_verifier,
         &block_w2_verifier,
+        &perm_w0_verifier,
         &block_w3_verifier,
         &block_w3_shifted_verifier,
       ];
@@ -3113,27 +3122,28 @@ impl<'a, S: SpartanExtensionField + Send + Sync> SNARK<S> {
       .max()
       .unwrap()
       .clone();
-      let (pairwise_verifier, inst_map) = VerifierWitnessSecInfo::merge(vec![
+      let (pairwise_w0_verifier, inst_map) = VerifierWitnessSecInfo::merge(vec![
         &perm_exec_w3_verifier,
         &addr_phy_mems_verifier,
-        &addr_vir_mems_verifier,
+        &addr_ts_bits_verifier
       ]);
-      let (pairwise_shifted_verifier, _) = VerifierWitnessSecInfo::merge(vec![
+      let (pairwise_w1_verifier, _) = VerifierWitnessSecInfo::merge(vec![
         &perm_exec_w3_shifted_verifier,
         &addr_phy_mems_shifted_verifier,
-        &addr_vir_mems_shifted_verifier,
+        &addr_vir_mems_verifier,
       ]);
-      let addr_ts_bits_verifier = {
-        let mut components = vec![&perm_w0_verifier; inst_map.len()];
+      let dummy_w2 = VerifierWitnessSecInfo::pad();
+      let pairwise_w2_verifier = {
+        let mut components = vec![&dummy_w2; inst_map.len()];
         for i in 0..inst_map.len() {
           if inst_map[i] == 2 {
-            components[i] = &addr_ts_bits_verifier;
+            components[i] = &addr_vir_mems_shifted_verifier;
           }
         }
         VerifierWitnessSecInfo::concat(components)
       };
-      let pairwise_num_instances = pairwise_verifier.num_proofs.len();
-      let pairwise_num_proofs: Vec<usize> = pairwise_verifier.num_proofs.clone();
+      let pairwise_num_instances = pairwise_w0_verifier.num_proofs.len();
+      let pairwise_num_proofs: Vec<usize> = pairwise_w0_verifier.num_proofs.clone();
 
       let pairwise_check_challenges = self.pairwise_check_r1cs_sat_proof.verify(
         pairwise_num_instances,
@@ -3141,9 +3151,9 @@ impl<'a, S: SpartanExtensionField + Send + Sync> SNARK<S> {
         &pairwise_num_proofs,
         max(8, mem_addr_ts_bits_size),
         vec![
-          &pairwise_verifier,
-          &pairwise_shifted_verifier,
-          &addr_ts_bits_verifier,
+          &pairwise_w0_verifier,
+          &pairwise_w1_verifier,
+          &pairwise_w2_verifier,
         ],
         pairwise_check_num_cons,
         &self.pairwise_check_inst_evals_bound_rp,

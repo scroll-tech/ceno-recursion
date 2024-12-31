@@ -25,6 +25,7 @@ use sumcheck::structs::{IOPProof, IOPProverStateV2, IOPVerifierState};
 use ff::Field;
 use halo2curves::serde::SerdeObject;
 use transcript::BasicTranscript;
+use rayon::prelude::*;
 
 #[derive(Serialize, Debug)]
 pub struct R1CSProof<S: SpartanExtensionField> {
@@ -898,14 +899,6 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let (rw_rev, rp_rev) = rw_rev.split_at(num_rounds_w);
     let rp: Vec<S> = rp_rev.iter().copied().rev().collect();
     let rw: Vec<S> = rw_rev.iter().copied().rev().collect();
-    let ry: Vec<S> = ry_rev.iter().copied().rev().collect();
-    */
-
-    // Separate ry into rp, rw, and ry
-    let (rp, ry) = ry.split_at(num_rounds_p);
-    let (rw, ry) = ry.split_at(num_rounds_w);
-    let rp = rp.to_vec();
-    let rw = rw.to_vec();
     let ry: Vec<S> = ry_rev.iter().copied().rev().collect();
     */
 

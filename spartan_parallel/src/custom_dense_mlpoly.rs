@@ -125,15 +125,15 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
     match mode {
         MODE_P => { self.bound_poly_p(r); }
         MODE_Q => { self.bound_poly_q(r); }
-        MODE_W => { self.bound_poly_w(r); }
-        MODE_X => { self.bound_poly_x(r); }
+        MODE_W => { self.bound_poly_w_parallel(r); }
+        MODE_X => { self.bound_poly_x_parallel(r); }
         _ => { panic!("DensePolynomialPqx bound failed: unrecognized mode {}!", mode); }
     }
   }
 
   // Bound the last variable of "p" section to r
   // We are only allowed to bound "p" if we have bounded the entire q and x section
-  pub fn bound_poly_p(&mut self, r: &S) {
+  fn bound_poly_p(&mut self, r: &S) {
     assert!(self.num_vars_p >= 1);
     assert_eq!(self.num_vars_q, 0);
     assert_eq!(self.num_vars_x, 0);
@@ -150,7 +150,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   }
 
   // Bound the last variable of "q" section to r
-  pub fn bound_poly_q(&mut self, r: &S) {
+  fn bound_poly_q(&mut self, r: &S) {
     assert!(self.num_vars_q >= 1);
     for p in 0..self.num_instances {
       let new_num_proofs = self.num_proofs[p].div_ceil(2);
@@ -170,7 +170,29 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
 
   // Bound the last variable of "w" section to r
   // We are only allowed to bound "w" if we have bounded the entire x section
-  pub fn bound_poly_w(&mut self, r: &S) {
+  fn bound_poly_w_parallel(&mut self, r: &S) {
+    let ZERO = S::field_zero();
+    assert!(self.num_vars_w >= 1);
+    assert_eq!(self.num_vars_x, 0);
+    let new_num_witness_secs = self.num_witness_secs.div_ceil(2);
+    let Z = std::mem::take(&mut self.Z);
+    self.Z = Z.into_iter().map(|Z_p| {
+      Z_p.into_par_iter().map(|mut Z_pq| {
+        for w in 0..self.num_witness_secs {
+          let Z_low = if 2 * w >= self.num_witness_secs { ZERO } else { Z_pq[2 * w][0] };
+          let Z_high = if 2 * w + 1 >= self.num_witness_secs { ZERO } else { Z_pq[2 * w + 1][0] };
+          Z_pq[w][0] = Z_low + r.clone() * (Z_high - Z_low);
+        }
+        Z_pq
+      }).collect::<Vec<Vec<Vec<S>>>>()
+    }).collect::<Vec<Vec<Vec<Vec<S>>>>>();
+    self.num_witness_secs = new_num_witness_secs;
+    self.num_vars_w -= 1;
+}
+
+  // Bound the last variable of "w" section to r
+  // We are only allowed to bound "w" if we have bounded the entire x section
+  fn _bound_poly_w(&mut self, r: &S) {
     assert!(self.num_vars_w >= 1);
     assert_eq!(self.num_vars_x, 0);
     let new_num_witness_secs = self.num_witness_secs.div_ceil(2);
@@ -188,7 +210,33 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
 }
 
   // Bound the last variable of "x" section to r
-  pub fn bound_poly_x(&mut self, r: &S) {
+  fn bound_poly_x_parallel(&mut self, r: &S) {
+    let ZERO = S::field_zero();
+    let new_num_inputs: Vec<Vec<usize>> = self.num_inputs.iter().map(|p|
+      p.iter().map(|w| w.div_ceil(2)).collect()
+    ).collect();
+    // assert!(self.num_vars_x >= 1);
+    let Z = std::mem::take(&mut self.Z);
+    self.Z = Z.into_iter().enumerate().map(|(p, Z_p)| {
+      Z_p.into_par_iter().map(|mut Z_pq| {
+        for w in 0..self.num_witness_secs {
+          for x in 0..new_num_inputs[p][w] {
+            let Z_low = if 2 * x >= self.num_inputs[p][w] { ZERO } else { Z_pq[w][2 * x] };
+            let Z_high = if 2 * x + 1 >= self.num_inputs[p][w] { ZERO } else { Z_pq[w][2 * x + 1] };
+            Z_pq[w][x] = Z_low + r.clone() * (Z_high - Z_low);
+          }
+        }
+        Z_pq
+      }).collect::<Vec<Vec<Vec<S>>>>()
+    }).collect::<Vec<Vec<Vec<Vec<S>>>>>();
+    self.num_inputs = new_num_inputs;
+    if self.num_vars_x >= 1 {
+      self.num_vars_x -= 1;
+    }
+  }
+
+  // Bound the last variable of "x" section to r
+  fn _bound_poly_x(&mut self, r: &S) {
     // assert!(self.num_vars_x >= 1);
     for p in 0..self.num_instances {
       for w in 0..self.num_witness_secs {
@@ -293,14 +341,14 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   // Bound the entire "w" section to r_w in reverse
   pub fn bound_poly_vars_rw(&mut self, r_w: &[S]) {
     for r in r_w {
-      self.bound_poly_w(r);
+      self.bound_poly_w_parallel(r);
     }
   }
 
   // Bound the entire "x_rev" section to r_x
   pub fn bound_poly_vars_rx(&mut self, r_x: &[S]) {
     for r in r_x {
-      self.bound_poly_x(r);
+      self.bound_poly_x_parallel(r);
     }
   }
 

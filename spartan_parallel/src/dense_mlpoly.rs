@@ -4,6 +4,7 @@ use super::math::Math;
 use super::random::RandomTape;
 use super::transcript::Transcript;
 use core::ops::Index;
+use multilinear_extensions::mle::DenseMultilinearExtension;
 use serde::{Deserialize, Serialize};
 use ff_ext::ExtensionField;
 use std::collections::HashMap;
@@ -295,6 +296,10 @@ impl<E: ExtensionField> DensePolynomial<E> {
         .map(|i| E::from(Z[i] as u64))
         .collect::<Vec<E>>(),
     )
+  }
+
+  pub fn to_ceno_dense_multilinear(&mut self) -> DenseMultilinearExtension<E> {
+    DenseMultilinearExtension::from_evaluations_ext_vec(self.num_vars, std::mem::take(&mut self.Z))
   }
 }
 

@@ -125,8 +125,8 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
     match mode {
         MODE_P => { self.bound_poly_p(r); }
         MODE_Q => { self.bound_poly_q(r); }
-        MODE_W => { self.bound_poly_w_parallel(r); }
-        MODE_X => { self.bound_poly_x_parallel(r); }
+        MODE_W => { self.bound_poly_w(r); }
+        MODE_X => { if self.num_vars_q >= 1 { self.bound_poly_x_parallel(r) } else { self.bound_poly_x(r) }; }
         _ => { panic!("DensePolynomialPqx bound failed: unrecognized mode {}!", mode); }
     }
   }
@@ -170,7 +170,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
 
   // Bound the last variable of "w" section to r
   // We are only allowed to bound "w" if we have bounded the entire x section
-  fn bound_poly_w_parallel(&mut self, r: &S) {
+  fn _bound_poly_w_parallel(&mut self, r: &S) {
     let ZERO = S::field_zero();
     assert!(self.num_vars_w >= 1);
     assert_eq!(self.num_vars_x, 0);
@@ -192,7 +192,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
 
   // Bound the last variable of "w" section to r
   // We are only allowed to bound "w" if we have bounded the entire x section
-  fn _bound_poly_w(&mut self, r: &S) {
+  fn bound_poly_w(&mut self, r: &S) {
     assert!(self.num_vars_w >= 1);
     assert_eq!(self.num_vars_x, 0);
     let new_num_witness_secs = self.num_witness_secs.div_ceil(2);
@@ -236,7 +236,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   }
 
   // Bound the last variable of "x" section to r
-  fn _bound_poly_x(&mut self, r: &S) {
+  fn bound_poly_x(&mut self, r: &S) {
     // assert!(self.num_vars_x >= 1);
     for p in 0..self.num_instances {
       for w in 0..self.num_witness_secs {
@@ -341,14 +341,14 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   // Bound the entire "w" section to r_w in reverse
   pub fn bound_poly_vars_rw(&mut self, r_w: &[S]) {
     for r in r_w {
-      self.bound_poly_w_parallel(r);
+      self.bound_poly_w(r);
     }
   }
 
   // Bound the entire "x_rev" section to r_x
   pub fn bound_poly_vars_rx(&mut self, r_x: &[S]) {
     for r in r_x {
-      self.bound_poly_x_parallel(r);
+      if self.num_vars_q >= 1 { self.bound_poly_x_parallel(r) } else { self.bound_poly_x(r) };
     }
   }
 

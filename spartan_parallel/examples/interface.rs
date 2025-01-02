@@ -7,7 +7,7 @@ use std::{fs::File, io::BufReader};
 
 use libspartan::scalar::{ScalarExt2, SpartanExtensionField};
 use libspartan::{instance::Instance, InputsAssignment, MemsAssignment, VarsAssignment, SNARK};
-use merlin::Transcript;
+use transcript::BasicTranscript as Transcript;
 use serde::{Deserialize, Serialize};
 use std::time::*;
 

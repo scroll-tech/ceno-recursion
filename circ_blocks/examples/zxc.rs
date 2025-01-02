@@ -31,7 +31,6 @@ use std::path::PathBuf;
 use libspartan::{
     instance::Instance, Assignment, InputsAssignment, MemsAssignment, VarsAssignment, SNARK,
 };
-use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::time::*;
 

@@ -10,6 +10,7 @@ use super::transcript::{AppendToTranscript, ProofTranscript};
 use super::unipoly::{CompressedUniPoly, UniPoly};
 use itertools::izip;
 use merlin::Transcript;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 
@@ -506,7 +507,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     transcript: &mut Transcript,
   ) -> (Self, Vec<S>, Vec<S>)
   where
-    F: Fn(&S, &S, &S, &S) -> S,
+    F: Fn(&S, &S, &S, &S) -> S + std::marker::Sync,
   {
     let ZERO = S::field_zero();
 
@@ -569,87 +570,157 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
       };
 
       let poly = {
-        let mut eval_point_0 = ZERO;
-        let mut eval_point_2 = ZERO;
-        let mut eval_point_3 = ZERO;
+        if mode == MODE_X {
+          // Multicore evaluation in MODE_X
+          let mut eval_point_0 = ZERO;
+          let mut eval_point_2 = ZERO;
+          let mut eval_point_3 = ZERO;
 
-        // We are guaranteed initially instance_len < num_proofs.len() < instance_len x 2
-        // So min(instance_len, num_proofs.len()) suffices
-        for p in 0..min(instance_len, num_proofs.len()) {
-          if mode == MODE_X { num_cons[p] = num_cons[p].div_ceil(2); }
-          // If q > num_proofs[p], the polynomials always evaluate to 0
-          if mode == MODE_Q { num_proofs[p] = num_proofs[p].div_ceil(2); }
-          for q in 0..num_proofs[p] {
-            for x in 0..num_cons[p] {
-              // evaluate A, B, C, D on p, q, x
-              let (poly_A_low, poly_A_high) = match mode {
-                MODE_X => (
-                  poly_Ap[p] * poly_Aq[q] * poly_Ax[2 * x],
-                  poly_Ap[p] * poly_Aq[q] * poly_Ax[2 * x + 1],
-                ),
-                MODE_Q => (
-                  poly_Ap[p] * poly_Aq[2 * q] * poly_Ax[x],
-                  poly_Ap[p] * poly_Aq[2 * q + 1] * poly_Ax[x],
-                ),
-                MODE_P => (
-                  poly_Ap[2 * p] * poly_Aq[q] * poly_Ax[x],
-                  poly_Ap[2 * p + 1] * poly_Aq[q] * poly_Ax[x],
-                ),
-                _ => unreachable!()
-              };
-              let poly_B_low = poly_B.index_low(p, q, 0, x, mode);
-              let poly_B_high = poly_B.index_high(p, q, 0, x, mode);
-              let poly_C_low = poly_C.index_low(p, q, 0, x, mode);
-              let poly_C_high = poly_C.index_high(p, q, 0, x, mode);
-              let poly_D_low = poly_D.index_low(p, q, 0, x, mode);
-              let poly_D_high = poly_D.index_high(p, q, 0, x, mode);
+          // We are guaranteed initially instance_len < num_proofs.len() < instance_len x 2
+          // So min(instance_len, num_proofs.len()) suffices
+          for p in 0..min(instance_len, num_proofs.len()) {
+            num_cons[p] = num_cons[p].div_ceil(2);
+            (eval_point_0, eval_point_2, eval_point_3) = (0..num_proofs[p]).into_par_iter().map(|q| {
+              let mut eval_point_0 = ZERO;
+              let mut eval_point_2 = ZERO;
+              let mut eval_point_3 = ZERO;
+              for x in 0..num_cons[p] {
+                // evaluate A, B, C, D on p, q, x
+                let poly_A_low = poly_Ap[p] * poly_Aq[q] * poly_Ax[2 * x];
+                let poly_A_high = poly_Ap[p] * poly_Aq[q] * poly_Ax[2 * x + 1];
+                let poly_B_low = poly_B.index_low(p, q, 0, x, mode);
+                let poly_B_high = poly_B.index_high(p, q, 0, x, mode);
+                let poly_C_low = poly_C.index_low(p, q, 0, x, mode);
+                let poly_C_high = poly_C.index_high(p, q, 0, x, mode);
+                let poly_D_low = poly_D.index_low(p, q, 0, x, mode);
+                let poly_D_high = poly_D.index_high(p, q, 0, x, mode);
 
-              // eval 0: bound_func is A(low)
-              eval_point_0 = eval_point_0
-                + comb_func(
-                  &poly_A_low,
-                  &poly_B_low,
-                  &poly_C_low,
-                  &poly_D_low,
-                ); // Az[x, x, x, ..., 0]
+                // eval 0: bound_func is A(low)
+                eval_point_0 = eval_point_0
+                  + comb_func(
+                    &poly_A_low,
+                    &poly_B_low,
+                    &poly_C_low,
+                    &poly_D_low,
+                  ); // Az[x, x, x, ..., 0]
 
-              // eval 2: bound_func is -A(low) + 2*A(high)
-              let poly_A_bound_point = poly_A_high + poly_A_high - poly_A_low;
-              let poly_B_bound_point = poly_B_high + poly_B_high - poly_B_low; 
-              let poly_C_bound_point = poly_C_high + poly_C_high - poly_C_low; 
-              let poly_D_bound_point = poly_D_high + poly_D_high - poly_D_low; 
-              eval_point_2 = eval_point_2
-                + comb_func(
-                  &poly_A_bound_point,
-                  &poly_B_bound_point,
-                  &poly_C_bound_point,
-                  &poly_D_bound_point,
-                ); // Az[x, x, ..., 2]
+                // eval 2: bound_func is -A(low) + 2*A(high)
+                let poly_A_bound_point = poly_A_high + poly_A_high - poly_A_low;
+                let poly_B_bound_point = poly_B_high + poly_B_high - poly_B_low; 
+                let poly_C_bound_point = poly_C_high + poly_C_high - poly_C_low; 
+                let poly_D_bound_point = poly_D_high + poly_D_high - poly_D_low; 
+                eval_point_2 = eval_point_2
+                  + comb_func(
+                    &poly_A_bound_point,
+                    &poly_B_bound_point,
+                    &poly_C_bound_point,
+                    &poly_D_bound_point,
+                  ); // Az[x, x, ..., 2]
 
-              // eval 3: bound_func is -2A(low) + 3A(high); computed incrementally with bound_func applied to eval(2)
-              let poly_A_bound_point = poly_A_bound_point + poly_A_high - poly_A_low;
-              let poly_B_bound_point = poly_B_bound_point + poly_B_high - poly_B_low;
-              let poly_C_bound_point = poly_C_bound_point + poly_C_high - poly_C_low;
-              let poly_D_bound_point = poly_D_bound_point + poly_D_high - poly_D_low;
-              eval_point_3 = eval_point_3
-                + comb_func(
-                  &poly_A_bound_point,
-                  &poly_B_bound_point,
-                  &poly_C_bound_point,
-                  &poly_D_bound_point,
-                );  // Az[x, x, ..., 3]
+                // eval 3: bound_func is -2A(low) + 3A(high); computed incrementally with bound_func applied to eval(2)
+                let poly_A_bound_point = poly_A_bound_point + poly_A_high - poly_A_low;
+                let poly_B_bound_point = poly_B_bound_point + poly_B_high - poly_B_low;
+                let poly_C_bound_point = poly_C_bound_point + poly_C_high - poly_C_low;
+                let poly_D_bound_point = poly_D_bound_point + poly_D_high - poly_D_low;
+                eval_point_3 = eval_point_3
+                  + comb_func(
+                    &poly_A_bound_point,
+                    &poly_B_bound_point,
+                    &poly_C_bound_point,
+                    &poly_D_bound_point,
+                  );  // Az[x, x, ..., 3]
+              }
+              (eval_point_0, eval_point_2, eval_point_3)
+            }).collect::<Vec<(S, S, S)>>().into_iter().fold((eval_point_0, eval_point_2, eval_point_3), |(e0, e2, e3), (a0, a2, a3)| (e0 + a0, e2 + a2, e3 + a3));
+          }
+
+          let evals = vec![
+            eval_point_0,
+            claim_per_round - eval_point_0,
+            eval_point_2,
+            eval_point_3,
+          ];
+          let poly = UniPoly::from_evals(&evals);
+          poly
+        } else {
+          // Singlecore evaluation in other Modes
+          let mut eval_point_0 = ZERO;
+          let mut eval_point_2 = ZERO;
+          let mut eval_point_3 = ZERO;
+
+          // We are guaranteed initially instance_len < num_proofs.len() < instance_len x 2
+          // So min(instance_len, num_proofs.len()) suffices
+          for p in 0..min(instance_len, num_proofs.len()) {
+            // If q > num_proofs[p], the polynomials always evaluate to 0
+            if mode == MODE_Q { num_proofs[p] = num_proofs[p].div_ceil(2); }
+            for q in 0..num_proofs[p] {
+              for x in 0..num_cons[p] {
+                // evaluate A, B, C, D on p, q, x
+                let (poly_A_low, poly_A_high) = match mode {
+                  MODE_Q => (
+                    poly_Ap[p] * poly_Aq[2 * q] * poly_Ax[x],
+                    poly_Ap[p] * poly_Aq[2 * q + 1] * poly_Ax[x],
+                  ),
+                  MODE_P => (
+                    poly_Ap[2 * p] * poly_Aq[q] * poly_Ax[x],
+                    poly_Ap[2 * p + 1] * poly_Aq[q] * poly_Ax[x],
+                  ),
+                  _ => unreachable!()
+                };
+                let poly_B_low = poly_B.index_low(p, q, 0, x, mode);
+                let poly_B_high = poly_B.index_high(p, q, 0, x, mode);
+                let poly_C_low = poly_C.index_low(p, q, 0, x, mode);
+                let poly_C_high = poly_C.index_high(p, q, 0, x, mode);
+                let poly_D_low = poly_D.index_low(p, q, 0, x, mode);
+                let poly_D_high = poly_D.index_high(p, q, 0, x, mode);
+
+                // eval 0: bound_func is A(low)
+                eval_point_0 = eval_point_0
+                  + comb_func(
+                    &poly_A_low,
+                    &poly_B_low,
+                    &poly_C_low,
+                    &poly_D_low,
+                  ); // Az[x, x, x, ..., 0]
+
+                // eval 2: bound_func is -A(low) + 2*A(high)
+                let poly_A_bound_point = poly_A_high + poly_A_high - poly_A_low;
+                let poly_B_bound_point = poly_B_high + poly_B_high - poly_B_low; 
+                let poly_C_bound_point = poly_C_high + poly_C_high - poly_C_low; 
+                let poly_D_bound_point = poly_D_high + poly_D_high - poly_D_low; 
+                eval_point_2 = eval_point_2
+                  + comb_func(
+                    &poly_A_bound_point,
+                    &poly_B_bound_point,
+                    &poly_C_bound_point,
+                    &poly_D_bound_point,
+                  ); // Az[x, x, ..., 2]
+
+                // eval 3: bound_func is -2A(low) + 3A(high); computed incrementally with bound_func applied to eval(2)
+                let poly_A_bound_point = poly_A_bound_point + poly_A_high - poly_A_low;
+                let poly_B_bound_point = poly_B_bound_point + poly_B_high - poly_B_low;
+                let poly_C_bound_point = poly_C_bound_point + poly_C_high - poly_C_low;
+                let poly_D_bound_point = poly_D_bound_point + poly_D_high - poly_D_low;
+                eval_point_3 = eval_point_3
+                  + comb_func(
+                    &poly_A_bound_point,
+                    &poly_B_bound_point,
+                    &poly_C_bound_point,
+                    &poly_D_bound_point,
+                  );  // Az[x, x, ..., 3]
+              }
             }
           }
-        }
 
-        let evals = vec![
-          eval_point_0,
-          claim_per_round - eval_point_0,
-          eval_point_2,
-          eval_point_3,
-        ];
-        let poly = UniPoly::from_evals(&evals);
-        poly
+          let evals = vec![
+            eval_point_0,
+            claim_per_round - eval_point_0,
+            eval_point_2,
+            eval_point_3,
+          ];
+          let poly = UniPoly::from_evals(&evals);
+          poly
+        }
       };
 
       // append the prover's message to the transcript

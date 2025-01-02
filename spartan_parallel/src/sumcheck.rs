@@ -332,7 +332,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     poly_C: &mut DensePolynomialPqx<S>,
     comb_func: F,
     transcript: &mut Transcript,
-  ) -> (Self, Vec<S>, Vec<S>)
+  ) -> (Self, Vec<S>, Vec<S>, Vec<Vec<S>>)
   where
     F: Fn(&S, &S, &S) -> S,
   {
@@ -353,6 +353,8 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     let mut witness_secs_len = num_rounds_w.pow2();
     let mut instance_len: usize = num_rounds_p.pow2();
 
+    // Every variable binded to ry
+    let mut claimed_vars_at_ry = Vec::new();
     for j in 0..num_rounds {
       /* For debugging only */
       /* If the value is not 0, the instance / input is wrong */
@@ -385,6 +387,14 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
       } else {
         MODE_P
       };
+      if j == num_rounds_y_max {
+        for p in 0..poly_C.num_instances {
+          claimed_vars_at_ry.push(Vec::new());
+          for w in 0..poly_C.num_witness_secs {
+            claimed_vars_at_ry[p].push(poly_C.index(p, 0, w, 0));
+          }
+        }
+      }
 
       if inputs_len > 1 {
         inputs_len /= 2
@@ -486,6 +496,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
         poly_B.index(0, 0, 0, 0),
         poly_C.index(0, 0, 0, 0),
       ],
+      claimed_vars_at_ry,
     )
   }
 

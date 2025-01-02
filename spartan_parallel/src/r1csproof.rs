@@ -82,11 +82,11 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     evals_ABC: &mut DensePolynomialPqx<S>,
     evals_z: &mut DensePolynomialPqx<S>,
     transcript: &mut Transcript,
-  ) -> (SumcheckInstanceProof<S>, Vec<S>, Vec<S>) {
+  ) -> (SumcheckInstanceProof<S>, Vec<S>, Vec<S>, Vec<Vec<S>>) {
     let comb_func = |poly_A_comp: &S, poly_B_comp: &S, poly_C_comp: &S| -> S {
       *poly_A_comp * *poly_B_comp * *poly_C_comp
     };
-    let (sc_proof_phase_two, r, claims) = SumcheckInstanceProof::<S>::prove_cubic_disjoint_rounds(
+    let (sc_proof_phase_two, r, claims, claimed_vars_at_ry) = SumcheckInstanceProof::<S>::prove_cubic_disjoint_rounds(
       claim,
       num_rounds,
       num_rounds_y_max,
@@ -102,7 +102,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       transcript,
     );
 
-    (sc_proof_phase_two, r, claims)
+    (sc_proof_phase_two, r, claims, claimed_vars_at_ry)
   }
 
   fn protocol_name() -> &'static [u8] {
@@ -344,7 +344,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
 
     // Sumcheck 2: (rA + rB + rC) * Z * eq(p) = e
     let timer_tmp = Timer::new("prove_sum_check");
-    let (sc_proof_phase2, ry_rev, _claims_phase2) = R1CSProof::prove_phase_two(
+    let (sc_proof_phase2, ry_rev, _claims_phase2, claimed_vars_at_ry) = R1CSProof::prove_phase_two(
       num_rounds_y + num_rounds_w + num_rounds_p,
       num_rounds_y,
       num_rounds_w,
@@ -378,6 +378,10 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let timer_polyeval = Timer::new("polyeval");
 
     // For every possible wit_sec.num_inputs, compute ry_factor = prodX(1 - ryX)...
+    let mut rq_factors = vec![ONE; num_rounds_q + 1];
+    for i in 0..num_rounds_q {
+      rq_factors[i + 1] = rq_factors[i] * (ONE - rq[i]);
+    }
     let mut ry_factors = vec![ONE; num_rounds_y + 1];
     for i in 0..num_rounds_y {
       ry_factors[i + 1] = ry_factors[i] * (ONE - ry[i]);
@@ -388,42 +392,26 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let mut num_inputs_list = Vec::new();
     // List of all evaluations
     let mut Zr_list = Vec::new();
-    // List of evaluations separated by witness_secs
+    // Obtain list of evaluations separated by witness_secs
+    // Note: eval_vars_at_ry_list and raw_eval_vars_at_ry_list are W * P but claimed_vars_at_ry_list is P * W, and
+    // raw_eval_vars_at_ry_list does not multiply rq_factor and ry_factor
     let mut eval_vars_at_ry_list = vec![Vec::new(); num_witness_secs];
-    let mut raw_eval_vars_at_ry_list = vec![Vec::new(); num_witness_secs]; // Does not multiply ry_factor
+    let mut raw_eval_vars_at_ry_list = vec![Vec::new(); num_witness_secs];
     for i in 0..num_witness_secs {
       let w = witness_secs[i];
       let wit_sec_num_instance = w.w_mat.len();
-      eval_vars_at_ry_list.push(Vec::new());
-
       for p in 0..wit_sec_num_instance {
         if w.num_inputs[p] > 1 {
           poly_list.push(&w.poly_w[p]);
           num_proofs_list.push(w.w_mat[p].len());
           num_inputs_list.push(w.num_inputs[p]);
-          // Depending on w.num_inputs[p], ry_short can be two different values
-          let ry_short = {
-            // if w.num_inputs[p] >= num_inputs, need to pad 0's to the front of ry
-            if w.num_inputs[p] >= max_num_inputs {
-              let ry_pad = vec![ZERO; w.num_inputs[p].log_2() - max_num_inputs.log_2()];
-              [ry_pad, ry.clone()].concat()
-            }
-            // Else ry_short is the last w.num_inputs[p].log_2() entries of ry
-            // thus, to obtain the actual ry, need to multiply by (1 - ry0)(1 - ry1)..., which is ry_factors[num_rounds_y - w.num_inputs[p]]
-            else {
-              ry[num_rounds_y - w.num_inputs[p].log_2()..].to_vec()
-            }
-          };
-          let rq_short = rq[num_rounds_q - num_proofs_list[num_proofs_list.len() - 1].log_2()..].to_vec();
-          let r = &[rq_short, ry_short.clone()].concat();
-          let eval_vars_at_ry = poly_list[poly_list.len() - 1].evaluate(r);
-          Zr_list.push(eval_vars_at_ry);
-          if w.num_inputs[p] >= max_num_inputs {
-            eval_vars_at_ry_list[i].push(eval_vars_at_ry);
-          } else {
-            eval_vars_at_ry_list[i].push(eval_vars_at_ry * ry_factors[num_rounds_y - w.num_inputs[p].log_2()]);
-          }
-          raw_eval_vars_at_ry_list[i].push(eval_vars_at_ry);
+          // Find out the extra q and y padding to remove in raw_eval_vars_at_ry_list
+          let rq_pad_inv = rq_factors[num_rounds_q - num_proofs[p].log_2()].invert().unwrap();
+          let ry_pad_inv = if w.num_inputs[p] >= max_num_inputs { ONE } else { ry_factors[num_rounds_y - w.num_inputs[p].log_2()].invert().unwrap() };
+          eval_vars_at_ry_list[i].push(claimed_vars_at_ry[p][i] * rq_pad_inv); // I don't know why need to divide by rq and later multiply it back, but it doesn't work without this
+          let claimed_vars_at_ry_no_pad = claimed_vars_at_ry[p][i] * rq_pad_inv * ry_pad_inv;
+          Zr_list.push(claimed_vars_at_ry_no_pad);
+          raw_eval_vars_at_ry_list[i].push(claimed_vars_at_ry_no_pad);
         } else {
           eval_vars_at_ry_list[i].push(ZERO);
           raw_eval_vars_at_ry_list[i].push(ZERO);
@@ -491,16 +479,15 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       };
       let mut eval_vars_comb =
         (0..num_witness_secs).fold(ZERO, |s, i| s + prefix_list[i] * e(i));
-      for q in 0..(num_rounds_q - num_proofs[p].log_2()) {
-        eval_vars_comb = eval_vars_comb * (ONE - rq[q]);
-      }
+      eval_vars_comb *= rq_factors[num_rounds_q - num_proofs[p].log_2()];
       eval_vars_comb_list.push(eval_vars_comb);
     }
     timer_polyeval.stop();
 
     let poly_vars = DensePolynomial::new(eval_vars_comb_list);
     let eval_vars_at_ry = poly_vars.evaluate(&rp);
-
+    // prove the final step of sum-check #2
+    // Deferred to verifier
     timer_prove.stop();
 
     (

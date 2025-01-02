@@ -7,8 +7,9 @@ use super::random::RandomTape;
 use super::transcript::ProofTranscript;
 use core::ops::Index;
 use merlin::Transcript;
+use rayon::{iter::ParallelIterator, slice::ParallelSliceMut};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{cmp::min, collections::HashMap};
 
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;
@@ -245,6 +246,57 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     }
     self.num_vars -= 1;
     self.len = n;
+  }
+
+  fn fold_r(proofs: &mut [S], r: &[S], step: usize, mut l: usize) {
+    for r in r {
+      let r1 = S::field_one() - r.clone();
+      let r2 = r.clone();
+  
+      l = l.div_ceil(2);
+      (0..l).for_each(|i| {
+        proofs[i * step] = r1 * proofs[2 * i * step] + r2 * proofs[(2 * i + 1) * step];
+      });
+    }
+  }
+
+  // returns Z(r) in O(n) time
+  pub fn evaluate_and_consume_parallel(&mut self, r: &[S]) -> S {
+    assert_eq!(r.len(), self.get_num_vars());
+    let mut inst = std::mem::take(&mut self.Z);
+
+    let len = self.len;
+    let dist_size = len / min(len, rayon::current_num_threads().next_power_of_two()); // distributed number of proofs on each thread
+    let num_threads = len / dist_size;
+
+    // To perform rigorous parallelism, both len and # threads must be powers of 2
+    // # threads must fully divide num_proofs for even distribution
+    assert_eq!(len, len.next_power_of_two());
+    assert_eq!(num_threads, num_threads.next_power_of_two());
+
+    // Determine parallelism levels
+    let levels = len.log_2(); // total layers
+    let sub_levels = dist_size.log_2(); // parallel layers
+    let final_levels = num_threads.log_2(); // single core final layers
+    // Divide r into sub and final
+    let sub_r = &r[0..sub_levels];
+    let final_r = &r[sub_levels..levels];
+
+    if sub_levels > 0 {
+      inst = inst
+        .par_chunks_mut(dist_size)
+        .map(|chunk| {
+          Self::fold_r(chunk, sub_r, 1, dist_size);
+          chunk.to_vec()
+        })
+        .flatten().collect()
+    }
+
+    if final_levels > 0 {
+      // aggregate the final result from sub-threads outputs using a single core
+      Self::fold_r(&mut inst, final_r, dist_size, num_threads);
+    }
+    inst[0]
   }
 
   // returns Z(r) in O(n) time

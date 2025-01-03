@@ -1268,6 +1268,7 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
       // create a multilinear polynomial using the supplied assignment for variables
       let perm_poly_w0 = DensePolynomial::new(perm_w0.clone());
 
+      let timer_tmp = Timer::new("exec_gen");
       // PERM_EXEC
       // w2 is _, _, ZO, r * i1, r^2 * i2, r^3 * i3, ...
       // where ZO * r^n = r^n * o0 + r^(n + 1) * o1, ...,
@@ -1324,32 +1325,9 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
         }
         (perm_exec_w2, perm_exec_w3)
       };
+      timer_tmp.stop();
 
-      /*
-      let perm_exec_w3 = {
-        let mut perm_exec_w3: Vec<Vec<S>> = vec![Vec::new(); consis_num_proofs];
-        for q in (0..consis_num_proofs).rev() {
-          perm_exec_w3[q] = vec![S::field_zero(); 8];
-          perm_exec_w3[q][0] = exec_inputs_list[q][0];
-          perm_exec_w3[q][1] = perm_exec_w3[q][0]
-            * (comb_tau
-              - perm_exec_w2[q][3..]
-                .iter()
-                .fold(S::field_zero(), |a, b| a + *b)
-              - exec_inputs_list[q][2]);
-          perm_exec_w3[q][4] = perm_exec_w2[q][0];
-          perm_exec_w3[q][5] = perm_exec_w2[q][1];
-          if q != consis_num_proofs - 1 {
-            perm_exec_w3[q][3] = perm_exec_w3[q][1]
-              * (perm_exec_w3[q + 1][2] + S::field_one() - perm_exec_w3[q + 1][0]);
-          } else {
-            perm_exec_w3[q][3] = perm_exec_w3[q][1];
-          }
-          perm_exec_w3[q][2] = perm_exec_w3[q][0] * perm_exec_w3[q][3];
-        }
-        perm_exec_w3
-      };
-      */
+      let timer_tmp = Timer::new("exec_poly");
       // commit the witnesses and inputs separately instance-by-instance
       let (perm_exec_poly_w2, perm_exec_poly_w3, perm_exec_poly_w3_shifted) = {
         let perm_exec_poly_w2 = {
@@ -1394,13 +1372,15 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
           perm_exec_poly_w3_shifted,
         )
       };
+      timer_tmp.stop();
 
+      let timer_tmp = Timer::new("block_gen");
       // INPUT_BLOCK_W2 | PHY_MEM_BLOCK_W2 & VIR_MEM_BLOCK_W2
       // BLOCK_W3
       //           INPUT      PHY    VIR
       // w3 is [v, x, pi, D, pi, D, pi, D]
       let mut block_w3: Vec<Vec<Vec<S>>> = Vec::new();
-      let block_w2_prover = {
+      let block_w2 = {
         let mut block_w2: Vec<Vec<Vec<S>>> = Vec::new();
         let block_w2_size_list: Vec<usize> = (0..block_num_instances)
           .map(|i| {
@@ -1554,6 +1534,12 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
           block_w3.push(block_w3_p);
         }
 
+        block_w2
+      };
+      timer_tmp.stop();
+
+      let timer_tmp = Timer::new("block_gen");
+      let (block_poly_w2_list, block_poly_w3_list, block_poly_w3_list_shifted) = {
         // commit the witnesses and inputs separately instance-by-instance
         let mut block_poly_w2_list = Vec::new();
 
@@ -1567,12 +1553,7 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
           };
           block_poly_w2_list.push(block_poly_w2);
         }
-
-        let block_w2_prover = ProverWitnessSecInfo::new(block_w2.clone(), block_poly_w2_list);
-
-        block_w2_prover
-      };
-      let (block_poly_w3_list, block_poly_w3_list_shifted) = {
+        
         let mut block_poly_w3_list = Vec::new();
         let mut block_poly_w3_list_shifted = Vec::new();
 
@@ -1605,8 +1586,9 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
           block_poly_w3_list_shifted.push(block_poly_w3_shifted);
         }
 
-        (block_poly_w3_list, block_poly_w3_list_shifted)
+        (block_poly_w2_list, block_poly_w3_list, block_poly_w3_list_shifted)
       };
+      timer_tmp.stop();
 
       let perm_w0_prover = ProverWitnessSecInfo::new(vec![vec![perm_w0]], vec![perm_poly_w0]);
       let perm_exec_w2_prover =
@@ -1618,6 +1600,7 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
       let perm_exec_w3_prover =
         ProverWitnessSecInfo::new(vec![perm_exec_w3], vec![perm_exec_poly_w3]);
 
+      let block_w2_prover = ProverWitnessSecInfo::new(block_w2, block_poly_w2_list);
       let block_w3_shifted_prover = ProverWitnessSecInfo::new(
         block_w3
           .iter()

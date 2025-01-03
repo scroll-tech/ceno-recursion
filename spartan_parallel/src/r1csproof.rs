@@ -246,7 +246,7 @@ impl<'a, E: ExtensionField + Send + Sync> R1CSProof<E> {
 
     // == test: ceno_verifier_bench ==
     let max_num_vars = poly_tau.get_num_vars();
-    let num_threads = 8;
+    let num_threads = 32;
 
     let arc_A: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(poly_tau.to_ceno_multilinear());
     let arc_B: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(poly_Az.to_ceno_multilinear());
@@ -449,7 +449,7 @@ impl<'a, E: ExtensionField + Send + Sync> R1CSProof<E> {
     let arc_B: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(Z_poly.to_ceno_multilinear());
     let arc_C: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(eq_p_rp_poly.to_ceno_multilinear());
     
-    let num_threads_phase2 = 8;
+    let num_threads_phase2 = 32;
 
     let mut virtual_polys =
         VirtualPolynomials::new(num_threads_phase2, max_num_vars_phase2);

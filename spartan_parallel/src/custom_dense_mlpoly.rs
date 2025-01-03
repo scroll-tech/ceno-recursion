@@ -2,7 +2,8 @@
 use std::cmp::min;
 
 use crate::dense_mlpoly::DensePolynomial;
-use crate::scalar::SpartanExtensionField;
+use ff_ext::ExtensionField;
+use multilinear_extensions::mle::DenseMultilinearExtension;
 
 use super::math::Math;
 
@@ -17,14 +18,14 @@ const MODE_X: usize = 4;
 // Dense polynomial with variable order: p, q_rev, w, x_rev
 // Used by Z_poly in r1csproof
 #[derive(Debug, Clone)]
-pub struct DensePolynomialPqx<S: SpartanExtensionField> {
+pub struct DensePolynomialPqx<E: ExtensionField> {
   num_instances: usize, // num_instances is a power of 2 and num_instances / 2 < Z.len() <= num_instances
   num_proofs: Vec<usize>,
   max_num_proofs: usize,
   pub num_witness_secs: usize, // num_witness_secs is a power of 2 and num_witness_secs / 2 < Z[.][.].len() <= num_witness_secs
   num_inputs: Vec<usize>,
   max_num_inputs: usize,
-  pub Z: Vec<Vec<Vec<Vec<S>>>>, // Evaluations of the polynomial in all the 2^num_vars Boolean inputs of order (p, q_rev, w, x_rev)
+  pub Z: Vec<Vec<Vec<Vec<E>>>>, // Evaluations of the polynomial in all the 2^num_vars Boolean inputs of order (p, q_rev, w, x_rev)
                                 // Let Q_max = max_num_proofs, assume that for a given P, num_proofs[P] = Q_i, then let STEP = Q_max / Q_i,
                                 // Z(P, y, .) is only non-zero if y is a multiple of STEP, so Z[P][j][.] actually stores Z(P, j*STEP, .)
                                 // The same applies to X
@@ -38,10 +39,10 @@ pub fn rev_bits(q: usize, max_num_proofs: usize) -> usize {
     .fold(0, |a, b| a + b)
 }
 
-impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
+impl<E: ExtensionField> DensePolynomialPqx<E> {
   // Assume z_mat is of form (p, q_rev, x), construct DensePoly
   pub fn new(
-    z_mat: Vec<Vec<Vec<Vec<S>>>>,
+    z_mat: Vec<Vec<Vec<Vec<E>>>>,
     num_proofs: Vec<usize>,
     max_num_proofs: usize,
     num_inputs: Vec<usize>,
@@ -63,7 +64,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   // Assume z_mat is in its standard form of (p, q, x)
   // Reverse q and x and convert it to (p, q_rev, x_rev)
   pub fn new_rev(
-    z_mat: &Vec<Vec<Vec<Vec<S>>>>,
+    z_mat: &Vec<Vec<Vec<Vec<E>>>>,
     num_proofs: Vec<usize>,
     max_num_proofs: usize,
     num_inputs: Vec<usize>,
@@ -75,7 +76,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
     for p in 0..num_instances {
       Z.push(vec![
         vec![
-          vec![S::field_zero(); num_inputs[p]];
+          vec![E::ZERO; num_inputs[p]];
           num_witness_secs
         ];
         num_proofs[p]
@@ -116,7 +117,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   }
 
   // Given (p, q_rev, x_rev) return Z[p][q_rev][x_rev]
-  pub fn index(&self, p: usize, q_rev: usize, w: usize, x_rev: usize) -> S {
+  pub fn index(&self, p: usize, q_rev: usize, w: usize, x_rev: usize) -> E {
     if p < self.Z.len()
       && q_rev < self.Z[p].len()
       && w < self.Z[p][q_rev].len()
@@ -124,7 +125,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
     {
       return self.Z[p][q_rev][w][x_rev];
     } else {
-      return S::field_zero();
+      return E::ZERO;
     }
   }
 
@@ -134,18 +135,18 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   // Mode = 3 ==> w* is w with first bit set to 1
   // Mode = 4 ==> x_rev* is x_rev with first bit set to 1
   // Assume that first bit of the corresponding index is 0, otherwise throw out of bound exception
-  pub fn index_high(&self, p: usize, q_rev: usize, w: usize, x_rev: usize, mode: usize) -> S {
+  pub fn index_high(&self, p: usize, q_rev: usize, w: usize, x_rev: usize, mode: usize) -> E {
     match mode {
       MODE_P => {
         if p + self.num_instances / 2 < self.Z.len() {
           return self.Z[p + self.num_instances / 2][q_rev][w][x_rev];
         } else {
-          return S::field_zero();
+          return E::ZERO;
         }
       }
       MODE_Q => {
         return if self.num_proofs[p] == 1 {
-          S::field_zero()
+          E::ZERO
         } else {
           self.Z[p][q_rev + self.num_proofs[p] / 2][w][x_rev]
         };
@@ -154,12 +155,12 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
         if w + self.num_witness_secs / 2 < self.Z[p][q_rev].len() {
           return self.Z[p][q_rev][w + self.num_witness_secs / 2][x_rev];
         } else {
-          return S::field_zero();
+          return E::ZERO;
         }
       }
       MODE_X => {
         return if self.num_inputs[p] == 1 {
-          S::field_zero()
+          E::ZERO
         } else {
           self.Z[p][q_rev][w][x_rev + self.num_inputs[p] / 2]
         };
@@ -178,7 +179,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   // Mode = 2 ==> Bound first variable of "q" section to r
   // Mode = 3 ==> Bound first variable of "w" section to r
   // Mode = 4 ==> Bound first variable of "x" section to r
-  pub fn bound_poly(&mut self, r: &S, mode: usize) {
+  pub fn bound_poly(&mut self, r: &E, mode: usize) {
     match mode {
       MODE_P => {
         self.bound_poly_p(r);
@@ -203,7 +204,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
 
   // Bound the first variable of "p" section to r
   // We are only allowed to bound "p" if we have bounded the entire q and x section
-  pub fn bound_poly_p(&mut self, r: &S) {
+  pub fn bound_poly_p(&mut self, r: &E) {
     assert_eq!(self.max_num_proofs, 1);
     assert_eq!(self.max_num_inputs, 1);
     self.num_instances /= 2;
@@ -212,7 +213,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
         let Z_high = if p + self.num_instances < self.Z.len() {
           self.Z[p + self.num_instances][0][w][0]
         } else {
-          S::field_zero()
+          E::ZERO
         };
         self.Z[p][0][w][0] = self.Z[p][0][w][0] + *r * (Z_high - self.Z[p][0][w][0]);
       }
@@ -220,14 +221,14 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   }
 
   // Bound the first variable of "q" section to r
-  pub fn bound_poly_q(&mut self, r: &S) {
+  pub fn bound_poly_q(&mut self, r: &E) {
     self.max_num_proofs /= 2;
 
     for p in 0..min(self.num_instances, self.Z.len()) {
       if self.num_proofs[p] == 1 {
         for w in 0..min(self.num_witness_secs, self.Z[p][0].len()) {
           for x in 0..self.num_inputs[p] {
-            self.Z[p][0][w][x] = (S::field_one() - *r) * self.Z[p][0][w][x];
+            self.Z[p][0][w][x] = (E::ONE - *r) * self.Z[p][0][w][x];
           }
         }
       } else {
@@ -245,7 +246,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   }
 
   // Bound the first variable of "w" section to r
-  pub fn bound_poly_w(&mut self, r: &S) {
+  pub fn bound_poly_w(&mut self, r: &E) {
     self.num_witness_secs /= 2;
 
     for p in 0..min(self.num_instances, self.Z.len()) {
@@ -255,7 +256,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
             let Z_high = if w + self.num_witness_secs < self.Z[p][q].len() {
               self.Z[p][q][w + self.num_witness_secs][x]
             } else {
-              S::field_zero()
+              E::ZERO
             };
             self.Z[p][q][w][x] = self.Z[p][q][w][x] + *r * (Z_high - self.Z[p][q][w][x]);
           }
@@ -265,14 +266,14 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   }
 
   // Bound the first variable of "x" section to r
-  pub fn bound_poly_x(&mut self, r: &S) {
+  pub fn bound_poly_x(&mut self, r: &E) {
     self.max_num_inputs /= 2;
 
     for p in 0..min(self.num_instances, self.Z.len()) {
       if self.num_inputs[p] == 1 {
         for q in 0..self.num_proofs[p] {
           for w in 0..min(self.num_witness_secs, self.Z[p][q].len()) {
-            self.Z[p][q][w][0] = (S::field_one() - *r) * self.Z[p][q][w][0];
+            self.Z[p][q][w][0] = (E::ONE - *r) * self.Z[p][q][w][0];
           }
         }
       } else {
@@ -291,34 +292,34 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
 
   // Bound the entire "p" section to r_p
   // Must occur after r_q's are bounded
-  pub fn bound_poly_vars_rp(&mut self, r_p: &Vec<S>) {
+  pub fn bound_poly_vars_rp(&mut self, r_p: &Vec<E>) {
     for r in r_p {
       self.bound_poly_p(r);
     }
   }
 
   // Bound the entire "q_rev" section to r_q
-  pub fn bound_poly_vars_rq(&mut self, r_q: &Vec<S>) {
+  pub fn bound_poly_vars_rq(&mut self, r_q: &Vec<E>) {
     for r in r_q {
       self.bound_poly_q(r);
     }
   }
 
   // Bound the entire "w" section to r_w
-  pub fn bound_poly_vars_rw(&mut self, r_w: &Vec<S>) {
+  pub fn bound_poly_vars_rw(&mut self, r_w: &Vec<E>) {
     for r in r_w {
       self.bound_poly_w(r);
     }
   }
 
   // Bound the entire "x_rev" section to r_x
-  pub fn bound_poly_vars_rx(&mut self, r_x: &Vec<S>) {
+  pub fn bound_poly_vars_rx(&mut self, r_x: &Vec<E>) {
     for r in r_x {
       self.bound_poly_x(r);
     }
   }
 
-  pub fn evaluate(&self, r_p: &Vec<S>, r_q: &Vec<S>, r_w: &Vec<S>, r_x: &Vec<S>) -> S {
+  pub fn evaluate(&self, r_p: &Vec<E>, r_q: &Vec<E>, r_w: &Vec<E>, r_x: &Vec<E>) -> E {
     let mut cl = self.clone();
     cl.bound_poly_vars_rx(r_x);
     cl.bound_poly_vars_rw(r_w);
@@ -327,11 +328,10 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
     cl.index(0, 0, 0, 0)
   }
 
-  // Convert to a (p, q_rev, x_rev) regular dense poly of form (p, q, x)
-  pub fn to_dense_poly(&self) -> DensePolynomial<S> {
+  fn to_dense_Z_poly(&self) -> Vec<E> {
     let mut Z_poly =
       vec![
-        S::field_zero();
+        E::ZERO;
         self.num_instances * self.max_num_proofs * self.num_witness_secs * self.max_num_inputs
       ];
     for p in 0..min(self.num_instances, self.Z.len()) {
@@ -350,6 +350,18 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
         }
       }
     }
-    DensePolynomial::new(Z_poly)
+
+    Z_poly
+  }
+
+  // Convert to a (p, q_rev, x_rev) regular dense poly of form (p, q, x)
+  pub fn to_dense_poly(&self) -> DensePolynomial<E> {
+    DensePolynomial::new(self.to_dense_Z_poly())
+  }
+
+  // Convert to Ceno prover compatible multilinear poly
+  pub fn to_ceno_multilinear(&self) -> DenseMultilinearExtension<E> {
+    let Z_poly = self.to_dense_Z_poly();
+    DenseMultilinearExtension::from_evaluations_ext_vec(Z_poly.len().log_2(), Z_poly)
   }
 }

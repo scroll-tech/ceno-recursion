@@ -6,17 +6,15 @@ use super::math::Math;
 use super::r1csinstance::R1CSInstance;
 use super::sumcheck::SumcheckInstanceProof;
 use super::timer::Timer;
-use super::transcript::ProofTranscript;
-use crate::scalar::SpartanExtensionField;
+use super::transcript::{Transcript, append_protocol_name, challenge_scalar, challenge_vector, append_field_to_transcript};
+use ff_ext::ExtensionField;
 use crate::{ProverWitnessSecInfo, VerifierWitnessSecInfo};
-use goldilocks::GoldilocksExt2;
-use merlin::Transcript;
 use serde::Serialize;
 use std::cmp::min;
 use std::iter::zip;
 use std::sync::Arc;
 use multilinear_extensions::{
-  mle::IntoMLE,
+  mle::{IntoMLE, MultilinearExtension, DenseMultilinearExtension},
   virtual_poly::VPAuxInfo,
   virtual_poly_v2::ArcMultilinearExtension,
 };
@@ -27,22 +25,22 @@ use halo2curves::serde::SerdeObject;
 use transcript::BasicTranscript;
 
 #[derive(Serialize, Debug)]
-pub struct R1CSProof<S: SpartanExtensionField> {
-  sc_proof_phase1_proof: IOPProof<GoldilocksExt2>,
-  sc_proof_phase2_proof: IOPProof<GoldilocksExt2>,
-  claims_phase2: (S, S, S),
+pub struct R1CSProof<E: ExtensionField> {
+  sc_proof_phase1_proof: IOPProof<E>,
+  sc_proof_phase2_proof: IOPProof<E>,
+  claims_phase2: (E, E, E),
   // Need to commit vars for short and long witnesses separately
   // The long version must exist, the short version might not
-  eval_vars_at_ry_list: Vec<Vec<S>>,
-  eval_vars_at_ry: S,
-  // proof_eval_vars_at_ry_list: Vec<PolyEvalProof<S>>,
+  eval_vars_at_ry_list: Vec<Vec<E>>,
+  eval_vars_at_ry: E,
+  // proof_eval_vars_at_ry_list: Vec<PolyEvalProof<E>>,
   max_num_vars: usize,
-  claim_phase1: GoldilocksExt2,
+  claim_phase1: E,
   max_num_vars_phase2: usize,
-  claim_phase2: GoldilocksExt2,
+  claim_phase2: E,
 }
 
-impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
+impl<'a, E: ExtensionField + Send + Sync> R1CSProof<E> {
   fn prove_phase_one(
     num_rounds: usize,
     num_rounds_x_max: usize,
@@ -50,21 +48,21 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     num_rounds_p: usize,
     num_proofs: &Vec<usize>,
     num_cons: &Vec<usize>,
-    evals_tau_p: &mut DensePolynomial<S>,
-    evals_tau_q: &mut DensePolynomial<S>,
-    evals_tau_x: &mut DensePolynomial<S>,
-    evals_Az: &mut DensePolynomialPqx<S>,
-    evals_Bz: &mut DensePolynomialPqx<S>,
-    evals_Cz: &mut DensePolynomialPqx<S>,
-    transcript: &mut Transcript,
-  ) -> (SumcheckInstanceProof<S>, Vec<S>, Vec<S>) {
-    let comb_func = |poly_A_comp: &S, poly_B_comp: &S, poly_C_comp: &S, poly_D_comp: &S| -> S {
+    evals_tau_p: &mut DensePolynomial<E>,
+    evals_tau_q: &mut DensePolynomial<E>,
+    evals_tau_x: &mut DensePolynomial<E>,
+    evals_Az: &mut DensePolynomialPqx<E>,
+    evals_Bz: &mut DensePolynomialPqx<E>,
+    evals_Cz: &mut DensePolynomialPqx<E>,
+    transcript: &mut Transcript<E>,
+  ) -> (SumcheckInstanceProof<E>, Vec<E>, Vec<E>) {
+    let comb_func = |poly_A_comp: &E, poly_B_comp: &E, poly_C_comp: &E, poly_D_comp: &E| -> E {
       *poly_A_comp * (*poly_B_comp * *poly_C_comp - *poly_D_comp)
     };
 
     let (sc_proof_phase_one, r, claims) =
-      SumcheckInstanceProof::<S>::prove_cubic_with_additive_term_disjoint_rounds(
-        &S::field_zero(), // claim is zero
+      SumcheckInstanceProof::<E>::prove_cubic_with_additive_term_disjoint_rounds(
+        &E::ZERO, // claim is zero
         num_rounds,
         num_rounds_x_max,
         num_rounds_q_max,
@@ -92,16 +90,16 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     single_inst: bool,
     num_witness_secs: usize,
     num_inputs: Vec<usize>,
-    claim: &S,
-    evals_eq: &mut DensePolynomial<S>,
-    evals_ABC: &mut DensePolynomialPqx<S>,
-    evals_z: &mut DensePolynomialPqx<S>,
-    transcript: &mut Transcript,
-  ) -> (SumcheckInstanceProof<S>, Vec<S>, Vec<S>) {
-    let comb_func = |poly_A_comp: &S, poly_B_comp: &S, poly_C_comp: &S| -> S {
+    claim: &E,
+    evals_eq: &mut DensePolynomial<E>,
+    evals_ABC: &mut DensePolynomialPqx<E>,
+    evals_z: &mut DensePolynomialPqx<E>,
+    transcript: &mut Transcript<E>,
+  ) -> (SumcheckInstanceProof<E>, Vec<E>, Vec<E>) {
+    let comb_func = |poly_A_comp: &E, poly_B_comp: &E, poly_C_comp: &E| -> E {
       *poly_A_comp * *poly_B_comp * *poly_C_comp
     };
-    let (sc_proof_phase_two, r, claims) = SumcheckInstanceProof::<S>::prove_cubic_disjoint_rounds(
+    let (sc_proof_phase_two, r, claims) = SumcheckInstanceProof::<E>::prove_cubic_disjoint_rounds(
       claim,
       num_rounds,
       num_rounds_y_max,
@@ -142,15 +140,15 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     // NUM_INPUTS: number of inputs per block
     // W_MAT: num_instances x num_proofs x num_inputs hypermatrix for all values
     // POLY_W: one dense polynomial per instance
-    witness_secs: Vec<&ProverWitnessSecInfo<S>>,
+    witness_secs: Vec<&ProverWitnessSecInfo<E>>,
     // INSTANCES
-    inst: &R1CSInstance<S>,
-    transcript: &mut Transcript,
-  ) -> (R1CSProof<S>, [Vec<S>; 4]) {
+    inst: &R1CSInstance<E>,
+    transcript: &mut Transcript<E>,
+  ) -> (R1CSProof<E>, [Vec<E>; 4]) {
     let timer_prove = Timer::new("R1CSProof::prove");
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
+    append_protocol_name(
       transcript,
-      R1CSProof::<S>::protocol_name(),
+      R1CSProof::<E>::protocol_name(),
     );
 
     let num_witness_secs = witness_secs.len();
@@ -194,11 +192,11 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
 
     // append input to variables to create a single vector z
     let timer_tmp = Timer::new("prove_z_mat_gen");
-    let mut z_mat: Vec<Vec<Vec<Vec<S>>>> = Vec::new();
+    let mut z_mat: Vec<Vec<Vec<Vec<E>>>> = Vec::new();
     for p in 0..num_instances {
       z_mat.push(Vec::new());
       for q in 0..num_proofs[p] {
-        z_mat[p].push(vec![vec![S::field_zero(); num_inputs[p]]; num_witness_secs]);
+        z_mat[p].push(vec![vec![E::ZERO; num_inputs[p]]; num_witness_secs]);
         for w in 0..witness_secs.len() {
           let ws = witness_secs[w];
           let p_w = if ws.w_mat.len() == 1 { 0 } else { p };
@@ -223,17 +221,17 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     );
 
     /*
-    let tau_p: Vec<S> = transcript.challenge_vector(b"challenge_tau_p", num_rounds_p);
-    let tau_q: Vec<S> = transcript.challenge_vector(b"challenge_tau_q", num_rounds_q);
-    let tau_x: Vec<S> = transcript.challenge_vector(b"challenge_tau_x", num_rounds_x);
+    let tau_p: Vec<E> = challenge_vector(transcript, b"challenge_tau_p", num_rounds_p);
+    let tau_q: Vec<E> = challenge_vector(transcript, b"challenge_tau_q", num_rounds_q);
+    let tau_x: Vec<E> = challenge_vector(transcript, b"challenge_tau_x", num_rounds_x);
 
     // compute the initial evaluation table for R(\tau, x)
     let mut poly_tau_p = DensePolynomial::new(EqPolynomial::new(tau_p).evals());
     let mut poly_tau_q = DensePolynomial::new(EqPolynomial::new(tau_q).evals());
     let mut poly_tau_x = DensePolynomial::new(EqPolynomial::new(tau_x).evals());
     */
-    let tau: Vec<S> = transcript.challenge_vector(b"challenge_tau", num_rounds_p + num_rounds_q + num_rounds_x);
-    let poly_tau = DensePolynomial::new(EqPolynomial::new(tau).evals());
+    let tau: Vec<E> = challenge_vector(transcript, b"challenge_tau", num_rounds_p + num_rounds_q + num_rounds_x);
+    let mut poly_tau = DensePolynomial::new(EqPolynomial::new(tau).evals());
     let (poly_Az, poly_Bz, poly_Cz) = inst.multiply_vec_block(
       num_instances,
       num_proofs.clone(),
@@ -247,66 +245,26 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     timer_tmp.stop();
 
     // == test: ceno_verifier_bench ==
-    let A = poly_tau;
-    let B = poly_Az.to_dense_poly();
-    let C = poly_Bz.to_dense_poly();
-    let D = poly_Cz.to_dense_poly();
-
-    println!(
-      "=> poly_A,B,C,D num_variables: {:?}, {:?}, {:?}, {:?}",
-      A.get_num_vars(),
-      B.get_num_vars(),
-      C.get_num_vars(),
-      D.get_num_vars(),
-    );
-
-    let arc_A: ArcMultilinearExtension<'a, GoldilocksExt2>  = Arc::new(
-      A.Z.iter().cloned().map(|s| 
-        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
-      )
-      .collect::<Vec<GoldilocksExt2>>()
-      .into_mle()
-    );
-
-    let arc_B: ArcMultilinearExtension<'a, GoldilocksExt2> = Arc::new(
-      B.Z.iter().cloned().map(|s| 
-        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
-      )
-      .collect::<Vec<GoldilocksExt2>>()
-      .into_mle()
-    );
-
-    let arc_C: ArcMultilinearExtension<'a, GoldilocksExt2> = Arc::new(
-      C.Z.iter().cloned().map(|s| 
-        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
-      )
-      .collect::<Vec<GoldilocksExt2>>()
-      .into_mle()
-    );
-
-    let arc_D: ArcMultilinearExtension<'a, GoldilocksExt2> = Arc::new(
-      D.Z.iter().cloned().map(|s| 
-        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
-      )
-      .collect::<Vec<GoldilocksExt2>>()
-      .into_mle()
-    );
-
-    let max_num_vars = A.get_num_vars();
+    let max_num_vars = poly_tau.get_num_vars();
     let num_threads = 8;
+
+    let arc_A: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(poly_tau.to_ceno_multilinear());
+    let arc_B: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(poly_Az.to_ceno_multilinear());
+    let arc_C: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(poly_Bz.to_ceno_multilinear());
+    let arc_D: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(poly_Cz.to_ceno_multilinear());
 
     let mut virtual_polys =
         VirtualPolynomials::new(num_threads, max_num_vars);
 
-    virtual_polys.add_mle_list(vec![&arc_A, &arc_B, &arc_C], GoldilocksExt2::ONE);
-    virtual_polys.add_mle_list(vec![&arc_A, &arc_D], GoldilocksExt2::ZERO - GoldilocksExt2::ONE);
+    virtual_polys.add_mle_list(vec![&arc_A, &arc_B, &arc_C], E::ONE);
+    virtual_polys.add_mle_list(vec![&arc_A, &arc_D], E::ZERO - E::ONE);
 
     let mut ceno_transcript = BasicTranscript::new(b"test");
 
     let timer_tmp = Timer::new("=> prove_sum_check with ceno (phase 1): IOPProverStateV2::prove_batch_polys");
     let (sc_proof_phase1_proof, sc_proof_phase1_state): (
-      IOPProof<GoldilocksExt2>,
-      IOPProverStateV2<GoldilocksExt2>
+      IOPProof<E>,
+      IOPProverStateV2<E>
     ) = IOPProverStateV2::prove_batch_polys(
       num_threads,
       virtual_polys.get_batched_polys(),
@@ -314,27 +272,20 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     );
     timer_tmp.stop();
     let sc_proof_phase1_state_evals = sc_proof_phase1_state.get_mle_final_evaluations();
-    let (tau_claim, Az_claim, Bz_claim, Cz_claim): (GoldilocksExt2, GoldilocksExt2, GoldilocksExt2, GoldilocksExt2) = (
+    let (tau_claim, Az_claim, Bz_claim, Cz_claim): (E, E, E, E) = (
       sc_proof_phase1_state_evals[0],
       sc_proof_phase1_state_evals[1],
       sc_proof_phase1_state_evals[2],
       sc_proof_phase1_state_evals[3],
     );
-
-    let _tau_claim: S = S::InnerType::from_raw_bytes(&tau_claim.to_raw_bytes()).unwrap().into();
-    let Az_claim: S = S::InnerType::from_raw_bytes(&Az_claim.to_raw_bytes()).unwrap().into();
-    let Bz_claim: S = S::InnerType::from_raw_bytes(&Bz_claim.to_raw_bytes()).unwrap().into();
-    let Cz_claim: S = S::InnerType::from_raw_bytes(&Cz_claim.to_raw_bytes()).unwrap().into();
     
-    let rx: Vec<S> = 
-      sc_proof_phase1_proof.point.iter().map(|c| 
-        S::InnerType::from_raw_bytes(&c.to_raw_bytes()).unwrap().into()
-      ).rev().collect::<Vec<S>>();
+    let rx: Vec<E> = 
+      sc_proof_phase1_proof.point.clone().into_iter().rev().collect::<Vec<E>>();
     timer_sc_proof_phase1.stop();
     // == test: ceno_verifier_bench ==
 
-    let fn_eval = |fs: &[ArcMultilinearExtension<GoldilocksExt2>; 4]| -> GoldilocksExt2 {
-      let mut evals = vec![GoldilocksExt2::ZERO; 1 << fs[0].num_vars()];
+    let fn_eval = |fs: &[ArcMultilinearExtension<E>; 4]| -> E {
+      let mut evals = vec![E::ZERO; 1 << fs[0].num_vars()];
       let A = fs[0].get_ext_field_vec();
       let B = fs[1].get_ext_field_vec();
       let C = fs[2].get_ext_field_vec();
@@ -344,7 +295,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
         *e += *a * b * c - *a * d;
       }
       
-      evals.iter().sum::<GoldilocksExt2>()
+      evals.iter().sum::<E>()
     };
     let claim_phase1 = fn_eval(&[arc_A.clone(), arc_B.clone(), arc_C.clone(), arc_D.clone()]);
 
@@ -389,21 +340,21 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     // Separate the result rx into rp, rq, and rx
     let (rx_rev, rq_rev) = rx.split_at(num_rounds_x);
     let (rq_rev, rp) = rq_rev.split_at(num_rounds_q);
-    let rx: Vec<S> = rx_rev.iter().copied().rev().collect();
+    let rx: Vec<E> = rx_rev.iter().copied().rev().collect();
     let rq_rev = rq_rev.to_vec();
-    let rq: Vec<S> = rq_rev.iter().copied().rev().collect();
+    let rq: Vec<E> = rq_rev.iter().copied().rev().collect();
     let rp = rp.to_vec();
     */
 
-    S::append_field_to_transcript(b"Az_claim", transcript, Az_claim);
-    S::append_field_to_transcript(b"Bz_claim", transcript, Bz_claim);
-    S::append_field_to_transcript(b"Cz_claim", transcript, Cz_claim);
+    append_field_to_transcript(b"Az_claim", transcript, Az_claim);
+    append_field_to_transcript(b"Bz_claim", transcript, Bz_claim);
+    append_field_to_transcript(b"Cz_claim", transcript, Cz_claim);
 
     // Separate the result rx into rp, rq, and rx
     let (rp, rq) = rx.split_at(num_rounds_p);
     let (rq, rx) = rq.split_at(num_rounds_q);
     let rq = rq.to_vec();
-    let rq_rev: Vec<S> = rq.iter().copied().rev().collect();
+    let rq_rev: Vec<E> = rq.iter().copied().rev().collect();
     let rp = rp.to_vec();
 
     // --
@@ -411,10 +362,10 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     // --
     let timer_sc_proof_phase2 = Timer::new("prove_sc_phase_two");
     // combine the three claims into a single claim
-    let r_A: S = transcript.challenge_scalar(b"challenge_Az");
-    let r_B: S = transcript.challenge_scalar(b"challenge_Bz");
-    let r_C: S = transcript.challenge_scalar(b"challenge_Cz");
-    let claim_phase2 = GoldilocksExt2::from_raw_bytes(&(r_A * Az_claim + r_B * Bz_claim + r_C * Cz_claim).inner().to_raw_bytes()).unwrap();
+    let r_A: E = challenge_scalar(transcript, b"challenge_Az");
+    let r_B: E = challenge_scalar(transcript, b"challenge_Bz");
+    let r_C: E = challenge_scalar(transcript, b"challenge_Cz");
+    let claim_phase2 = r_A * Az_claim + r_B * Bz_claim + r_C * Cz_claim;
 
     let timer_tmp = Timer::new("prove_abc_gen");
     let evals_ABC = {
@@ -467,25 +418,25 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     timer_tmp.stop();
 
     // == test ceno_verifier_bench
-    let ABC_poly = ABC_poly.to_dense_poly();
-    let Z_poly = Z_poly.to_dense_poly();
+    let mut ABC_poly = ABC_poly.to_dense_poly();
+    let mut Z_poly = Z_poly.to_dense_poly();
 
     // An Eq function to match p with rp
-    let max_num_vars_phase2 = ABC_poly.get_num_vars();
-    // rp.extend(std::iter::repeat(S::field_one()).take(max_num_vars_phase2 - rp.len()));
+    // rp.extend(std::iter::repeat(E::ONE).take(max_num_vars_phase2 - rp.len()));
     // let rp = rp.into_iter().rev().collect();
     let tmp_rp_poly = EqPolynomial::new(rp).evals();
     // Every entry of tmp_rp_poly needs to be repeated "scale" times
     let scale = ABC_poly.len() / tmp_rp_poly.len();
-    let eq_p_rp_poly = DensePolynomial::new(
-      tmp_rp_poly.into_iter().map(|i| vec![i; scale]).collect::<Vec<Vec<S>>>().concat()
+    let mut eq_p_rp_poly = DensePolynomial::new(
+      tmp_rp_poly.into_iter().map(|i| vec![i; scale]).collect::<Vec<Vec<E>>>().concat()
     );
+    let max_num_vars_phase2 = ABC_poly.get_num_vars();
 
-    let mut claimed_sum = S::field_zero();
-    let mut claimed_partial_sum = S::field_zero();
-    let mut a_sum = S::field_zero();
-    let mut b_sum = S::field_zero();
-    let mut c_sum = S::field_zero();
+    let mut claimed_sum = E::ZERO;
+    let mut claimed_partial_sum = E::ZERO;
+    let mut a_sum = E::ZERO;
+    let mut b_sum = E::ZERO;
+    let mut c_sum = E::ZERO;
     for (a, (b, c)) in zip(&eq_p_rp_poly.Z, zip(&ABC_poly.Z, &Z_poly.Z)) {
       claimed_sum += a.clone() * b.clone() * c.clone();
       claimed_partial_sum += b.clone() * c.clone();
@@ -494,50 +445,23 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       c_sum += c.clone();
     }
 
-    println!(
-      "=> ABC_poly, Z_poly, eq_p_rp_poly num_variables: {:?}, {:?}, {:?}",
-      ABC_poly.get_num_vars(),
-      Z_poly.get_num_vars(),
-      eq_p_rp_poly.get_num_vars(),
-    );
-
-    let arc_A: ArcMultilinearExtension<'a, GoldilocksExt2>  = Arc::new(
-      ABC_poly.Z.iter().cloned().map(|s| 
-        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
-      )
-      .collect::<Vec<GoldilocksExt2>>()
-      .into_mle()
-    );
-
-    let arc_B: ArcMultilinearExtension<'a, GoldilocksExt2> = Arc::new(
-      Z_poly.Z.iter().cloned().map(|s| 
-        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
-      )
-      .collect::<Vec<GoldilocksExt2>>()
-      .into_mle()
-    );
-
-    let arc_C: ArcMultilinearExtension<'a, GoldilocksExt2> = Arc::new(
-      eq_p_rp_poly.Z.iter().clone().map(|s| 
-        GoldilocksExt2::from_raw_bytes_unchecked(&s.inner().to_raw_bytes())
-      )
-      .collect::<Vec<GoldilocksExt2>>()
-      .into_mle()
-    );
+    let arc_A: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(ABC_poly.to_ceno_multilinear());
+    let arc_B: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(Z_poly.to_ceno_multilinear());
+    let arc_C: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(eq_p_rp_poly.to_ceno_multilinear());
     
     let num_threads_phase2 = 8;
 
     let mut virtual_polys =
         VirtualPolynomials::new(num_threads_phase2, max_num_vars_phase2);
 
-    virtual_polys.add_mle_list(vec![&arc_A, &arc_B, &arc_C], GoldilocksExt2::ONE);
+    virtual_polys.add_mle_list(vec![&arc_A, &arc_B, &arc_C], E::ONE);
 
     let mut ceno_transcript = BasicTranscript::new(b"test");
 
     let timer_tmp = Timer::new("=> prove_sum_check with ceno (phase 2): IOPProverStateV2::prove_batch_polys");
     let (sc_proof_phase2_proof, _sc_proof_phase2_state): (
-      IOPProof<GoldilocksExt2>,
-      IOPProverStateV2<GoldilocksExt2>
+      IOPProof<E>,
+      IOPProverStateV2<E>
     ) = IOPProverStateV2::prove_batch_polys(
       num_threads,
       virtual_polys.get_batched_polys(),
@@ -545,10 +469,8 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     );
     timer_tmp.stop();
 
-    let ry: Vec<S> = 
-      sc_proof_phase2_proof.point.iter().map(|c| 
-        S::InnerType::from_raw_bytes(&c.to_raw_bytes()).unwrap().into()
-      ).rev().collect::<Vec<S>>();
+    let ry: Vec<E> = 
+      sc_proof_phase2_proof.point.clone().into_iter().rev().collect::<Vec<E>>();
     // == test ceno_verifier_bench
 
     /*
@@ -576,7 +498,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let (rw, rp) = rw.split_at(num_rounds_w);
     let rp = rp.to_vec();
     let rw = rw.to_vec();
-    let ry: Vec<S> = ry_rev.iter().copied().rev().collect();
+    let ry: Vec<E> = ry_rev.iter().copied().rev().collect();
     */
     let (rp, ry) = ry.split_at(num_rounds_p);
     let (rw, ry) = ry.split_at(num_rounds_w);
@@ -591,9 +513,9 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let timer_polyeval = Timer::new("polyeval");
 
     // For every possible wit_sec.num_inputs, compute ry_factor = prodX(1 - ryX)...
-    let mut ry_factors = vec![S::field_one(); num_rounds_y + 1];
+    let mut ry_factors = vec![E::ONE; num_rounds_y + 1];
     for i in 0..num_rounds_y {
-      ry_factors[i + 1] = ry_factors[i] * (S::field_one() - ry[i]);
+      ry_factors[i + 1] = ry_factors[i] * (E::ONE - ry[i]);
     }
 
     let mut poly_list = Vec::new();
@@ -617,7 +539,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
         let ry_short = {
           // if w.num_inputs[p] >= num_inputs, need to pad 0's to the front of ry
           if w.num_inputs[p] >= max_num_inputs {
-            let ry_pad = vec![S::field_zero(); w.num_inputs[p].log_2() - max_num_inputs.log_2()];
+            let ry_pad = vec![E::ZERO; w.num_inputs[p].log_2() - max_num_inputs.log_2()];
             [ry_pad, ry.clone()].concat()
           }
           // Else ry_short is the last w.num_inputs[p].log_2() entries of ry
@@ -670,28 +592,28 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       let e = |i: usize| eval_vars_at_ry_list[i][wit_sec_p(i)];
       let prefix_list = match num_witness_secs.next_power_of_two() {
         1 => {
-          vec![S::field_one()]
+          vec![E::ONE]
         }
         2 => {
-          vec![(S::field_one() - rw[0]), rw[0]]
+          vec![(E::ONE - rw[0]), rw[0]]
         }
         4 => {
           vec![
-            (S::field_one() - rw[0]) * (S::field_one() - rw[1]),
-            (S::field_one() - rw[0]) * rw[1],
-            rw[0] * (S::field_one() - rw[1]),
+            (E::ONE - rw[0]) * (E::ONE - rw[1]),
+            (E::ONE - rw[0]) * rw[1],
+            rw[0] * (E::ONE - rw[1]),
             rw[0] * rw[1],
           ]
         }
         8 => {
           vec![
-            (S::field_one() - rw[0]) * (S::field_one() - rw[1]) * (S::field_one() - rw[2]),
-            (S::field_one() - rw[0]) * (S::field_one() - rw[1]) * rw[2],
-            (S::field_one() - rw[0]) * rw[1] * (S::field_one() - rw[2]),
-            (S::field_one() - rw[0]) * rw[1] * rw[2],
-            rw[0] * (S::field_one() - rw[1]) * (S::field_one() - rw[2]),
-            rw[0] * (S::field_one() - rw[1]) * rw[2],
-            rw[0] * rw[1] * (S::field_one() - rw[2]),
+            (E::ONE - rw[0]) * (E::ONE - rw[1]) * (E::ONE - rw[2]),
+            (E::ONE - rw[0]) * (E::ONE - rw[1]) * rw[2],
+            (E::ONE - rw[0]) * rw[1] * (E::ONE - rw[2]),
+            (E::ONE - rw[0]) * rw[1] * rw[2],
+            rw[0] * (E::ONE - rw[1]) * (E::ONE - rw[2]),
+            rw[0] * (E::ONE - rw[1]) * rw[2],
+            rw[0] * rw[1] * (E::ONE - rw[2]),
             rw[0] * rw[1] * rw[2],
           ]
         }
@@ -700,9 +622,9 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
         }
       };
       let mut eval_vars_comb =
-        (0..num_witness_secs).fold(S::field_zero(), |s, i| s + prefix_list[i] * e(i));
+        (0..num_witness_secs).fold(E::ZERO, |s, i| s + prefix_list[i] * e(i));
       for q in 0..(num_rounds_q - num_proofs[p].log_2()) {
-        eval_vars_comb = eval_vars_comb * (S::field_one() - rq[q]);
+        eval_vars_comb = eval_vars_comb * (E::ONE - rq[q]);
       }
       eval_vars_comb_list.push(eval_vars_comb);
     }
@@ -751,12 +673,12 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     witness_secs: Vec<&VerifierWitnessSecInfo>,
 
     num_cons: usize,
-    evals: &[S; 3],
-    transcript: &mut Transcript,
-  ) -> Result<[Vec<S>; 4], ProofVerifyError> {
-    <Transcript as ProofTranscript<S>>::append_protocol_name(
+    evals: &[E; 3],
+    transcript: &mut Transcript<E>,
+  ) -> Result<[Vec<E>; 4], ProofVerifyError> {
+    append_protocol_name(
       transcript,
-      R1CSProof::<S>::protocol_name(),
+      R1CSProof::<E>::protocol_name(),
     );
 
     let num_witness_secs = witness_secs.len();
@@ -774,15 +696,15 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
 
     // derive the verifier's challenge tau
     /*
-    let tau_p: Vec<S> = transcript.challenge_vector(b"challenge_tau_p", num_rounds_p);
-    let tau_q: Vec<S> = transcript.challenge_vector(b"challenge_tau_q", num_rounds_q);
-    let tau_x: Vec<S> = transcript.challenge_vector(b"challenge_tau_x", num_rounds_x);
+    let tau_p: Vec<E> = challenge_vector(transcript, b"challenge_tau_p", num_rounds_p);
+    let tau_q: Vec<E> = challenge_vector(transcript, b"challenge_tau_q", num_rounds_q);
+    let tau_x: Vec<E> = challenge_vector(transcript, b"challenge_tau_x", num_rounds_x);
     */
-    let tau: Vec<S> = transcript.challenge_vector(b"challenge_tau", num_rounds_p + num_rounds_q + num_rounds_x);
+    let tau: Vec<E> = challenge_vector(transcript, b"challenge_tau", num_rounds_p + num_rounds_q + num_rounds_x);
 
     // == test: ceno_verifier_bench ==
     let mut ceno_transcript = BasicTranscript::new(b"test");
-    let subclaim = IOPVerifierState::<GoldilocksExt2>::verify(
+    let subclaim = IOPVerifierState::<E>::verify(
         self.claim_phase1,
         &self.sc_proof_phase1_proof,
         &VPAuxInfo {
@@ -792,16 +714,14 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
         },
         &mut ceno_transcript,
     );
-    let rx: Vec<S> = 
-      subclaim.point.iter().map(|c| 
-        S::InnerType::from_raw_bytes(&c.elements.to_raw_bytes()).unwrap().into()
-      ).rev().collect::<Vec<S>>();
-    let claim_post_phase_1 = S::InnerType::from_raw_bytes(&subclaim.expected_evaluation.to_raw_bytes()).unwrap().into();
+    let rx: Vec<E> = 
+      subclaim.point.iter().map(|c| c.elements).rev().collect::<Vec<E>>();
+    let claim_post_phase_1 = subclaim.expected_evaluation;
     // == test: ceno_verifier_bench ==
 
     /*
     // let (claim_post_phase_1, rx) = self.sc_proof_phase1.verify(
-    //   S::field_zero(),
+    //   E::ZERO,
     //   num_rounds_x + num_rounds_q + num_rounds_p,
     //   3,
     //   transcript,
@@ -810,20 +730,20 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     // taus_bound_rx is really taus_bound_rx_rq_rp
     let taus_bound_rp: S = (0..rp_round1.len())
       .map(|i| {
-        rp_round1[i] * tau_p[i] + (S::field_one() - rp_round1[i]) * (S::field_one() - tau_p[i])
+        rp_round1[i] * tau_p[i] + (E::ONE - rp_round1[i]) * (E::ONE - tau_p[i])
       })
       .product();
     let taus_bound_rq: S = (0..rq_rev.len())
-      .map(|i| rq_rev[i] * tau_q[i] + (S::field_one() - rq_rev[i]) * (S::field_one() - tau_q[i]))
+      .map(|i| rq_rev[i] * tau_q[i] + (E::ONE - rq_rev[i]) * (E::ONE - tau_q[i]))
       .product();
     let taus_bound_rx: S = (0..rx_rev.len())
-      .map(|i| rx_rev[i] * tau_x[i] + (S::field_one() - rx_rev[i]) * (S::field_one() - tau_x[i]))
+      .map(|i| rx_rev[i] * tau_x[i] + (E::ONE - rx_rev[i]) * (E::ONE - tau_x[i]))
       .product();
     let taus_bound_rx = taus_bound_rp * taus_bound_rq * taus_bound_rx;
     */
-    let taus_bound_rx: S = (0..num_rounds_p + num_rounds_q + num_rounds_x)
+    let taus_bound_rx: E = (0..num_rounds_p + num_rounds_q + num_rounds_x)
     .map(|i| {
-      rx[i] * tau[i] + (S::field_one() - rx[i]) * (S::field_one() - tau[i])
+      rx[i] * tau[i] + (E::ONE - rx[i]) * (E::ONE - tau[i])
     })
     .product();
 
@@ -832,25 +752,25 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let (rq, rx) = rq.split_at(num_rounds_q);
     let rx = rx.to_vec();
     let rq = rq.to_vec();
-    let rq_rev: Vec<S> = rq.iter().copied().rev().collect();
+    let rq_rev: Vec<E> = rq.iter().copied().rev().collect();
     let rp_round1 = rp_round1.to_vec();
 
     // perform the intermediate sum-check test with claimed Az, Bz, and Cz
     let (Az_claim, Bz_claim, Cz_claim) = self.claims_phase2;
-    S::append_field_to_transcript(b"Az_claim", transcript, Az_claim);
-    S::append_field_to_transcript(b"Bz_claim", transcript, Bz_claim);
-    S::append_field_to_transcript(b"Cz_claim", transcript, Cz_claim);
+    append_field_to_transcript(b"Az_claim", transcript, Az_claim);
+    append_field_to_transcript(b"Bz_claim", transcript, Bz_claim);
+    append_field_to_transcript(b"Cz_claim", transcript, Cz_claim);
     assert_eq!(taus_bound_rx * (Az_claim * Bz_claim - Cz_claim), claim_post_phase_1);
 
     // derive three public challenges and then derive a joint claim
-    let r_A: S = transcript.challenge_scalar(b"challenge_Az");
-    let r_B: S = transcript.challenge_scalar(b"challenge_Bz");
-    let r_C: S = transcript.challenge_scalar(b"challenge_Cz");
-    let claim_phase2 = GoldilocksExt2::from_raw_bytes(&(r_A * Az_claim + r_B * Bz_claim + r_C * Cz_claim).inner().to_raw_bytes()).unwrap();
+    let r_A: E = challenge_scalar(transcript, b"challenge_Az");
+    let r_B: E = challenge_scalar(transcript, b"challenge_Bz");
+    let r_C: E = challenge_scalar(transcript, b"challenge_Cz");
+    let claim_phase2 = r_A * Az_claim + r_B * Bz_claim + r_C * Cz_claim;
 
     // == test: ceno_verifier_bench ==
     let mut ceno_transcript = BasicTranscript::new(b"test");
-    let subclaim = IOPVerifierState::<GoldilocksExt2>::verify(
+    let subclaim = IOPVerifierState::<E>::verify(
         claim_phase2,
         &self.sc_proof_phase2_proof,
         &VPAuxInfo {
@@ -860,11 +780,9 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
         },
         &mut ceno_transcript,
     );
-    let ry: Vec<S> = 
-      subclaim.point.iter().map(|c| 
-        S::InnerType::from_raw_bytes(&c.elements.to_raw_bytes()).unwrap().into()
-      ).rev().collect::<Vec<S>>();
-    let claim_post_phase_2: S = S::InnerType::from_raw_bytes(&subclaim.expected_evaluation.to_raw_bytes()).unwrap().into();
+    let ry: Vec<E> = 
+      subclaim.point.into_iter().map(|c| c.elements).rev().collect::<Vec<E>>();
+    let claim_post_phase_2: E = subclaim.expected_evaluation;
     // == test: ceno_verifier_bench ==
 
     /*
@@ -881,7 +799,7 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let (rw, rp) = rw.split_at(num_rounds_w);
     let rp = rp.to_vec();
     let rw = rw.to_vec();
-    let ry: Vec<S> = ry_rev.iter().copied().rev().collect();
+    let ry: Vec<E> = ry_rev.iter().copied().rev().collect();
     */
 
     // Separate ry into rp, rw, and ry
@@ -892,17 +810,17 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     let ry = ry.to_vec();
 
     // An Eq function to match p with rp
-    let p_rp_poly_bound_ry: S = (0..rp.len())
-      .map(|i| rp[i] * rp_round1[i] + (S::field_one() - rp[i]) * (S::field_one() - rp_round1[i]))
+    let p_rp_poly_bound_ry: E = (0..rp.len())
+      .map(|i| rp[i] * rp_round1[i] + (E::ONE - rp[i]) * (E::ONE - rp_round1[i]))
       .product();
 
     // verify Z(rp, rq, ry) proof against the initial commitment
     // First by witness & by instance on ry
     // For every possible wit_sec.num_inputs, compute ry_factor = prodX(1 - ryX)...
     // If there are 2 witness secs, then ry_factors[0] = 1, ry_factors[1] = 1, ry_factors[2] = 1 - ry1, ry_factors[3] = (1 - ry1)(1 - ry2), etc.
-    let mut ry_factors = vec![S::field_one(); num_rounds_y + 1];
+    let mut ry_factors = vec![E::ONE; num_rounds_y + 1];
     for i in 0..num_rounds_y {
-      ry_factors[i + 1] = (ry_factors[i]) * (S::field_one() - ry[i]);
+      ry_factors[i + 1] = (ry_factors[i]) * (E::ONE - ry[i]);
     }
 
     // POLY COMMIT
@@ -951,28 +869,28 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       };
       let prefix_list = match num_witness_secs.next_power_of_two() {
         1 => {
-          vec![S::field_one()]
+          vec![E::ONE]
         }
         2 => {
-          vec![(S::field_one() - rw[0]), rw[0]]
+          vec![(E::ONE - rw[0]), rw[0]]
         }
         4 => {
           vec![
-            (S::field_one() - rw[0]) * (S::field_one() - rw[1]),
-            (S::field_one() - rw[0]) * rw[1],
-            rw[0] * (S::field_one() - rw[1]),
+            (E::ONE - rw[0]) * (E::ONE - rw[1]),
+            (E::ONE - rw[0]) * rw[1],
+            rw[0] * (E::ONE - rw[1]),
             rw[0] * rw[1],
           ]
         }
         8 => {
           vec![
-            (S::field_one() - rw[0]) * (S::field_one() - rw[1]) * (S::field_one() - rw[2]),
-            (S::field_one() - rw[0]) * (S::field_one() - rw[1]) * rw[2],
-            (S::field_one() - rw[0]) * rw[1] * (S::field_one() - rw[2]),
-            (S::field_one() - rw[0]) * rw[1] * rw[2],
-            rw[0] * (S::field_one() - rw[1]) * (S::field_one() - rw[2]),
-            rw[0] * (S::field_one() - rw[1]) * rw[2],
-            rw[0] * rw[1] * (S::field_one() - rw[2]),
+            (E::ONE - rw[0]) * (E::ONE - rw[1]) * (E::ONE - rw[2]),
+            (E::ONE - rw[0]) * (E::ONE - rw[1]) * rw[2],
+            (E::ONE - rw[0]) * rw[1] * (E::ONE - rw[2]),
+            (E::ONE - rw[0]) * rw[1] * rw[2],
+            rw[0] * (E::ONE - rw[1]) * (E::ONE - rw[2]),
+            rw[0] * (E::ONE - rw[1]) * rw[2],
+            rw[0] * rw[1] * (E::ONE - rw[2]),
             rw[0] * rw[1] * rw[2],
           ]
         }
@@ -983,14 +901,14 @@ impl<'a, S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       let mut eval_vars_comb =
         (1..num_witness_secs).fold(prefix_list[0] * c(0), |s, i| s + prefix_list[i] * c(i));
       for q in 0..(num_rounds_q - num_proofs[p].log_2()) {
-        eval_vars_comb *= S::field_one() - rq[q];
+        eval_vars_comb *= E::ONE - rq[q];
       }
       expected_eval_vars_list.push(eval_vars_comb);
     }
 
     let EQ_p = &EqPolynomial::new(rp.clone()).evals()[..num_instances];
     let expected_eval_vars_at_ry =
-      zip(EQ_p, expected_eval_vars_list).fold(S::field_zero(), |s, (a, b)| s + *a * b);
+      zip(EQ_p, expected_eval_vars_list).fold(E::ZERO, |s, (a, b)| s + *a * b);
 
     assert_eq!(expected_eval_vars_at_ry, self.eval_vars_at_ry);
 

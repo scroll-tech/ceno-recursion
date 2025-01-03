@@ -4,10 +4,9 @@
 use std::io::{BufRead, Read};
 use std::{default, env};
 use std::{fs::File, io::BufReader};
-
-use libspartan::scalar::{ScalarExt2, SpartanExtensionField};
-use libspartan::{instance::Instance, InputsAssignment, MemsAssignment, VarsAssignment, SNARK};
-use merlin::Transcript;
+use ff_ext::ExtensionField;
+use goldilocks::GoldilocksExt2;
+use libspartan::{instance::Instance, InputsAssignment, MemsAssignment, VarsAssignment, SNARK, transcript::Transcript};
 use serde::{Deserialize, Serialize};
 use std::time::*;
 
@@ -59,7 +58,7 @@ impl CompileTimeKnowledge {
 
 // Everything provided by the prover
 #[derive(Serialize, Deserialize)]
-struct RunTimeKnowledge<S: SpartanExtensionField> {
+struct RunTimeKnowledge<E: ExtensionField> {
   block_max_num_proofs: usize,
   block_num_proofs: Vec<usize>,
   consis_num_proofs: usize,
@@ -68,13 +67,13 @@ struct RunTimeKnowledge<S: SpartanExtensionField> {
   total_num_phy_mem_accesses: usize,
   total_num_vir_mem_accesses: usize,
 
-  block_vars_matrix: Vec<Vec<VarsAssignment<S>>>,
-  exec_inputs: Vec<InputsAssignment<S>>,
-  init_phy_mems_list: Vec<MemsAssignment<S>>,
-  init_vir_mems_list: Vec<MemsAssignment<S>>,
-  addr_phy_mems_list: Vec<MemsAssignment<S>>,
-  addr_vir_mems_list: Vec<MemsAssignment<S>>,
-  addr_ts_bits_list: Vec<MemsAssignment<S>>,
+  block_vars_matrix: Vec<Vec<VarsAssignment<E>>>,
+  exec_inputs: Vec<InputsAssignment<E>>,
+  init_phy_mems_list: Vec<MemsAssignment<E>>,
+  init_vir_mems_list: Vec<MemsAssignment<E>>,
+  addr_phy_mems_list: Vec<MemsAssignment<E>>,
+  addr_vir_mems_list: Vec<MemsAssignment<E>>,
+  addr_ts_bits_list: Vec<MemsAssignment<E>>,
 
   input: Vec<[u8; 32]>,
   input_stack: Vec<[u8; 32]>,
@@ -83,8 +82,8 @@ struct RunTimeKnowledge<S: SpartanExtensionField> {
   output_exec_num: usize,
 }
 
-impl<S: SpartanExtensionField + for<'de> serde::de::Deserialize<'de>> RunTimeKnowledge<S> {
-  fn deserialize_from_file(benchmark_name: String) -> RunTimeKnowledge<S> {
+impl<E: ExtensionField + for<'de> serde::de::Deserialize<'de>> RunTimeKnowledge<E> {
+  fn deserialize_from_file(benchmark_name: String) -> RunTimeKnowledge<E> {
     // Input can be provided through multiple files, use i to determine the next file label
     let mut i = 0;
     let mut file_name = format!("../zok_tests/inputs/{benchmark_name}_bin_{i}.rtk");
@@ -105,7 +104,7 @@ fn main() {
   // let ctk = CompileTimeKnowledge::read_from_file(benchmark_name.to_string()).unwrap();
   let ctk = CompileTimeKnowledge::deserialize_from_file(benchmark_name.to_string());
   // let rtk = RunTimeKnowledge::read_from_file(benchmark_name.to_string()).unwrap();
-  let rtk: RunTimeKnowledge<ScalarExt2> =
+  let rtk: RunTimeKnowledge<GoldilocksExt2> =
     RunTimeKnowledge::deserialize_from_file(benchmark_name.to_string());
 
   // --
@@ -148,7 +147,7 @@ fn main() {
       &rtk.block_num_proofs,
     );
   // block_inst is used by commitment. Every block has different number of variables
-  let (_, _, _, block_inst_for_commit) = Instance::<ScalarExt2>::gen_block_inst::<true, true>(
+  let (_, _, _, block_inst_for_commit) = Instance::<GoldilocksExt2>::gen_block_inst::<true, true>(
     block_num_instances_bound,
     num_vars,
     &ctk.args,

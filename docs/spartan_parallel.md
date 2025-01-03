@@ -87,7 +87,7 @@ Also, $\mathcal{C}'_i$ are the larger circuits while $\mathcal{C}_c$, $\mathcal{
 * `R1CSInstance::multi_commit` in `src/r1csinstance.rs`
 * `R1CSInstance::multi_evaluate` in `src/r1csinstance.rs`
 
-The previous steps generate in total $b + 4$ circuits of various sizes. Our circuit commitment follows the existing batched sparse polynomial commitment scheme of Spartan. However, with circuits of different sizes, we want to only pay proportional to the approximate size of each circuit. The solution is to divide circuits of different sizes into groups and commit each groups separately.
+The previous steps generate in total $b + 4$ circuits of various sizes, where $b$ is the number of blocks. Our circuit commitment follows the existing batched sparse polynomial commitment scheme of Spartan. However, with circuits of different sizes, we want to only pay proportional to the approximate size of each circuit. The solution is to divide circuits of different sizes into groups and commit each groups separately.
 
 Let each circuit $\mathcal{C}_i$ be of size $M_i\times N_i$ with $L_i$ non-zero entries. We assume that $M_i$ and $N_i$ are of similar sizes and $N_i$ and $L_i$ are roughly proportional to each other. 
 For each commitment, the prover pays for $O(L)$ time to generate a proof of size $O(\log(N) + \log(L))$.
@@ -103,7 +103,7 @@ The solution is to provide the prover with two versions of each block circuit (t
 The discrepancy between the two versions requires additional handling of commitment opening. The sumcheck produces two lists of challenges corresponding to the two dimensions of the circuit: $|rx| = \log M_{\text{max}}$, $|ry| = \log N_{\text{max}}$. On the constraint side, if $M_j < M_{\text{max}}$, the prover divides $rx \to rx_\text{pad} || rx_\text{eval}$. On the witness side, if $N_j < N_{\text{max}}$, the prover divides $ry\to ry_\text{comb} || ry_\text{pad} || ry_\text{eval}$. We describe each section:
 * $rx_\text{pad}$ has length $(\log M_{\text{max}} - \log M_j)$ are the "extra" challenges
 * $rx_\text{eval}$ has length $\log M_j$ are evaluated on the commitment
-* $ry_\text{comb}$ has length-3 is used to combine the 8 different segments of witnesses
+* $ry_\text{comb}$ has length-3 is used to combine the 5 (8) different segments of witnesses
 * $ry_\text{pad}$ has length $(\log N_{\text{max}} - 3 - \log N_j)$ are the "extra" challenges on each segment. By placing $ry_\text{comb}$ in front of $ry_\text{pad}$, the prover resolves the issue where witness segments are padded to a different length in the commit version and the sumcheck version.
 * $ry_\text{eval}$ has length $\log N_j$ are evaluated on the commitment.
 
@@ -193,10 +193,10 @@ We denote the following parameters for the proof:
 * $P$ (`num_instances`): number of circuits.
 * $Q_i$ (`num_proofs`): number of assignments to each circuit $i$.
 * $X$ (`num_cons`): _maximum_ number of constraints of any circuit.
-* $W$ (`num_witness_secs`): number of padded segments of $z'_{i, j}$. In this case, $W = 8$.
+* $W$ (`num_witness_secs`): number of padded segments of $z'_{i, j}$. In this case, $W = 5$.
 * $Y$ (`max_num_inputs`): _maximum_ number of witnesses of any circuit.
 
-We use the lowercase version of each variable to denote their logarithmic value (e.g. $p = \log P$). Below we walkthrough the proving process of `spartan_parallel`.
+We use the lowercase version of each variable to denote their logarithmic value rounded up (e.g. $p = \log P$). Below we walkthrough the proving process of `spartan_parallel`.
 
 The goal of Spartan is to prove that $Az \cdot Bz - Cz = 0$. This is separated into two sumchecks:
 * Sumcheck 1 proves that given purported polynomial extensions $\tilde{Az}, \tilde{Bz}, \tilde{Cz}$, 
@@ -220,12 +220,12 @@ $z, rz, \pi, \pi'$ are different for each circuit and each instance, and thus ca
 
 From the construction we can deduce that the size of $Q_i$ and $Y_i$ depends on the entry of the $P$ dimension, while the size of $W$ does not. Further, even though sumcheck requires the size of each dimension to be _conceptually_ a power of 2, `z_mat` allows vectors on the $P, W, Y_i$ dimensions to only store the non-zero entries at the front.
 
-> XXX: current construction pads $Y_i$ to a power of 2, pending improvements. Moreover, there are no fundamental challenges to trim the $Q_i$ dimension, except that they make the code extremely messy and hard to parallelize.
+> XXX: current construction pads $Y_i$ to a power of 2, pending improvements. Moreover, there are no fundamental challenges to trim the $Q_i$ dimension, except that they make the code a lot messier and hard to parallelize.
 
 ### Obtaining $\tilde{Az}, \tilde{Bz}, \tilde{Cz}$
 > Relevant files: `src/r1csinstance.rs` and `src/customdensepolynomial.rs`
 
-To obtain $Az$, $Bz$, $Cz$, the prover treats `z_mat` as $P$ counts of $Q_i \times (W \cdot Y_i)$ matrix. Since $A$, $B$, $C$ can be expressed as $P$ counts of $X_i\times (W \cdot Y_i)$ matrices, this allows the prover to perform $P$ matrix multiplications to obtain $P \times Q_i \times X_i$ tensors $Az$, $Bz$, $Cz$ and their MLE $\tilde{Az}$ (`poly_Az`), $\tilde{Bz}$, $\tilde{Cz}$. This process is described in `R1CSinstance::multiply_vec_block`. Note that:
+To obtain $Az$, $Bz$, $Cz$, the prover treats `z_mat` as $P$ counts of $Q_i \times (W \cdot Y_i)$ matrices. Since $A$, $B$, $C$ can be expressed as $P$ counts of $X_i\times (W \cdot Y_i)$ matrices, this allows the prover to perform $P$ matrix multiplications to obtain $P \times Q_i \times X_i$ tensors $Az$, $Bz$, $Cz$ and their MLE $\tilde{Az}$ (`poly_Az`), $\tilde{Bz}$, $\tilde{Cz}$. This process is described in `R1CSinstance::multiply_vec_block`. Note that:
 * Conceptually, `poly_Az` of every block $i$ has $p + q_\text{max} + x_\text{max}$ variables. However, the value of the variables indexed at $[p, p + q_\text{max} - q_i)$ and $[p + q_\text{max}, p + q_\text{max} + x_\text{max} - x_i)$ does not affect the evaluation for parts of the polynomial.
 * Each circuit $i$ has different $Q_i$ and $X_i$, so $Az$ is expressed as a 3-dimensional vector, and the prover stores its MLE in a concise structure `DensePolynomialPqx`.
 
@@ -246,7 +246,7 @@ Binding $x_{p, 0}$ to $r$ is equivalent to the following operations:
 $$G_0 = \langle(1 - r)\cdot G_{0, 0} + r\cdot G_{2, 0}, (1 - r)\cdot G_{0, 1} + r\cdot G_{2, 1}, (1 - r)\cdot G_{0, 2}, (1 - r)\cdot G_{0, 3}\rangle$$
 $$G_1 = \langle(1 - r)\cdot G_{1, 0} + r\cdot G_{3, 0}, (1 - r)\cdot G_{1, 1} + r\cdot G_{3, 1}, (1 - r)\cdot G_{1, 2}, (1 - r)\cdot G_{1, 3}\rangle$$
 
-Since $Q_2 = Q_3 = 2$, $G_{2, 2}, G_{2, 3}, G_{3, 2}, G_{3, 3}$ are all 0s, thus the prover does not access nor perform operations on them. As a result, in the first round, the prover's work is $\sum_i Q_i = 12$ multiplications. However, after the first round, the prover is left with $P = 2$ and $Q_i = [4, 4]$. So its work binding $x_{p, 1}$ would be 8 multiplications.
+Since $Q_2 = Q_3 = 2$, $G_{2, 2}, G_{2, 3}, G_{3, 2}, G_{3, 3}$ are all 0s, so the prover does not access nor perform operations on them. As a result, in the first round, the prover's work is $\sum_i Q_i = 12$ multiplications. However, after the first round, the prover is left with $P = 2$ and $Q_i = [4, 4]$. So its work binding $x_{p, 1}$ would be 8 multiplications.
 
 Now consider the alternative of binding $x_{q, 1}$ first. All bindings are performed within the $Q$ dimension:
 $$G_0 = \langle(1 - r)\cdot G_{0, 0} + r\cdot G_{0, 1}, (1 - r)\cdot G_{0, 2} + r\cdot G_{0, 3}\rangle$$
@@ -268,7 +268,7 @@ for p in 0..num_instances:
         if 2 * x + 1 < Z[p][q][w].len():
           Z[p][q][w][x] += r * Z[p][q][w][2 * x + 1]
 ```
-which merges entry $2x$ and $2x+1$ into entry $x$. Note that if `num_inputs[p] = 1`, then the binding simply multiplies the first and only entry by $1-r$ without further modification.
+which merges entry $2x$ and $2x+1$ into entry $x$. Note that if `num_inputs[p] = 1`, then the binding simply multiplies the first and only entry by $1-r$.
 
 ### Sumcheck 1
 > Relevant functions: `R1CSProof::prove_phase_one` and `SumcheckInstanceProof::prove_cubic_with_additive_term_disjoint_rounds`
@@ -276,7 +276,7 @@ which merges entry $2x$ and $2x+1$ into entry $x$. Note that if `num_inputs[p] =
 Similar to the regular Spartan, sumcheck 1 is of the following form:
 $$\sum_{\tau\in\{0, 1\}^{p + q_\text{max} + x_\text{max}}} \tilde{\text{eq}}(\tau) \cdot (\tilde{Az}(\tau) \cdot \tilde{Bz}(\tau) - \tilde{Cz}(\tau)) = 0$$
 
-Except that $\tilde{Az}$, $\tilde{Bz}$, and $\tilde{Cz}$ are now $p + q_\text{max} + x_\text{max}$-variate polynomials, which means the sumcheck involves $p + q_\text{max} + x_\text{max}$ rounds and returns with the challenge $r = r_p || r_q || r_x$. However, we want the prover to only perform $\sum_i Q_i \cdot X_i$ computations (as opposed to $P \cdot Q_\text{max} \cdot X_\text{max}$).
+Except that $\tilde{Az}$, $\tilde{Bz}$, and $\tilde{Cz}$ are now $(p + q_\text{max} + x_\text{max})$-variate polynomials, which means the sumcheck involves $p + q_\text{max} + x_\text{max}$ rounds and returns with the challenge $r = r_p || r_q || r_x$. However, we want the prover to only perform $\sum_i Q_i \cdot X_i$ computations (as opposed to $P \cdot Q_\text{max} \cdot X_\text{max}$).
 
 The solution is the same approach to the binding problem. `spartan_parallel` always performs sumcheck evaluation from right to left. Since the evaluation polynomial is of degree 3, at each round, the prover performs the following steps:
 1. Bind the right-most variable in $\tilde{\text{eq}}, \tilde{Az}, \tilde{Bz}, \tilde{Cz}$ to 0, 1, 2, and 3 and form a degree-3 univariate polynomial.
@@ -326,7 +326,7 @@ After all sumchecks, the prover still needs to show the following:
 We recall our grand product construction: given a list of $w3_k = [v_k, x_k, \pi_k, D_k], k\in[0, Q)$, want to compute the cumulative product $\pi_k$ through $D_k = x_k \cdot (\pi_{k+1} + (1 - v_{k+1}))$ and $\pi_k = v_k\cdot D_k$. We note that the same computation is applied to every $w3_k$, and thus the computation should be easily parallelizable. Naively, one would generate a circuit $\mathcal{C}_\text{perm}$ for one instance of $w3_k$, and then execute that circuit $Q$ times. However, this problem to this approach is that the computation also involves entries of $w3_{k+1}$ ($\pi_{k+1}$, $v_{k+1}$). Alternatively, one can also construct $\mathcal{C}_\text{perm}$ to be satisfied by $w3'_k = [v_k, x_k, \pi_k, D_k, v_{k+1}, x_{k+1}, \pi_{k+1}, D_{k+1}]$, but the prover still needs to prove that the last four entries of $w3'_k$ matches with the first four entries of $w3'_{k+1}$. Our solution is to cut $w3'$ in two halves (i.e. set $W = 2, Y = 4$). This translates to two $Q\times 4$ commitments: `w3 = [v0, x0, pi0, D0, v1, x1, pi1, D1, ...]` for the left half and `w3_shifted = [v1, x1, pi1, D1, v2, x2, pi2, D2, ..., 0, 0, 0, 0]` for the right half. Finally, to prove that `w3_shifted` is `w3` shifted by 4 entries, the prover treats entries of `w3` and `w3_shifted` as coefficients to univariate polynomials $\tilde{w3}$, $\tilde{w3_s}$ and shows that for some random challenge $r$,
 $$\tilde{w3}(r) = v_0 + r\cdot x_0 + r^2\cdot pi_0 + r^3\cdot D_0 + r^4\tilde{w3_s}(r)$$
 
-Note that the prover also needs to show that $v_0, x_0, pi_0, D_0$ are indeed the first four entries of $\tilde{w3}$, which is quite difficult were $\tilde{w3}$ a univariate polynomial. Instead, for these openings, $\tilde{w3}$ is re-interpreted as a multilinear polynomial. Thus $v_0 = \tilde{w3}(0, 0, \dots, 0), x_0 = \tilde{w3}(0, 0, \dots, 1)$, etc. For this strategy to work, however, `spartan_parallel` must choose a polynomial commitment scheme that allows both univariate and multilinear opening.
+Note that the prover also needs to show that $v_0, x_0, pi_0, D_0$ are indeed the first four entries of $\tilde{w3}$, which is quite difficult if $\tilde{w3}$ is a univariate polynomial. Instead, for these openings, $\tilde{w3}$ is re-interpreted as a multilinear polynomial. Thus $v_0 = \tilde{w3}(0, 0, \dots, 0), x_0 = \tilde{w3}(0, 0, \dots, 1)$, etc. For this strategy to work, however, `spartan_parallel` must choose a polynomial commitment scheme that allows both univariate and multilinear opening.
 
 Finally, we remark that the same shift strategy can be applied to verify memory and register consistency checks on consecutive states.
 

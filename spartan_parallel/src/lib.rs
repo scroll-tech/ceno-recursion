@@ -1268,7 +1268,6 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
       // create a multilinear polynomial using the supplied assignment for variables
       let perm_poly_w0 = DensePolynomial::new(perm_w0.clone());
 
-      let timer_tmp = Timer::new("exec_gen");
       // PERM_EXEC
       // w2 is _, _, ZO, r * i1, r^2 * i2, r^3 * i3, ...
       // where ZO * r^n = r^n * o0 + r^(n + 1) * o1, ...,
@@ -1325,9 +1324,7 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
         }
         (perm_exec_w2, perm_exec_w3)
       };
-      timer_tmp.stop();
 
-      let timer_tmp = Timer::new("exec_poly");
       // commit the witnesses and inputs separately instance-by-instance
       let (perm_exec_poly_w2, perm_exec_poly_w3, perm_exec_poly_w3_shifted) = {
         let perm_exec_poly_w2 = {
@@ -1372,9 +1369,7 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
           perm_exec_poly_w3_shifted,
         )
       };
-      timer_tmp.stop();
 
-      let timer_tmp = Timer::new("block_gen");
       // INPUT_BLOCK_W2 | PHY_MEM_BLOCK_W2 & VIR_MEM_BLOCK_W2
       // BLOCK_W3
       //           INPUT      PHY    VIR
@@ -1536,9 +1531,7 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
 
         block_w2
       };
-      timer_tmp.stop();
 
-      let timer_tmp = Timer::new("block_gen");
       let (block_poly_w2_list, block_poly_w3_list, block_poly_w3_list_shifted) = {
         // commit the witnesses and inputs separately instance-by-instance
         let mut block_poly_w2_list = Vec::new();
@@ -1588,7 +1581,6 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
 
         (block_poly_w2_list, block_poly_w3_list, block_poly_w3_list_shifted)
       };
-      timer_tmp.stop();
 
       let perm_w0_prover = ProverWitnessSecInfo::new(vec![vec![perm_w0]], vec![perm_poly_w0]);
       let perm_exec_w2_prover =
@@ -1927,22 +1919,22 @@ impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
     let block_vars_prover = ProverWitnessSecInfo::new(block_vars_mat, block_poly_vars_list);
     let exec_inputs_prover = ProverWitnessSecInfo::new(vec![exec_inputs_list], exec_poly_inputs);
     let init_phy_mems_prover = if total_num_init_phy_mem_accesses > 0 {
-      ProverWitnessSecInfo::new(vec![init_phy_mems_list.clone()], poly_init_phy_mems)
+      ProverWitnessSecInfo::new(vec![init_phy_mems_list], poly_init_phy_mems)
     } else {
       ProverWitnessSecInfo::dummy()
     };
     let init_vir_mems_prover = if total_num_init_vir_mem_accesses > 0 {
-      ProverWitnessSecInfo::new(vec![init_vir_mems_list.clone()], poly_init_vir_mems)
+      ProverWitnessSecInfo::new(vec![init_vir_mems_list], poly_init_vir_mems)
     } else {
       ProverWitnessSecInfo::dummy()
     };
     let addr_phy_mems_prover = if total_num_phy_mem_accesses > 0 {
-      ProverWitnessSecInfo::new(vec![addr_phy_mems_list.clone()], addr_poly_phy_mems)
+      ProverWitnessSecInfo::new(vec![addr_phy_mems_list], addr_poly_phy_mems)
     } else {
       ProverWitnessSecInfo::dummy()
     };
     let addr_vir_mems_prover = if total_num_vir_mem_accesses > 0 {
-      ProverWitnessSecInfo::new(vec![addr_vir_mems_list.clone()], addr_poly_vir_mems)
+      ProverWitnessSecInfo::new(vec![addr_vir_mems_list], addr_poly_vir_mems)
     } else {
       ProverWitnessSecInfo::dummy()
     };

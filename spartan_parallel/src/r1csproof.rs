@@ -13,6 +13,7 @@ use serde::Serialize;
 use std::cmp::min;
 use std::iter::zip;
 use std::sync::Arc;
+use std::cmp::max;
 use multilinear_extensions::{
   mle::{IntoMLE, MultilinearExtension, DenseMultilinearExtension},
   virtual_poly::VPAuxInfo,
@@ -245,13 +246,13 @@ impl<'a, E: ExtensionField + Send + Sync> R1CSProof<E> {
     timer_tmp.stop();
 
     // == test: ceno_verifier_bench ==
-    let max_num_vars = poly_tau.get_num_vars();
     let num_threads = 32;
+    let max_num_vars = poly_tau.get_num_vars();
 
     let arc_A: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(poly_tau.to_ceno_multilinear());
-    let arc_B: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(poly_Az.to_ceno_multilinear());
-    let arc_C: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(poly_Bz.to_ceno_multilinear());
-    let arc_D: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(poly_Cz.to_ceno_multilinear());
+    let arc_B: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(poly_Az);
+    let arc_C: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(poly_Bz);
+    let arc_D: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(poly_Cz);
 
     let mut virtual_polys =
         VirtualPolynomials::new(num_threads, max_num_vars);
@@ -430,7 +431,6 @@ impl<'a, E: ExtensionField + Send + Sync> R1CSProof<E> {
     let mut eq_p_rp_poly = DensePolynomial::new(
       tmp_rp_poly.into_iter().map(|i| vec![i; scale]).collect::<Vec<Vec<E>>>().concat()
     );
-    let max_num_vars_phase2 = ABC_poly.get_num_vars();
 
     let mut claimed_sum = E::ZERO;
     let mut claimed_partial_sum = E::ZERO;
@@ -444,6 +444,9 @@ impl<'a, E: ExtensionField + Send + Sync> R1CSProof<E> {
       b_sum += b.clone();
       c_sum += c.clone();
     }
+
+    // debug_ceno_prover
+    let max_num_vars_phase2 = max(ABC_poly.get_num_vars(), max(Z_poly.get_num_vars(), eq_p_rp_poly.get_num_vars()));
 
     let arc_A: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(ABC_poly.to_ceno_multilinear());
     let arc_B: Arc<dyn MultilinearExtension<_, Output = DenseMultilinearExtension<E>>> = Arc::new(Z_poly.to_ceno_multilinear());

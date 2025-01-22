@@ -326,7 +326,13 @@ After all sumchecks, the prover still needs to show the following:
 We recall our grand product construction: given a list of $w3_k = [v_k, x_k, \pi_k, D_k], k\in[0, Q)$, want to compute the cumulative product $\pi_k$ through $D_k = x_k \cdot (\pi_{k+1} + (1 - v_{k+1}))$ and $\pi_k = v_k\cdot D_k$. We note that the same computation is applied to every $w3_k$, and thus the computation should be easily parallelizable. Naively, one would generate a circuit $\mathcal{C}_\text{perm}$ for one instance of $w3_k$, and then execute that circuit $Q$ times. However, this problem to this approach is that the computation also involves entries of $w3_{k+1}$ ($\pi_{k+1}$, $v_{k+1}$). Alternatively, one can also construct $\mathcal{C}_\text{perm}$ to be satisfied by $w3'_k = [v_k, x_k, \pi_k, D_k, v_{k+1}, x_{k+1}, \pi_{k+1}, D_{k+1}]$, but the prover still needs to prove that the last four entries of $w3'_k$ matches with the first four entries of $w3'_{k+1}$. Our solution is to cut $w3'$ in two halves (i.e. set $W = 2, Y = 4$). This translates to two $Q\times 4$ commitments: `w3 = [v0, x0, pi0, D0, v1, x1, pi1, D1, ...]` for the left half and `w3_shifted = [v1, x1, pi1, D1, v2, x2, pi2, D2, ..., 0, 0, 0, 0]` for the right half. Finally, to prove that `w3_shifted` is `w3` shifted by 4 entries, the prover treats entries of `w3` and `w3_shifted` as coefficients to univariate polynomials $\tilde{w3}$, $\tilde{w3_s}$ and shows that for some random challenge $r$,
 $$\tilde{w3}(r) = v_0 + r\cdot x_0 + r^2\cdot pi_0 + r^3\cdot D_0 + r^4\tilde{w3_s}(r)$$
 
-Note that the prover also needs to show that $v_0, x_0, pi_0, D_0$ are indeed the first four entries of $\tilde{w3}$, which is quite difficult if $\tilde{w3}$ is a univariate polynomial. Instead, for these openings, $\tilde{w3}$ is re-interpreted as a multilinear polynomial. Thus $v_0 = \tilde{w3}(0, 0, \dots, 0), x_0 = \tilde{w3}(0, 0, \dots, 1)$, etc. For this strategy to work, however, `spartan_parallel` must choose a polynomial commitment scheme that allows both univariate and multilinear opening.
+Thus, the protocol is as follows:
+1. The prover sends the commitments $\mathcal{C}_{w3}$, $\mathcal{C}_{w3'}$, together with the purported values of $v_0, x_0, \pi_0, D_0$.
+2. The verifier samples a random value $r$ and sends to the prover.
+3. The prover opens the univariate commitments $\mathcal{C}_{w3}(r)$, $\mathcal{C}_{w3'}(r)$.
+4. The verifier checks the relationship between $w3$ and $w3'$ using $v_0, x_0, \pi_0, D_0, \mathcal{C}_{w3}(r), \mathcal{C}_{w3'}(r)$.
+
+Note that the prover never proves that $v_0, x_0, \pi_0, D_0$ are the first four entries of $\tilde{w3}(r)$. This is unnecessary since the random linear combination forces it to provide the correct value.
 
 Finally, we remark that the same shift strategy can be applied to verify memory and register consistency checks on consecutive states.
 

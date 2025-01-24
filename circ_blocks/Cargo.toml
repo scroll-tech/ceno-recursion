@@ -7,6 +7,10 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+spartan_parallel = { path = "../spartan_parallel", default-features = false, features = [
+  "multicore",
+  "profile",
+], optional = true }
 circ_fields = { path = "circ_fields" }
 circ_opt = { path = "circ_opt" }
 circ_hc = { path = "circ_hc", default-features = false, features = [
@@ -51,10 +55,6 @@ from-pest = { version = "0.3", optional = true }
 itertools = "0.10"
 petgraph = { version = "0.6", optional = true }
 spartan = { version = "0.8", default-features = false, optional = true }
-spartan_parallel = { path = "../spartan_parallel", default-features = false, features = [
-  "multicore",
-  "profile",
-] }
 merlin = { version = "3.0.0" }
 curve25519-dalek = { version = "4", features = ["serde"], optional = true }
 # TODO: kill
@@ -74,7 +74,8 @@ approx = "0.5"
 ff = { path = "../ff" }
 
 [features]
-default = ["bellman", "r1cs", "smt", "zok"]
+default = ["default_without_spartan", "dep:spartan_parallel"]
+default_without_spartan = ["bellman", "r1cs", "smt", "zok"]
 # frontends
 c = ["lang-c"]
 zok = ["smt", "zokrates_parser", "zokrates_pest_ast", "typed-arena", "petgraph"]

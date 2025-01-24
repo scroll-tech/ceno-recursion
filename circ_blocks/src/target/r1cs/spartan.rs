@@ -177,7 +177,7 @@ pub fn r1cs_to_spartan(
 }
 
 fn int_to_scalar(i: &Integer) -> Scalar {
-    let mut accumulator = Scalar::zero();
+    let mut accumulator = Scalar::ZERO;
     let limb_bits = (std::mem::size_of::<limb_t>() as u64) << 3;
     assert_eq!(limb_bits, 64);
 

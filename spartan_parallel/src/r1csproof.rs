@@ -97,6 +97,9 @@ impl R1CSProof {
     transcript: &mut Transcript,
     random_tape: &mut RandomTape,
   ) -> (ZKSumcheckInstanceProof, Vec<Scalar>, Vec<Scalar>, Scalar) {
+    // This looks like A * z * B * z = C * z
+    // as mentioned in https://github.com/scroll-tech/ceno-recursion/issues/60
+    // We also mention proof phases here.
     let comb_func = |poly_A_comp: &Scalar,
                      poly_B_comp: &Scalar,
                      poly_C_comp: &Scalar,

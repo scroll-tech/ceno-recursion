@@ -74,7 +74,7 @@ approx = "0.5"
 ff = { path = "../ff" }
 
 [features]
-default = ["default_without_spartan", "dep:spartan_parallel"]
+default = ["default_without_spartan", "spartan_parallel"]
 default_without_spartan = ["bellman", "r1cs", "smt", "zok"]
 # frontends
 c = ["lang-c"]

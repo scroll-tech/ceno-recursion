@@ -492,11 +492,6 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSInstance<S> {
 
     // Group the instances based on number of variables, which are already orders of 2^4
     for i in 0..self.num_instances {
-      println!(
-        "I: {}, NUM_CONS: {}, NUM_VARS: {}",
-        i, self.num_cons[i], self.num_vars[i]
-      );
-
       let var_len = self.num_vars[i];
       // A_list, B_list, C_list
       if let Some(index) = vars_size.get(&var_len) {

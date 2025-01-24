@@ -1,8 +1,0 @@
-def add(field a, field b) -> field:
-  return a + b
-
-def foo(field a, field c) -> field:
-  return add(add(a, c), add(c, a))
-
-def main(field a, field b, field c, field d) -> field:
-  return foo(foo(a, b), foo(c, d))

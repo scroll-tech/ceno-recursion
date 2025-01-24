@@ -14,7 +14,6 @@ for cargo_toml in $(git ls-files '**/Cargo.toml'); do
 done
 
 ./setup.sh
-./encode_ceno.sh
-
-# This one is expected to fail at the moment, but it's still useful to run:
+# ./encode_ceno.sh
 # ./verify_ceno.sh
+./test_poseidon.sh 1000

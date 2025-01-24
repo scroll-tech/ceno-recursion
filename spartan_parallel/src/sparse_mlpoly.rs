@@ -48,18 +48,16 @@ impl<S: SpartanExtensionField> Derefs<S> {
     let ret_row_ops_val = row_ops_val.clone();
     let ret_col_ops_val = col_ops_val.clone();
 
-    let derefs = {
+    {
       // combine all polynomials into a single polynomial (used below to produce a single commitment)
-      let comb = DensePolynomial::merge(row_ops_val.into_iter().chain(col_ops_val.into_iter()));
+      let comb = DensePolynomial::merge(row_ops_val.into_iter().chain(col_ops_val));
 
       Derefs {
         row_ops_val: ret_row_ops_val,
         col_ops_val: ret_col_ops_val,
         comb,
       }
-    };
-
-    derefs
+    }
   }
 }
 
@@ -104,10 +102,7 @@ impl<S: SpartanExtensionField> DerefsEvalProof<S> {
     // decommit the joint polynomial at r_joint
     S::append_field_to_transcript(b"joint_claim_eval", transcript, eval_joint);
 
-    let proof_derefs =
-      PolyEvalProof::prove(joint_poly, &r_joint, &eval_joint, transcript, random_tape);
-
-    proof_derefs
+    PolyEvalProof::prove(joint_poly, &r_joint, &eval_joint, transcript, random_tape)
   }
 
   // evalues both polynomials at r and produces a joint proof of opening
@@ -342,10 +337,10 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
       row
         .ops_addr
         .into_iter()
-        .chain(row.read_ts.into_iter())
-        .chain(col.ops_addr.into_iter())
-        .chain(col.read_ts.into_iter())
-        .chain(val_vec.into_iter()),
+        .chain(row.read_ts)
+        .chain(col.ops_addr)
+        .chain(col.read_ts)
+        .chain(val_vec),
     );
     let mut comb_mem = row.audit_ts.clone();
     comb_mem.extend(&col.audit_ts);
@@ -395,7 +390,7 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
         (row, *val * z[col])
       })
       .fold(vec![S::field_zero(); num_rows], |mut Mz, (r, v)| {
-        Mz[r] = Mz[r] + v;
+        Mz[r] += v;
         Mz
       })
   }
@@ -417,7 +412,7 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
         (row, *val * z[col / max_num_cols][col % max_num_cols])
       })
       .fold(vec![S::field_zero(); num_rows], |mut Mz, (r, v)| {
-        Mz[r] = Mz[r] + v;
+        Mz[r] += v;
         Mz
       })
   }
@@ -429,7 +424,7 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
 
     for i in 0..self.M.len() {
       let entry = &self.M[i];
-      M_evals[entry.col] = M_evals[entry.col] + rx[entry.row] * entry.val;
+      M_evals[entry.col] += rx[entry.row] * entry.val;
     }
     M_evals
   }
@@ -450,8 +445,7 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
 
     for i in 0..self.M.len() {
       let entry = &self.M[i];
-      M_evals[entry.col / max_num_cols][entry.col % max_num_cols] =
-        M_evals[entry.col / max_num_cols][entry.col % max_num_cols] + rx[entry.row] * entry.val;
+      M_evals[entry.col / max_num_cols][entry.col % max_num_cols] += rx[entry.row] * entry.val;
     }
     M_evals
   }
@@ -1165,8 +1159,8 @@ impl<S: SpartanExtensionField> ProductLayerProof<S> {
     assert_eq!(*row_eval_init * ws, rs * *row_eval_audit);
 
     S::append_field_to_transcript(b"claim_row_eval_init", transcript, *row_eval_init);
-    S::append_field_vector_to_transcript(b"claim_row_eval_read", transcript, &row_eval_read);
-    S::append_field_vector_to_transcript(b"claim_row_eval_write", transcript, &row_eval_write);
+    S::append_field_vector_to_transcript(b"claim_row_eval_read", transcript, row_eval_read);
+    S::append_field_vector_to_transcript(b"claim_row_eval_write", transcript, row_eval_write);
     S::append_field_to_transcript(b"claim_row_eval_audit", transcript, *row_eval_audit);
 
     // subset check
@@ -1180,8 +1174,8 @@ impl<S: SpartanExtensionField> ProductLayerProof<S> {
     assert_eq!(*col_eval_init * ws, rs * *col_eval_audit);
 
     S::append_field_to_transcript(b"claim_col_eval_init", transcript, *col_eval_init);
-    S::append_field_vector_to_transcript(b"claim_col_eval_read", transcript, &col_eval_read);
-    S::append_field_vector_to_transcript(b"claim_col_eval_write", transcript, &col_eval_write);
+    S::append_field_vector_to_transcript(b"claim_col_eval_read", transcript, col_eval_read);
+    S::append_field_vector_to_transcript(b"claim_col_eval_write", transcript, col_eval_write);
     S::append_field_to_transcript(b"claim_col_eval_audit", transcript, *col_eval_audit);
 
     // verify the evaluation of the sparse polynomial

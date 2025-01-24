@@ -165,7 +165,7 @@ impl<S: SpartanExtensionField> Instance<S> {
     Vec<(usize, usize, [u8; 32])>,
   ) {
     let int_to_scalar = |i: isize| {
-      let abs_scalar = S::from(i.abs() as u64);
+      let abs_scalar = S::from(i.unsigned_abs() as u64);
       if i < 0 {
         abs_scalar.negate().to_bytes()
       } else {
@@ -1043,7 +1043,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         println!("Total Cons Exec Size: {}", total_cons_exec_size);
       }
 
-      let pairwise_check_inst = Instance::new(
+      Instance::new(
         3,
         pairwise_check_max_num_cons,
         pairwise_check_num_cons,
@@ -1052,8 +1052,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         &B_list,
         &C_list,
       )
-      .unwrap();
-      pairwise_check_inst
+      .unwrap()
     };
     (
       pairwise_check_num_vars,
@@ -1294,7 +1293,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         println!("Total Cons Exec Size: {}", total_cons_exec_size);
       }
 
-      let perm_root_inst = Instance::new(
+      Instance::new(
         1,
         perm_root_num_cons,
         vec![perm_root_num_cons],
@@ -1303,8 +1302,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         &B_list,
         &C_list,
       )
-      .unwrap();
-      perm_root_inst
+      .unwrap()
     };
     (
       perm_root_num_cons,

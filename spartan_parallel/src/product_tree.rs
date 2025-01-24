@@ -438,11 +438,10 @@ impl<S: SpartanExtensionField> ProductCircuitEvalProofBatched<S> {
           transcript.append_scalar(b"claim_dotp_right", &claims_dotp_right[i]);
           transcript.append_scalar(b"claim_dotp_weight", &claims_dotp_weight[i]);
 
-          claim_expected = claim_expected
-            + coeff_vec[i + num_prod_instances]
-              * claims_dotp_left[i]
-              * claims_dotp_right[i]
-              * claims_dotp_weight[i];
+          claim_expected += coeff_vec[i + num_prod_instances]
+            * claims_dotp_left[i]
+            * claims_dotp_right[i]
+            * claims_dotp_weight[i];
         }
       }
 

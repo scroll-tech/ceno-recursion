@@ -4,11 +4,9 @@ use crate::scalar::SpartanExtensionField;
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::random::RandomTape;
-use super::transcript::ProofTranscript;
 use core::ops::Index;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[cfg(feature = "multicore")]
 use rayon::prelude::*;

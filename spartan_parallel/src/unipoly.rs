@@ -71,8 +71,8 @@ impl<S: SpartanExtensionField> UniPoly<S> {
     let mut eval = self.coeffs[0];
     let mut power = *r;
     for i in 1..self.coeffs.len() {
-      eval = eval + power * self.coeffs[i];
-      power = power * *r;
+      eval += power * self.coeffs[i];
+      power *= *r;
     }
     eval
   }
@@ -93,7 +93,7 @@ impl<S: SpartanExtensionField> CompressedUniPoly<S> {
     let mut linear_term =
       *hint - self.coeffs_except_linear_term[0] - self.coeffs_except_linear_term[0];
     for i in 1..self.coeffs_except_linear_term.len() {
-      linear_term = linear_term - self.coeffs_except_linear_term[i];
+      linear_term -= self.coeffs_except_linear_term[i];
     }
 
     let mut coeffs = vec![self.coeffs_except_linear_term[0], linear_term];

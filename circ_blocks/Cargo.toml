@@ -51,10 +51,7 @@ from-pest = { version = "0.3", optional = true }
 itertools = "0.10"
 petgraph = { version = "0.6", optional = true }
 spartan = { version = "0.8", default-features = false, optional = true }
-spartan_parallel = { path = "../spartan_parallel", default-features = false, features = [
-  "multicore",
-  "profile",
-] }
+spartan_parallel = { path = "../spartan_parallel", default-features = false, features = ["profile"] }
 merlin = { version = "3.0.0" }
 curve25519-dalek = { version = "4", features = ["serde"], optional = true }
 # TODO: kill

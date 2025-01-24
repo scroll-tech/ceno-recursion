@@ -200,7 +200,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
           let q_w = if ws.w_mat[p_w].len() == 1 { 0 } else { q };
 
           let r_w = if ws.num_inputs[p_w] < num_inputs[p][w] {
-            let padding = std::iter::repeat(S::field_zero()).take(num_inputs[p][w] - ws.num_inputs[p_w]).collect::<Vec<S>>();
+            let padding = std::iter::repeat(ZERO).take(num_inputs[p][w] - ws.num_inputs[p_w]).collect::<Vec<S>>();
             let mut r = ws.w_mat[p_w][q_w].clone();
             r.extend(padding);
             r

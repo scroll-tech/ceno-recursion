@@ -477,7 +477,7 @@ impl<S: SpartanExtensionField> ProverWitnessSecInfo<S> {
   fn merge(components: Vec<&ProverWitnessSecInfo<S>>) -> (ProverWitnessSecInfo<S>, Vec<usize>) {
     // Merge algorithm with pointer on each component
     let mut pointers = vec![0; components.len()];
-    let merged_size = components.iter().fold(0, |a, b| a + b.num_inputs.len());
+    let merged_size = components.iter().map(|c| c.num_inputs.len()).sum();
     // Map from instances of the merged ProverWitnessSec to each component
     let mut inst_map = Vec::new();
     let mut merged_num_inputs = Vec::new();
@@ -571,7 +571,7 @@ impl VerifierWitnessSecInfo {
   fn merge(components: Vec<&VerifierWitnessSecInfo>) -> (VerifierWitnessSecInfo, Vec<usize>) {
     // Merge algorithm with pointer on each component
     let mut pointers = vec![0; components.len()];
-    let merged_size = components.iter().fold(0, |a, b| a + b.num_inputs.len());
+    let merged_size = components.iter().map(|c| c.num_inputs.len()).sum();
     // Map from instances of the merged ProverWitnessSec to each component
     let mut inst_map = Vec::new();
     let mut merged_num_inputs = Vec::new();

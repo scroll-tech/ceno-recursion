@@ -1,16 +1,17 @@
 //! A trait for CirC-compatible proofs
 
-use std::fs::File;
-use std::io::{BufReader, BufWriter};
-use std::path::Path;
+use std::{
+    fs::File,
+    io::{BufReader, BufWriter},
+    path::Path,
+};
 
 use bincode::{deserialize_from, serialize_into};
 use fxhash::FxHashMap as HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::{ProverData, VerifierData};
-use crate::ir::term::text::parse_value_map;
-use crate::ir::term::Value;
+use crate::ir::term::{Value, text::parse_value_map};
 
 fn serialize_into_file<S: Serialize, P: AsRef<Path>>(data: &S, path: P) -> std::io::Result<()> {
     let mut file = BufWriter::new(File::create(path.as_ref())?);
@@ -94,7 +95,7 @@ pub trait CommitProofSystem {
     type ComRand: Serialize + for<'a> Deserialize<'a> + Default;
     /// Setup
     fn cp_setup(p_data: ProverData, v_data: VerifierData)
-        -> (Self::ProvingKey, Self::VerifyingKey);
+    -> (Self::ProvingKey, Self::VerifyingKey);
     /// Proving
     fn cp_prove(
         pk: &Self::ProvingKey,
@@ -210,9 +211,7 @@ impl<P: CommitProofSystem> ProofSystem for P {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::cfg::CircCfg;
-    use crate::ir::term::*;
-    use crate::target::r1cs;
+    use crate::{cfg::CircCfg, ir::term::*, target::r1cs};
 
     #[allow(dead_code)]
     fn test_setup_prove_verify<PS: ProofSystem>(
@@ -230,8 +229,7 @@ mod test {
 
     #[cfg(feature = "bellman")]
     mod mirage {
-        use super::super::super::mirage::Mirage;
-        use super::*;
+        use super::{super::super::mirage::Mirage, *};
 
         // TODO(Matthias): fix this test, and then remove the #[should_panic] attribute
         #[should_panic]

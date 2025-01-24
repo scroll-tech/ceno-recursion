@@ -2,11 +2,12 @@
 
 use thiserror::Error;
 
-use super::parser::ast::Span;
-use super::term::T;
+use super::{parser::ast::Span, term::T};
 
-use std::convert::From;
-use std::fmt::{self, Display, Formatter};
+use std::{
+    convert::From,
+    fmt::{self, Display, Formatter},
+};
 
 #[derive(Error, Debug)]
 /// An error in circuit translation

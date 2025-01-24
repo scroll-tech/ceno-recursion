@@ -3,12 +3,12 @@
 //! Cost: about (N + A)(L + 1) where the ROM size is N, there are A reads, and values have size L.
 //! If the ROM contents are fixed, cost drops to N + A(L + 1)
 
-use super::super::hash::UniversalHasher;
-use super::{Access, Ram};
-use crate::front::PROVER_VIS;
-use crate::ir::opt::cfold::fold;
-use crate::ir::term::*;
-use crate::util::ns::Namespace;
+use super::{super::hash::UniversalHasher, Access, Ram};
+use crate::{
+    front::PROVER_VIS,
+    ir::{opt::cfold::fold, term::*},
+    util::ns::Namespace,
+};
 
 use log::debug;
 

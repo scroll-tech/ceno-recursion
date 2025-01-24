@@ -11,21 +11,23 @@ pub mod zvisit;
 mod prover;
 
 use super::{FrontEnd, Mode};
-use crate::cfg::cfg;
-use crate::circify::{CircError, Circify, Loc, Val};
-use crate::front::proof::PROVER_ID;
-use crate::front::zsharp::prover::MemOp;
-use crate::ir::proof::ConstraintMetadata;
-use crate::ir::term::*;
+use crate::{
+    cfg::cfg,
+    circify::{CircError, Circify, Loc, Val},
+    front::{proof::PROVER_ID, zsharp::prover::MemOp},
+    ir::{proof::ConstraintMetadata, term::*},
+};
 
 use log::{debug, trace, warn};
 use rug::Integer;
-use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, HashMap};
-use std::fmt::Display;
-use std::hash::BuildHasherDefault;
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{
+    cell::{Cell, RefCell},
+    collections::{BTreeMap, HashMap},
+    fmt::Display,
+    hash::BuildHasherDefault,
+    path::PathBuf,
+    str::FromStr,
+};
 use zokrates_pest_ast as ast;
 
 use term::*;
@@ -117,9 +119,9 @@ impl ZSharpFE {
         Vec<usize>,                                                        // Block IDs
         Vec<Vec<Option<Value>>>, // Prog Input | Block Outputs
         Vec<Vec<Option<Value>>>, // (PM Vars + VM Vars) per block
-        Vec<HashMap<String, Value, BuildHasherDefault<fxhash::FxHasher>>>, // Map of IO name -> IO value, for witness generation
-        Vec<[Value; 2]>, // Initial physical (read-only) memory accesses, sorted by execution & address (same ordering)
-        Vec<[Value; 4]>, // Initial virtual memory accesses, sorted by execution & address (same ordering)
+        Vec<HashMap<String, Value, BuildHasherDefault<fxhash::FxHasher>>>, /* Map of IO name -> IO value, for witness generation */
+        Vec<[Value; 2]>, /* Initial physical (read-only) memory accesses, sorted by execution & address (same ordering) */
+        Vec<[Value; 4]>, /* Initial virtual memory accesses, sorted by execution & address (same ordering) */
         Vec<(Value, Value)>, // Physical memory accesses, sorted by address
         Vec<[Value; 4]>, // Virtual memory accesses, sorted by address
     ) {
@@ -301,19 +303,21 @@ impl ZSharpFE {
             })
             .collect();
         let block_outputs_list = [
-            vec![prog_reg_in
-                .iter()
-                .map(|j| {
-                    if let Some(k) = j {
-                        Some(
-                            to_const_value(k.clone())
-                                .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
-                        )
-                    } else {
-                        None
-                    }
-                })
-                .collect()],
+            vec![
+                prog_reg_in
+                    .iter()
+                    .map(|j| {
+                        if let Some(k) = j {
+                            Some(
+                                to_const_value(k.clone())
+                                    .unwrap_or_else(|e| panic!("const_entry_fn failed: {}", e)),
+                            )
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
+            ],
             bl_exec_state
                 .iter()
                 .map(|i| {
@@ -751,9 +755,8 @@ impl<'ast> ZGen<'ast> {
                 .map_err(|e| format!("{e}"))?
                 .unwrap_term()
         };
-        let new =
-            loc_store(old, &zaccs[..], val)
-                .and_then(|n| if strict { const_val(n) } else { Ok(n) })?;
+        let new = loc_store(old, &zaccs[..], val)
+            .and_then(|n| if strict { const_val(n) } else { Ok(n) })?;
         debug!("Assign: {}", name);
         if IS_CNST {
             self.cvar_assign(name, new)
@@ -1288,13 +1291,9 @@ impl<'ast> ZGen<'ast> {
                 assert!(!p.accesses.is_empty());
                 let (val, accs) = if let Some(ast::Access::Call(c)) = p.accesses.first() {
                     let (f_path, f_name) = self.deref_import(&p.id.value);
-                    let exp_ty = self.lhs_ty_take().and_then(|ty| {
-                        if p.accesses.len() > 1 {
-                            None
-                        } else {
-                            Some(ty)
-                        }
-                    });
+                    let exp_ty = self
+                        .lhs_ty_take()
+                        .and_then(|ty| if p.accesses.len() > 1 { None } else { Some(ty) });
                     let args = c
                         .arguments
                         .expressions
@@ -1888,8 +1887,10 @@ impl<'ast> ZGen<'ast> {
     }
 
     fn visit_imports(&mut self) -> Vec<PathBuf> {
-        use petgraph::algo::toposort;
-        use petgraph::graph::{DefaultIx, DiGraph, NodeIndex};
+        use petgraph::{
+            algo::toposort,
+            graph::{DefaultIx, DiGraph, NodeIndex},
+        };
         let asts = std::mem::take(&mut self.asts);
 
         // we use the graph to toposort the includes and the map to go from PathBuf to NodeIdx
@@ -1907,38 +1908,39 @@ impl<'ast> ZGen<'ast> {
             for d in f.declarations.iter() {
                 // XXX(opt) retain() declarations instead? if we don't need them, saves allocs
                 if let ast::SymbolDeclaration::Import(i) = d {
-                    let (src_path, src_names, dst_names, i_span) = match i {
-                        ast::ImportDirective::Main(m) => (
-                            m.source.value.clone(),
-                            vec!["main".to_owned()],
-                            vec![m
-                                .alias
-                                .as_ref()
-                                .map(|a| a.value.clone())
-                                .unwrap_or_else(|| {
-                                    PathBuf::from(m.source.value.clone())
-                                        .file_stem()
-                                        .unwrap_or_else(|| panic!("Bad import: {}", m.source.value))
-                                        .to_string_lossy()
-                                        .to_string()
-                                })],
-                            &m.span,
-                        ),
-                        ast::ImportDirective::From(m) => (
-                            m.source.value.clone(),
-                            m.symbols.iter().map(|s| s.id.value.clone()).collect(),
-                            m.symbols
-                                .iter()
-                                .map(|s| {
-                                    s.alias
-                                        .as_ref()
-                                        .map(|a| a.value.clone())
-                                        .unwrap_or_else(|| s.id.value.clone())
-                                })
-                                .collect(),
-                            &m.span,
-                        ),
-                    };
+                    let (src_path, src_names, dst_names, i_span) =
+                        match i {
+                            ast::ImportDirective::Main(m) => (
+                                m.source.value.clone(),
+                                vec!["main".to_owned()],
+                                vec![m.alias.as_ref().map(|a| a.value.clone()).unwrap_or_else(
+                                    || {
+                                        PathBuf::from(m.source.value.clone())
+                                            .file_stem()
+                                            .unwrap_or_else(|| {
+                                                panic!("Bad import: {}", m.source.value)
+                                            })
+                                            .to_string_lossy()
+                                            .to_string()
+                                    },
+                                )],
+                                &m.span,
+                            ),
+                            ast::ImportDirective::From(m) => (
+                                m.source.value.clone(),
+                                m.symbols.iter().map(|s| s.id.value.clone()).collect(),
+                                m.symbols
+                                    .iter()
+                                    .map(|s| {
+                                        s.alias
+                                            .as_ref()
+                                            .map(|a| a.value.clone())
+                                            .unwrap_or_else(|| s.id.value.clone())
+                                    })
+                                    .collect(),
+                                &m.span,
+                            ),
+                        };
                     assert!(!src_names.is_empty());
                     let abs_src_path = self.stdlib.canonicalize(&self.cur_dir(), src_path.as_str());
                     debug!(
@@ -2184,7 +2186,7 @@ impl<'ast> ZGen<'ast> {
         Ok(())
     }
 
-    /*** circify wrapper functions (hides RefCell) ***/
+    /// * circify wrapper functions (hides RefCell) **
 
     fn circ_enter_condition(&self, cond: Term) {
         if self.isolate_asserts {
@@ -2270,8 +2272,7 @@ fn span_to_string(span: &ast::Span) -> String {
 }
 
 fn type_span<'ast, 'a>(ty: &'a ast::Type<'ast>) -> &'a ast::Span<'ast> {
-    use ast::BasicType::*;
-    use ast::Type::*;
+    use ast::{BasicType::*, Type::*};
     match ty {
         Array(a) => &a.span,
         Struct(s) => &s.span,

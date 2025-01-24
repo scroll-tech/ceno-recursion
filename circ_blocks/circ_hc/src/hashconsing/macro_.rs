@@ -2,8 +2,7 @@
 #[macro_export]
 macro_rules! generate_hashcons_hashconsing {
     ($Op:ty) => {
-        use hashconsing::*;
-        use hashconsing::{HConsed, HashConsign};
+        use hashconsing::{HConsed, HashConsign, *};
 
         use $crate::Id;
 

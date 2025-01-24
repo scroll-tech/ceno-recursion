@@ -1,5 +1,4 @@
-use hashconsing::*;
-use hashconsing::{HConsed, HashConsign};
+use hashconsing::{HConsed, HashConsign, *};
 
 use std::net::SocketAddrV6 as TemplateOp;
 

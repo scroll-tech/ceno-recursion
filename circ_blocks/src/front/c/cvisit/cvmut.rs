@@ -1,10 +1,8 @@
 //! AST Walker for zokrates_pest_ast
 
-use super::walkfns::*;
-use super::CVisitorResult;
+use super::{CVisitorResult, walkfns::*};
 
-use lang_c::ast;
-use lang_c::span::Node;
+use lang_c::{ast, span::Node};
 
 pub trait CVisitorMut<'ast>: Sized {
     fn visit_translation_unit(&mut self, tu: &mut ast::TranslationUnit) -> CVisitorResult {

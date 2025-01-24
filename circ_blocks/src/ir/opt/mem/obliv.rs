@@ -17,8 +17,7 @@
 //! We could make the analysis more precise (and/or efficient) with a better data structure for
 //! tracking information about value locations.
 
-use crate::ir::term::extras::as_uint_constant;
-use crate::ir::term::*;
+use crate::ir::term::{extras::as_uint_constant, *};
 
 use log::trace;
 
@@ -150,7 +149,7 @@ impl OblivRewriter {
                 },
                 None,
             ),
-            //Op::Tuple => panic!("Tuple in obliv"),
+            // Op::Tuple => panic!("Tuple in obliv"),
             _ => (None, None),
         };
         if let Some(tup) = tup_opt {

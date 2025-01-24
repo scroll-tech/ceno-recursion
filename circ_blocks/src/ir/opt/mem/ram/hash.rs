@@ -1,6 +1,6 @@
 //! Keyed hashes
 
-use crate::ir::term::{pf_lit, term, Op, Term, PF_ADD, PF_MUL};
+use crate::ir::term::{Op, PF_ADD, PF_MUL, Term, pf_lit, term};
 use circ_fields::FieldT;
 
 /// A multi-set hasher.

@@ -8,8 +8,7 @@ use log::trace;
 
 use std::collections::VecDeque;
 
-use crate::ir::opt::visit::RewritePass;
-use crate::ir::term::*;
+use crate::ir::{opt::visit::RewritePass, term::*};
 use circ_fields::FieldT;
 use circ_opt::RamOpt;
 
@@ -23,7 +22,6 @@ pub mod volatile;
 /// An access to a RAM
 ///
 /// ## Field ordering
-///
 struct Access {
     /// The value read or (conditionally) written.
     pub val: Term,

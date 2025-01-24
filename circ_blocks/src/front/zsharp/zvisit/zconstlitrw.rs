@@ -1,8 +1,6 @@
 //! AST Walker for zokrates_pest_ast
 
-use super::super::term::Ty;
-use super::walkfns::*;
-use super::{ZVisitorError, ZVisitorMut, ZVisitorResult};
+use super::{super::term::Ty, ZVisitorError, ZVisitorMut, ZVisitorResult, walkfns::*};
 
 use zokrates_pest_ast as ast;
 
@@ -30,37 +28,35 @@ impl ZConstLiteralRewriter {
 }
 
 impl<'ast> ZVisitorMut<'ast> for ZConstLiteralRewriter {
-    /*
-    Expressions can be any of:
-
-    Binary(BinaryExpression<'ast>),
-        -> depends on operator. e.g., == outputs Bool but takes in arbitrary l and r
-
-    Ternary(TernaryExpression<'ast>)
-        -> first expr is Bool, other two are expected type
-
-    Unary(UnaryExpression<'ast>),
-        -> no change to expected type: each sub-expr should have the expected type
-
-    Postfix(PostfixExpression<'ast>),
-        -> cannot type Access results, but descend into sub-exprs to type array indices
-
-    Identifier(IdentifierExpression<'ast>),
-        -> nothing to do (terminal)
-
-    Literal(LiteralExpression<'ast>),
-        -> literal should have same type as expression
-
-    InlineArray(InlineArrayExpression<'ast>),
-        -> descend into SpreadOrExpression, looking for either array or element type
-
-    InlineStruct(InlineStructExpression<'ast>),
-        -> check that struct types are equal
-
-    ArrayInitializer(ArrayInitializerExpression<'ast>),
-        -> value should have type of value inside Array
-        -> count should have type Field
-    */
+    // Expressions can be any of:
+    //
+    // Binary(BinaryExpression<'ast>),
+    // -> depends on operator. e.g., == outputs Bool but takes in arbitrary l and r
+    //
+    // Ternary(TernaryExpression<'ast>)
+    // -> first expr is Bool, other two are expected type
+    //
+    // Unary(UnaryExpression<'ast>),
+    // -> no change to expected type: each sub-expr should have the expected type
+    //
+    // Postfix(PostfixExpression<'ast>),
+    // -> cannot type Access results, but descend into sub-exprs to type array indices
+    //
+    // Identifier(IdentifierExpression<'ast>),
+    // -> nothing to do (terminal)
+    //
+    // Literal(LiteralExpression<'ast>),
+    // -> literal should have same type as expression
+    //
+    // InlineArray(InlineArrayExpression<'ast>),
+    // -> descend into SpreadOrExpression, looking for either array or element type
+    //
+    // InlineStruct(InlineStructExpression<'ast>),
+    // -> check that struct types are equal
+    //
+    // ArrayInitializer(ArrayInitializerExpression<'ast>),
+    // -> value should have type of value inside Array
+    // -> count should have type Field
 
     fn visit_ternary_expression(
         &mut self,
@@ -171,7 +167,10 @@ impl<'ast> ZVisitorMut<'ast> for ZConstLiteralRewriter {
         let ty_map = if let Some(t) = to_ty.as_ref() {
             if let Ty::Struct(name, ty_map) = t {
                 if name != &ise.ty.value {
-                    Err(format!("ZConstLiteralRewriter: got struct {}, expected {} visiting inline struct expression", &ise.ty.value, name))
+                    Err(format!(
+                        "ZConstLiteralRewriter: got struct {}, expected {} visiting inline struct expression",
+                        &ise.ty.value, name
+                    ))
                 } else {
                     Ok(Some(ty_map.clone()))
                 }

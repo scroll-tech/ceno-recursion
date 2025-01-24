@@ -4,12 +4,13 @@ use std::fmt::{self, Display, Formatter};
 
 use rug::Integer;
 
-use super::error::ErrorKind;
-use super::ty::Ty;
+use super::{error::ErrorKind, ty::Ty};
 
-use crate::cfg::cfg;
-use crate::circify::{CirCtx, Embeddable, Typed};
-use crate::ir::term::*;
+use crate::{
+    cfg::cfg,
+    circify::{CirCtx, Embeddable, Typed},
+    ir::term::*,
+};
 
 /// A term
 #[derive(Debug, Clone)]

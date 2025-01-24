@@ -1,4 +1,4 @@
-use circ_hc::{generate_hashcons_rc, Node as NodeTrait, Table as TableTrait};
+use circ_hc::{Node as NodeTrait, Table as TableTrait, generate_hashcons_rc};
 
 generate_hashcons_rc!(u32);
 

@@ -5,10 +5,12 @@ macro_rules! generate_hashcons_rc {
         use fxhash::FxHashMap as HashMap;
 
         use log::trace;
-        use std::borrow::Borrow;
-        use std::cell::{Cell, RefCell};
-        use std::rc::Rc;
-        use std::thread_local;
+        use std::{
+            borrow::Borrow,
+            cell::{Cell, RefCell},
+            rc::Rc,
+            thread_local,
+        };
         use $crate::Id;
 
         #[allow(dead_code)]
@@ -300,8 +302,10 @@ macro_rules! generate_hashcons_rc {
 
         mod hash {
             use super::{Node, NodeData, NodeDataRef, Weak};
-            use std::borrow::Borrow;
-            use std::hash::{Hash, Hasher};
+            use std::{
+                borrow::Borrow,
+                hash::{Hash, Hasher},
+            };
 
             impl Hash for Node {
                 fn hash<H: Hasher>(&self, state: &mut H) {

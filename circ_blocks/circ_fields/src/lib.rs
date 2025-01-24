@@ -14,10 +14,10 @@ pub mod moduli {
 }
 
 use ext_field::FGoldilocksExt2;
-use ff_field::{FBls12381, FBn254, FCurve25519, FGoldilocks};
-use ff_field::{F_BLS12381_FMOD, F_BN254_FMOD, F_CURVE25519_FMOD, F_GOLDILOCKS_FMOD};
 use ff_field::{
-    F_BLS12381_FMOD_ARC, F_BN254_FMOD_ARC, F_CURVE25519_FMOD_ARC, F_GOLDILOCKS_FMOD_ARC,
+    F_BLS12381_FMOD, F_BLS12381_FMOD_ARC, F_BN254_FMOD, F_BN254_FMOD_ARC, F_CURVE25519_FMOD,
+    F_CURVE25519_FMOD_ARC, F_GOLDILOCKS_FMOD, F_GOLDILOCKS_FMOD_ARC, FBls12381, FBn254,
+    FCurve25519, FGoldilocks,
 };
 use int_field::IntField;
 
@@ -26,9 +26,11 @@ use ff::Field;
 use paste::paste;
 use rug::Integer;
 use serde::{Deserialize, Serialize};
-use std::fmt::{self, Debug, Display, Formatter};
-use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use std::sync::Arc;
+use std::{
+    fmt::{self, Debug, Display, Formatter},
+    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    sync::Arc,
+};
 
 // TODO: rework this using macros?
 

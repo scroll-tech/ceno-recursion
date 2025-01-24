@@ -1,7 +1,6 @@
 //! IR extensions
 
-use super::ty::TypeErrorReason;
-use super::{Sort, Term, Value};
+use super::{Sort, Term, Value, ty::TypeErrorReason};
 use circ_hc::Node;
 use serde::{Deserialize, Serialize};
 

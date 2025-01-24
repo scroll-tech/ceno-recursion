@@ -7,7 +7,6 @@ use std::convert::From;
 
 #[derive(Serialize, Deserialize, Clone)]
 /// A term represented as a sequence of operator applications (rather than with hash-consing).
-///
 pub struct LinTerm {
     steps: Vec<(Op, Vec<usize>)>,
 }

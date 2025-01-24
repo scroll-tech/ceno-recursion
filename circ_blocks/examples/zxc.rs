@@ -34,6 +34,7 @@ use libspartan::{
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::time::*;
+use std::time::*;
 
 // How many reserved variables (EXCLUDING V) are in front of the actual input / output?
 // %BN, %RET, %TS, %AS, %SP, %BP

@@ -384,7 +384,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     }
     let mut ry_factors = vec![ONE; num_rounds_y + 1];
     for i in 0..num_rounds_y {
-      ry_factors[i + 1] = ry_factors[i] * (ONE - ry[i]);
+      ry_factors[i + 1] = ry_factors[i] * (S::field_one() - ry[i]);
     }
 
     let mut poly_list = Vec::new();
@@ -438,6 +438,13 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     // So we need to multiply each entry by (1 - rq0)(1 - rq1)
     let mut eval_vars_comb_list = Vec::new();
     for p in 0..num_instances {
+      let _wit_sec_p = |i: usize| {
+        if witness_secs[i].w_mat.len() == 1 {
+          0
+        } else {
+          p
+        }
+      };
       let wit_sec_p = |i: usize| {
         if witness_secs[i].w_mat.len() == 1 {
           0
@@ -448,28 +455,28 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       let e = |i: usize| eval_vars_at_ry_list[i][wit_sec_p(i)];
       let prefix_list = match num_witness_secs.next_power_of_two() {
         1 => {
-          vec![ONE]
+          vec![S::field_one()]
         }
         2 => {
-          vec![(ONE - rw[0]), rw[0]]
+          vec![(S::field_one() - rw[0]), rw[0]]
         }
         4 => {
           vec![
-            (ONE - rw[0]) * (ONE - rw[1]),
-            (ONE - rw[0]) * rw[1],
-            rw[0] * (ONE - rw[1]),
+            (S::field_one() - rw[0]) * (S::field_one() - rw[1]),
+            (S::field_one() - rw[0]) * rw[1],
+            rw[0] * (S::field_one() - rw[1]),
             rw[0] * rw[1],
           ]
         }
         8 => {
           vec![
-            (ONE - rw[0]) * (ONE - rw[1]) * (ONE - rw[2]),
-            (ONE - rw[0]) * (ONE - rw[1]) * rw[2],
-            (ONE - rw[0]) * rw[1] * (ONE - rw[2]),
-            (ONE - rw[0]) * rw[1] * rw[2],
-            rw[0] * (ONE - rw[1]) * (ONE - rw[2]),
-            rw[0] * (ONE - rw[1]) * rw[2],
-            rw[0] * rw[1] * (ONE - rw[2]),
+            (S::field_one() - rw[0]) * (S::field_one() - rw[1]) * (S::field_one() - rw[2]),
+            (S::field_one() - rw[0]) * (S::field_one() - rw[1]) * rw[2],
+            (S::field_one() - rw[0]) * rw[1] * (S::field_one() - rw[2]),
+            (S::field_one() - rw[0]) * rw[1] * rw[2],
+            rw[0] * (S::field_one() - rw[1]) * (S::field_one() - rw[2]),
+            rw[0] * (S::field_one() - rw[1]) * rw[2],
+            rw[0] * rw[1] * (S::field_one() - rw[2]),
             rw[0] * rw[1] * rw[2],
           ]
         }
@@ -507,7 +514,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     &self,
     num_instances: usize,
     max_num_proofs: usize,
-    num_proofs: &Vec<usize>,
+    _num_proofs: &Vec<usize>,
     max_num_inputs: usize,
 
     // NUM_WITNESS_SECS
@@ -619,9 +626,9 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     // First by witness & by instance on ry
     // For every possible wit_sec.num_inputs, compute ry_factor = prodX(1 - ryX)...
     // If there are 2 witness secs, then ry_factors[0] = 1, ry_factors[1] = 1, ry_factors[2] = 1 - ry1, ry_factors[3] = (1 - ry1)(1 - ry2), etc.
-    let mut ry_factors = vec![ONE; num_rounds_y + 1];
+    let mut ry_factors = vec![S::field_one(); num_rounds_y + 1];
     for i in 0..num_rounds_y {
-      ry_factors[i + 1] = (ry_factors[i]) * (ONE - ry[i]);
+      ry_factors[i + 1] = (ry_factors[i]) * (S::field_one() - ry[i]);
     }
 
     // POLY COMMIT
@@ -658,7 +665,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     // Then on rp
     let mut expected_eval_vars_list = Vec::new();
     for p in 0..num_instances {
-      let wit_sec_p = |i: usize| {
+      let _wit_sec_p = |i: usize| {
         if witness_secs[i].num_proofs.len() == 1 {
           0
         } else {
@@ -675,28 +682,28 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
       };
       let prefix_list = match num_witness_secs.next_power_of_two() {
         1 => {
-          vec![ONE]
+          vec![S::field_one()]
         }
         2 => {
-          vec![(ONE - rw[0]), rw[0]]
+          vec![(S::field_one() - rw[0]), rw[0]]
         }
         4 => {
           vec![
-            (ONE - rw[0]) * (ONE - rw[1]),
-            (ONE - rw[0]) * rw[1],
-            rw[0] * (ONE - rw[1]),
+            (S::field_one() - rw[0]) * (S::field_one() - rw[1]),
+            (S::field_one() - rw[0]) * rw[1],
+            rw[0] * (S::field_one() - rw[1]),
             rw[0] * rw[1],
           ]
         }
         8 => {
           vec![
-            (ONE - rw[0]) * (ONE - rw[1]) * (ONE - rw[2]),
-            (ONE - rw[0]) * (ONE - rw[1]) * rw[2],
-            (ONE - rw[0]) * rw[1] * (ONE - rw[2]),
-            (ONE - rw[0]) * rw[1] * rw[2],
-            rw[0] * (ONE - rw[1]) * (ONE - rw[2]),
-            rw[0] * (ONE - rw[1]) * rw[2],
-            rw[0] * rw[1] * (ONE - rw[2]),
+            (S::field_one() - rw[0]) * (S::field_one() - rw[1]) * (S::field_one() - rw[2]),
+            (S::field_one() - rw[0]) * (S::field_one() - rw[1]) * rw[2],
+            (S::field_one() - rw[0]) * rw[1] * (S::field_one() - rw[2]),
+            (S::field_one() - rw[0]) * rw[1] * rw[2],
+            rw[0] * (S::field_one() - rw[1]) * (S::field_one() - rw[2]),
+            rw[0] * (S::field_one() - rw[1]) * rw[2],
+            rw[0] * rw[1] * (S::field_one() - rw[2]),
             rw[0] * rw[1] * rw[2],
           ]
         }

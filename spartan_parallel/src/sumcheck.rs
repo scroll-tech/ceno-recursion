@@ -98,24 +98,22 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
         let poly_A_bound_point = poly_A[len + i] + poly_A[len + i] - poly_A[i];
         let poly_B_bound_point = poly_B[len + i] + poly_B[len + i] - poly_B[i];
         let poly_C_bound_point = poly_C[len + i] + poly_C[len + i] - poly_C[i];
-        eval_point_2 = eval_point_2
-          + comb_func(
-            &poly_A_bound_point,
-            &poly_B_bound_point,
-            &poly_C_bound_point,
-          );
+        eval_point_2 += comb_func(
+          &poly_A_bound_point,
+          &poly_B_bound_point,
+          &poly_C_bound_point,
+        );
 
         // eval 3: bound_func is -2A(low) + 3A(high); computed incrementally with bound_func applied to eval(2)
         let poly_A_bound_point = poly_A_bound_point + poly_A[len + i] - poly_A[i];
         let poly_B_bound_point = poly_B_bound_point + poly_B[len + i] - poly_B[i];
         let poly_C_bound_point = poly_C_bound_point + poly_C[len + i] - poly_C[i];
 
-        eval_point_3 = eval_point_3
-          + comb_func(
-            &poly_A_bound_point,
-            &poly_B_bound_point,
-            &poly_C_bound_point,
-          );
+        eval_point_3 += comb_func(
+          &poly_A_bound_point,
+          &poly_B_bound_point,
+          &poly_C_bound_point,
+        );
       }
 
       let evals = vec![eval_point_0, e - eval_point_0, eval_point_2, eval_point_3];
@@ -181,30 +179,28 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
         let len = poly_A.len() / 2;
         for i in 0..len {
           // eval 0: bound_func is A(low)
-          eval_point_0 = eval_point_0 + comb_func(&poly_A[i], &poly_B[i], &poly_C_par[i]);
+          eval_point_0 += comb_func(&poly_A[i], &poly_B[i], &poly_C_par[i]);
 
           // eval 2: bound_func is -A(low) + 2*A(high)
           let poly_A_bound_point = poly_A[len + i] + poly_A[len + i] - poly_A[i];
           let poly_B_bound_point = poly_B[len + i] + poly_B[len + i] - poly_B[i];
           let poly_C_bound_point = poly_C_par[len + i] + poly_C_par[len + i] - poly_C_par[i];
-          eval_point_2 = eval_point_2
-            + comb_func(
-              &poly_A_bound_point,
-              &poly_B_bound_point,
-              &poly_C_bound_point,
-            );
+          eval_point_2 += comb_func(
+            &poly_A_bound_point,
+            &poly_B_bound_point,
+            &poly_C_bound_point,
+          );
 
           // eval 3: bound_func is -2A(low) + 3A(high); computed incrementally with bound_func applied to eval(2)
           let poly_A_bound_point = poly_A_bound_point + poly_A[len + i] - poly_A[i];
           let poly_B_bound_point = poly_B_bound_point + poly_B[len + i] - poly_B[i];
           let poly_C_bound_point = poly_C_bound_point + poly_C_par[len + i] - poly_C_par[i];
 
-          eval_point_3 = eval_point_3
-            + comb_func(
-              &poly_A_bound_point,
-              &poly_B_bound_point,
-              &poly_C_bound_point,
-            );
+          eval_point_3 += comb_func(
+            &poly_A_bound_point,
+            &poly_B_bound_point,
+            &poly_C_bound_point,
+          );
         }
 
         evals.push((eval_point_0, eval_point_2, eval_point_3));
@@ -221,27 +217,25 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
         let len = poly_A.len() / 2;
         for i in 0..len {
           // eval 0: bound_func is A(low)
-          eval_point_0 = eval_point_0 + comb_func(&poly_A[i], &poly_B[i], &poly_C[i]);
+          eval_point_0 += comb_func(&poly_A[i], &poly_B[i], &poly_C[i]);
           // eval 2: bound_func is -A(low) + 2*A(high)
           let poly_A_bound_point = poly_A[len + i] + poly_A[len + i] - poly_A[i];
           let poly_B_bound_point = poly_B[len + i] + poly_B[len + i] - poly_B[i];
           let poly_C_bound_point = poly_C[len + i] + poly_C[len + i] - poly_C[i];
-          eval_point_2 = eval_point_2
-            + comb_func(
-              &poly_A_bound_point,
-              &poly_B_bound_point,
-              &poly_C_bound_point,
-            );
+          eval_point_2 += comb_func(
+            &poly_A_bound_point,
+            &poly_B_bound_point,
+            &poly_C_bound_point,
+          );
           // eval 3: bound_func is -2A(low) + 3A(high); computed incrementally with bound_func applied to eval(2)
           let poly_A_bound_point = poly_A_bound_point + poly_A[len + i] - poly_A[i];
           let poly_B_bound_point = poly_B_bound_point + poly_B[len + i] - poly_B[i];
           let poly_C_bound_point = poly_C_bound_point + poly_C[len + i] - poly_C[i];
-          eval_point_3 = eval_point_3
-            + comb_func(
-              &poly_A_bound_point,
-              &poly_B_bound_point,
-              &poly_C_bound_point,
-            );
+          eval_point_3 += comb_func(
+            &poly_A_bound_point,
+            &poly_B_bound_point,
+            &poly_C_bound_point,
+          );
         }
         evals.push((eval_point_0, eval_point_2, eval_point_3));
       }
@@ -422,12 +416,11 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
               };
 
               // eval 0: bound_func is A(low)
-              eval_point_0 = eval_point_0
-                + comb_func(
-                  &poly_A_index_p_w_y,
-                  &poly_B.index(p_inst, 0, w, y),
-                  &poly_C.index(p, 0, w, y),
-                ); // Az[0, x, x, x, ...]
+              eval_point_0 += comb_func(
+                &poly_A_index_p_w_y,
+                &poly_B.index(p_inst, 0, w, y),
+                &poly_C.index(p, 0, w, y),
+              ); // Az[0, x, x, x, ...]
 
               // eval 2: bound_func is -A(low) + 2*A(high)
               let poly_A_bound_point =
@@ -438,12 +431,11 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
               let poly_C_bound_point = poly_C.index_high(p, 0, w, y, mode)
                 + poly_C.index_high(p, 0, w, y, mode)
                 - poly_C.index(p, 0, w, y);
-              eval_point_2 = eval_point_2
-                + comb_func(
-                  &poly_A_bound_point,
-                  &poly_B_bound_point,
-                  &poly_C_bound_point,
-                );
+              eval_point_2 += comb_func(
+                &poly_A_bound_point,
+                &poly_B_bound_point,
+                &poly_C_bound_point,
+              );
 
               // eval 3: bound_func is -2A(low) + 3A(high); computed incrementally with bound_func applied to eval(2)
               let poly_A_bound_point =
@@ -453,12 +445,11 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
                 - poly_B.index(p_inst, 0, w, y); // Az[3, x, x, ...]
               let poly_C_bound_point =
                 poly_C_bound_point + poly_C.index_high(p, 0, w, y, mode) - poly_C.index(p, 0, w, y);
-              eval_point_3 = eval_point_3
-                + comb_func(
-                  &poly_A_bound_point,
-                  &poly_B_bound_point,
-                  &poly_C_bound_point,
-                );
+              eval_point_3 += comb_func(
+                &poly_A_bound_point,
+                &poly_B_bound_point,
+                &poly_C_bound_point,
+              );
             }
           }
         }
@@ -469,9 +460,8 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
           eval_point_2,
           eval_point_3,
         ];
-        let poly = UniPoly::from_evals(&evals);
 
-        poly
+        UniPoly::from_evals(&evals)
       };
 
       // append the prover's message to the transcript
@@ -627,13 +617,12 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
               };
 
               // eval 0: bound_func is A(low)
-              eval_point_0 = eval_point_0
-                + comb_func(
-                  &poly_A_index_p_q_x,
-                  &poly_B.index(p, q, 0, x),
-                  &poly_C.index(p, q, 0, x),
-                  &poly_D.index(p, q, 0, x),
-                ); // Az[0, x, x, x, ...]
+              eval_point_0 += comb_func(
+                &poly_A_index_p_q_x,
+                &poly_B.index(p, q, 0, x),
+                &poly_C.index(p, q, 0, x),
+                &poly_D.index(p, q, 0, x),
+              ); // Az[0, x, x, x, ...]
 
               // eval 2: bound_func is -A(low) + 2*A(high)
               let poly_A_bound_point =
@@ -647,13 +636,12 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
               let poly_D_bound_point = poly_D.index_high(p, q, 0, x, mode)
                 + poly_D.index_high(p, q, 0, x, mode)
                 - poly_D.index(p, q, 0, x);
-              eval_point_2 = eval_point_2
-                + comb_func(
-                  &poly_A_bound_point,
-                  &poly_B_bound_point,
-                  &poly_C_bound_point,
-                  &poly_D_bound_point,
-                );
+              eval_point_2 += comb_func(
+                &poly_A_bound_point,
+                &poly_B_bound_point,
+                &poly_C_bound_point,
+                &poly_D_bound_point,
+              );
 
               // eval 3: bound_func is -2A(low) + 3A(high); computed incrementally with bound_func applied to eval(2)
               let poly_A_bound_point =
@@ -664,13 +652,12 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
                 poly_C_bound_point + poly_C.index_high(p, q, 0, x, mode) - poly_C.index(p, q, 0, x);
               let poly_D_bound_point =
                 poly_D_bound_point + poly_D.index_high(p, q, 0, x, mode) - poly_D.index(p, q, 0, x);
-              eval_point_3 = eval_point_3
-                + comb_func(
-                  &poly_A_bound_point,
-                  &poly_B_bound_point,
-                  &poly_C_bound_point,
-                  &poly_D_bound_point,
-                );
+              eval_point_3 += comb_func(
+                &poly_A_bound_point,
+                &poly_B_bound_point,
+                &poly_C_bound_point,
+                &poly_D_bound_point,
+              );
             }
           }
         }
@@ -681,8 +668,8 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
           eval_point_2,
           eval_point_3,
         ];
-        let poly = UniPoly::from_evals(&evals);
-        poly
+
+        UniPoly::from_evals(&evals)
       };
 
       // append the prover's message to the transcript

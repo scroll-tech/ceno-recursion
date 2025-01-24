@@ -35,7 +35,7 @@ pub fn rev_bits(q: usize, max_num_proofs: usize) -> usize {
   (0..max_num_proofs.log_2())
     .rev()
     .map(|i| q / (i.pow2()) % 2 * (max_num_proofs / i.pow2() / 2))
-    .fold(0, |a, b| a + b)
+    .sum::<usize>()
 }
 
 impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
@@ -112,7 +112,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   }
 
   pub fn len(&self) -> usize {
-    return self.num_instances * self.max_num_proofs * self.max_num_inputs;
+    self.num_instances * self.max_num_proofs * self.max_num_inputs
   }
 
   // Given (p, q_rev, x_rev) return Z[p][q_rev][x_rev]
@@ -122,9 +122,9 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
       && w < self.Z[p][q_rev].len()
       && x_rev < self.Z[p][q_rev][w].len()
     {
-      return self.Z[p][q_rev][w][x_rev];
+      self.Z[p][q_rev][w][x_rev]
     } else {
-      return S::field_zero();
+      S::field_zero()
     }
   }
 
@@ -138,31 +138,31 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
     match mode {
       MODE_P => {
         if p + self.num_instances / 2 < self.Z.len() {
-          return self.Z[p + self.num_instances / 2][q_rev][w][x_rev];
+          self.Z[p + self.num_instances / 2][q_rev][w][x_rev]
         } else {
-          return S::field_zero();
+          S::field_zero()
         }
       }
       MODE_Q => {
-        return if self.num_proofs[p] == 1 {
+        if self.num_proofs[p] == 1 {
           S::field_zero()
         } else {
           self.Z[p][q_rev + self.num_proofs[p] / 2][w][x_rev]
-        };
+        }
       }
       MODE_W => {
         if w + self.num_witness_secs / 2 < self.Z[p][q_rev].len() {
-          return self.Z[p][q_rev][w + self.num_witness_secs / 2][x_rev];
+          self.Z[p][q_rev][w + self.num_witness_secs / 2][x_rev]
         } else {
-          return S::field_zero();
+          S::field_zero()
         }
       }
       MODE_X => {
-        return if self.num_inputs[p] == 1 {
+        if self.num_inputs[p] == 1 {
           S::field_zero()
         } else {
           self.Z[p][q_rev][w][x_rev + self.num_inputs[p] / 2]
-        };
+        }
       }
       _ => {
         panic!(

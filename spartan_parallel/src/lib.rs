@@ -196,7 +196,7 @@ impl<S: SpartanExtensionField> IOProofs<S> {
     let mut live_input = Vec::new();
     for i in 0..input_liveness.len() {
       if input_liveness[i] {
-        live_input.push(input[i].clone());
+        live_input.push(input[i]);
       }
     }
     input_indices = input_indices[..live_input.len()].to_vec();
@@ -218,7 +218,7 @@ impl<S: SpartanExtensionField> IOProofs<S> {
       .iter()
       .map(|i| to_bin_array(*i))
       .collect(),
-      vec![
+      [
         vec![
           S::field_one(),
           S::field_one(),
@@ -277,7 +277,7 @@ impl<S: SpartanExtensionField> IOProofs<S> {
     let mut live_input = Vec::new();
     for i in 0..input_liveness.len() {
       if input_liveness[i] {
-        live_input.push(input[i].clone());
+        live_input.push(input[i]);
       }
     }
     input_indices = input_indices[..live_input.len()].to_vec();
@@ -300,7 +300,7 @@ impl<S: SpartanExtensionField> IOProofs<S> {
       .iter()
       .map(|i| to_bin_array(*i))
       .collect(),
-      vec![
+      [
         vec![
           S::field_one(),
           S::field_one(),
@@ -351,7 +351,7 @@ impl<S: SpartanExtensionField> ShiftProofs<S> {
     let mut next_c = S::field_one();
     for _ in 0..max_poly_size {
       rc.push(next_c);
-      next_c = next_c * c;
+      next_c *= c;
     }
     let mut orig_evals = Vec::new();
     let mut shifted_evals = Vec::new();
@@ -400,7 +400,7 @@ impl<S: SpartanExtensionField> ShiftProofs<S> {
     let mut next_c = S::field_one();
     for _ in 0..max_shift_size + 1 {
       rc.push(next_c);
-      next_c = next_c * c;
+      next_c *= c;
     }
 
     // Proof of opening
@@ -491,7 +491,7 @@ impl<S: SpartanExtensionField> ProverWitnessSecInfo<S> {
       merged_num_inputs.push(components[next_component].num_inputs[pointers[next_component]]);
       merged_w_mat.push(components[next_component].w_mat[pointers[next_component]].clone());
       merged_poly_w.push(components[next_component].poly_w[pointers[next_component]].clone());
-      pointers[next_component] = pointers[next_component] + 1;
+      pointers[next_component] += 1;
     }
 
     (
@@ -576,7 +576,7 @@ impl VerifierWitnessSecInfo {
       inst_map.push(next_component);
       merged_num_inputs.push(components[next_component].num_inputs[pointers[next_component]]);
       merged_num_proofs.push(components[next_component].num_proofs[pointers[next_component]]);
-      pointers[next_component] = pointers[next_component] + 1;
+      pointers[next_component] += 1;
     }
 
     (
@@ -732,16 +732,16 @@ impl<S: SpartanExtensionField> SNARK<S> {
           // Flatten the witnesses into a Q_i * X list
           let w2_list_p = mem_w2.clone().into_iter().flatten().collect();
           // create a multilinear polynomial using the supplied assignment for variables
-          let mem_poly_w2 = DensePolynomial::new(w2_list_p);
-          mem_poly_w2
+
+          DensePolynomial::new(w2_list_p)
         };
 
         let mem_poly_w3 = {
           // Flatten the witnesses into a Q_i * X list
           let w3_list_p = mem_w3.clone().into_iter().flatten().collect();
           // create a multilinear polynomial using the supplied assignment for variables
-          let mem_poly_w3 = DensePolynomial::new(w3_list_p);
-          mem_poly_w3
+
+          DensePolynomial::new(w3_list_p)
         };
 
         let mem_poly_w3_shifted = {
@@ -752,8 +752,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
           ]
           .concat();
           // create a multilinear polynomial using the supplied assignment for variables
-          let mem_poly_w3_shifted = DensePolynomial::new(w3_list_p);
-          mem_poly_w3_shifted
+
+          DensePolynomial::new(w3_list_p)
         };
 
         (mem_poly_w2, mem_poly_w3, mem_poly_w3_shifted)
@@ -1162,7 +1162,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
         let mut r_tmp = comb_r;
         for _ in 1..2 * num_inputs_unpadded {
           perm_w0.push(r_tmp);
-          r_tmp = r_tmp * comb_r;
+          r_tmp *= comb_r;
         }
         perm_w0.extend(vec![S::field_zero(); num_ios - 2 * num_inputs_unpadded]);
         perm_w0
@@ -1193,14 +1193,13 @@ impl<S: SpartanExtensionField> SNARK<S> {
           perm_exec_w2[q][1] = exec_inputs_list[q][0];
           for i in 0..num_inputs_unpadded - 1 {
             let perm = if i == 0 { S::field_one() } else { perm_w0[i] };
-            perm_exec_w2[q][0] = perm_exec_w2[q][0] + perm * exec_inputs_list[q][2 + i];
-            perm_exec_w2[q][2] =
-              perm_exec_w2[q][2] + perm * exec_inputs_list[q][2 + (num_inputs_unpadded - 1) + i];
+            perm_exec_w2[q][0] += perm * exec_inputs_list[q][2 + i];
+            perm_exec_w2[q][2] += perm * exec_inputs_list[q][2 + (num_inputs_unpadded - 1) + i];
           }
-          perm_exec_w2[q][0] = perm_exec_w2[q][0] * exec_inputs_list[q][0];
+          perm_exec_w2[q][0] *= exec_inputs_list[q][0];
           let ZO = perm_exec_w2[q][2];
-          perm_exec_w2[q][1] = perm_exec_w2[q][1] + ZO;
-          perm_exec_w2[q][1] = perm_exec_w2[q][1] * exec_inputs_list[q][0];
+          perm_exec_w2[q][1] += ZO;
+          perm_exec_w2[q][1] *= exec_inputs_list[q][0];
         }
         perm_exec_w2
       };
@@ -1234,18 +1233,16 @@ impl<S: SpartanExtensionField> SNARK<S> {
           // Flatten the witnesses into a Q_i * X list
           let w2_list_p = perm_exec_w2.clone().into_iter().flatten().collect();
           // create a multilinear polynomial using the supplied assignment for variables
-          let perm_exec_poly_w2 = DensePolynomial::new(w2_list_p);
 
-          perm_exec_poly_w2
+          DensePolynomial::new(w2_list_p)
         };
 
         let perm_exec_poly_w3 = {
           // Flatten the witnesses into a Q_i * X list
           let w3_list_p = perm_exec_w3.clone().into_iter().flatten().collect();
           // create a multilinear polynomial using the supplied assignment for variables
-          let perm_exec_poly_w3 = DensePolynomial::new(w3_list_p);
 
-          perm_exec_poly_w3
+          DensePolynomial::new(w3_list_p)
         };
 
         let perm_exec_poly_w3_shifted = {
@@ -1261,9 +1258,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
           ]
           .concat();
           // create a multilinear polynomial using the supplied assignment for variables
-          let perm_exec_poly_w3_shifted = DensePolynomial::new(w3_list_p);
 
-          perm_exec_poly_w3_shifted
+          DensePolynomial::new(w3_list_p)
         };
 
         (
@@ -1321,19 +1317,17 @@ impl<S: SpartanExtensionField> SNARK<S> {
             block_w2[p][q][0] = block_vars_mat[p][q][0];
             block_w2[p][q][1] = block_vars_mat[p][q][0];
             for i in 1..2 * (num_inputs_unpadded - 1) {
-              block_w2[p][q][2 + i] =
-                block_w2[p][q][2 + i] + perm_w0[i] * block_vars_mat[p][q][i + 2];
+              block_w2[p][q][2 + i] += perm_w0[i] * block_vars_mat[p][q][i + 2];
             }
             for i in 0..num_inputs_unpadded - 1 {
               let perm = if i == 0 { S::field_one() } else { perm_w0[i] };
-              block_w2[p][q][0] = block_w2[p][q][0] + perm * block_vars_mat[p][q][2 + i];
-              block_w2[p][q][2] =
-                block_w2[p][q][2] + perm * block_vars_mat[p][q][2 + (num_inputs_unpadded - 1) + i];
+              block_w2[p][q][0] += perm * block_vars_mat[p][q][2 + i];
+              block_w2[p][q][2] += perm * block_vars_mat[p][q][2 + (num_inputs_unpadded - 1) + i];
             }
-            block_w2[p][q][0] = block_w2[p][q][0] * block_vars_mat[p][q][0];
+            block_w2[p][q][0] *= block_vars_mat[p][q][0];
             let ZO = block_w2[p][q][2];
-            block_w2[p][q][1] = block_w2[p][q][1] + ZO;
-            block_w2[p][q][1] = block_w2[p][q][1] * block_vars_mat[p][q][0];
+            block_w2[p][q][1] += ZO;
+            block_w2[p][q][1] *= block_vars_mat[p][q][0];
             block_w3[p][q] = vec![S::field_zero(); 8];
             block_w3[p][q][0] = block_vars_mat[p][q][0];
             block_w3[p][q][1] = block_w3[p][q][0]
@@ -1428,15 +1422,13 @@ impl<S: SpartanExtensionField> SNARK<S> {
             // Flatten the witnesses into a Q_i * X list
             let w2_list_p = block_w2[p].clone().into_iter().flatten().collect();
             // create a multilinear polynomial using the supplied assignment for variables
-            let block_poly_w2 = DensePolynomial::new(w2_list_p);
-            block_poly_w2
+
+            DensePolynomial::new(w2_list_p)
           };
           block_poly_w2_list.push(block_poly_w2);
         }
 
-        let block_w2_prover = ProverWitnessSecInfo::new(block_w2.clone(), block_poly_w2_list);
-
-        block_w2_prover
+        ProverWitnessSecInfo::new(block_w2.clone(), block_poly_w2_list)
       };
       let (block_poly_w3_list, block_poly_w3_list_shifted) = {
         let mut block_poly_w3_list = Vec::new();
@@ -1447,8 +1439,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
             // Flatten the witnesses into a Q_i * X list
             let w3_list_p = block_w3[p].clone().into_iter().flatten().collect();
             // create a multilinear polynomial using the supplied assignment for variables
-            let block_poly_w3 = DensePolynomial::new(w3_list_p);
-            block_poly_w3
+
+            DensePolynomial::new(w3_list_p)
           };
 
           let block_poly_w3_shifted = {
@@ -1464,8 +1456,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
             ]
             .concat();
             // create a multilinear polynomial using the supplied assignment for variables
-            let block_poly_w3_shifted = DensePolynomial::new(w3_list_p);
-            block_poly_w3_shifted
+
+            DensePolynomial::new(w3_list_p)
           };
           block_poly_w3_list.push(block_poly_w3);
           block_poly_w3_list_shifted.push(block_poly_w3_shifted);
@@ -1594,16 +1586,16 @@ impl<S: SpartanExtensionField> SNARK<S> {
             // Flatten the witnesses into a Q_i * X list
             let w2_list_p = vir_mem_addr_w2.clone().into_iter().flatten().collect();
             // create a multilinear polynomial using the supplied assignment for variables
-            let vir_mem_addr_poly_w2 = DensePolynomial::new(w2_list_p);
-            vir_mem_addr_poly_w2
+
+            DensePolynomial::new(w2_list_p)
           };
 
           let vir_mem_addr_poly_w3 = {
             // Flatten the witnesses into a Q_i * X list
             let w3_list_p = vir_mem_addr_w3.clone().into_iter().flatten().collect();
             // create a multilinear polynomial using the supplied assignment for variables
-            let vir_mem_addr_poly_w3 = DensePolynomial::new(w3_list_p);
-            vir_mem_addr_poly_w3
+
+            DensePolynomial::new(w3_list_p)
           };
 
           let vir_mem_addr_poly_w3_shifted = {
@@ -1619,8 +1611,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
             ]
             .concat();
             // create a multilinear polynomial using the supplied assignment for variables
-            let vir_mem_addr_poly_w3_shifted = DensePolynomial::new(w3_list_p);
-            vir_mem_addr_poly_w3_shifted
+
+            DensePolynomial::new(w3_list_p)
           };
 
           (
@@ -1673,8 +1665,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
           // Flatten the witnesses into a Q_i * X list
           let vars_list_p: Vec<S> = block_vars_mat[p].clone().into_iter().flatten().collect();
           // create a multilinear polynomial using the supplied assignment for variables
-          let block_poly_vars = DensePolynomial::new(vars_list_p);
-          block_poly_vars
+
+          DensePolynomial::new(vars_list_p)
         };
         block_poly_vars_list.push(block_poly_vars);
       }
@@ -1682,8 +1674,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let exec_poly_inputs = {
         let exec_inputs = exec_inputs_list.clone().into_iter().flatten().collect();
         // create a multilinear polynomial using the supplied assignment for variables
-        let exec_poly_inputs = DensePolynomial::new(exec_inputs);
-        exec_poly_inputs
+
+        DensePolynomial::new(exec_inputs)
       };
 
       (block_poly_vars_list, vec![exec_poly_inputs])
@@ -1693,8 +1685,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
         let poly_init_mems = {
           let init_mems = init_phy_mems_list.clone().into_iter().flatten().collect();
           // create a multilinear polynomial using the supplied assignment for variables
-          let poly_init_mems = DensePolynomial::new(init_mems);
-          poly_init_mems
+
+          DensePolynomial::new(init_mems)
         };
         (vec![poly_init_mems],)
       } else {
@@ -1706,8 +1698,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
         let poly_init_mems = {
           let init_mems = init_vir_mems_list.clone().into_iter().flatten().collect();
           // create a multilinear polynomial using the supplied assignment for variables
-          let poly_init_mems = DensePolynomial::new(init_mems);
-          poly_init_mems
+
+          DensePolynomial::new(init_mems)
         };
         (vec![poly_init_mems],)
       } else {
@@ -1720,8 +1712,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
         let addr_poly_phy_mems = {
           let addr_phy_mems = addr_phy_mems_list.clone().into_iter().flatten().collect();
           // create a multilinear polynomial using the supplied assignment for variables
-          let addr_poly_phy_mems = DensePolynomial::new(addr_phy_mems);
-          addr_poly_phy_mems
+
+          DensePolynomial::new(addr_phy_mems)
         };
         // Remove the first entry and shift the remaining entries up by one
         // Used later by coherence check
@@ -1738,15 +1730,15 @@ impl<S: SpartanExtensionField> SNARK<S> {
           .concat();
           // create a multilinear polynomial using the supplied assignment for variables
           let addr_poly_phy_mems_shifted = DensePolynomial::new(addr_phy_mems_shifted);
-          let addr_phy_mems_shifted_prover = ProverWitnessSecInfo::new(
+
+          ProverWitnessSecInfo::new(
             vec![[
               addr_phy_mems_list[1..].to_vec(),
               vec![vec![S::field_zero(); PHY_MEM_WIDTH]],
             ]
             .concat()],
             vec![addr_poly_phy_mems_shifted],
-          );
-          addr_phy_mems_shifted_prover
+          )
         };
         (vec![addr_poly_phy_mems], addr_phy_mems_shifted_prover)
       } else {
@@ -1758,8 +1750,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
         let addr_poly_vir_mems = {
           let addr_vir_mems = addr_vir_mems_list.clone().into_iter().flatten().collect();
           // create a multilinear polynomial using the supplied assignment for variables
-          let addr_poly_vir_mems = DensePolynomial::new(addr_vir_mems);
-          addr_poly_vir_mems
+
+          DensePolynomial::new(addr_vir_mems)
         };
         // Remove the first entry and shift the remaining entries up by one
         // Used later by coherence check
@@ -1776,23 +1768,22 @@ impl<S: SpartanExtensionField> SNARK<S> {
           .concat();
           // create a multilinear polynomial using the supplied assignment for variables
           let addr_poly_vir_mems_shifted = DensePolynomial::new(addr_vir_mems_shifted);
-          let addr_vir_mems_shifted_prover = ProverWitnessSecInfo::new(
+
+          ProverWitnessSecInfo::new(
             vec![[
               addr_vir_mems_list[1..].to_vec(),
               vec![vec![S::field_zero(); VIR_MEM_WIDTH]],
             ]
             .concat()],
             vec![addr_poly_vir_mems_shifted],
-          );
-          addr_vir_mems_shifted_prover
+          )
         };
         let addr_ts_bits_prover = {
           let addr_ts_bits = addr_ts_bits_list.clone().into_iter().flatten().collect();
           // create a multilinear polynomial using the supplied assignment for variables
           let addr_poly_ts_bits = DensePolynomial::new(addr_ts_bits);
-          let addr_ts_bits_prover =
-            ProverWitnessSecInfo::new(vec![addr_ts_bits_list], vec![addr_poly_ts_bits]);
-          addr_ts_bits_prover
+
+          ProverWitnessSecInfo::new(vec![addr_ts_bits_list], vec![addr_poly_ts_bits])
         };
         (
           vec![addr_poly_vir_mems],
@@ -1923,15 +1914,14 @@ impl<S: SpartanExtensionField> SNARK<S> {
     // PAIRWISE_CHECK
     // --
     let timer_proof = Timer::new("Pairwise Check");
-    let pairwise_size = [
+    let pairwise_size = *[
       consis_num_proofs,
       total_num_phy_mem_accesses,
       total_num_vir_mem_accesses,
     ]
     .iter()
     .max()
-    .unwrap()
-    .clone();
+    .unwrap();
     let (pairwise_prover, inst_map) = ProverWitnessSecInfo::merge(vec![
       &perm_exec_w3_prover,
       &addr_phy_mems_prover,
@@ -2035,7 +2025,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     // PERM_EXEC_ROOT, MEM_ADDR_ROOT
     // --
     let timer_proof = Timer::new("Perm Root");
-    let perm_size = [
+    let perm_size = *[
       consis_num_proofs,
       total_num_init_phy_mem_accesses,
       total_num_init_vir_mem_accesses,
@@ -2044,8 +2034,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     ]
     .iter()
     .max()
-    .unwrap()
-    .clone();
+    .unwrap();
     let (perm_root_w1_prover, _) = ProverWitnessSecInfo::merge(vec![
       &exec_inputs_prover,
       &init_phy_mems_prover,
@@ -2215,7 +2204,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     // - (if exist) addr_vir_mems => shift by 8
     // - (if exist) vir_mem_addr_w3 => shift by 8
     let timer_proof = Timer::new("Shift Proofs");
-    let shift_proof = {
+    {
       // perm_exec_w3
       let mut orig_polys = vec![&perm_exec_w3_prover.poly_w[0]];
       let mut shifted_polys = vec![&perm_exec_w3_shifted_prover.poly_w[0]];
@@ -2634,7 +2623,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let mut r_tmp = comb_r;
       for _ in 1..2 * num_inputs_unpadded {
         perm_w0.push(r_tmp);
-        r_tmp = r_tmp * comb_r;
+        r_tmp *= comb_r;
       }
       perm_w0.extend(vec![S::field_zero(); num_ios - 2 * num_inputs_unpadded]);
       // create a multilinear polynomial using the supplied assignment for variables
@@ -2648,7 +2637,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
               .next_power_of_two()
           })
           .collect();
-        VerifierWitnessSecInfo::new(block_w2_size_list, &block_num_proofs)
+        VerifierWitnessSecInfo::new(block_w2_size_list, block_num_proofs)
       };
       (
         VerifierWitnessSecInfo::new(vec![num_ios], &vec![1]),
@@ -2740,13 +2729,13 @@ impl<S: SpartanExtensionField> SNARK<S> {
     let (block_vars_verifier, exec_inputs_verifier) = {
       // add the commitment to the verifier's transcript
       (
-        VerifierWitnessSecInfo::new(block_num_vars, &block_num_proofs),
+        VerifierWitnessSecInfo::new(block_num_vars, block_num_proofs),
         VerifierWitnessSecInfo::new(vec![num_ios], &vec![consis_num_proofs]),
       )
     };
 
     let init_phy_mems_verifier = {
-      if input_stack.len() > 0 {
+      if !input_stack.is_empty() {
         assert_eq!(
           total_num_init_phy_mem_accesses,
           input_stack.len().next_power_of_two()
@@ -2759,7 +2748,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
                 S::field_one(),
                 S::field_zero(),
                 S::from(i as u64),
-                input_stack[i].clone(),
+                input_stack[i],
               ]
             })
             .concat(),
@@ -2780,7 +2769,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       }
     };
     let init_vir_mems_verifier = {
-      if input_mem.len() > 0 {
+      if !input_mem.is_empty() {
         assert_eq!(
           total_num_init_vir_mem_accesses,
           input_mem.len().next_power_of_two()
@@ -2793,7 +2782,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
                 S::field_one(),
                 S::field_zero(),
                 S::from(i as u64),
-                input_mem[i].clone(),
+                input_mem[i],
               ]
             })
             .concat(),
@@ -2921,15 +2910,14 @@ impl<S: SpartanExtensionField> SNARK<S> {
     {
       let timer_sat_proof = Timer::new("Pairwise Check Sat");
 
-      let pairwise_size = [
+      let pairwise_size = *[
         consis_num_proofs,
         total_num_phy_mem_accesses,
         total_num_vir_mem_accesses,
       ]
       .iter()
       .max()
-      .unwrap()
-      .clone();
+      .unwrap();
       let (pairwise_verifier, inst_map) = VerifierWitnessSecInfo::merge(vec![
         &perm_exec_w3_verifier,
         &addr_phy_mems_verifier,
@@ -3008,7 +2996,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     // PERM_EXEC_ROOT, MEM_ADDR_ROOT
     // --
     {
-      let perm_size = [
+      let perm_size = *[
         consis_num_proofs,
         total_num_init_phy_mem_accesses,
         total_num_init_vir_mem_accesses,
@@ -3017,8 +3005,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       ]
       .iter()
       .max()
-      .unwrap()
-      .clone();
+      .unwrap();
       let timer_sat_proof = Timer::new("Perm Root Sat");
       let (perm_root_w1_verifier, _) = VerifierWitnessSecInfo::merge(vec![
         &exec_inputs_verifier,
@@ -3166,37 +3153,32 @@ impl<S: SpartanExtensionField> SNARK<S> {
       for p in 0..perm_poly_num_instances {
         match inst_map[p] {
           0 => {
-            perm_exec_poly_bound_tau = perm_exec_poly_bound_tau * self.perm_poly_poly_list[p];
+            perm_exec_poly_bound_tau *= self.perm_poly_poly_list[p];
           }
           1 => {
-            phy_mem_block_poly_bound_tau =
-              phy_mem_block_poly_bound_tau * self.perm_poly_poly_list[p];
+            phy_mem_block_poly_bound_tau *= self.perm_poly_poly_list[p];
           }
           2 => {
-            vir_mem_block_poly_bound_tau =
-              vir_mem_block_poly_bound_tau * self.perm_poly_poly_list[p];
+            vir_mem_block_poly_bound_tau *= self.perm_poly_poly_list[p];
           }
           3 => {
-            phy_mem_addr_poly_bound_tau = phy_mem_addr_poly_bound_tau * self.perm_poly_poly_list[p];
+            phy_mem_addr_poly_bound_tau *= self.perm_poly_poly_list[p];
           }
           4 => {
-            vir_mem_addr_poly_bound_tau = vir_mem_addr_poly_bound_tau * self.perm_poly_poly_list[p];
+            vir_mem_addr_poly_bound_tau *= self.perm_poly_poly_list[p];
           }
           5 => {
-            perm_block_poly_bound_tau = perm_block_poly_bound_tau * self.perm_poly_poly_list[p];
+            perm_block_poly_bound_tau *= self.perm_poly_poly_list[p];
           }
           6 => {
             if max_block_num_phy_ops > 0 {
-              phy_mem_block_poly_bound_tau =
-                phy_mem_block_poly_bound_tau * self.perm_poly_poly_list[p];
+              phy_mem_block_poly_bound_tau *= self.perm_poly_poly_list[p];
             } else {
-              vir_mem_block_poly_bound_tau =
-                vir_mem_block_poly_bound_tau * self.perm_poly_poly_list[p];
+              vir_mem_block_poly_bound_tau *= self.perm_poly_poly_list[p];
             }
           }
           7 => {
-            vir_mem_block_poly_bound_tau =
-              vir_mem_block_poly_bound_tau * self.perm_poly_poly_list[p];
+            vir_mem_block_poly_bound_tau *= self.perm_poly_poly_list[p];
           }
           _ => {}
         }

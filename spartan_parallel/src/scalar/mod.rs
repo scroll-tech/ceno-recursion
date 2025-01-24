@@ -154,7 +154,7 @@ pub trait SpartanExtensionField:
     for (input, scratch) in inputs.iter().zip(scratch.iter_mut()) {
       *scratch = acc;
 
-      acc = acc * *input;
+      acc *= *input;
     }
 
     // acc is nonzero iff all inputs are nonzero
@@ -169,7 +169,7 @@ pub trait SpartanExtensionField:
     // Pass through the vector backwards to compute the inverses
     // in place
     for (input, scratch) in inputs.iter_mut().rev().zip(scratch.iter().rev()) {
-      let tmp: Self = acc * input.clone();
+      let tmp: Self = acc * *input;
       *input = acc * *scratch;
       acc = tmp;
     }

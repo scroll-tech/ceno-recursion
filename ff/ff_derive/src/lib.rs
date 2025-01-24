@@ -35,10 +35,7 @@ impl ReprEndianness {
         match self {
             ReprEndianness::Big => {
                 let buf = modulus.to_bytes_be();
-                iter::repeat(0)
-                    .take(bytes - buf.len())
-                    .chain(buf.into_iter())
-                    .collect()
+                iter::repeat(0).take(bytes - buf.len()).chain(buf).collect()
             }
             ReprEndianness::Little => {
                 let mut buf = modulus.to_bytes_le();

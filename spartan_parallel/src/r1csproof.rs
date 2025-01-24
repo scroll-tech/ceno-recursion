@@ -285,7 +285,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
         inst.get_inst_num_cons(),
         num_witness_secs,
         max_num_inputs,
-        &num_inputs,
+        num_inputs,
         &evals_rx,
       );
 
@@ -482,7 +482,7 @@ impl<S: SpartanExtensionField> R1CSProof<S> {
       let mut eval_vars_comb =
         (0..num_witness_secs).fold(S::field_zero(), |s, i| s + prefix_list[i] * e(i));
       for q in 0..(num_rounds_q - num_proofs[p].log_2()) {
-        eval_vars_comb = eval_vars_comb * (S::field_one() - rq[q]);
+        eval_vars_comb *= S::field_one() - rq[q];
       }
       eval_vars_comb_list.push(eval_vars_comb);
     }

@@ -451,8 +451,7 @@ impl<S: SpartanExtensionField> SparseMatPolynomial<S> {
 
     for i in 0..self.M.len() {
       let entry = &self.M[i];
-      M_evals[entry.col / max_num_cols][entry.col % max_num_cols] =
-        M_evals[entry.col / max_num_cols][entry.col % max_num_cols] + rx[entry.row] * entry.val;
+      M_evals[entry.col / max_num_cols][entry.col % max_num_cols] += rx[entry.row] * entry.val;
     }
     M_evals
   }

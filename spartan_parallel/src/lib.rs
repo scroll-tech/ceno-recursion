@@ -15,8 +15,6 @@ extern crate digest;
 extern crate merlin;
 extern crate rand;
 extern crate sha3;
-
-#[cfg(feature = "multicore")]
 extern crate rayon;
 
 mod custom_dense_mlpoly;
@@ -40,7 +38,7 @@ mod unipoly;
 use std::{
   cmp::{max, Ordering},
   fs::File,
-  io::Write,
+  io::Write, iter::zip,
 };
 
 use dense_mlpoly::{DensePolynomial, PolyEvalProof};
@@ -52,6 +50,7 @@ use merlin::Transcript;
 use r1csinstance::{R1CSCommitment, R1CSDecommitment, R1CSEvalProof, R1CSInstance};
 use r1csproof::R1CSProof;
 use random::RandomTape;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use scalar::SpartanExtensionField;
 use serde::{Deserialize, Serialize};
 use timer::Timer;
@@ -433,11 +432,22 @@ impl<S: SpartanExtensionField> ProverWitnessSecInfo<S> {
     }
   }
 
+  // Empty ProverWitnessSecInfo
   fn dummy() -> ProverWitnessSecInfo<S> {
     ProverWitnessSecInfo {
       num_inputs: Vec::new(),
       w_mat: Vec::new(),
       poly_w: Vec::new(),
+    }
+  }
+
+  // Zero ProverWitnessSecInfo
+  fn pad() -> ProverWitnessSecInfo<S> {
+    let ZERO = S::field_zero();
+    ProverWitnessSecInfo {
+      num_inputs: vec![1],
+      w_mat: vec![vec![vec![ZERO]]],
+      poly_w: vec![DensePolynomial::new(vec![ZERO])],
     }
   }
 
@@ -467,7 +477,7 @@ impl<S: SpartanExtensionField> ProverWitnessSecInfo<S> {
   fn merge(components: Vec<&ProverWitnessSecInfo<S>>) -> (ProverWitnessSecInfo<S>, Vec<usize>) {
     // Merge algorithm with pointer on each component
     let mut pointers = vec![0; components.len()];
-    let merged_size = components.iter().fold(0, |a, b| a + b.num_inputs.len());
+    let merged_size = components.iter().map(|c| c.num_inputs.len()).sum();
     // Map from instances of the merged ProverWitnessSec to each component
     let mut inst_map = Vec::new();
     let mut merged_num_inputs = Vec::new();
@@ -531,6 +541,13 @@ impl VerifierWitnessSecInfo {
     }
   }
 
+  fn pad() -> VerifierWitnessSecInfo {
+    VerifierWitnessSecInfo {
+      num_inputs: vec![1],
+      num_proofs: vec![1],
+    }
+  }
+
   // Concatenate the components in the given order to a new verifier witness sec
   fn concat(components: Vec<&VerifierWitnessSecInfo>) -> VerifierWitnessSecInfo {
     let mut num_inputs = Vec::new();
@@ -554,7 +571,7 @@ impl VerifierWitnessSecInfo {
   fn merge(components: Vec<&VerifierWitnessSecInfo>) -> (VerifierWitnessSecInfo, Vec<usize>) {
     // Merge algorithm with pointer on each component
     let mut pointers = vec![0; components.len()];
-    let merged_size = components.iter().fold(0, |a, b| a + b.num_inputs.len());
+    let merged_size = components.iter().map(|c| c.num_inputs.len()).sum();
     // Map from instances of the merged ProverWitnessSec to each component
     let mut inst_map = Vec::new();
     let mut merged_num_inputs = Vec::new();
@@ -605,13 +622,12 @@ pub struct SNARK<S: SpartanExtensionField> {
   perm_root_r1cs_sat_proof: R1CSProof<S>,
   perm_root_inst_evals: [S; 3],
   perm_root_r1cs_eval_proof: R1CSEvalProof<S>,
-
   // Product proof for permutation
-  perm_poly_poly_list: Vec<S>,
-  proof_eval_perm_poly_prod_list: Vec<PolyEvalProof<S>>,
+  // perm_poly_poly_list: Vec<S>,
+  // proof_eval_perm_poly_prod_list: Vec<PolyEvalProof<S>>,
 
   // shift_proof: ShiftProofs<S>,
-  io_proof: IOProofs<S>,
+  // io_proof: IOProofs<S>,
 }
 
 // Sort block_num_proofs and record where each entry is
@@ -643,9 +659,94 @@ impl PartialEq for InstanceSortHelper {
 }
 impl Eq for InstanceSortHelper {}
 
-impl<S: SpartanExtensionField> SNARK<S> {
+impl<S: SpartanExtensionField + Send + Sync> SNARK<S> {
   fn protocol_name() -> &'static [u8] {
     b"Spartan SNARK proof"
+  }
+
+  // Computes proof size by commitment / non-commitment
+  fn compute_size(&self) -> (usize, usize, usize, usize) {
+    /*
+    let commit_size = bincode::serialize(&self.block_comm_vars_list).unwrap().len()
+                           + bincode::serialize(&self.exec_comm_inputs).unwrap().len()
+                           + bincode::serialize(&self.addr_comm_phy_mems).unwrap().len()
+                           + bincode::serialize(&self.addr_comm_phy_mems_shifted).unwrap().len()
+                           + bincode::serialize(&self.addr_comm_vir_mems).unwrap().len()
+                           + bincode::serialize(&self.addr_comm_vir_mems_shifted).unwrap().len()
+                           + bincode::serialize(&self.addr_comm_ts_bits).unwrap().len()
+
+                           + bincode::serialize(&self.perm_exec_comm_w2_list).unwrap().len()
+                           + bincode::serialize(&self.perm_exec_comm_w3_list).unwrap().len()
+                           + bincode::serialize(&self.perm_exec_comm_w3_shifted).unwrap().len()
+
+                           + bincode::serialize(&self.block_comm_w2_list).unwrap().len()
+                           + bincode::serialize(&self.block_comm_w3_list).unwrap().len()
+                           + bincode::serialize(&self.block_comm_w3_list_shifted).unwrap().len()
+
+                           + bincode::serialize(&self.init_phy_mem_comm_w2).unwrap().len()
+                           + bincode::serialize(&self.init_phy_mem_comm_w3).unwrap().len()
+                           + bincode::serialize(&self.init_phy_mem_comm_w3_shifted).unwrap().len()
+
+                           + bincode::serialize(&self.init_vir_mem_comm_w2).unwrap().len()
+                           + bincode::serialize(&self.init_vir_mem_comm_w3).unwrap().len()
+                           + bincode::serialize(&self.init_vir_mem_comm_w3_shifted).unwrap().len()
+
+                           + bincode::serialize(&self.phy_mem_addr_comm_w2).unwrap().len()
+                           + bincode::serialize(&self.phy_mem_addr_comm_w3).unwrap().len()
+                           + bincode::serialize(&self.phy_mem_addr_comm_w3_shifted).unwrap().len()
+
+                           + bincode::serialize(&self.vir_mem_addr_comm_w2).unwrap().len()
+                           + bincode::serialize(&self.vir_mem_addr_comm_w3).unwrap().len()
+                           + bincode::serialize(&self.vir_mem_addr_comm_w3_shifted).unwrap().len();
+    */
+    let dense_commit_size = 0;
+
+    let block_proof_size = bincode::serialize(&self.block_r1cs_sat_proof)
+      .unwrap()
+      .len()
+      + bincode::serialize(&self.block_inst_evals_bound_rp)
+        .unwrap()
+        .len()
+      + bincode::serialize(&self.block_inst_evals_list)
+        .unwrap()
+        .len()
+      + bincode::serialize(&self.block_r1cs_eval_proof_list)
+        .unwrap()
+        .len();
+
+    let pairwise_proof_size = bincode::serialize(&self.pairwise_check_r1cs_sat_proof)
+      .unwrap()
+      .len()
+      + bincode::serialize(&self.pairwise_check_inst_evals_bound_rp)
+        .unwrap()
+        .len()
+      + bincode::serialize(&self.pairwise_check_inst_evals_list)
+        .unwrap()
+        .len()
+      + bincode::serialize(&self.pairwise_check_r1cs_eval_proof)
+        .unwrap()
+        .len();
+
+    let perm_proof_size = bincode::serialize(&self.perm_root_r1cs_sat_proof)
+      .unwrap()
+      .len()
+      + bincode::serialize(&self.perm_root_inst_evals)
+        .unwrap()
+        .len()
+      + bincode::serialize(&self.perm_root_r1cs_eval_proof)
+        .unwrap()
+        .len();
+    // + bincode::serialize(&self.perm_poly_poly_list).unwrap().len()
+    // + bincode::serialize(&self.proof_eval_perm_poly_prod_list).unwrap().len();
+
+    // + bincode::serialize(&self.shift_proof).unwrap().len()
+    // let io_proof_size = bincode::serialize(&self.io_proof).unwrap().len();
+    (
+      dense_commit_size,
+      block_proof_size,
+      pairwise_proof_size,
+      perm_proof_size,
+    )
   }
 
   /// A public computation to create a commitment to a list of R1CS instances
@@ -1015,9 +1116,6 @@ impl<S: SpartanExtensionField> SNARK<S> {
     let index: Vec<usize> = inst_sorter.iter().map(|i| i.index).collect();
     let block_inst_unsorted = block_inst.clone();
     block_inst.sort(block_num_instances, &index);
-    let block_num_vars: Vec<usize> = (0..block_num_instances)
-      .map(|i| block_num_vars[index[i]])
-      .collect();
     let block_num_phy_ops: Vec<usize> = (0..block_num_instances)
       .map(|i| block_num_phy_ops[index[i]])
       .collect();
@@ -1174,50 +1272,48 @@ impl<S: SpartanExtensionField> SNARK<S> {
       // w2 is _, _, ZO, r * i1, r^2 * i2, r^3 * i3, ...
       // where ZO * r^n = r^n * o0 + r^(n + 1) * o1, ...,
       // are used by the consistency check
-      let perm_exec_w2 = {
-        let mut perm_exec_w2: Vec<Vec<S>> = exec_inputs_list
-          .iter()
-          .map(|input| {
-            [
-              vec![S::field_zero(); 3],
-              (1..2 * num_inputs_unpadded - 2)
-                .map(|j| perm_w0[j] * input[j + 2])
-                .collect(),
-              vec![S::field_zero(); num_ios - 2 * num_inputs_unpadded],
-            ]
-            .concat()
-          })
-          .collect();
-        for q in 0..consis_num_proofs {
-          perm_exec_w2[q][0] = exec_inputs_list[q][0];
-          perm_exec_w2[q][1] = exec_inputs_list[q][0];
+      let (perm_exec_w2, perm_exec_w3) = {
+        let perm_exec_w2: Vec<Vec<S>>;
+        let mut perm_exec_w3: Vec<Vec<S>>;
+        // Entries that do not depend on others can be generated in parallel
+        (perm_exec_w2, perm_exec_w3) = (0..consis_num_proofs).into_par_iter().map(|q| {
+          // perm_exec_w2
+          let mut perm_exec_w2_q = [
+            vec![S::field_zero(); 3],
+            (1..2 * num_inputs_unpadded - 2)
+              .map(|j| perm_w0[j] * exec_inputs_list[q][j + 2])
+              .collect(),
+            vec![S::field_zero(); num_ios - 2 * num_inputs_unpadded],
+          ].concat();
+          perm_exec_w2_q[0] = exec_inputs_list[q][0];
+          perm_exec_w2_q[1] = exec_inputs_list[q][0];
           for i in 0..num_inputs_unpadded - 1 {
             let perm = if i == 0 { S::field_one() } else { perm_w0[i] };
-            perm_exec_w2[q][0] = perm_exec_w2[q][0] + perm * exec_inputs_list[q][2 + i];
-            perm_exec_w2[q][2] =
-              perm_exec_w2[q][2] + perm * exec_inputs_list[q][2 + (num_inputs_unpadded - 1) + i];
+            perm_exec_w2_q[0] = perm_exec_w2_q[0] + perm * exec_inputs_list[q][2 + i];
+            perm_exec_w2_q[2] =
+              perm_exec_w2_q[2] + perm * exec_inputs_list[q][2 + (num_inputs_unpadded - 1) + i];
           }
-          perm_exec_w2[q][0] = perm_exec_w2[q][0] * exec_inputs_list[q][0];
-          let ZO = perm_exec_w2[q][2];
-          perm_exec_w2[q][1] = perm_exec_w2[q][1] + ZO;
-          perm_exec_w2[q][1] = perm_exec_w2[q][1] * exec_inputs_list[q][0];
-        }
-        perm_exec_w2
-      };
-      // w3 is [v, x, pi, D]
-      let perm_exec_w3 = {
-        let mut perm_exec_w3: Vec<Vec<S>> = vec![Vec::new(); consis_num_proofs];
-        for q in (0..consis_num_proofs).rev() {
-          perm_exec_w3[q] = vec![S::field_zero(); 8];
-          perm_exec_w3[q][0] = exec_inputs_list[q][0];
-          perm_exec_w3[q][1] = perm_exec_w3[q][0]
+          perm_exec_w2_q[0] = perm_exec_w2_q[0] * exec_inputs_list[q][0];
+          let ZO = perm_exec_w2_q[2];
+          perm_exec_w2_q[1] = perm_exec_w2_q[1] + ZO;
+          perm_exec_w2_q[1] = perm_exec_w2_q[1] * exec_inputs_list[q][0];
+
+          // perm_exec_w3
+          let mut perm_exec_w3_q = vec![S::field_zero(); 8];
+          perm_exec_w3_q[0] = exec_inputs_list[q][0];
+          perm_exec_w3_q[1] = perm_exec_w3_q[0]
             * (comb_tau
-              - perm_exec_w2[q][3..]
+              - perm_exec_w2_q[3..]
                 .iter()
                 .fold(S::field_zero(), |a, b| a + *b)
               - exec_inputs_list[q][2]);
-          perm_exec_w3[q][4] = perm_exec_w2[q][0];
-          perm_exec_w3[q][5] = perm_exec_w2[q][1];
+          perm_exec_w3_q[4] = perm_exec_w2_q[0];
+          perm_exec_w3_q[5] = perm_exec_w2_q[1];
+
+          (perm_exec_w2_q, perm_exec_w3_q)
+        }).unzip();
+        // Generate sequential entries separately
+        for q in (0..consis_num_proofs).rev() {
           if q != consis_num_proofs - 1 {
             perm_exec_w3[q][3] = perm_exec_w3[q][1]
               * (perm_exec_w3[q + 1][2] + S::field_one() - perm_exec_w3[q + 1][0]);
@@ -1226,8 +1322,9 @@ impl<S: SpartanExtensionField> SNARK<S> {
           }
           perm_exec_w3[q][2] = perm_exec_w3[q][0] * perm_exec_w3[q][3];
         }
-        perm_exec_w3
+        (perm_exec_w2, perm_exec_w3)
       };
+
       // commit the witnesses and inputs separately instance-by-instance
       let (perm_exec_poly_w2, perm_exec_poly_w3, perm_exec_poly_w3_shifted) = {
         let perm_exec_poly_w2 = {
@@ -1278,8 +1375,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
       //           INPUT      PHY    VIR
       // w3 is [v, x, pi, D, pi, D, pi, D]
       let mut block_w3: Vec<Vec<Vec<S>>> = Vec::new();
-      let block_w2_prover = {
-        let mut block_w2 = Vec::new();
+      let block_w2 = {
+        let mut block_w2: Vec<Vec<Vec<S>>> = Vec::new();
         let block_w2_size_list: Vec<usize> = (0..block_num_instances)
           .map(|i| {
             (2 * num_inputs_unpadded + 2 * block_num_phy_ops[i] + 4 * block_num_vir_ops[i])
@@ -1311,115 +1408,131 @@ impl<S: SpartanExtensionField> SNARK<S> {
           |b: usize, i: usize| 2 * num_inputs_unpadded + 2 * block_num_phy_ops[b] + 4 * i + 3;
 
         for p in 0..block_num_instances {
-          block_w2.push(vec![Vec::new(); block_num_proofs[p]]);
-          block_w3.push(vec![Vec::new(); block_num_proofs[p]]);
-          for q in (0..block_num_proofs[p]).rev() {
+          let block_w2_p: Vec<Vec<S>>;
+          let mut block_w3_p: Vec<Vec<S>>;
+          // Entries that do not depend on others can be generated in parallel
+          (block_w2_p, block_w3_p) = (0..block_num_proofs[p]).into_par_iter().map(|q| {
             let V_CNST = block_vars_mat[p][q][0];
             // For INPUT
-            block_w2[p][q] = vec![S::field_zero(); block_w2_size_list[p]];
+            let mut q2 = vec![S::field_zero(); block_w2_size_list[p]];
 
-            block_w2[p][q][0] = block_vars_mat[p][q][0];
-            block_w2[p][q][1] = block_vars_mat[p][q][0];
+            q2[0] = block_vars_mat[p][q][0];
+            q2[1] = block_vars_mat[p][q][0];
             for i in 1..2 * (num_inputs_unpadded - 1) {
-              block_w2[p][q][2 + i] =
-                block_w2[p][q][2 + i] + perm_w0[i] * block_vars_mat[p][q][i + 2];
+              q2[2 + i] = q2[2 + i] + perm_w0[i] * block_vars_mat[p][q][i + 2];
             }
             for i in 0..num_inputs_unpadded - 1 {
               let perm = if i == 0 { S::field_one() } else { perm_w0[i] };
-              block_w2[p][q][0] = block_w2[p][q][0] + perm * block_vars_mat[p][q][2 + i];
-              block_w2[p][q][2] =
-                block_w2[p][q][2] + perm * block_vars_mat[p][q][2 + (num_inputs_unpadded - 1) + i];
+              q2[0] = q2[0] + perm * block_vars_mat[p][q][2 + i];
+              q2[2] = q2[2] + perm * block_vars_mat[p][q][2 + (num_inputs_unpadded - 1) + i];
             }
-            block_w2[p][q][0] = block_w2[p][q][0] * block_vars_mat[p][q][0];
-            let ZO = block_w2[p][q][2];
-            block_w2[p][q][1] = block_w2[p][q][1] + ZO;
-            block_w2[p][q][1] = block_w2[p][q][1] * block_vars_mat[p][q][0];
-            block_w3[p][q] = vec![S::field_zero(); 8];
-            block_w3[p][q][0] = block_vars_mat[p][q][0];
-            block_w3[p][q][1] = block_w3[p][q][0]
-              * (comb_tau
-                - block_w2[p][q][3..]
-                  .iter()
-                  .fold(S::field_zero(), |a, b| a + *b)
-                - block_vars_mat[p][q][2]);
-            if q != block_num_proofs[p] - 1 {
-              block_w3[p][q][3] = block_w3[p][q][1]
-                * (block_w3[p][q + 1][2] + S::field_one() - block_w3[p][q + 1][0]);
-            } else {
-              block_w3[p][q][3] = block_w3[p][q][1];
-            }
-            block_w3[p][q][2] = block_w3[p][q][0] * block_w3[p][q][3];
+            q2[0] = q2[0] * block_vars_mat[p][q][0];
+            let ZO = q2[2];
+            q2[1] = q2[1] + ZO;
+            q2[1] = q2[1] * block_vars_mat[p][q][0];
+            let mut q3 = vec![S::field_zero(); 8];
+            q3[0] = block_vars_mat[p][q][0];
 
             // For PHY
             // Compute PMR, PMC
             for i in 0..block_num_phy_ops[p] {
               // PMR = r * PD
-              block_w2[p][q][V_PMR(i)] = comb_r * block_vars_mat[p][q][io_width + V_PD(i)];
+              q2[V_PMR(i)] = comb_r * block_vars_mat[p][q][io_width + V_PD(i)];
               // PMC = (1 or PMC[i-1]) * (tau - PA - PMR)
               let t = if i == 0 {
                 V_CNST
               } else {
-                block_w2[p][q][V_PMC(i - 1)]
+                q2[V_PMC(i - 1)]
               };
-              block_w2[p][q][V_PMC(i)] = t
-                * (comb_tau - block_vars_mat[p][q][io_width + V_PA(i)] - block_w2[p][q][V_PMR(i)]);
+              q2[V_PMC(i)] = t
+                * (comb_tau - block_vars_mat[p][q][io_width + V_PA(i)] - q2[V_PMR(i)]);
             }
-            // Compute x
-            let px = if block_num_phy_ops[p] == 0 {
-              V_CNST
-            } else {
-              block_w2[p][q][V_PMC(block_num_phy_ops[p] - 1)]
-            };
-            // Compute D and pi
-            if q != block_num_proofs[p] - 1 {
-              block_w3[p][q][5] =
-                px * (block_w3[p][q + 1][4] + S::field_one() - block_w3[p][q + 1][0]);
-            } else {
-              block_w3[p][q][5] = px;
-            }
-            block_w3[p][q][4] = V_CNST * block_w3[p][q][5];
 
             // For VIR
             // Compute VMR1, VMR2, VMR3, VMC
             for i in 0..block_num_vir_ops[p] {
               // VMR1 = r * VD
-              block_w2[p][q][V_VMR1(p, i)] = comb_r * block_vars_mat[p][q][io_width + V_VD(p, i)];
+              q2[V_VMR1(p, i)] = comb_r * block_vars_mat[p][q][io_width + V_VD(p, i)];
               // VMR2 = r^2 * VL
-              block_w2[p][q][V_VMR2(p, i)] =
+              q2[V_VMR2(p, i)] =
                 comb_r * comb_r * block_vars_mat[p][q][io_width + V_VL(p, i)];
               // VMR1 = r^3 * VT
-              block_w2[p][q][V_VMR3(p, i)] =
+              q2[V_VMR3(p, i)] =
                 comb_r * comb_r * comb_r * block_vars_mat[p][q][io_width + V_VT(p, i)];
               // VMC = (1 or VMC[i-1]) * (tau - VA - VMR1 - VMR2 - VMR3)
               let t = if i == 0 {
                 V_CNST
               } else {
-                block_w2[p][q][V_VMC(p, i - 1)]
+                q2[V_VMC(p, i - 1)]
               };
-              block_w2[p][q][V_VMC(p, i)] = t
+              q2[V_VMC(p, i)] = t
                 * (comb_tau
                   - block_vars_mat[p][q][io_width + V_VA(p, i)]
-                  - block_w2[p][q][V_VMR1(p, i)]
-                  - block_w2[p][q][V_VMR2(p, i)]
-                  - block_w2[p][q][V_VMR3(p, i)]);
+                  - q2[V_VMR1(p, i)]
+                  - q2[V_VMR2(p, i)]
+                  - q2[V_VMR3(p, i)]);
             }
+            (q2, q3)
+          }).unzip();
+          // Generate sequential entries separately
+          for q in (0..block_num_proofs[p]).rev() {
+            let V_CNST = block_vars_mat[p][q][0];
+            // For INPUT
+            block_w3_p[q][1] = block_w3_p[q][0]
+              * (comb_tau
+                - block_w2_p[q][3..]
+                  .iter()
+                  .fold(S::field_zero(), |a, b| a + *b)
+                - block_vars_mat[p][q][2]);
+            if q != block_num_proofs[p] - 1 {
+              block_w3_p[q][3] = block_w3_p[q][1]
+                * (block_w3_p[q + 1][2] + S::field_one() - block_w3_p[q + 1][0]);
+            } else {
+              block_w3_p[q][3] = block_w3_p[q][1];
+            }
+            block_w3_p[q][2] = block_w3_p[q][0] * block_w3_p[q][3];
+
+            // For PHY
+            // Compute x
+            let px = if block_num_phy_ops[p] == 0 {
+              V_CNST
+            } else {
+              block_w2_p[q][V_PMC(block_num_phy_ops[p] - 1)]
+            };
+            // Compute D and pi
+            if q != block_num_proofs[p] - 1 {
+              block_w3_p[q][5] =
+                px * (block_w3_p[q + 1][4] + S::field_one() - block_w3_p[q + 1][0]);
+            } else {
+              block_w3_p[q][5] = px;
+            }
+            block_w3_p[q][4] = V_CNST * block_w3_p[q][5];
+
+            // For VIR
             // Compute x
             let vx = if block_num_vir_ops[p] == 0 {
               V_CNST
             } else {
-              block_w2[p][q][V_VMC(p, block_num_vir_ops[p] - 1)]
+              block_w2_p[q][V_VMC(p, block_num_vir_ops[p] - 1)]
             };
             // Compute D and pi
             if q != block_num_proofs[p] - 1 {
-              block_w3[p][q][7] =
-                vx * (block_w3[p][q + 1][6] + S::field_one() - block_w3[p][q + 1][0]);
+              block_w3_p[q][7] =
+                vx * (block_w3_p[q + 1][6] + S::field_one() - block_w3_p[q + 1][0]);
             } else {
-              block_w3[p][q][7] = vx;
+              block_w3_p[q][7] = vx;
             }
-            block_w3[p][q][6] = V_CNST * block_w3[p][q][7];
+            block_w3_p[q][6] = V_CNST * block_w3_p[q][7];
           }
+
+          block_w2.push(block_w2_p);
+          block_w3.push(block_w3_p);
         }
 
+        block_w2
+      };
+
+      let (block_poly_w2_list, block_poly_w3_list, block_poly_w3_list_shifted) = {
         // commit the witnesses and inputs separately instance-by-instance
         let mut block_poly_w2_list = Vec::new();
 
@@ -1433,12 +1546,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
           };
           block_poly_w2_list.push(block_poly_w2);
         }
-
-        let block_w2_prover = ProverWitnessSecInfo::new(block_w2.clone(), block_poly_w2_list);
-
-        block_w2_prover
-      };
-      let (block_poly_w3_list, block_poly_w3_list_shifted) = {
+        
         let mut block_poly_w3_list = Vec::new();
         let mut block_poly_w3_list_shifted = Vec::new();
 
@@ -1471,20 +1579,20 @@ impl<S: SpartanExtensionField> SNARK<S> {
           block_poly_w3_list_shifted.push(block_poly_w3_shifted);
         }
 
-        (block_poly_w3_list, block_poly_w3_list_shifted)
+        (block_poly_w2_list, block_poly_w3_list, block_poly_w3_list_shifted)
       };
 
       let perm_w0_prover = ProverWitnessSecInfo::new(vec![vec![perm_w0]], vec![perm_poly_w0]);
       let perm_exec_w2_prover =
         ProverWitnessSecInfo::new(vec![perm_exec_w2], vec![perm_exec_poly_w2]);
-      let perm_exec_w3_prover =
-        ProverWitnessSecInfo::new(vec![perm_exec_w3.clone()], vec![perm_exec_poly_w3]);
       let perm_exec_w3_shifted_prover = ProverWitnessSecInfo::new(
         vec![[perm_exec_w3[1..].to_vec(), vec![vec![S::field_zero(); 8]]].concat()],
         vec![perm_exec_poly_w3_shifted],
       );
+      let perm_exec_w3_prover =
+        ProverWitnessSecInfo::new(vec![perm_exec_w3], vec![perm_exec_poly_w3]);
 
-      let block_w3_prover = ProverWitnessSecInfo::new(block_w3.clone(), block_poly_w3_list);
+      let block_w2_prover = ProverWitnessSecInfo::new(block_w2, block_poly_w2_list);
       let block_w3_shifted_prover = ProverWitnessSecInfo::new(
         block_w3
           .iter()
@@ -1492,6 +1600,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
           .collect(),
         block_poly_w3_list_shifted,
       );
+      let block_w3_prover = ProverWitnessSecInfo::new(block_w3, block_poly_w3_list);
 
       (
         comb_tau,
@@ -1810,26 +1919,126 @@ impl<S: SpartanExtensionField> SNARK<S> {
     let block_vars_prover = ProverWitnessSecInfo::new(block_vars_mat, block_poly_vars_list);
     let exec_inputs_prover = ProverWitnessSecInfo::new(vec![exec_inputs_list], exec_poly_inputs);
     let init_phy_mems_prover = if total_num_init_phy_mem_accesses > 0 {
-      ProverWitnessSecInfo::new(vec![init_phy_mems_list.clone()], poly_init_phy_mems)
+      ProverWitnessSecInfo::new(vec![init_phy_mems_list], poly_init_phy_mems)
     } else {
       ProverWitnessSecInfo::dummy()
     };
     let init_vir_mems_prover = if total_num_init_vir_mem_accesses > 0 {
-      ProverWitnessSecInfo::new(vec![init_vir_mems_list.clone()], poly_init_vir_mems)
+      ProverWitnessSecInfo::new(vec![init_vir_mems_list], poly_init_vir_mems)
     } else {
       ProverWitnessSecInfo::dummy()
     };
     let addr_phy_mems_prover = if total_num_phy_mem_accesses > 0 {
-      ProverWitnessSecInfo::new(vec![addr_phy_mems_list.clone()], addr_poly_phy_mems)
+      ProverWitnessSecInfo::new(vec![addr_phy_mems_list], addr_poly_phy_mems)
     } else {
       ProverWitnessSecInfo::dummy()
     };
     let addr_vir_mems_prover = if total_num_vir_mem_accesses > 0 {
-      ProverWitnessSecInfo::new(vec![addr_vir_mems_list.clone()], addr_poly_vir_mems)
+      ProverWitnessSecInfo::new(vec![addr_vir_mems_list], addr_poly_vir_mems)
     } else {
       ProverWitnessSecInfo::dummy()
     };
     timer_commit.stop();
+
+    // Record total size of witnesses:
+    let block_witness_sizes: Vec<usize> = [
+      block_vars_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+      block_w2_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+      block_w3_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+      block_w3_shifted_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+    ]
+    .concat();
+    let exec_witness_sizes: Vec<usize> = [
+      exec_inputs_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+      perm_exec_w2_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+      perm_exec_w3_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+      perm_exec_w3_shifted_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+    ]
+    .concat();
+    let mem_witness_sizes: Vec<usize> = [
+      addr_phy_mems_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+      phy_mem_addr_w2_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+      phy_mem_addr_w3_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+      phy_mem_addr_w3_shifted_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+      addr_vir_mems_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+      addr_ts_bits_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+      vir_mem_addr_w2_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+      vir_mem_addr_w3_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+      vir_mem_addr_w3_shifted_prover
+        .poly_w
+        .iter()
+        .map(|i| i.len())
+        .collect::<Vec<usize>>(),
+    ]
+    .concat();
+
+    println!("BLOCK WITNESSES: {:?} Goldilocks", block_witness_sizes);
+    println!("EXEC WITNESSES: {:?} Goldilocks", exec_witness_sizes);
+    println!("MEM WITNESSES: {:?} Goldilocks", mem_witness_sizes);
 
     // --
     // BLOCK_CORRECTNESS_EXTRACT
@@ -1837,8 +2046,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
     let timer_proof = Timer::new("Block Correctness Extract");
     let block_wit_secs = vec![
       &block_vars_prover,
-      &perm_w0_prover,
       &block_w2_prover,
+      &perm_w0_prover,
       &block_w3_prover,
       &block_w3_shifted_prover,
     ];
@@ -1850,7 +2059,6 @@ impl<S: SpartanExtensionField> SNARK<S> {
           block_max_num_proofs,
           block_num_proofs,
           num_vars,
-          &block_num_vars,
           block_wit_secs,
           &block_inst.inst,
           transcript,
@@ -1869,9 +2077,11 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let timer_eval = Timer::new("eval_sparse_polys");
 
       // Per instance evaluation is unsorted
-      let inst_evals_list = block_inst_unsorted.inst.multi_evaluate(&rx, &ry);
+      let inst_evals_list = block_inst_unsorted.inst.multi_evaluate::<true>(&rx, &ry);
       // RP-bound evaluation is sorted
-      let (_, inst_evals_bound_rp) = block_inst.inst.multi_evaluate_bound_rp(&rp, &rx, &ry);
+      let (_, inst_evals_bound_rp) = block_inst
+        .inst
+        .multi_evaluate_bound_rp::<true>(&rp, &rx, &ry);
       timer_eval.stop();
 
       for r in &inst_evals_list {
@@ -1887,7 +2097,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let r1cs_eval_proof_list = {
         let mut r1cs_eval_proof_list = Vec::new();
         for i in 0..block_comm_list.len() {
-          let proof = R1CSEvalProof::prove(
+          let proof = R1CSEvalProof::prove::<true>(
             &block_decomm_list[i].decomm,
             &rx,
             &ry,
@@ -1932,27 +2142,28 @@ impl<S: SpartanExtensionField> SNARK<S> {
     .max()
     .unwrap()
     .clone();
-    let (pairwise_prover, inst_map) = ProverWitnessSecInfo::merge(vec![
+    let (pairwise_w0_prover, inst_map) = ProverWitnessSecInfo::merge(vec![
       &perm_exec_w3_prover,
       &addr_phy_mems_prover,
-      &addr_vir_mems_prover,
+      &addr_ts_bits_prover,
     ]);
-    let (pairwise_shifted_prover, _) = ProverWitnessSecInfo::merge(vec![
+    let (pairwise_w1_prover, _) = ProverWitnessSecInfo::merge(vec![
       &perm_exec_w3_shifted_prover,
       &addr_phy_mems_shifted_prover,
-      &addr_vir_mems_shifted_prover,
+      &addr_vir_mems_prover,
     ]);
-    let addr_ts_bits_prover = {
-      let mut components = vec![&perm_w0_prover; inst_map.len()];
+    let dummy_w2 = ProverWitnessSecInfo::pad();
+    let pairwise_w2_prover = {
+      let mut components = vec![&dummy_w2; inst_map.len()];
       for i in 0..inst_map.len() {
         if inst_map[i] == 2 {
-          components[i] = &addr_ts_bits_prover;
+          components[i] = &addr_vir_mems_shifted_prover;
         }
       }
       ProverWitnessSecInfo::concat(components)
     };
-    let pairwise_num_instances = pairwise_prover.w_mat.len();
-    let pairwise_num_proofs: Vec<usize> = pairwise_prover.w_mat.iter().map(|i| i.len()).collect();
+    let pairwise_num_instances = pairwise_w0_prover.w_mat.len();
+    let pairwise_num_proofs: Vec<usize> = pairwise_w0_prover.w_mat.iter().map(|i| i.len()).collect();
     let (pairwise_check_r1cs_sat_proof, pairwise_check_challenges) = {
       let (proof, pairwise_check_challenges) = {
         R1CSProof::prove(
@@ -1960,11 +2171,10 @@ impl<S: SpartanExtensionField> SNARK<S> {
           pairwise_size,
           &pairwise_num_proofs,
           max(8, mem_addr_ts_bits_size),
-          &vec![max(8, mem_addr_ts_bits_size); pairwise_num_instances],
           vec![
-            &pairwise_prover,
-            &pairwise_shifted_prover,
-            &addr_ts_bits_prover,
+            &pairwise_w0_prover,
+            &pairwise_w1_prover,
+            &pairwise_w2_prover,
           ],
           &pairwise_check_inst.inst,
           transcript,
@@ -1987,11 +2197,13 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let timer_eval = Timer::new("eval_sparse_polys");
 
       // Per instance evaluation is unsorted
-      let inst_evals_list = pairwise_check_inst_unsorted.inst.multi_evaluate(&rx, &ry);
+      let inst_evals_list = pairwise_check_inst_unsorted
+        .inst
+        .multi_evaluate::<false>(&rx, &ry);
       // RP-bound evaluation is sorted
       let (_, inst_evals_bound_rp) = pairwise_check_inst
         .inst
-        .multi_evaluate_bound_rp(&rp, &rx, &ry);
+        .multi_evaluate_bound_rp::<false>(&rp, &rx, &ry);
       timer_eval.stop();
 
       for r in &inst_evals_list {
@@ -2004,7 +2216,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let _: S = transcript.challenge_scalar(b"challenge_c2");
 
       let r1cs_eval_proof = {
-        let proof = R1CSEvalProof::prove(
+        let proof = R1CSEvalProof::prove::<false>(
           &pairwise_check_decomm.decomm,
           &rx,
           &ry,
@@ -2084,7 +2296,6 @@ impl<S: SpartanExtensionField> SNARK<S> {
           perm_size,
           &perm_root_num_proofs,
           num_ios,
-          &vec![num_ios; perm_root_num_instances],
           vec![
             &perm_w0_prover,
             &perm_root_w1_prover,
@@ -2120,7 +2331,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       timer_eval.stop();
 
       let r1cs_eval_proof = {
-        let proof = R1CSEvalProof::prove(
+        let proof = R1CSEvalProof::prove::<false>(
           &perm_root_decomm.decomm,
           &rx,
           &ry,
@@ -2141,6 +2352,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     // --
     // PERM_PRODUCT_PROOF
     // --
+    /*
     let timer_proof = Timer::new("Perm Product");
     // Record the prod of exec, blocks, mem_block, & mem_addr
     let (perm_poly_poly_list, proof_eval_perm_poly_prod_list) = {
@@ -2292,6 +2504,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
       &mut random_tape,
     );
     timer_proof.stop();
+    */
 
     timer_prove.stop();
 
@@ -2309,12 +2522,11 @@ impl<S: SpartanExtensionField> SNARK<S> {
       perm_root_r1cs_sat_proof,
       perm_root_inst_evals,
       perm_root_r1cs_eval_proof,
-
-      perm_poly_poly_list,
-      proof_eval_perm_poly_prod_list,
+      // perm_poly_poly_list,
+      // proof_eval_perm_poly_prod_list,
 
       // shift_proof,
-      io_proof,
+      // io_proof,
     }
   }
 
@@ -2365,13 +2577,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
 
     transcript: &mut Transcript,
   ) -> Result<(), ProofVerifyError> {
-    let proof_size = bincode::serialize(&self).unwrap().len();
-    let commit_size = bincode::serialize(&block_comm_list).unwrap().len() +
-      // bincode::serialize(&block_gens).unwrap().len() + 
-      bincode::serialize(&pairwise_check_comm).unwrap().len() +
-      // bincode::serialize(&pairwise_check_gens).unwrap().len() + 
-      bincode::serialize(&perm_root_comm).unwrap().len();
-    // bincode::serialize(&perm_root_gens).unwrap().len();
+    let (_, block_size, pairwise_size, perm_size) = self.compute_size();
     let meta_size =
       // usize
       19 * std::mem::size_of::<usize>() +
@@ -2544,9 +2750,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     let mut block_num_proofs: Vec<usize> = inst_sorter.iter().map(|i| i.num_exec).collect();
     // index[i] = j => the original jth entry should now be at the ith position
     let block_index: Vec<usize> = inst_sorter.iter().map(|i| i.index).collect();
-    let block_num_vars: Vec<usize> = (0..block_num_instances)
-      .map(|i| block_num_vars[block_index[i]])
-      .collect();
+    let block_num_vars: Vec<usize> = (0..block_num_instances).map(|i| block_num_vars[block_index[i]]).collect();
     let block_num_phy_ops: Vec<usize> = (0..block_num_instances)
       .map(|i| block_num_phy_ops[block_index[i]])
       .collect();
@@ -2855,8 +3059,8 @@ impl<S: SpartanExtensionField> SNARK<S> {
       let timer_sat_proof = Timer::new("Block Correctness Extract Sat");
       let block_wit_secs = vec![
         &block_vars_verifier,
-        &perm_w0_verifier,
         &block_w2_verifier,
+        &perm_w0_verifier,
         &block_w3_verifier,
         &block_w3_shifted_verifier,
       ];
@@ -2895,7 +3099,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
         .collect();
 
       for i in 0..block_comm_list.len() {
-        self.block_r1cs_eval_proof_list[i].verify(
+        self.block_r1cs_eval_proof_list[i].verify::<true>(
           &block_comm_list[i].comm,
           &rx,
           &ry,
@@ -2930,27 +3134,28 @@ impl<S: SpartanExtensionField> SNARK<S> {
       .max()
       .unwrap()
       .clone();
-      let (pairwise_verifier, inst_map) = VerifierWitnessSecInfo::merge(vec![
+      let (pairwise_w0_verifier, inst_map) = VerifierWitnessSecInfo::merge(vec![
         &perm_exec_w3_verifier,
         &addr_phy_mems_verifier,
-        &addr_vir_mems_verifier,
+        &addr_ts_bits_verifier
       ]);
-      let (pairwise_shifted_verifier, _) = VerifierWitnessSecInfo::merge(vec![
+      let (pairwise_w1_verifier, _) = VerifierWitnessSecInfo::merge(vec![
         &perm_exec_w3_shifted_verifier,
         &addr_phy_mems_shifted_verifier,
-        &addr_vir_mems_shifted_verifier,
+        &addr_vir_mems_verifier,
       ]);
-      let addr_ts_bits_verifier = {
-        let mut components = vec![&perm_w0_verifier; inst_map.len()];
+      let dummy_w2 = VerifierWitnessSecInfo::pad();
+      let pairwise_w2_verifier = {
+        let mut components = vec![&dummy_w2; inst_map.len()];
         for i in 0..inst_map.len() {
           if inst_map[i] == 2 {
-            components[i] = &addr_ts_bits_verifier;
+            components[i] = &addr_vir_mems_shifted_verifier;
           }
         }
         VerifierWitnessSecInfo::concat(components)
       };
-      let pairwise_num_instances = pairwise_verifier.num_proofs.len();
-      let pairwise_num_proofs: Vec<usize> = pairwise_verifier.num_proofs.clone();
+      let pairwise_num_instances = pairwise_w0_verifier.num_proofs.len();
+      let pairwise_num_proofs: Vec<usize> = pairwise_w0_verifier.num_proofs.clone();
 
       let pairwise_check_challenges = self.pairwise_check_r1cs_sat_proof.verify(
         pairwise_num_instances,
@@ -2958,9 +3163,9 @@ impl<S: SpartanExtensionField> SNARK<S> {
         &pairwise_num_proofs,
         max(8, mem_addr_ts_bits_size),
         vec![
-          &pairwise_verifier,
-          &pairwise_shifted_verifier,
-          &addr_ts_bits_verifier,
+          &pairwise_w0_verifier,
+          &pairwise_w1_verifier,
+          &pairwise_w2_verifier,
         ],
         pairwise_check_num_cons,
         &self.pairwise_check_inst_evals_bound_rp,
@@ -2988,7 +3193,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
         })
         .collect();
 
-      self.pairwise_check_r1cs_eval_proof.verify(
+      self.pairwise_check_r1cs_eval_proof.verify::<false>(
         &pairwise_check_comm.comm,
         &rx,
         &ry,
@@ -3075,7 +3280,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
         S::append_field_to_transcript(tag, transcript, *val);
       }
       let [_, _, rx, ry] = perm_block_root_challenges;
-      self.perm_root_r1cs_eval_proof.verify(
+      self.perm_root_r1cs_eval_proof.verify::<false>(
         &perm_root_comm.comm,
         &rx,
         &ry,
@@ -3088,6 +3293,7 @@ impl<S: SpartanExtensionField> SNARK<S> {
     // --
     // PERM_PRODUCT_PROOF
     // --
+    /*
     {
       let timer_eval_opening = Timer::new("Perm Product");
       // Verify prod of exec, blocks, mem_block, & mem_addr
@@ -3282,13 +3488,14 @@ impl<S: SpartanExtensionField> SNARK<S> {
       transcript,
     )?;
     timer_proof.stop();
+    */
 
     timer_verify.stop();
 
-    println!("PROOF SIZE: {}", proof_size);
-    println!("COMMIT SIZE: {}", commit_size);
-    println!("META SIZE: {}", meta_size);
-    println!("Total Proof Size: {}", proof_size + commit_size + meta_size);
+    println!("BLOCK SUMCHECK SIZE: {} bytes", block_size);
+    println!("PAIRWISE SUMCHECK SIZE: {} bytes", pairwise_size);
+    println!("PERM SUMCHECK SIZE: {} bytes", perm_size);
+    println!("META SIZE: {} bytes", meta_size);
 
     Ok(())
   }

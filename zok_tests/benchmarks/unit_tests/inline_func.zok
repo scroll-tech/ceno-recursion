@@ -1,8 +1,0 @@
-def bar() -> u32:
-  return 1
-
-def inline foo() -> u32:
-  return bar()
-
-def main() -> u32:
-  return foo() + foo()

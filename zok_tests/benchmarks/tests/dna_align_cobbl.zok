@@ -1,0 +1,116 @@
+/*
+ * Computes the Longest Common Subsequence of two strings, one of 
+ * length m and the other of length n in O(m*n) time
+ */
+def main(u32 x, u32 n) -> u32:
+    array_decl u32[ro n] A
+    array_decl u32[ro n] B
+    u32 sum = 0
+    for u32 i in 0..n do
+        sum = sum + i
+        A[i] = sum
+        B[i] = 60 - sum
+    endfor
+
+    u32[n] LCS = [0; n]
+    u32 arr_size = n
+
+    // Dynamic programming memo
+    u32[n * n + n + 1] LL = [0; n * n + n + 1]
+    // Hold choices made at each step, for use when backtracking
+    array_decl u32[ro n * n + n + 1] choices
+
+    // Used when backtracking
+    u32 diag = 0
+    u32 down = 0
+    u32 right = 0
+
+    // Go backwards from i = n-1 downto 0
+    u32 i = n - 1
+    while i + 1 > 0 do
+        u32 j = n - 1
+        while j + 1 > 0 do
+            if A[i] == B[j] then
+                if i+1 < n && j+1 < n then
+                    diag = LL[(i+1) * arr_size + j+1]
+                else
+                    diag = 0
+                endif
+                // Diagonal jump
+                LL[i * arr_size + j] = 1 + diag
+                choices[i * arr_size + j] = 0
+            else
+                if i+1 < n && j < n then
+                    down = LL[(i+1) * arr_size + j]
+                else 
+                    down = 0
+                endif
+                if i < n && j+1 < n then
+                    right = LL[i * arr_size + j+1]
+                else
+                    right = 0
+                endif
+                // Assertion: down and right differ by at most 1
+                if down == right + 1 then
+                    // Jump down
+                    LL[i * arr_size + j] = down
+                    choices[i * arr_size + j] = 1
+                else
+                    // Jump right if down == right or right == down + 1.
+                    LL[i * arr_size + j] = right
+                    choices[i * arr_size + j] = 2
+                endif
+            endif
+            j = j - 1
+        endwhile
+        i = i - 1
+    endwhile
+
+
+    // Construct LCS, allowing it to have intermittent zero characters
+    u32 iPtr = 0
+    u32 jPtr = 0 // Pointers to where in LL we are with respect to backtracking
+
+    u32 i = 0
+    while i < n do
+        LCS[i] = 0 //If A[i] is not in the LCS, this remains 0.
+        u32 j = 0
+        while j < n do
+            if i == iPtr && j == jPtr then // Loop until we meet up with the iPtr and jPtr
+                u32 choice = choices[i * arr_size + j]
+                if choice == 0 then // we made a diagonal jump here
+                    LCS[i] = A[i]
+                    iPtr = iPtr + 1
+                    jPtr = jPtr + 1
+                else
+                    if choice == 1 then // jump down
+                        iPtr = iPtr + 1
+                    else // jump right
+                        jPtr = jPtr + 1
+                    endif
+                endif
+            endif
+            j = j + 1
+        endwhile
+        i = i + 1
+    endwhile
+
+    // Now move any string terminator (\0) characters in LCS to the end ala insertion sort
+    u32 i = 1
+    while i < n do
+        u32 inserted = 0
+        u32 j = 0
+        while j < i do
+            if LCS[j] == 0 && inserted == 0 then
+                // Swap LCS[j] and LCS[i].
+                LCS[j] = LCS[i]
+                LCS[i] = 0
+                inserted = 1
+            endif
+            j = j + 1
+        endwhile
+        i = i + 1
+    endwhile
+
+
+    return LCS[x]

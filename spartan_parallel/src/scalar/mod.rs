@@ -47,12 +47,14 @@ pub trait SpartanExtensionField:
   + fmt::Debug
   + Mul<Self::BaseField, Output = Self>
   + MulAssign<Self::BaseField>
+  + Send
+  + Sync
 {
   /// Inner Goldilocks extension field
-  type InnerType: ExtensionField + Field;
+  type InnerType: ExtensionField + Field + Send + Sync;
 
   /// Basefield for conserving computational resources
-  type BaseField: Field;
+  type BaseField: Field + Send + Sync;
 
   /// Return inner Goldilocks field element
   fn inner(&self) -> &Self::InnerType;

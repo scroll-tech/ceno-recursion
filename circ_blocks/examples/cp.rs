@@ -32,7 +32,6 @@ struct Options {
 
 #[derive(PartialEq, Debug, Clone, ValueEnum)]
 /// `Prove`/`Verify` execute proving/verifying in bellman separately
-/// `Spartan` executes both proving/verifying in spartan
 enum ProofAction {
     Prove,
     Verify,

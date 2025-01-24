@@ -9,11 +9,6 @@ use bls12_381::Bls12;
 #[cfg(feature = "bellman")]
 use circ::target::r1cs::{bellman::Bellman, mirage::Mirage, proof::ProofSystem};
 
-#[cfg(feature = "spartan")]
-use circ::ir::term::text::parse_value_map;
-#[cfg(feature = "spartan")]
-use circ::target::r1cs::spartan;
-
 #[derive(Debug, Parser)]
 #[command(name = "zk", about = "The CirC ZKP runner")]
 struct Options {
@@ -39,11 +34,9 @@ struct Options {
 
 #[derive(PartialEq, Debug, Clone, ValueEnum)]
 /// `Prove`/`Verify` execute proving/verifying in bellman separately
-/// `Spartan` executes both proving/verifying in spartan
 enum ProofAction {
     Prove,
     Verify,
-    Spartan,
 }
 
 #[derive(PartialEq, Debug, Clone, ValueEnum)]
@@ -89,17 +82,5 @@ fn main() {
         }
         #[cfg(not(feature = "bellman"))]
         (ProofAction::Prove | ProofAction::Verify, _) => panic!("Missing feature: bellman"),
-        #[cfg(feature = "spartan")]
-        (ProofAction::Spartan, _) => {
-            let prover_input_map = parse_value_map(&std::fs::read(opts.pin).unwrap());
-            println!("Spartan Proving");
-            let (gens, inst, proof) = spartan::prove(opts.prover_key, &prover_input_map).unwrap();
-
-            let verifier_input_map = parse_value_map(&std::fs::read(opts.vin).unwrap());
-            println!("Spartan Verifying");
-            spartan::verify(opts.verifier_key, &verifier_input_map, &gens, &inst, proof).unwrap();
-        }
-        #[cfg(not(feature = "spartan"))]
-        (ProofAction::Spartan, _) => panic!("Missing feature: spartan"),
     }
 }

@@ -18,8 +18,6 @@ pub mod bellman;
 pub mod mirage;
 pub mod opt;
 pub mod proof;
-#[cfg(feature = "spartan")]
-pub mod spartan;
 pub mod trans;
 pub mod wit_comp;
 

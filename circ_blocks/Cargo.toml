@@ -50,7 +50,6 @@ pest-ast = { version = "0.3", optional = true }
 from-pest = { version = "0.3", optional = true }
 itertools = "0.10"
 petgraph = { version = "0.6", optional = true }
-spartan = { version = "0.8", default-features = false, optional = true }
 spartan_parallel = { path = "../spartan_parallel", default-features = false, features = [
   "multicore",
   "profile",
@@ -84,7 +83,6 @@ smt = ["rsmt2", "ieee754"]
 lp = ["good_lp", "lp-solvers"]
 aby = ["lp"]
 r1cs = ["bincode", "rayon"]
-spartan = ["r1cs", "dep:spartan", "curve25519-dalek", "bincode", "gmp-mpfr-sys"]
 bellman = [
   "r1cs",
   "dep:bellman",

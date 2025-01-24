@@ -128,13 +128,11 @@ def test(features, extra_args):
         if "lp" in features:
             log_run_check(["./scripts/test_zok_to_ilp.zsh"])
         if "r1cs" in features:
-            if "spartan" in features:  # spartan field
-                log_run_check(["./scripts/spartan_zok_test.zsh"])
-            else:  # bellman field
-                log_run_check(["./scripts/zokrates_test.zsh"])
-                if "poly" in features:
-                    log_run_check(["./scripts/cp_test.zsh"])
-                    log_run_check(["./scripts/ram_test.zsh"])
+            # bellman field
+            log_run_check(["./scripts/zokrates_test.zsh"])
+            if "poly" in features:
+                log_run_check(["./scripts/cp_test.zsh"])
+                log_run_check(["./scripts/ram_test.zsh"])
         if "lp" in features and "r1cs" in features:
             log_run_check(["./scripts/test_zok_to_ilp_pf.zsh"])
 

@@ -7,7 +7,7 @@ mode_path = ".mode.txt"
 
 # TODO: add in "kahip", "kahypar" binaries dependencies when adding new MPC changes
 cargo_features = {"aby", "c", "lp", "r1cs", "smt",
-                  "zok", "datalog", "bellman", "spartan", "poly"}
+                  "zok", "datalog", "bellman", "poly"}
 
 
 def save_mode(mode):

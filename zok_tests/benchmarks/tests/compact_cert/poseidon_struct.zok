@@ -1,4 +1,0 @@
-struct DoubleHash {
-    field hash0
-    field hash1
-}

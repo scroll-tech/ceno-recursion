@@ -4,7 +4,6 @@ use super::dense_mlpoly::{DensePolynomial, EqPolynomial};
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::r1csinstance::R1CSInstance;
-use super::random::RandomTape;
 use super::sumcheck::SumcheckInstanceProof;
 use super::timer::Timer;
 use super::transcript::ProofTranscript;

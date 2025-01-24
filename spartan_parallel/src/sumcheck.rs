@@ -6,7 +6,6 @@ use crate::scalar::SpartanExtensionField;
 
 use super::dense_mlpoly::DensePolynomial;
 use super::errors::ProofVerifyError;
-use super::random::RandomTape;
 use super::transcript::{AppendToTranscript, ProofTranscript};
 use super::unipoly::{CompressedUniPoly, UniPoly};
 use itertools::izip;

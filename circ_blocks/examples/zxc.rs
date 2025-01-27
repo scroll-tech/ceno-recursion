@@ -13,7 +13,12 @@ use circ::target::r1cs::wit_comp::StagedWitCompEvaluator;
 use circ::target::r1cs::ProverData;
 use circ::target::r1cs::{Lc, VarType};
 use core::cmp::min;
-use libspartan::scalar::{ScalarExt2, SpartanExtensionField};
+use ff_ext::ExtensionField;
+use libspartan::{
+    bytes::{to_bytes},
+    transcript::Transcript,
+};
+use goldilocks::GoldilocksExt2;
 use rug::Integer;
 
 use std::fs::{create_dir_all, File};
@@ -31,7 +36,6 @@ use std::path::PathBuf;
 use libspartan::{
     instance::Instance, Assignment, InputsAssignment, MemsAssignment, VarsAssignment, SNARK,
 };
-use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::time::*;
 
@@ -361,7 +365,7 @@ impl CompileTimeKnowledge {
 }
 
 #[derive(Serialize, Deserialize)]
-struct RunTimeKnowledge<S: SpartanExtensionField + Send + Sync> {
+struct RunTimeKnowledge<E: ExtensionField + Send + Sync> {
     block_max_num_proofs: usize,
     block_num_proofs: Vec<usize>,
     consis_num_proofs: usize,
@@ -370,14 +374,14 @@ struct RunTimeKnowledge<S: SpartanExtensionField + Send + Sync> {
     total_num_phy_mem_accesses: usize,
     total_num_vir_mem_accesses: usize,
 
-    block_vars_matrix: Vec<Vec<VarsAssignment<S>>>,
-    exec_inputs: Vec<InputsAssignment<S>>,
+    block_vars_matrix: Vec<Vec<VarsAssignment<E>>>,
+    exec_inputs: Vec<InputsAssignment<E>>,
     // Initial memory state, in (addr, val, ls = STORE, ts = 0) pair, sorted by appearance in program input (the same as address order)
-    init_phy_mems_list: Vec<MemsAssignment<S>>,
-    init_vir_mems_list: Vec<MemsAssignment<S>>,
-    addr_phy_mems_list: Vec<MemsAssignment<S>>,
-    addr_vir_mems_list: Vec<MemsAssignment<S>>,
-    addr_ts_bits_list: Vec<MemsAssignment<S>>,
+    init_phy_mems_list: Vec<MemsAssignment<E>>,
+    init_vir_mems_list: Vec<MemsAssignment<E>>,
+    addr_phy_mems_list: Vec<MemsAssignment<E>>,
+    addr_vir_mems_list: Vec<MemsAssignment<E>>,
+    addr_ts_bits_list: Vec<MemsAssignment<E>>,
 
     input: Vec<[u8; 32]>,
     input_stack: Vec<[u8; 32]>,
@@ -386,7 +390,7 @@ struct RunTimeKnowledge<S: SpartanExtensionField + Send + Sync> {
     output_exec_num: usize,
 }
 
-impl<S: SpartanExtensionField + Send + Sync> RunTimeKnowledge<S> {
+impl<E: ExtensionField + Send + Sync> RunTimeKnowledge<E> {
     fn serialize_to_file(
         &self,
         benchmark_name: String,
@@ -455,7 +459,7 @@ impl<S: SpartanExtensionField + Send + Sync> RunTimeKnowledge<S> {
             for exec in block {
                 writeln!(&mut f, "EXEC {}", exec_counter)?;
                 for assg in &exec.assignment {
-                    write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                    write!(&mut f, "{} ", bytes_to_integer(&to_bytes(*assg)))?;
                 }
                 writeln!(&mut f)?;
                 exec_counter += 1;
@@ -467,7 +471,7 @@ impl<S: SpartanExtensionField + Send + Sync> RunTimeKnowledge<S> {
         for exec in &self.exec_inputs {
             writeln!(&mut f, "EXEC {}", exec_counter)?;
             for assg in &exec.assignment {
-                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                write!(&mut f, "{} ", bytes_to_integer(&to_bytes(*assg)))?;
             }
             writeln!(&mut f)?;
             exec_counter += 1;
@@ -477,7 +481,7 @@ impl<S: SpartanExtensionField + Send + Sync> RunTimeKnowledge<S> {
         for addr in &self.init_phy_mems_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
             for assg in &addr.assignment {
-                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                write!(&mut f, "{} ", bytes_to_integer(&to_bytes(*assg)))?;
             }
             writeln!(&mut f)?;
             addr_counter += 1;
@@ -487,7 +491,7 @@ impl<S: SpartanExtensionField + Send + Sync> RunTimeKnowledge<S> {
         for addr in &self.init_vir_mems_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
             for assg in &addr.assignment {
-                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                write!(&mut f, "{} ", bytes_to_integer(&to_bytes(*assg)))?;
             }
             writeln!(&mut f)?;
             addr_counter += 1;
@@ -497,7 +501,7 @@ impl<S: SpartanExtensionField + Send + Sync> RunTimeKnowledge<S> {
         for addr in &self.addr_phy_mems_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
             for assg in &addr.assignment {
-                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                write!(&mut f, "{} ", bytes_to_integer(&to_bytes(*assg)))?;
             }
             writeln!(&mut f)?;
             addr_counter += 1;
@@ -507,7 +511,7 @@ impl<S: SpartanExtensionField + Send + Sync> RunTimeKnowledge<S> {
         for addr in &self.addr_vir_mems_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
             for assg in &addr.assignment {
-                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                write!(&mut f, "{} ", bytes_to_integer(&to_bytes(*assg)))?;
             }
             writeln!(&mut f)?;
             addr_counter += 1;
@@ -517,7 +521,7 @@ impl<S: SpartanExtensionField + Send + Sync> RunTimeKnowledge<S> {
         for addr in &self.addr_ts_bits_list {
             writeln!(&mut f, "ACCESS {}", addr_counter)?;
             for assg in &addr.assignment {
-                write!(&mut f, "{} ", bytes_to_integer(&assg.to_bytes()))?;
+                write!(&mut f, "{} ", bytes_to_integer(&to_bytes(*assg)))?;
             }
             writeln!(&mut f)?;
             addr_counter += 1;
@@ -850,7 +854,7 @@ fn get_compile_time_knowledge<const VERBOSE: bool>(
 // --
 // Generate witnesses and others
 // --
-fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField + Send + Sync>(
+fn get_run_time_knowledge<const VERBOSE: bool, E: ExtensionField + Send + Sync>(
     path: PathBuf,
     options: &Options,
     entry_regs: Vec<Integer>,
@@ -863,7 +867,7 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField + Send +
     prover_data_list: Vec<ProverData>,
     total_num_init_phy_mem_accesses: usize,
     total_num_init_vir_mem_accesses: usize,
-) -> RunTimeKnowledge<S> {
+) -> RunTimeKnowledge<E> {
     let num_blocks = ctk.block_num_instances;
     let num_input_unpadded = ctk.num_inputs_unpadded;
     let io_width = 2 * num_input_unpadded;
@@ -1285,9 +1289,9 @@ fn get_run_time_knowledge<const VERBOSE: bool, S: SpartanExtensionField + Send +
     }
 }
 
-fn run_spartan_proof<S: SpartanExtensionField + Send + Sync>(
+fn run_spartan_proof<E: ExtensionField + Send + Sync>(
     ctk: CompileTimeKnowledge,
-    rtk: RunTimeKnowledge<S>,
+    rtk: RunTimeKnowledge<E>,
 ) {
     // --
     // INSTANCE PREPROCESSING
@@ -1329,7 +1333,7 @@ fn run_spartan_proof<S: SpartanExtensionField + Send + Sync>(
             &rtk.block_num_proofs,
         );
     // block_inst is used by commitment. Every block has different number of variables
-    let (_, _, _, block_inst_for_commit) = Instance::<S>::gen_block_inst::<true, true>(
+    let (_, _, _, block_inst_for_commit) = Instance::<E>::gen_block_inst::<true, true>(
         block_num_instances_bound,
         num_vars,
         &ctk.args,
@@ -1600,7 +1604,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<false, ScalarExt2>(
+    let rtk = get_run_time_knowledge::<false, GoldilocksExt2>(
         path.clone(),
         &options,
         entry_regs,

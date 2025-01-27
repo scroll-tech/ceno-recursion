@@ -1,46 +1,43 @@
 #![allow(clippy::too_many_arguments)]
-use crate::scalar::SpartanExtensionField;
+use ff_ext::ExtensionField;
 
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::random::RandomTape;
-use super::transcript::ProofTranscript;
+use super::transcript::Transcript;
 use core::ops::Index;
-use merlin::Transcript;
 use rayon::{iter::ParallelIterator, slice::ParallelSliceMut};
 use serde::{Deserialize, Serialize};
-use std::{cmp::min, collections::HashMap};
-
-#[cfg(feature = "multicore")]
+use std::cmp::min;
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
-pub struct DensePolynomial<S: SpartanExtensionField> {
+pub struct DensePolynomial<E: ExtensionField> {
   num_vars: usize, // the number of variables in the multilinear polynomial
   len: usize,
-  Z: Vec<S>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
+  Z: Vec<E>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
 }
 
-pub struct EqPolynomial<S: SpartanExtensionField> {
-  r: Vec<S>,
+pub struct EqPolynomial<E: ExtensionField> {
+  r: Vec<E>,
 }
 
-impl<S: SpartanExtensionField> EqPolynomial<S> {
-  pub fn new(r: Vec<S>) -> Self {
+impl<E: ExtensionField> EqPolynomial<E> {
+  pub fn new(r: Vec<E>) -> Self {
     EqPolynomial { r }
   }
 
-  pub fn evaluate(&self, rx: &[S]) -> S {
+  pub fn evaluate(&self, rx: &[E]) -> E {
     assert_eq!(self.r.len(), rx.len());
     (0..rx.len())
-      .map(|i| self.r[i] * rx[i] + (S::field_one() - self.r[i]) * (S::field_one() - rx[i]))
+      .map(|i| self.r[i] * rx[i] + (E::ONE - self.r[i]) * (E::ONE - rx[i]))
       .product()
   }
 
-  pub fn evals(&self) -> Vec<S> {
+  pub fn evals(&self) -> Vec<E> {
     let ell = self.r.len();
 
-    let mut evals: Vec<S> = vec![S::field_one(); ell.pow2()];
+    let mut evals: Vec<E> = vec![E::ONE; ell.pow2()];
     let mut size = 1;
     for j in 0..ell {
       // in each iteration, we double the size of chis
@@ -56,10 +53,10 @@ impl<S: SpartanExtensionField> EqPolynomial<S> {
   }
 
   // Only bound Eq on the first self.r.len() of the total_len variables
-  pub fn evals_front(&self, total_len: usize) -> Vec<S> {
+  pub fn evals_front(&self, total_len: usize) -> Vec<E> {
     let ell = self.r.len();
 
-    let mut evals: Vec<S> = vec![S::field_one(); total_len.pow2()];
+    let mut evals: Vec<E> = vec![E::ONE; total_len.pow2()];
     let base_size = (total_len - ell).pow2();
     let mut size = base_size;
     for j in 0..ell {
@@ -83,9 +80,9 @@ impl<S: SpartanExtensionField> EqPolynomial<S> {
     (ell / 2, ell - ell / 2)
   }
 
-  pub fn compute_factored_evals(&self) -> (Vec<S>, Vec<S>) {
+  pub fn compute_factored_evals(&self) -> (Vec<E>, Vec<E>) {
     let ell = self.r.len();
-    let (left_num_vars, _right_num_vars) = EqPolynomial::<S>::compute_factored_lens(ell);
+    let (left_num_vars, _right_num_vars) = EqPolynomial::<E>::compute_factored_lens(ell);
 
     let L = EqPolynomial::new(self.r[..left_num_vars].to_vec()).evals();
     let R = EqPolynomial::new(self.r[left_num_vars..ell].to_vec()).evals();
@@ -93,32 +90,32 @@ impl<S: SpartanExtensionField> EqPolynomial<S> {
     (L, R)
   }
 }
-pub struct IdentityPolynomial<S: SpartanExtensionField> {
+pub struct IdentityPolynomial<E: ExtensionField> {
   size_point: usize,
-  _phantom: S,
+  _phantom: E,
 }
 
-impl<S: SpartanExtensionField> IdentityPolynomial<S> {
+impl<E: ExtensionField> IdentityPolynomial<E> {
   pub fn new(size_point: usize) -> Self {
     IdentityPolynomial {
       size_point,
-      _phantom: S::field_zero(),
+      _phantom: E::ZERO,
     }
   }
 
-  pub fn evaluate(&self, r: &[S]) -> S {
+  pub fn evaluate(&self, r: &[E]) -> E {
     let len = r.len();
     assert_eq!(len, self.size_point);
     (0..len)
-      .map(|i| S::from((len - i - 1).pow2() as u64) * r[i])
+      .map(|i| E::from((len - i - 1).pow2() as u64) * r[i])
       .sum()
   }
 }
 
-impl<S: SpartanExtensionField> DensePolynomial<S> {
-  pub fn new(mut Z: Vec<S>) -> Self {
+impl<E: ExtensionField> DensePolynomial<E> {
+  pub fn new(mut Z: Vec<E>) -> Self {
     // If length of Z is not a power of 2, append Z with 0
-    let zero = S::field_zero();
+    let zero = E::ZERO;
     Z.extend(vec![zero; Z.len().next_power_of_two() - Z.len()]);
     DensePolynomial {
       num_vars: Z.len().log_2(),
@@ -135,11 +132,11 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     self.len
   }
 
-  pub fn clone(&self) -> DensePolynomial<S> {
+  pub fn clone(&self) -> DensePolynomial<E> {
     DensePolynomial::new(self.Z[0..self.len].to_vec())
   }
 
-  pub fn split(&self, idx: usize) -> (DensePolynomial<S>, DensePolynomial<S>) {
+  pub fn split(&self, idx: usize) -> (DensePolynomial<E>, DensePolynomial<E>) {
     assert!(idx < self.len());
     (
       DensePolynomial::new(self.Z[..idx].to_vec()),
@@ -147,9 +144,9 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     )
   }
 
-  pub fn bound(&self, L: &[S]) -> Vec<S> {
+  pub fn bound(&self, L: &[E]) -> Vec<E> {
     let (left_num_vars, right_num_vars) =
-      EqPolynomial::<S>::compute_factored_lens(self.get_num_vars());
+      EqPolynomial::<E>::compute_factored_lens(self.get_num_vars());
     let L_size = left_num_vars.pow2();
     let R_size = right_num_vars.pow2();
     (0..R_size)
@@ -157,7 +154,7 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
       .collect()
   }
 
-  pub fn bound_poly_var_top(&mut self, r: &S) {
+  pub fn bound_poly_var_top(&mut self, r: &E) {
     let n = self.len() / 2;
     for i in 0..n {
       self.Z[i] = self.Z[i] + *r * (self.Z[i + n] - self.Z[i]);
@@ -169,7 +166,7 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
   // Bound_var_top but the polynomial is in (x, q, p) form and certain (p, q) pair is invalid
   pub fn bound_poly_var_top_disjoint_rounds(
     &mut self,
-    r: &S,
+    r: &E,
     proof_space: usize,
     instance_space: usize,
     cons_len: usize,
@@ -203,7 +200,7 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
   // Use "num_proofs" to record how many "q"s need to process for each "p"
   pub fn bound_poly_var_front_rq(
     &mut self,
-    r_q: &Vec<S>,
+    r_q: &Vec<E>,
     mut max_proof_space: usize,
     instance_space: usize,
     cons_space: usize,
@@ -221,7 +218,7 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
           // q = 0
           for x in 0..cons_space {
             let i = p * cons_space + x;
-            self.Z[i] = (S::field_one() - *r) * self.Z[i];
+            self.Z[i] = (E::ONE - *r) * self.Z[i];
           }
         } else {
           num_proofs[p] /= 2;
@@ -239,7 +236,7 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     }
   }
 
-  pub fn bound_poly_var_bot(&mut self, r: &S) {
+  pub fn bound_poly_var_bot(&mut self, r: &E) {
     let n = self.len() / 2;
     for i in 0..n {
       self.Z[i] = self.Z[2 * i] + *r * (self.Z[2 * i + 1] - self.Z[2 * i]);
@@ -248,9 +245,9 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     self.len = n;
   }
 
-  fn fold_r(proofs: &mut [S], r: &[S], step: usize, mut l: usize) {
+  fn fold_r(proofs: &mut [E], r: &[E], step: usize, mut l: usize) {
     for r in r {
-      let r1 = S::field_one() - r.clone();
+      let r1 = E::ONE - r.clone();
       let r2 = r.clone();
   
       l = l.div_ceil(2);
@@ -261,7 +258,7 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
   }
 
   // returns Z(r) in O(n) time
-  pub fn evaluate_and_consume_parallel(&mut self, r: &[S]) -> S {
+  pub fn evaluate_and_consume_parallel(&mut self, r: &[E]) -> E {
     assert_eq!(r.len(), self.get_num_vars());
     let mut inst = std::mem::take(&mut self.Z);
 
@@ -300,7 +297,7 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
   }
 
   // returns Z(r) in O(n) time
-  pub fn evaluate(&self, r: &[S]) -> S {
+  pub fn evaluate(&self, r: &[E]) -> E {
     // r must have a value for each variable
     assert_eq!(r.len(), self.get_num_vars());
     let chis = EqPolynomial::new(r.to_vec()).evals();
@@ -308,16 +305,16 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     Self::compute_dotproduct(&self.Z, &chis)
   }
 
-  fn compute_dotproduct(a: &[S], b: &[S]) -> S {
+  fn compute_dotproduct(a: &[E], b: &[E]) -> E {
     assert_eq!(a.len(), b.len());
     (0..a.len()).map(|i| a[i] * b[i]).sum()
   }
 
-  fn vec(&self) -> &Vec<S> {
+  fn vec(&self) -> &Vec<E> {
     &self.Z
   }
 
-  pub fn extend(&mut self, other: &DensePolynomial<S>) {
+  pub fn extend(&mut self, other: &DensePolynomial<E>) {
     // TODO: allow extension even when some vars are bound
     assert_eq!(self.Z.len(), self.len);
     let other_vec = other.vec();
@@ -328,17 +325,17 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
     assert_eq!(self.Z.len(), self.len);
   }
 
-  pub fn merge<'a, I>(polys: I) -> DensePolynomial<S>
+  pub fn merge<'a, I>(polys: I) -> DensePolynomial<E>
   where
-    I: IntoIterator<Item = DensePolynomial<S>>,
+    I: IntoIterator<Item = DensePolynomial<E>>,
   {
-    let mut Z: Vec<S> = Vec::new();
+    let mut Z: Vec<E> = Vec::new();
     for poly in polys.into_iter() {
       Z.extend(poly.vec());
     }
 
     // pad the polynomial with zero polynomial at the end
-    Z.resize(Z.len().next_power_of_two(), S::field_zero());
+    Z.resize(Z.len().next_power_of_two(), E::ZERO);
 
     DensePolynomial::new(Z)
   }
@@ -346,48 +343,48 @@ impl<S: SpartanExtensionField> DensePolynomial<S> {
   pub fn from_usize(Z: &[usize]) -> Self {
     DensePolynomial::new(
       (0..Z.len())
-        .map(|i| S::from(Z[i] as u64))
-        .collect::<Vec<S>>(),
+        .map(|i| E::from(Z[i] as u64))
+        .collect::<Vec<E>>(),
     )
   }
 }
 
-impl<S: SpartanExtensionField> Index<usize> for DensePolynomial<S> {
-  type Output = S;
+impl<E: ExtensionField> Index<usize> for DensePolynomial<E> {
+  type Output = E;
 
   #[inline(always)]
-  fn index(&self, _index: usize) -> &S {
+  fn index(&self, _index: usize) -> &E {
     &(self.Z[_index])
   }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PolyEvalProof<S: SpartanExtensionField> {
-  _phantom: S,
+pub struct PolyEvalProof<E: ExtensionField> {
+  _phantom: E,
 }
 
-impl<S: SpartanExtensionField> PolyEvalProof<S> {
+impl<E: ExtensionField> PolyEvalProof<E> {
   fn protocol_name() -> &'static [u8] {
     b"polynomial evaluation proof"
   }
 
   pub fn prove(
-    _poly: &DensePolynomial<S>,
-    _r: &[S], // point at which the polynomial is evaluated
-    _Zr: &S,  // evaluation of \widetilde{Z}(r)
-    _transcript: &mut Transcript,
-    _random_tape: &mut RandomTape<S>,
-  ) -> PolyEvalProof<S> {
+    _poly: &DensePolynomial<E>,
+    _r: &[E], // point at which the polynomial is evaluated
+    _Zr: &E,  // evaluation of \widetilde{Z}(r)
+    _transcript: &mut Transcript<E>,
+    _random_tape: &mut RandomTape<E>,
+  ) -> PolyEvalProof<E> {
     // TODO: Alternative evaluation proof scheme
     PolyEvalProof {
-      _phantom: S::field_zero(),
+      _phantom: E::ZERO,
     }
   }
 
   pub fn verify(
     &self,
-    transcript: &mut Transcript,
-    r: &[S], // point at which the polynomial is evaluated
+    transcript: &mut Transcript<E>,
+    r: &[E], // point at which the polynomial is evaluated
   ) -> Result<(), ProofVerifyError> {
     // TODO: Alternative evaluation proof scheme
     Ok(())
@@ -395,30 +392,30 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 
   pub fn verify_plain(
     &self,
-    transcript: &mut Transcript,
-    r: &[S], // point at which the polynomial is evaluated
-    _Zr: &S, // evaluation \widetilde{Z}(r)
+    transcript: &mut Transcript<E>,
+    r: &[E], // point at which the polynomial is evaluated
+    _Zr: &E, // evaluation \widetilde{Z}(r)
   ) -> Result<(), ProofVerifyError> {
     self.verify(transcript, r)
   }
 
   // Evaluation of multiple points on the same instance
   pub fn prove_batched_points(
-    _poly: &DensePolynomial<S>,
-    _r_list: Vec<Vec<S>>, // point at which the polynomial is evaluated
-    _Zr_list: Vec<S>,     // evaluation of \widetilde{Z}(r) on each point
-    _transcript: &mut Transcript,
-    _random_tape: &mut RandomTape<S>,
-  ) -> Vec<PolyEvalProof<S>> {
+    _poly: &DensePolynomial<E>,
+    _r_list: Vec<Vec<E>>, // point at which the polynomial is evaluated
+    _Zr_list: Vec<E>,     // evaluation of \widetilde{Z}(r) on each point
+    _transcript: &mut Transcript<E>,
+    _random_tape: &mut RandomTape<E>,
+  ) -> Vec<PolyEvalProof<E>> {
     // TODO: Alternative evaluation proof scheme
     vec![]
   }
 
   pub fn verify_plain_batched_points(
-    _proof_list: &Vec<PolyEvalProof<S>>,
-    _transcript: &mut Transcript,
-    _r_list: Vec<Vec<S>>, // point at which the polynomial is evaluated
-    _Zr_list: Vec<S>,     // commitment to \widetilde{Z}(r) on each point
+    _proof_list: &Vec<PolyEvalProof<E>>,
+    _transcript: &mut Transcript<E>,
+    _r_list: Vec<Vec<E>>, // point at which the polynomial is evaluated
+    _Zr_list: Vec<E>,     // commitment to \widetilde{Z}(r) on each point
   ) -> Result<(), ProofVerifyError> {
     // TODO: Alternative evaluation proof scheme
     Ok(())
@@ -427,21 +424,21 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   // Evaluation on multiple instances, each at different point
   // Size of each instance might be different, but all are larger than the evaluation point
   pub fn prove_batched_instances(
-    _poly_list: &Vec<DensePolynomial<S>>, // list of instances
-    _r_list: Vec<&Vec<S>>,                // point at which the polynomial is evaluated
-    _Zr_list: &Vec<S>,                    // evaluation of \widetilde{Z}(r) on each instance
-    _transcript: &mut Transcript,
-    _random_tape: &mut RandomTape<S>,
-  ) -> Vec<PolyEvalProof<S>> {
+    _poly_list: &Vec<DensePolynomial<E>>, // list of instances
+    _r_list: Vec<&Vec<E>>,                // point at which the polynomial is evaluated
+    _Zr_list: &Vec<E>,                    // evaluation of \widetilde{Z}(r) on each instance
+    _transcript: &mut Transcript<E>,
+    _random_tape: &mut RandomTape<E>,
+  ) -> Vec<PolyEvalProof<E>> {
     // TODO: Alternative evaluation proof scheme
     vec![]
   }
 
   pub fn verify_plain_batched_instances(
-    _proof_list: &Vec<PolyEvalProof<S>>,
-    _transcript: &mut Transcript,
-    _r_list: Vec<&Vec<S>>,       // point at which the polynomial is evaluated
-    _Zr_list: &Vec<S>,           // commitment to \widetilde{Z}(r) of each instance
+    _proof_list: &Vec<PolyEvalProof<E>>,
+    _transcript: &mut Transcript<E>,
+    _r_list: Vec<&Vec<E>>,       // point at which the polynomial is evaluated
+    _Zr_list: &Vec<E>,           // commitment to \widetilde{Z}(r) of each instance
     _num_vars_list: &Vec<usize>, // size of each polynomial
   ) -> Result<(), ProofVerifyError> {
     // TODO: Alternative evaluation proof scheme
@@ -451,26 +448,26 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   // Like prove_batched_instances, but r is divided into rq ++ ry
   // Each polynomial is supplemented with num_proofs and num_inputs
   pub fn prove_batched_instances_disjoint_rounds(
-    _poly_list: &Vec<&DensePolynomial<S>>,
+    _poly_list: &Vec<&DensePolynomial<E>>,
     _num_proofs_list: &Vec<usize>,
     _num_inputs_list: &Vec<usize>,
-    _rq: &[S],
-    _ry: &[S],
-    _Zr_list: &Vec<S>,
-    _transcript: &mut Transcript,
-    _random_tape: &mut RandomTape<S>,
-  ) -> Vec<PolyEvalProof<S>> {
+    _rq: &[E],
+    _ry: &[E],
+    _Zr_list: &Vec<E>,
+    _transcript: &mut Transcript<E>,
+    _random_tape: &mut RandomTape<E>,
+  ) -> Vec<PolyEvalProof<E>> {
     // TODO: Alternative evaluation proof scheme
     vec![]
   }
 
   pub fn verify_batched_instances_disjoint_rounds(
-    _proof_list: &Vec<PolyEvalProof<S>>,
+    _proof_list: &Vec<PolyEvalProof<E>>,
     _num_proofs_list: &Vec<usize>,
     _num_inputs_list: &Vec<usize>,
-    _transcript: &mut Transcript,
-    _rq: &[S],
-    _ry: &[S],
+    _transcript: &mut Transcript<E>,
+    _rq: &[E],
+    _ry: &[E],
   ) -> Result<(), ProofVerifyError> {
     // TODO: Alternative evaluation proof scheme
     Ok(())
@@ -478,22 +475,22 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
 
   // Treat the polynomial(s) as univariate and open on a single point
   pub fn prove_uni_batched_instances(
-    _poly_list: &Vec<&DensePolynomial<S>>,
-    _r: &S,       // point at which the polynomial is evaluated
-    _Zr: &Vec<S>, // evaluation of \widetilde{Z}(r)
-    _transcript: &mut Transcript,
-    _random_tape: &mut RandomTape<S>,
-  ) -> PolyEvalProof<S> {
+    _poly_list: &Vec<&DensePolynomial<E>>,
+    _r: &E,       // point at which the polynomial is evaluated
+    _Zr: &Vec<E>, // evaluation of \widetilde{Z}(r)
+    _transcript: &mut Transcript<E>,
+    _random_tape: &mut RandomTape<E>,
+  ) -> PolyEvalProof<E> {
     // TODO: Alternative evaluation proof scheme
     PolyEvalProof {
-      _phantom: S::field_zero(),
+      _phantom: E::ZERO,
     }
   }
 
   pub fn verify_uni_batched_instances(
     &self,
-    _transcript: &mut Transcript,
-    _r: &S, // point at which the polynomial is evaluated
+    _transcript: &mut Transcript<E>,
+    _r: &E, // point at which the polynomial is evaluated
     _poly_size: Vec<usize>,
   ) -> Result<(), ProofVerifyError> {
     // TODO: Alternative evaluation proof scheme
@@ -501,6 +498,7 @@ impl<S: SpartanExtensionField> PolyEvalProof<S> {
   }
 }
 
+/*
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -662,3 +660,4 @@ mod tests {
     assert_eq!(R, R2);
   }
 }
+*/

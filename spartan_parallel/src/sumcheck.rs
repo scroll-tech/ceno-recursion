@@ -2,14 +2,13 @@
 #![allow(clippy::type_complexity)]
 use crate::custom_dense_mlpoly::DensePolynomialPqx;
 use crate::math::Math;
-use crate::scalar::SpartanExtensionField;
+use ff_ext::ExtensionField;
 
 use super::dense_mlpoly::DensePolynomial;
 use super::errors::ProofVerifyError;
-use super::transcript::{AppendToTranscript, ProofTranscript};
+use super::transcript::{Transcript, challenge_scalar};
 use super::unipoly::{CompressedUniPoly, UniPoly};
 use itertools::izip;
-use merlin::Transcript;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
@@ -20,24 +19,24 @@ const MODE_W: usize = 3;
 const MODE_X: usize = 4;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct SumcheckInstanceProof<S: SpartanExtensionField> {
-  compressed_polys: Vec<CompressedUniPoly<S>>,
+pub struct SumcheckInstanceProof<E: ExtensionField> {
+  compressed_polys: Vec<CompressedUniPoly<E>>,
 }
 
-impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
-  pub fn new(compressed_polys: Vec<CompressedUniPoly<S>>) -> SumcheckInstanceProof<S> {
+impl<E: ExtensionField> SumcheckInstanceProof<E> {
+  pub fn new(compressed_polys: Vec<CompressedUniPoly<E>>) -> SumcheckInstanceProof<E> {
     SumcheckInstanceProof { compressed_polys }
   }
 
   pub fn verify(
     &self,
-    claim: S,
+    claim: E,
     num_rounds: usize,
     degree_bound: usize,
-    transcript: &mut Transcript,
-  ) -> Result<(S, Vec<S>), ProofVerifyError> {
+    transcript: &mut Transcript<E>,
+  ) -> Result<(E, Vec<E>), ProofVerifyError> {
     let mut e = claim;
-    let mut r: Vec<S> = Vec::new();
+    let mut r: Vec<E> = Vec::new();
 
     // verify that there is a univariate polynomial for each round
     assert_eq!(self.compressed_polys.len(), num_rounds);
@@ -54,7 +53,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
       poly.append_to_transcript(b"poly", transcript);
 
       // derive the verifier's challenge for the next round
-      let r_i = transcript.challenge_scalar(b"challenge_nextround");
+      let r_i = challenge_scalar(transcript, b"challenge_nextround");
 
       // scalar_debug
       // println!("=> SumcheckInstanceProof-verify, challenge round {:?} - {:?}", i, r_i);
@@ -69,26 +68,26 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
   }
 }
 
-impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
+impl<E: ExtensionField> SumcheckInstanceProof<E> {
   pub fn prove_cubic<F>(
-    claim: &S,
+    claim: &E,
     num_rounds: usize,
-    poly_A: &mut DensePolynomial<S>,
-    poly_B: &mut DensePolynomial<S>,
-    poly_C: &mut DensePolynomial<S>,
+    poly_A: &mut DensePolynomial<E>,
+    poly_B: &mut DensePolynomial<E>,
+    poly_C: &mut DensePolynomial<E>,
     comb_func: F,
-    transcript: &mut Transcript,
-  ) -> (Self, Vec<S>, Vec<S>)
+    transcript: &mut Transcript<E>,
+  ) -> (Self, Vec<E>, Vec<E>)
   where
-    F: Fn(&S, &S, &S) -> S,
+    F: Fn(&E, &E, &E) -> E,
   {
     let mut e = *claim;
-    let mut r: Vec<S> = Vec::new();
-    let mut cubic_polys: Vec<CompressedUniPoly<S>> = Vec::new();
+    let mut r: Vec<E> = Vec::new();
+    let mut cubic_polys: Vec<CompressedUniPoly<E>> = Vec::new();
     for _j in 0..num_rounds {
-      let mut eval_point_0 = S::field_zero();
-      let mut eval_point_2 = S::field_zero();
-      let mut eval_point_3 = S::field_zero();
+      let mut eval_point_0 = E::ZERO;
+      let mut eval_point_2 = E::ZERO;
+      let mut eval_point_3 = E::ZERO;
 
       let len = poly_A.len() / 2;
       for i in 0..len {
@@ -126,7 +125,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
       poly.append_to_transcript(b"poly", transcript);
 
       //derive the verifier's challenge for the next round
-      let r_j = transcript.challenge_scalar(b"challenge_nextround");
+      let r_j = challenge_scalar(transcript, b"challenge_nextround");
       r.push(r_j);
       // bound all tables to the verifier's challenege
       poly_A.bound_poly_var_top(&r_j);
@@ -144,40 +143,40 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
   }
 
   pub fn prove_cubic_batched<F>(
-    claim: &S,
+    claim: &E,
     num_rounds: usize,
     poly_vec_par: (
-      &mut Vec<&mut DensePolynomial<S>>,
-      &mut Vec<&mut DensePolynomial<S>>,
-      &mut DensePolynomial<S>,
+      &mut Vec<&mut DensePolynomial<E>>,
+      &mut Vec<&mut DensePolynomial<E>>,
+      &mut DensePolynomial<E>,
     ),
     poly_vec_seq: (
-      &mut Vec<&mut DensePolynomial<S>>,
-      &mut Vec<&mut DensePolynomial<S>>,
-      &mut Vec<&mut DensePolynomial<S>>,
+      &mut Vec<&mut DensePolynomial<E>>,
+      &mut Vec<&mut DensePolynomial<E>>,
+      &mut Vec<&mut DensePolynomial<E>>,
     ),
-    coeffs: &[S],
+    coeffs: &[E],
     comb_func: F,
-    transcript: &mut Transcript,
-  ) -> (Self, Vec<S>, (Vec<S>, Vec<S>, S), (Vec<S>, Vec<S>, Vec<S>))
+    transcript: &mut Transcript<E>,
+  ) -> (Self, Vec<E>, (Vec<E>, Vec<E>, E), (Vec<E>, Vec<E>, Vec<E>))
   where
-    F: Fn(&S, &S, &S) -> S,
+    F: Fn(&E, &E, &E) -> E,
   {
     let (poly_A_vec_par, poly_B_vec_par, poly_C_par) = poly_vec_par;
     let (poly_A_vec_seq, poly_B_vec_seq, poly_C_vec_seq) = poly_vec_seq;
 
     //let (poly_A_vec_seq, poly_B_vec_seq, poly_C_vec_seq) = poly_vec_seq;
     let mut e = *claim;
-    let mut r: Vec<S> = Vec::new();
-    let mut cubic_polys: Vec<CompressedUniPoly<S>> = Vec::new();
+    let mut r: Vec<E> = Vec::new();
+    let mut cubic_polys: Vec<CompressedUniPoly<E>> = Vec::new();
 
     for _j in 0..num_rounds {
-      let mut evals: Vec<(S, S, S)> = Vec::new();
+      let mut evals: Vec<(E, E, E)> = Vec::new();
 
       for (poly_A, poly_B) in poly_A_vec_par.iter().zip(poly_B_vec_par.iter()) {
-        let mut eval_point_0 = S::field_zero();
-        let mut eval_point_2 = S::field_zero();
-        let mut eval_point_3 = S::field_zero();
+        let mut eval_point_0 = E::ZERO;
+        let mut eval_point_2 = E::ZERO;
+        let mut eval_point_3 = E::ZERO;
 
         let len = poly_A.len() / 2;
         for i in 0..len {
@@ -216,9 +215,9 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
         poly_B_vec_seq.iter(),
         poly_C_vec_seq.iter()
       ) {
-        let mut eval_point_0 = S::field_zero();
-        let mut eval_point_2 = S::field_zero();
-        let mut eval_point_3 = S::field_zero();
+        let mut eval_point_0 = E::ZERO;
+        let mut eval_point_2 = E::ZERO;
+        let mut eval_point_3 = E::ZERO;
         let len = poly_A.len() / 2;
         for i in 0..len {
           // eval 0: bound_func is A(low)
@@ -263,7 +262,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
       poly.append_to_transcript(b"poly", transcript);
 
       //derive the verifier's challenge for the next round
-      let r_j = transcript.challenge_scalar(b"challenge_nextround");
+      let r_j = challenge_scalar(transcript, b"challenge_nextround");
 
       // scalar_debug
       // println!("=> prove_cubic_batched, challenge round {:?} - {:?}", _j, r_j);
@@ -319,7 +318,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
   }
   
   pub fn prove_cubic_disjoint_rounds<F>(
-    claim: &S,
+    claim: &E,
     num_rounds: usize,
     num_rounds_y_max: usize,
     num_rounds_w: usize,
@@ -327,16 +326,16 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     single_inst: bool, // indicates whether poly_B only has one instance
     num_witness_secs: usize,
     mut num_inputs: Vec<Vec<usize>>,
-    poly_A: &mut DensePolynomial<S>,
-    poly_B: &mut DensePolynomialPqx<S>,
-    poly_C: &mut DensePolynomialPqx<S>,
+    poly_A: &mut DensePolynomial<E>,
+    poly_B: &mut DensePolynomialPqx<E>,
+    poly_C: &mut DensePolynomialPqx<E>,
     comb_func: F,
-    transcript: &mut Transcript,
-  ) -> (Self, Vec<S>, Vec<S>, Vec<Vec<S>>)
+    transcript: &mut Transcript<E>,
+  ) -> (Self, Vec<E>, Vec<E>, Vec<Vec<E>>)
   where
-    F: Fn(&S, &S, &S) -> S,
+    F: Fn(&E, &E, &E) -> E,
   {
-    let ZERO = S::field_zero();
+    let ZERO = E::ZERO;
 
     // NOTE: if single_inst, number of instances in poly_B is 1, might not match with instance_len!
     // NOTE: num_proofs must be 1!
@@ -346,8 +345,8 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
 
     let mut claim_per_round = *claim;
 
-    let mut r: Vec<S> = Vec::new();
-    let mut polys: Vec<CompressedUniPoly<S>> = Vec::new();
+    let mut r: Vec<E> = Vec::new();
+    let mut polys: Vec<CompressedUniPoly<E>> = Vec::new();
 
     let mut inputs_len = num_rounds_y_max.pow2();
     let mut witness_secs_len = num_rounds_w.pow2();
@@ -473,7 +472,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
       poly.append_to_transcript(b"poly", transcript);
 
       //derive the verifier's challenge for the next round
-      let r_j = transcript.challenge_scalar(b"challenge_nextround");
+      let r_j = challenge_scalar(transcript, b"challenge_nextround");
       r.push(r_j);
 
       // bound all tables to the verifier's challenege
@@ -501,26 +500,26 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
   }
 
   pub fn prove_cubic_with_additive_term_disjoint_rounds<F>(
-    claim: &S,
+    claim: &E,
     num_rounds: usize,
     num_rounds_x_max: usize,
     num_rounds_q_max: usize,
     num_rounds_p: usize,
     mut num_proofs: Vec<usize>,
     mut num_cons: Vec<usize>,
-    poly_Ap: &mut DensePolynomial<S>,
-    poly_Aq: &mut DensePolynomial<S>,
-    poly_Ax: &mut DensePolynomial<S>,
-    poly_B: &mut DensePolynomialPqx<S>,
-    poly_C: &mut DensePolynomialPqx<S>,
-    poly_D: &mut DensePolynomialPqx<S>,
+    poly_Ap: &mut DensePolynomial<E>,
+    poly_Aq: &mut DensePolynomial<E>,
+    poly_Ax: &mut DensePolynomial<E>,
+    poly_B: &mut DensePolynomialPqx<E>,
+    poly_C: &mut DensePolynomialPqx<E>,
+    poly_D: &mut DensePolynomialPqx<E>,
     comb_func: F,
-    transcript: &mut Transcript,
-  ) -> (Self, Vec<S>, Vec<S>)
+    transcript: &mut Transcript<E>,
+  ) -> (Self, Vec<E>, Vec<E>)
   where
-    F: Fn(&S, &S, &S, &S) -> S + std::marker::Sync,
+    F: Fn(&E, &E, &E, &E) -> E + std::marker::Sync,
   {
-    let ZERO = S::field_zero();
+    let ZERO = E::ZERO;
 
     // Note: num_witness_secs must be 1!
     // We perform sumcheck in x -> q_rev -> p order, but all polynomials have parameters (p, q, x)
@@ -537,8 +536,8 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
 
     let mut claim_per_round = *claim;
 
-    let mut r: Vec<S> = Vec::new();
-    let mut polys: Vec<CompressedUniPoly<S>> = Vec::new();
+    let mut r: Vec<E> = Vec::new();
+    let mut polys: Vec<CompressedUniPoly<E>> = Vec::new();
 
     let mut cons_len = num_rounds_x_max.pow2();
     let mut proof_len = num_rounds_q_max.pow2();
@@ -642,7 +641,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
                   );  // Az[x, x, ..., 3]
               }
               (eval_point_0, eval_point_2, eval_point_3)
-            }).collect::<Vec<(S, S, S)>>().into_iter().fold((eval_point_0, eval_point_2, eval_point_3), |(e0, e2, e3), (a0, a2, a3)| (e0 + a0, e2 + a2, e3 + a3));
+            }).collect::<Vec<(E, E, E)>>().into_iter().fold((eval_point_0, eval_point_2, eval_point_3), |(e0, e2, e3), (a0, a2, a3)| (e0 + a0, e2 + a2, e3 + a3));
           }
 
           let evals = vec![
@@ -738,7 +737,7 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
       poly.append_to_transcript(b"poly", transcript);
 
       //derive the verifier's challenge for the next round
-      let r_j = transcript.challenge_scalar(b"challenge_nextround");
+      let r_j = challenge_scalar(transcript, b"challenge_nextround");
       r.push(r_j);
 
       // bound all tables to the verifier's challenege

@@ -3,7 +3,7 @@ use std::cmp::min;
 
 use crate::dense_mlpoly::DensePolynomial;
 use crate::math::Math;
-use crate::scalar::SpartanExtensionField;
+use ff_ext::ExtensionField;
 use rayon::prelude::*;
 
 const MODE_P: usize = 1;
@@ -17,7 +17,7 @@ const MODE_X: usize = 4;
 // Dense polynomial with variable order: p, q, w, x
 // Used by Z_poly in r1csproof
 #[derive(Debug, Clone, Hash)]
-pub struct DensePolynomialPqx<S: SpartanExtensionField> {
+pub struct DensePolynomialPqx<E: ExtensionField> {
   // All metadata might not be a power of 2
   pub num_instances: usize,
   pub num_proofs: Vec<usize>, // P
@@ -27,12 +27,12 @@ pub struct DensePolynomialPqx<S: SpartanExtensionField> {
   pub num_vars_q: usize,
   pub num_vars_w: usize,
   pub num_vars_x: usize,
-  pub Z: Vec<Vec<Vec<Vec<S>>>>, // Evaluations of the polynomial in all the 2^num_vars Boolean inputs of order (p, q, w, x)
+  pub Z: Vec<Vec<Vec<Vec<E>>>>, // Evaluations of the polynomial in all the 2^num_vars Boolean inputs of order (p, q, w, x)
 }
 
-fn fold_rq<S: SpartanExtensionField>(proofs: &mut [Vec<Vec<S>>], r_q: &[S], step: usize, mut q: usize, w: usize, x: &Vec<usize>) {
+fn fold_rq<E: ExtensionField>(proofs: &mut [Vec<Vec<E>>], r_q: &[E], step: usize, mut q: usize, w: usize, x: &Vec<usize>) {
   for r in r_q {
-    let r1 = S::field_one() - r.clone();
+    let r1 = E::ONE - r.clone();
     let r2 = r.clone();
 
     q = q.div_ceil(2);
@@ -46,10 +46,10 @@ fn fold_rq<S: SpartanExtensionField>(proofs: &mut [Vec<Vec<S>>], r_q: &[S], step
   }
 }
 
-impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
+impl<E: ExtensionField> DensePolynomialPqx<E> {
   // Assume z_mat is of form (p, q_rev, x), construct DensePoly
   pub fn new(
-    z_mat: Vec<Vec<Vec<Vec<S>>>>, 
+    z_mat: Vec<Vec<Vec<Vec<E>>>>, 
   ) -> Self {
     let num_instances = z_mat.len();
     let num_proofs: Vec<usize> = (0..num_instances).map(|p| z_mat[p].len()).collect();
@@ -85,7 +85,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   }
 
   // Given (p, q, w, x) return Z[p][q][w][x], DO NOT CHECK FOR OUT OF BOUND
-  pub fn index(&self, p: usize, q: usize, w: usize, x: usize) -> S {
+  pub fn index(&self, p: usize, q: usize, w: usize, x: usize) -> E {
     return self.Z[p][q][w][x];
   }
 
@@ -95,8 +95,8 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   // Mode = 3 ==> w* = 2w for low, 2w + 1
   // Mode = 4 ==> x* = 2x for low, 2x + 1
   // Assume p*, q*, w*, x* are within bound
-  pub fn index_low(&self, p: usize, q: usize, w: usize, x: usize, mode: usize) -> S {
-    let ZERO = S::field_zero();
+  pub fn index_low(&self, p: usize, q: usize, w: usize, x: usize, mode: usize) -> E {
+    let ZERO = E::ZERO;
     match mode {
       MODE_P => { if self.num_instances == 1 { self.Z[0][q][w][x] } else if 2 * p >= self.num_instances { ZERO } else { self.Z[2 * p][q][w][x] } }
       MODE_Q => { if 2 * q >= self.num_proofs[p] { ZERO } else { self.Z[p][2 * q][w][x] } },
@@ -105,8 +105,8 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
       _ => unreachable!()
     }
   }
-  pub fn index_high(&self, p: usize, q: usize, w: usize, x: usize, mode: usize) -> S {
-    let ZERO = S::field_zero();
+  pub fn index_high(&self, p: usize, q: usize, w: usize, x: usize, mode: usize) -> E {
+    let ZERO = E::ZERO;
     match mode {
       MODE_P => { if self.num_instances == 1 { self.Z[0][q][w][x] } else if 2 * p + 1 >= self.num_instances { ZERO } else { self.Z[2 * p + 1][q][w][x] } }
       MODE_Q => { if 2 * q + 1 >= self.num_proofs[p] { ZERO } else { self.Z[p][2 * q + 1][w][x] } }
@@ -121,7 +121,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   // Mode = 2 ==> Bound last variable of "q" section to r
   // Mode = 3 ==> Bound last variable of "w" section to r
   // Mode = 4 ==> Bound last variable of "x" section to r
-  pub fn bound_poly(&mut self, r: &S, mode: usize) {
+  pub fn bound_poly(&mut self, r: &E, mode: usize) {
     match mode {
         MODE_P => { self.bound_poly_p(r); }
         MODE_Q => { self.bound_poly_q(r); }
@@ -133,7 +133,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
 
   // Bound the last variable of "p" section to r
   // We are only allowed to bound "p" if we have bounded the entire q and x section
-  fn bound_poly_p(&mut self, r: &S) {
+  fn bound_poly_p(&mut self, r: &E) {
     assert!(self.num_vars_p >= 1);
     assert_eq!(self.num_vars_q, 0);
     assert_eq!(self.num_vars_x, 0);
@@ -150,7 +150,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   }
 
   // Bound the last variable of "q" section to r
-  fn bound_poly_q(&mut self, r: &S) {
+  fn bound_poly_q(&mut self, r: &E) {
     assert!(self.num_vars_q >= 1);
     for p in 0..self.num_instances {
       let new_num_proofs = self.num_proofs[p].div_ceil(2);
@@ -170,8 +170,8 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
 
   // Bound the last variable of "w" section to r
   // We are only allowed to bound "w" if we have bounded the entire x section
-  fn _bound_poly_w_parallel(&mut self, r: &S) {
-    let ZERO = S::field_zero();
+  fn _bound_poly_w_parallel(&mut self, r: &E) {
+    let ZERO = E::ZERO;
     assert!(self.num_vars_w >= 1);
     assert_eq!(self.num_vars_x, 0);
     let new_num_witness_secs = self.num_witness_secs.div_ceil(2);
@@ -184,15 +184,15 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
           Z_pq[w][0] = Z_low + r.clone() * (Z_high - Z_low);
         }
         Z_pq
-      }).collect::<Vec<Vec<Vec<S>>>>()
-    }).collect::<Vec<Vec<Vec<Vec<S>>>>>();
+      }).collect::<Vec<Vec<Vec<E>>>>()
+    }).collect::<Vec<Vec<Vec<Vec<E>>>>>();
     self.num_witness_secs = new_num_witness_secs;
     self.num_vars_w -= 1;
 }
 
   // Bound the last variable of "w" section to r
   // We are only allowed to bound "w" if we have bounded the entire x section
-  fn bound_poly_w(&mut self, r: &S) {
+  fn bound_poly_w(&mut self, r: &E) {
     assert!(self.num_vars_w >= 1);
     assert_eq!(self.num_vars_x, 0);
     let new_num_witness_secs = self.num_witness_secs.div_ceil(2);
@@ -210,8 +210,8 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
 }
 
   // Bound the last variable of "x" section to r
-  fn bound_poly_x_parallel(&mut self, r: &S) {
-    let ZERO = S::field_zero();
+  fn bound_poly_x_parallel(&mut self, r: &E) {
+    let ZERO = E::ZERO;
     let new_num_inputs: Vec<Vec<usize>> = self.num_inputs.iter().map(|p|
       p.iter().map(|w| w.div_ceil(2)).collect()
     ).collect();
@@ -227,8 +227,8 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
           }
         }
         Z_pq
-      }).collect::<Vec<Vec<Vec<S>>>>()
-    }).collect::<Vec<Vec<Vec<Vec<S>>>>>();
+      }).collect::<Vec<Vec<Vec<E>>>>()
+    }).collect::<Vec<Vec<Vec<Vec<E>>>>>();
     self.num_inputs = new_num_inputs;
     if self.num_vars_x >= 1 {
       self.num_vars_x -= 1;
@@ -236,7 +236,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   }
 
   // Bound the last variable of "x" section to r
-  fn bound_poly_x(&mut self, r: &S) {
+  fn bound_poly_x(&mut self, r: &E) {
     // assert!(self.num_vars_x >= 1);
     for p in 0..self.num_instances {
       for w in 0..self.num_witness_secs {
@@ -258,7 +258,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
 
   // Bound the entire "p" section to r_p in reverse
   // Must occur after r_q's are bounded
-  pub fn bound_poly_vars_rp(&mut self, r_p: &[S]) {
+  pub fn bound_poly_vars_rp(&mut self, r_p: &[E]) {
     for r in r_p {
       self.bound_poly_p(r);
     }
@@ -267,7 +267,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   // Bound the entire "q" section to r_q in reverse
   pub fn bound_poly_vars_rq_parallel(
     &mut self, 
-    r_q: &[S],
+    r_q: &[E],
   ) {
     let Z = std::mem::take(&mut self.Z);
 
@@ -316,7 +316,7 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
 
         if left_over_q_len > 0 {
           // the series of random challenges exceeds the total number of variables
-          let c = left_over_rq.into_iter().fold(S::field_one(), |acc, n| acc * (S::field_one() - *n));
+          let c = left_over_rq.into_iter().fold(E::ONE, |acc, n| acc * (E::ONE - *n));
           for w in 0..inst[0].len() {
             for x in 0..inst[0][w].len() {
               inst[0][w][x] *= c;
@@ -325,39 +325,39 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
         }
 
         inst
-      }).collect::<Vec<Vec<Vec<Vec<S>>>>>();
+      }).collect::<Vec<Vec<Vec<Vec<E>>>>>();
 
     self.num_vars_q = 0;
     self.num_proofs = vec![1; self.num_instances];
   }
 
   // Bound the entire "q" section to r_q in reverse
-  pub fn bound_poly_vars_rq(&mut self, r_q: &[S]) {
+  pub fn bound_poly_vars_rq(&mut self, r_q: &[E]) {
     for r in r_q {
       self.bound_poly_q(r);
     }
   }
 
   // Bound the entire "w" section to r_w in reverse
-  pub fn bound_poly_vars_rw(&mut self, r_w: &[S]) {
+  pub fn bound_poly_vars_rw(&mut self, r_w: &[E]) {
     for r in r_w {
       self.bound_poly_w(r);
     }
   }
 
   // Bound the entire "x_rev" section to r_x
-  pub fn bound_poly_vars_rx(&mut self, r_x: &[S]) {
+  pub fn bound_poly_vars_rx(&mut self, r_x: &[E]) {
     for r in r_x {
       if self.num_vars_q >= 1 { self.bound_poly_x_parallel(r) } else { self.bound_poly_x(r) };
     }
   }
 
   pub fn evaluate(&self,
-    rp_rev: &Vec<S>,
-    rq_rev: &Vec<S>,
-    rw_rev: &Vec<S>,
-    rx_rev: &Vec<S>,
-  ) -> S {
+    rp_rev: &Vec<E>,
+    rq_rev: &Vec<E>,
+    rw_rev: &Vec<E>,
+    rx_rev: &Vec<E>,
+  ) -> E {
     let mut cl = self.clone();
     cl.bound_poly_vars_rx(rx_rev);
     cl.bound_poly_vars_rw(rw_rev);
@@ -367,8 +367,8 @@ impl<S: SpartanExtensionField> DensePolynomialPqx<S> {
   }
 
   // Convert to a (p, q_rev, x_rev) regular dense poly of form (p, q, x)
-  pub fn to_dense_poly(&self) -> DensePolynomial<S> {
-    let ZERO = S::field_zero();
+  pub fn to_dense_poly(&self) -> DensePolynomial<E> {
+    let ZERO = E::ZERO;
 
     let p_space = self.num_vars_p.pow2();
     let q_space = self.num_vars_q.pow2();

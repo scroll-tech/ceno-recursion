@@ -3,8 +3,9 @@ use std::collections::HashMap;
 
 use crate::errors::R1CSError;
 use crate::math::Math;
-use crate::scalar::SpartanExtensionField;
+use ff_ext::ExtensionField;
 use crate::R1CSInstance;
+use crate::bytes::{from_bytes, to_bytes};
 
 const GROUP_POWER_SCALE: usize = 16;
 // Group all instances with the similar num_vars (round to the next power of four) together
@@ -19,14 +20,14 @@ fn next_group_size(val: usize) -> usize {
 
 /// `Instance` holds the description of R1CS matrices and a hash of the matrices
 #[derive(Clone)]
-pub struct Instance<S: SpartanExtensionField> {
+pub struct Instance<E: ExtensionField> {
   /// Matrix of Instance
-  pub inst: crate::R1CSInstance<S>,
+  pub inst: crate::R1CSInstance<E>,
   /// Digest of Instance
   pub digest: Vec<u8>,
 }
 
-impl<S: SpartanExtensionField> Instance<S> {
+impl<E: ExtensionField> Instance<E> {
   /// Constructs a new `Instance` and an associated satisfying assignment
   pub fn new(
     num_instances: usize,
@@ -37,8 +38,8 @@ impl<S: SpartanExtensionField> Instance<S> {
     A: &Vec<Vec<(usize, usize, [u8; 32])>>,
     B: &Vec<Vec<(usize, usize, [u8; 32])>>,
     C: &Vec<Vec<(usize, usize, [u8; 32])>>,
-  ) -> Result<Instance<S>, R1CSError> {
-    let ZERO = S::field_zero();
+  ) -> Result<Instance<E>, R1CSError> {
+    let ZERO = E::ZERO;
 
     let (max_num_vars_padded, num_vars_padded, max_num_cons_padded, num_cons_padded) = {
       let max_num_vars_padded = {
@@ -88,8 +89,8 @@ impl<S: SpartanExtensionField> Instance<S> {
     };
 
     let bytes_to_scalar =
-      |b: usize, tups: &[(usize, usize, [u8; 32])]| -> Result<Vec<(usize, usize, S)>, R1CSError> {
-        let mut mat: Vec<(usize, usize, S)> = Vec::new();
+      |b: usize, tups: &[(usize, usize, [u8; 32])]| -> Result<Vec<(usize, usize, E)>, R1CSError> {
+        let mut mat: Vec<(usize, usize, E)> = Vec::new();
         for &(row, col, val_bytes) in tups {
           // row must be smaller than num_cons
           if row >= num_cons[b] {
@@ -103,7 +104,7 @@ impl<S: SpartanExtensionField> Instance<S> {
             return Err(R1CSError::InvalidIndex);
           }
 
-          let val = S::from_bytes(&val_bytes);
+          let val = from_bytes(&val_bytes);
           if val.is_some().unwrap_u8() == 1 {
             // if col >= num_vars, it means that it is referencing a 1 or input in the satisfying
             // assignment
@@ -190,11 +191,11 @@ impl<S: SpartanExtensionField> Instance<S> {
     Vec<(usize, usize, [u8; 32])>,
   ) {
     let int_to_scalar = |i: isize| {
-      let abs_scalar = S::from(i.abs() as u64);
+      let abs_scalar = E::from(i.abs() as u64);
       if i < 0 {
-        abs_scalar.negate().to_bytes()
+        to_bytes(abs_scalar.neg())
       } else {
-        abs_scalar.to_bytes()
+        to_bytes(abs_scalar)
       }
     };
     for vars in &args_A {
@@ -287,7 +288,7 @@ impl<S: SpartanExtensionField> Instance<S> {
     // Information used only by printing
     num_vars_per_block: &Vec<usize>,
     block_num_proofs: &Vec<usize>,
-  ) -> (usize, usize, usize, Instance<S>) {
+  ) -> (usize, usize, usize, Instance<E>) {
     assert_eq!(num_instances, args.len());
 
     let num_vars_padded_per_block = if COMMIT_MODE {
@@ -397,7 +398,7 @@ impl<S: SpartanExtensionField> Instance<S> {
           tmp_nnz_A += arg[i].0.len();
           tmp_nnz_B += arg[i].1.len();
           tmp_nnz_C += arg[i].2.len();
-          (A, B, C) = Instance::<S>::gen_constr_bytes(
+          (A, B, C) = Instance::<E>::gen_constr_bytes(
             A,
             B,
             C,
@@ -413,7 +414,7 @@ impl<S: SpartanExtensionField> Instance<S> {
           // correctness of w2
           // for i1..
           for i in 1..num_inputs_unpadded - 1 {
-            (A, B, C) = Instance::<S>::gen_constr(
+            (A, B, C) = Instance::<E>::gen_constr(
               A,
               B,
               C,
@@ -426,7 +427,7 @@ impl<S: SpartanExtensionField> Instance<S> {
           }
           // for o0, o1..
           for i in 0..num_inputs_unpadded - 1 {
-            (A, B, C) = Instance::<S>::gen_constr(
+            (A, B, C) = Instance::<E>::gen_constr(
               A,
               B,
               C,
@@ -438,7 +439,7 @@ impl<S: SpartanExtensionField> Instance<S> {
             counter += 1;
           }
           // v[k]
-          (A, B, C) = Instance::<S>::gen_constr(
+          (A, B, C) = Instance::<E>::gen_constr(
             A,
             B,
             C,
@@ -449,7 +450,7 @@ impl<S: SpartanExtensionField> Instance<S> {
           );
           counter += 1;
           // x[k]
-          (A, B, C) = Instance::<S>::gen_constr(
+          (A, B, C) = Instance::<E>::gen_constr(
             A,
             B,
             C,
@@ -466,7 +467,7 @@ impl<S: SpartanExtensionField> Instance<S> {
           );
           counter += 1;
           // D[k] = x[k] * (pi[k + 1] + (1 - v[k + 1]))
-          (A, B, C) = Instance::<S>::gen_constr(
+          (A, B, C) = Instance::<E>::gen_constr(
             A,
             B,
             C,
@@ -477,7 +478,7 @@ impl<S: SpartanExtensionField> Instance<S> {
           );
           counter += 1;
           // pi[k] = v[k] * D[k]
-          (A, B, C) = Instance::<S>::gen_constr(
+          (A, B, C) = Instance::<E>::gen_constr(
             A,
             B,
             C,
@@ -498,7 +499,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         // Physical Memory
         for i in 0..num_phy_ops[b] {
           // PMR = r * PD
-          (A, B, C) = Instance::<S>::gen_constr(
+          (A, B, C) = Instance::<E>::gen_constr(
             A,
             B,
             C,
@@ -510,7 +511,7 @@ impl<S: SpartanExtensionField> Instance<S> {
           counter += 1;
           // PMC = (1 or PMC[i-1]) * (tau - PA - PMR)
           if i == 0 {
-            (A, B, C) = Instance::<S>::gen_constr(
+            (A, B, C) = Instance::<E>::gen_constr(
               A,
               B,
               C,
@@ -520,7 +521,7 @@ impl<S: SpartanExtensionField> Instance<S> {
               vec![(V_PMC(b, i), 1)],
             );
           } else {
-            (A, B, C) = Instance::<S>::gen_constr(
+            (A, B, C) = Instance::<E>::gen_constr(
               A,
               B,
               C,
@@ -534,7 +535,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         }
         counter += 1;
         // Pd
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -550,7 +551,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         counter += 1;
         // Pp
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -568,7 +569,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         // Virtual Memory
         for i in 0..num_vir_ops[b] {
           // VMR1 = r * VD
-          (A, B, C) = Instance::<S>::gen_constr(
+          (A, B, C) = Instance::<E>::gen_constr(
             A,
             B,
             C,
@@ -579,7 +580,7 @@ impl<S: SpartanExtensionField> Instance<S> {
           );
           counter += 1;
           // VMR2 = r^2 * VL
-          (A, B, C) = Instance::<S>::gen_constr(
+          (A, B, C) = Instance::<E>::gen_constr(
             A,
             B,
             C,
@@ -590,7 +591,7 @@ impl<S: SpartanExtensionField> Instance<S> {
           );
           counter += 1;
           // VMR3 = r^3 * VT
-          (A, B, C) = Instance::<S>::gen_constr(
+          (A, B, C) = Instance::<E>::gen_constr(
             A,
             B,
             C,
@@ -602,7 +603,7 @@ impl<S: SpartanExtensionField> Instance<S> {
           counter += 1;
           // VMC = (1 or VMC[i-1]) * (tau - VA - VMR1 - VMR2 - VMR3)
           if i == 0 {
-            (A, B, C) = Instance::<S>::gen_constr(
+            (A, B, C) = Instance::<E>::gen_constr(
               A,
               B,
               C,
@@ -618,7 +619,7 @@ impl<S: SpartanExtensionField> Instance<S> {
               vec![(V_VMC(b, i), 1)],
             );
           } else {
-            (A, B, C) = Instance::<S>::gen_constr(
+            (A, B, C) = Instance::<E>::gen_constr(
               A,
               B,
               C,
@@ -638,7 +639,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         }
         counter += 1;
         // Vd
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -654,7 +655,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         counter += 1;
         // Vp
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -807,7 +808,7 @@ impl<S: SpartanExtensionField> Instance<S> {
     consis_num_proofs: usize,
     total_num_phy_mem_accesses: usize,
     total_num_vir_mem_accesses: usize,
-  ) -> (usize, usize, usize, Instance<S>) {
+  ) -> (usize, usize, usize, Instance<E>) {
     if PRINT_SIZE {
       println!("\n\n--\nPAIRWISE INSTS");
       println!(
@@ -843,7 +844,7 @@ impl<S: SpartanExtensionField> Instance<S> {
 
         // R1CS:
         // Output matches input
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -887,7 +888,7 @@ impl<S: SpartanExtensionField> Instance<S> {
 
         let mut num_cons = 0;
         // (v[k] - 1) * v[k + 1] = 0
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -898,7 +899,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         num_cons += 1;
         // v[k + 1] * (1 - addr[k + 1] + addr[k]) = D[k]
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -909,7 +910,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         num_cons += 1;
         // D[k] * (addr[k + 1] - addr[k]) = 0
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -920,7 +921,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         num_cons += 1;
         // D[k] * (val[k + 1] - val[k]) = 0
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -972,7 +973,7 @@ impl<S: SpartanExtensionField> Instance<S> {
 
         let mut num_cons = 0;
         // (v[k] - 1) * v[k + 1] = 0
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -984,7 +985,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         num_cons += 1;
         // Sortedness
         // D1[k] = v[k + 1] * (1 - addr[k + 1] + addr[k])
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -995,7 +996,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         num_cons += 1;
         // D1[k] * (addr[k + 1] - addr[k]) = 0
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -1006,7 +1007,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         num_cons += 1;
         // EQ
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -1019,7 +1020,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         // C>=
         for i in 0..max_ts_width {
           // Bi * Bi = Bi
-          (A, B, C) = Instance::<S>::gen_constr(
+          (A, B, C) = Instance::<E>::gen_constr(
             A,
             B,
             C,
@@ -1031,7 +1032,7 @@ impl<S: SpartanExtensionField> Instance<S> {
           num_cons += 1;
         }
         // D1[k] * (ts[k + 1] - ts[k]) = EQ + \Sum_i B_i
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -1050,7 +1051,7 @@ impl<S: SpartanExtensionField> Instance<S> {
 
         // Consistency
         // D1[k] * (ls[k + 1] - STORE) = D2[k], where STORE = 0
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -1061,7 +1062,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         num_cons += 1;
         // D2[k] * (data[k + 1] - data[k]) = 0
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -1072,7 +1073,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         num_cons += 1;
         // (1 - D1[k]) * (ls[k + 1] - STORE) = 0, where STORE = 0
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -1159,7 +1160,7 @@ impl<S: SpartanExtensionField> Instance<S> {
     consis_num_proofs: usize,
     total_num_phy_mem_accesses: usize,
     total_num_vir_mem_accesses: usize,
-  ) -> (usize, usize, Instance<S>) {
+  ) -> (usize, usize, Instance<E>) {
     if PRINT_SIZE {
       println!("\n\n--\nPERM INSTS");
       println!(
@@ -1214,7 +1215,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         // correctness of w2
         // for i1..
         for i in 1..num_inputs_unpadded - 1 {
-          (A, B, C) = Instance::<S>::gen_constr(
+          (A, B, C) = Instance::<E>::gen_constr(
             A,
             B,
             C,
@@ -1227,7 +1228,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         }
         // for o0, o1..
         for i in 0..num_inputs_unpadded - 1 {
-          (A, B, C) = Instance::<S>::gen_constr(
+          (A, B, C) = Instance::<E>::gen_constr(
             A,
             B,
             C,
@@ -1239,7 +1240,7 @@ impl<S: SpartanExtensionField> Instance<S> {
           constraint_count += 1;
         }
         // ZO * r^n = r^n * o0 + r^(n + 1) * o1, ...
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -1252,7 +1253,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         constraint_count += 1;
         // I = v * (v + i0 + r * i1 + r^2 * i2 + ...)
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -1269,7 +1270,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         constraint_count += 1;
         // O = v * (v + ZO)
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -1280,7 +1281,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         constraint_count += 1;
         // v[k]
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -1291,7 +1292,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         constraint_count += 1;
         // x[k]
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -1308,7 +1309,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         constraint_count += 1;
         // D[k] = x[k] * (pi[k + 1] + (1 - v[k + 1]))
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,
@@ -1319,7 +1320,7 @@ impl<S: SpartanExtensionField> Instance<S> {
         );
         constraint_count += 1;
         // pi[k] = v[k] * D[k]
-        (A, B, C) = Instance::<S>::gen_constr(
+        (A, B, C) = Instance::<E>::gen_constr(
           A,
           B,
           C,

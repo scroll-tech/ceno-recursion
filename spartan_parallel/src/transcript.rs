@@ -1,35 +1,71 @@
-use super::scalar::SpartanExtensionField;
-use merlin::Transcript;
+use ff_ext::ExtensionField;
+pub use transcript::BasicTranscript as Transcript;
+use transcript::Transcript as IsTranscript;
 
-pub trait ProofTranscript<S: SpartanExtensionField> {
-  fn append_protocol_name(&mut self, protocol_name: &'static [u8]);
-  fn append_scalar(&mut self, label: &'static [u8], scalar: &S);
-  fn challenge_scalar(&mut self, label: &'static [u8]) -> S;
-  fn challenge_vector(&mut self, label: &'static [u8], len: usize) -> Vec<S>;
+/// Generate a challenge scalar
+pub fn challenge_scalar<E: ExtensionField>(
+  transcript: &mut Transcript<E>,
+  label: &'static [u8]
+) -> E {
+  transcript.get_and_append_challenge(label).elements
 }
 
-impl<S: SpartanExtensionField> ProofTranscript<S> for Transcript {
-  fn append_protocol_name(&mut self, protocol_name: &'static [u8]) {
-    self.append_message(b"protocol-name", protocol_name);
-  }
-
-  fn append_scalar(&mut self, label: &'static [u8], scalar: &S) {
-    self.append_message(label, &scalar.to_bytes());
-  }
-
-  fn challenge_scalar(&mut self, label: &'static [u8]) -> S {
-    let mut buf = [0u8; 64];
-    self.challenge_bytes(label, &mut buf);
-    S::from_bytes_wide(&buf)
-  }
-
-  fn challenge_vector(&mut self, label: &'static [u8], len: usize) -> Vec<S> {
-    (0..len)
-      .map(|_i| self.challenge_scalar(label))
-      .collect::<Vec<S>>()
-  }
+/// Generate a vector of challenge scalars
+pub fn challenge_vector<E: ExtensionField>(
+  transcript: &mut Transcript<E>,
+  label: &'static [u8],
+  len: usize
+) -> Vec<E> {
+  (0..len)
+    .map(|_i| challenge_scalar(transcript, label))
+    .collect::<Vec<E>>()
 }
 
-pub trait AppendToTranscript {
-  fn append_to_transcript(&self, label: &'static [u8], transcript: &mut Transcript);
+/// Append protocol name to transcript
+pub fn append_protocol_name<E: ExtensionField>(
+  transcript: &mut Transcript<E>,
+  protocol_name: &'static [u8]
+) {
+  transcript.append_message(protocol_name);
+}
+
+/// Append ExtensionField scalar to transcript
+pub fn append_scalar<E: ExtensionField>(
+  label: &'static [u8],
+  transcript: &mut Transcript<E>,
+  input: E
+) {
+  transcript.append_message(label);
+  transcript.append_field_element_ext(&input);
+}
+
+/// Append ExtensionField scalar to transcript
+pub fn append_field_to_transcript<E: ExtensionField>(
+  label: &'static [u8],
+  transcript: &mut Transcript<E>,
+  input: E
+) {
+  transcript.append_message(label);
+  transcript.append_field_element_ext(&input);
+}
+
+/// Append a vector ExtensionField scalars to transcript
+pub fn append_field_vector_to_transcript<E: ExtensionField>(
+  label: &'static [u8],
+  transcript: &mut Transcript<E>,
+  input: &[E],
+) {
+  transcript.append_message(b"begin_append_vector");
+  transcript.append_field_element_exts(input);
+  transcript.append_message(b"end_append_vector");
+}
+
+/// Append a message to transcript
+pub fn append_message<E: ExtensionField>(
+  label: &'static [u8],
+  transcript: &mut Transcript<E>,
+  bytes: &[u8],
+) {
+  transcript.append_message(label);
+  transcript.append_message(bytes);
 }

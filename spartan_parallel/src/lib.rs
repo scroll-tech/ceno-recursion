@@ -48,7 +48,7 @@ use instance::Instance;
 use itertools::Itertools;
 use math::Math;
 use multilinear_extensions::mle::DenseMultilinearExtension;
-use mpcs::PolynomialCommitmentScheme;
+use mpcs::{PolynomialCommitmentScheme, ProverParam};
 use r1csinstance::{R1CSCommitment, R1CSDecommitment, R1CSEvalProof, R1CSInstance};
 use r1csproof::R1CSProof;
 use random::RandomTape;
@@ -612,7 +612,27 @@ impl VerifierWitnessSecInfo {
 /// `SNARK` holds a proof produced by Spartan SNARK
 #[derive(Serialize, Debug)]
 pub struct SNARK<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
-  perm_exec_w2_comm: (Pcs::VerifierParam, Pcs::CommitmentWithWitness),
+  poly_vp: Pcs::VerifierParam,
+  block_vars_comm_list: Vec<Pcs::Commitment>,
+  exec_inputs_comm: Pcs::Commitment,
+  addr_phy_mems_comm: Option<Pcs::Commitment>,
+  addr_phy_mems_shifted_comm: Option<Pcs::Commitment>,
+  addr_vir_mems_comm: Option<Pcs::Commitment>,
+  addr_vir_mems_shifted_comm: Option<Pcs::Commitment>,
+  addr_ts_bits_comm: Option<Pcs::Commitment>,
+
+  perm_exec_w2_comm: Pcs::Commitment,
+  perm_exec_w3_comm: Pcs::Commitment,
+  perm_exec_w3_shifted_comm: Pcs::Commitment,
+  block_w2_comm_list: Vec<Pcs::Commitment>,
+  block_w3_comm_list: Vec<Pcs::Commitment>,
+  block_w3_shifted_comm_list: Vec<Pcs::Commitment>,
+  phy_mem_addr_w2_comm: Option<Pcs::Commitment>,
+  phy_mem_addr_w3_comm: Option<Pcs::Commitment>,
+  phy_mem_addr_w3_shifted_comm: Option<Pcs::Commitment>,
+  vir_mem_addr_w2_comm: Option<Pcs::Commitment>,
+  vir_mem_addr_w3_comm: Option<Pcs::Commitment>,
+  vir_mem_addr_w3_shifted_comm: Option<Pcs::Commitment>,
 
   block_r1cs_sat_proof: R1CSProof<E>,
   block_inst_evals_bound_rp: [E; 3],
@@ -673,7 +693,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
   fn compute_size(&self) -> (usize, usize, usize, usize) {
     /*
     let commit_size = bincode::serialize(&self.block_comm_vars_list).unwrap().len()
-                           + bincode::serialize(&self.exec_comm_inputs).unwrap().len()
+                           + bincode::serialize(&self.exec_inputs_comm).unwrap().len()
                            + bincode::serialize(&self.addr_comm_phy_mems).unwrap().len()
                            + bincode::serialize(&self.addr_comm_phy_mems_shifted).unwrap().len()
                            + bincode::serialize(&self.addr_comm_vir_mems).unwrap().len()
@@ -798,10 +818,14 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     comb_r: &E,
     comb_tau: &E,
     _transcript: &mut Transcript<E>,
+    pp: &ProverParam<E, Pcs>,
   ) -> (
     ProverWitnessSecInfo<E>,
+    Option<Pcs::Commitment>,
     ProverWitnessSecInfo<E>,
+    Option<Pcs::Commitment>,
     ProverWitnessSecInfo<E>,
+    Option<Pcs::Commitment>,
   ) {
     if total_num_mem_accesses > 0 {
       // init_mem_w2 is (I, O, ZO, r * data, 0, 0)
@@ -832,6 +856,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
         mem_w3[q][4] = mems_list[q][0] * (mems_list[q][0] + mems_list[q][2] + mem_w2[q][3]);
         mem_w3[q][5] = mems_list[q][0];
       }
+      let mem_w3_shifted_mat = [mem_w3[1..].to_vec(), vec![vec![E::ZERO; W3_WIDTH]]].concat();
 
       let (mem_poly_w2, mem_poly_w3, mem_poly_w3_shifted) = {
         let mem_poly_w2 = {
@@ -865,29 +890,62 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
         (mem_poly_w2, mem_poly_w3, mem_poly_w3_shifted)
       };
 
+      let (mem_w2_mle, mem_w2_p_comm, mem_w2_v_comm) = Self::mat_to_comm(&mem_w2, pp);
+      let (mem_w3_mle, mem_w3_p_comm, mem_w3_v_comm) = Self::mat_to_comm(&mem_w3, pp);
+      let (mem_w3_shifted_mle, mem_w3_shifted_p_comm, mem_w3_shifted_v_comm) = Self::mat_to_comm(&mem_w3_shifted_mat, pp);
+
       let mem_w2_prover = ProverWitnessSecInfo::new(vec![mem_w2], vec![mem_poly_w2]);
       let mem_w3_prover = ProverWitnessSecInfo::new(vec![mem_w3.clone()], vec![mem_poly_w3]);
       let mem_w3_shifted_prover = ProverWitnessSecInfo::new(
-        vec![[mem_w3[1..].to_vec(), vec![vec![E::ZERO; W3_WIDTH]]].concat()],
+        vec![mem_w3_shifted_mat],
         vec![mem_poly_w3_shifted],
       );
 
-      (mem_w2_prover, mem_w3_prover, mem_w3_shifted_prover)
+      (mem_w2_prover, Some(mem_w2_v_comm), mem_w3_prover, Some(mem_w3_v_comm), mem_w3_shifted_prover, Some(mem_w3_shifted_v_comm))
     } else {
       (
         ProverWitnessSecInfo::dummy(),
+        None,
         ProverWitnessSecInfo::dummy(),
+        None,
         ProverWitnessSecInfo::dummy(),
+        None,
       )
     }
   }
 
-  fn mat_to_mle(mat: &Vec<Vec<E>>) -> DenseMultilinearExtension<E> {
+  // Convert a matrix into mles and commitments
+  fn mat_to_comm(mat: &Vec<Vec<E>>, pp: &ProverParam<E, Pcs>) -> (
+    DenseMultilinearExtension<E>,
+    Pcs::CommitmentWithWitness,
+    Pcs::Commitment,
+  ) {
     // Flatten the witnesses into a Q_i * X list
     let mat_concat_p: Vec<E> = mat.clone().into_iter().flatten().collect();
     // create a multilinear polynomial using the supplied assignment for variables
     let poly = DenseMultilinearExtension::from_evaluation_vec_smart(mat_concat_p.len().log_2(), mat_concat_p);
-    poly
+    println!("POLY_SIZE: {:?}", poly.num_vars.pow2());
+    let p_comm = Pcs::commit(pp, &poly).unwrap();
+    let v_comm = Pcs::get_pure_commitment(&p_comm);
+    (poly, p_comm, v_comm)
+  }
+
+  // Convert a list of matrices into mles and commitments
+  fn mats_to_comms(mats: &Vec<Vec<Vec<E>>>, pp: &ProverParam<E, Pcs>) -> (
+    Vec<DenseMultilinearExtension<E>>,
+    Vec<Pcs::CommitmentWithWitness>,
+    Vec<Pcs::Commitment>,
+  ) {
+    let mut polys = Vec::new();
+    let mut p_comms = Vec::new();
+    let mut v_comms = Vec::new();
+    for mat in mats {
+      let (poly, pc, vc) = Self::mat_to_comm(mat, pp);
+      polys.push(poly);
+      p_comms.push(pc);
+      v_comms.push(vc);
+    }
+    (polys, p_comms, v_comms)
   }
 
   /// A method to produce a SNARK proof of the satisfiability of an R1CS instance
@@ -1248,20 +1306,30 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     let timer_gen = Timer::new("witness_gen");
     // Block
     let timer_sec_gen = Timer::new("block_witness_gen");
+    let max_poly_size = block_max_num_proofs * num_vars;
+    println!("MAX_POLY_SIZE: {}", max_poly_size);
+    let poly_param = Pcs::setup(max_poly_size).unwrap();
+    let (poly_pp, poly_vp) = Pcs::trim(poly_param, num_vars).unwrap();
+
     let (
       comb_tau,
       comb_r,
       perm_w0_prover,
       // perm_exec
-      perm_exec_w2_comm,
       perm_exec_w2_prover,
+      perm_exec_w2_comm,
       perm_exec_w3_prover,
+      perm_exec_w3_comm,
       perm_exec_w3_shifted_prover, // shifted by W3_WIDTH
+      perm_exec_w3_shifted_comm,
       // input_block_w2 | phy_mem_block_w2 | vir_mem_block_w2
       block_w2_prover,
+      block_w2_comm_list,
       // block_w3
       block_w3_prover,
+      block_w3_comm_list,
       block_w3_shifted_prover, // shifted by W3_WIDTH
+      block_w3_shifted_comm_list,
     ) = {
       let comb_tau = challenge_scalar(transcript, b"challenge_tau");
       let comb_r = challenge_scalar(transcript, b"challenge_r");
@@ -1338,12 +1406,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
         }
         (perm_exec_w2, perm_exec_w3)
       };
-
-      let perm_exec_mle_w2 = Self::mat_to_mle(&perm_exec_w2);
-      let perm_exec_w2_param = Pcs::setup(perm_exec_mle_w2.num_vars.pow2()).unwrap();
-      let (perm_exec_w2_pp, perm_exec_w2_vp) = Pcs::trim(perm_exec_w2_param, perm_exec_mle_w2.num_vars.pow2()).unwrap();
-      let perm_exec_w2_comm = Pcs::commit(&perm_exec_w2_pp, &perm_exec_mle_w2).unwrap();
-
+      let perm_exec_w3_shifted_mat = [perm_exec_w3[1..].to_vec(), vec![vec![E::ZERO; 8]]].concat();
       // commit the witnesses and inputs separately instance-by-instance
       let (perm_exec_poly_w2, perm_exec_poly_w3, perm_exec_poly_w3_shifted) = {
         let perm_exec_poly_w2 = {
@@ -1550,7 +1613,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
 
         block_w2
       };
-
+      let block_w3_shifted_mat = block_w3.iter().map(|i| [i[1..].to_vec(), vec![vec![E::ZERO; 8]]].concat()).collect();
       let (block_poly_w2_list, block_poly_w3_list, block_poly_w3_list_shifted) = {
         // commit the witnesses and inputs separately instance-by-instance
         let mut block_poly_w2_list = Vec::new();
@@ -1601,22 +1664,27 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
         (block_poly_w2_list, block_poly_w3_list, block_poly_w3_list_shifted)
       };
 
+      let (perm_exec_w2_mle, perm_exec_w2_p_comm, perm_exec_w2_v_comm) = Self::mat_to_comm(&perm_exec_w2, &poly_pp);
+      let (perm_exec_w3_mle, perm_exec_w3_p_comm, perm_exec_w3_v_comm) = Self::mat_to_comm(&perm_exec_w3, &poly_pp);
+      let (perm_exec_w3_shifted_mle, perm_exec_w3_shifted_p_comm, perm_exec_w3_shifted_v_comm) = Self::mat_to_comm(&perm_exec_w3_shifted_mat, &poly_pp);
+
       let perm_w0_prover = ProverWitnessSecInfo::new(vec![vec![perm_w0]], vec![perm_poly_w0]);
       let perm_exec_w2_prover =
         ProverWitnessSecInfo::new(vec![perm_exec_w2], vec![perm_exec_poly_w2]);
       let perm_exec_w3_shifted_prover = ProverWitnessSecInfo::new(
-        vec![[perm_exec_w3[1..].to_vec(), vec![vec![E::ZERO; 8]]].concat()],
+        vec![perm_exec_w3_shifted_mat],
         vec![perm_exec_poly_w3_shifted],
       );
       let perm_exec_w3_prover =
         ProverWitnessSecInfo::new(vec![perm_exec_w3], vec![perm_exec_poly_w3]);
 
+      let (block_w2_mle, block_w2_p_comm, block_w2_v_comm) = Self::mats_to_comms(&block_w2, &poly_pp);
+      let (block_w3_mle, block_w3_p_comm, block_w3_v_comm) = Self::mats_to_comms(&block_w3, &poly_pp);
+      let (block_w3_shifted_mle, block_w3_shifted_p_comm, block_w3_shifted_v_comm) = Self::mats_to_comms(&block_w3_shifted_mat, &poly_pp);
+
       let block_w2_prover = ProverWitnessSecInfo::new(block_w2, block_poly_w2_list);
       let block_w3_shifted_prover = ProverWitnessSecInfo::new(
-        block_w3
-          .iter()
-          .map(|i| [i[1..].to_vec(), vec![vec![E::ZERO; 8]]].concat())
-          .collect(),
+        block_w3_shifted_mat,
         block_poly_w3_list_shifted,
       );
       let block_w3_prover = ProverWitnessSecInfo::new(block_w3, block_poly_w3_list);
@@ -1625,56 +1693,64 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
         comb_tau,
         comb_r,
         perm_w0_prover,
-        (perm_exec_w2_vp, perm_exec_w2_comm),
         perm_exec_w2_prover,
+        perm_exec_w2_v_comm,
         perm_exec_w3_prover,
+        perm_exec_w3_v_comm,
         perm_exec_w3_shifted_prover,
+        perm_exec_w3_shifted_v_comm,
         block_w2_prover,
+        block_w2_v_comm,
         block_w3_prover,
+        block_w3_v_comm,
         block_w3_shifted_prover,
+        block_w3_shifted_v_comm,
       )
     };
     timer_sec_gen.stop();
 
     // Initial Physical Memory-as-a-whole
     let timer_sec_gen = Timer::new("init_phy_mem_witness_gen");
-    let (init_phy_mem_w2_prover, init_phy_mem_w3_prover, init_phy_mem_w3_shifted_prover) =
+    let (init_phy_mem_w2_prover, _, init_phy_mem_w3_prover, _, init_phy_mem_w3_shifted_prover, _) =
       Self::mem_gen::<INIT_PHY_MEM_WIDTH>(
         total_num_init_phy_mem_accesses,
         &init_phy_mems_list,
         &comb_r,
         &comb_tau,
         transcript,
+        &poly_pp,
       );
     timer_sec_gen.stop();
 
     // Initial Virtual Memory-as-a-whole
     let timer_sec_gen = Timer::new("init_vir_mem_witness_gen");
-    let (init_vir_mem_w2_prover, init_vir_mem_w3_prover, init_vir_mem_w3_shifted_prover) =
+    let (init_vir_mem_w2_prover, _, init_vir_mem_w3_prover, _, init_vir_mem_w3_shifted_prover, _) =
       Self::mem_gen::<INIT_VIR_MEM_WIDTH>(
         total_num_init_vir_mem_accesses,
         &init_vir_mems_list,
         &comb_r,
         &comb_tau,
         transcript,
+        &poly_pp,
       );
     timer_sec_gen.stop();
 
     // Physical Memory-as-a-whole
     let timer_sec_gen = Timer::new("phy_mem_addr_witness_gen");
-    let (phy_mem_addr_w2_prover, phy_mem_addr_w3_prover, phy_mem_addr_w3_shifted_prover) =
+    let (phy_mem_addr_w2_prover, phy_mem_addr_w2_comm, phy_mem_addr_w3_prover, phy_mem_addr_w3_comm, phy_mem_addr_w3_shifted_prover, phy_mem_addr_w3_shifted_comm) =
       Self::mem_gen::<PHY_MEM_WIDTH>(
         total_num_phy_mem_accesses,
         &addr_phy_mems_list,
         &comb_r,
         &comb_tau,
         transcript,
+        &poly_pp,
       );
     timer_sec_gen.stop();
 
     // Virtual Memory-as-a-whole
     let timer_sec_gen = Timer::new("vir_mem_addr_witness_gen");
-    let (vir_mem_addr_w2_prover, vir_mem_addr_w3_prover, vir_mem_addr_w3_shifted_prover) = {
+    let (vir_mem_addr_w2_prover, vir_mem_addr_w2_comm, vir_mem_addr_w3_prover, vir_mem_addr_w3_comm, vir_mem_addr_w3_shifted_prover, vir_mem_addr_w3_shifted_comm) = {
       if total_num_vir_mem_accesses > 0 {
         // vir_mem_addr_w2 is (I, O, ZO, r * data, r^2 * ls, r^3 * ts)
         // where ZO = 0,
@@ -1717,6 +1793,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
               + vir_mem_addr_w2[q][5]);
           vir_mem_addr_w3[q][5] = addr_vir_mems_list[q][0];
         }
+        let vir_mem_addr_w3_shifted_mat = [vir_mem_addr_w3[1..].to_vec(), vec![vec![E::ZERO; W3_WIDTH]]].concat();
 
         let (vir_mem_addr_poly_w2, vir_mem_addr_poly_w3, vir_mem_addr_poly_w3_shifted) = {
           let vir_mem_addr_poly_w2 = {
@@ -1759,29 +1836,35 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
           )
         };
 
+        let (vir_mem_addr_w2_mle, vir_mem_addr_w2_p_comm, vir_mem_addr_w2_v_comm) = Self::mat_to_comm(&vir_mem_addr_w2, &poly_pp);
+        let (vir_mem_addr_w3_mle, vir_mem_addr_w3_p_comm, vir_mem_addr_w3_v_comm) = Self::mat_to_comm(&vir_mem_addr_w3, &poly_pp);
+        let (vir_mem_addr_w3_shifted_mle, vir_mem_addr_w3_shifted_p_comm, vir_mem_addr_w3_shifted_v_comm) = Self::mat_to_comm(&vir_mem_addr_w3_shifted_mat, &poly_pp);  
+
         let vir_mem_addr_w2_prover =
           ProverWitnessSecInfo::new(vec![vir_mem_addr_w2], vec![vir_mem_addr_poly_w2]);
         let vir_mem_addr_w3_prover =
           ProverWitnessSecInfo::new(vec![vir_mem_addr_w3.clone()], vec![vir_mem_addr_poly_w3]);
         let vir_mem_addr_w3_shifted_prover = ProverWitnessSecInfo::new(
-          vec![[
-            vir_mem_addr_w3[1..].to_vec(),
-            vec![vec![E::ZERO; W3_WIDTH]],
-          ]
-          .concat()],
+          vec![vir_mem_addr_w3_shifted_mat],
           vec![vir_mem_addr_poly_w3_shifted],
         );
 
         (
           vir_mem_addr_w2_prover,
+          Some(vir_mem_addr_w2_v_comm),
           vir_mem_addr_w3_prover,
+          Some(vir_mem_addr_w3_v_comm),
           vir_mem_addr_w3_shifted_prover,
+          Some(vir_mem_addr_w3_shifted_v_comm),
         )
       } else {
         (
           ProverWitnessSecInfo::dummy(),
+          None,
           ProverWitnessSecInfo::dummy(),
+          None,
           ProverWitnessSecInfo::dummy(),
+          None,
         )
       }
     };
@@ -1793,7 +1876,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     // WITNESS COMMITMENTS
     // --
     let timer_commit = Timer::new("input_commit");
-    let (block_poly_vars_list, exec_poly_inputs) = {
+    let (block_poly_vars_list, block_vars_comm_list, exec_poly_inputs, exec_inputs_comm) = {
       // commit the witnesses and inputs separately instance-by-instance
       let mut block_poly_vars_list = Vec::new();
 
@@ -1815,7 +1898,10 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
         exec_poly_inputs
       };
 
-      (block_poly_vars_list, vec![exec_poly_inputs])
+      let (block_vars_mle_list, block_vars_p_comm_list, block_vars_v_comm_list) = Self::mats_to_comms(&block_vars_mat, &poly_pp);
+      let (exec_inputs_mle, exec_inputs_p_comm, exec_inputs_v_comm) = Self::mat_to_comm(&exec_inputs_list, &poly_pp);
+
+      (block_poly_vars_list, block_vars_v_comm_list, vec![exec_poly_inputs], exec_inputs_v_comm)
     };
     let (poly_init_phy_mems,) = {
       if total_num_init_phy_mem_accesses > 0 {
@@ -1844,7 +1930,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
       }
     };
 
-    let (addr_poly_phy_mems, addr_phy_mems_shifted_prover) = {
+    let (addr_poly_phy_mems, addr_phy_mems_comm, addr_phy_mems_shifted_prover, addr_phy_mems_shifted_comm) = {
       if total_num_phy_mem_accesses > 0 {
         let addr_poly_phy_mems = {
           let addr_phy_mems = addr_phy_mems_list.clone().into_iter().flatten().collect();
@@ -1853,18 +1939,15 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
           addr_poly_phy_mems
         };
         // Remove the first entry and shift the remaining entries up by one
+        let addr_phy_mems_shifted_list = vec![addr_phy_mems_list[1..].to_vec(), vec![vec![E::ZERO; PHY_MEM_WIDTH]]].concat();
+        let (addr_phy_mems_mle, addr_phy_mems_p_comm, addr_phy_mems_v_comm) = Self::mat_to_comm(&addr_phy_mems_list, &poly_pp);
+        let (addr_phy_mems_shifted_mle, addr_phy_mems_shifted_p_comm, addr_phy_mems_shifted_v_comm) = Self::mat_to_comm(&addr_phy_mems_shifted_list, &poly_pp);
         // Used later by coherence check
         let addr_phy_mems_shifted_prover = {
-          let addr_phy_mems_shifted = [
-            addr_phy_mems_list[1..]
-              .to_vec()
-              .clone()
+          let addr_phy_mems_shifted = addr_phy_mems_shifted_list
               .into_iter()
               .flatten()
-              .collect(),
-            vec![E::ZERO; PHY_MEM_WIDTH],
-          ]
-          .concat();
+              .collect();
           // create a multilinear polynomial using the supplied assignment for variables
           let addr_poly_phy_mems_shifted = DensePolynomial::new(addr_phy_mems_shifted);
           let addr_phy_mems_shifted_prover = ProverWitnessSecInfo::new(
@@ -1877,12 +1960,12 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
           );
           addr_phy_mems_shifted_prover
         };
-        (vec![addr_poly_phy_mems], addr_phy_mems_shifted_prover)
+        (vec![addr_poly_phy_mems], Some(addr_phy_mems_v_comm), addr_phy_mems_shifted_prover, Some(addr_phy_mems_shifted_v_comm))
       } else {
-        (Vec::new(), ProverWitnessSecInfo::dummy())
+        (Vec::new(), None, ProverWitnessSecInfo::dummy(), None)
       }
     };
-    let (addr_poly_vir_mems, addr_vir_mems_shifted_prover, addr_ts_bits_prover) = {
+    let (addr_poly_vir_mems, addr_vir_mems_comm, addr_vir_mems_shifted_prover, addr_vir_mems_shifted_comm, addr_ts_bits_prover, addr_ts_bits_comm) = {
       if total_num_vir_mem_accesses > 0 {
         let addr_poly_vir_mems = {
           let addr_vir_mems = addr_vir_mems_list.clone().into_iter().flatten().collect();
@@ -1891,18 +1974,15 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
           addr_poly_vir_mems
         };
         // Remove the first entry and shift the remaining entries up by one
+        let addr_vir_mems_shifted_list = vec![addr_vir_mems_list[1..].to_vec(), vec![vec![E::ZERO; VIR_MEM_WIDTH]]].concat();
+        let (addr_vir_mems_mle, addr_vir_mems_p_comm, addr_vir_mems_v_comm) = Self::mat_to_comm(&addr_vir_mems_list, &poly_pp);
+        let (addr_vir_mems_shifted_mle, addr_vir_mems_shifted_p_comm, addr_vir_mems_shifted_v_comm) = Self::mat_to_comm(&addr_vir_mems_shifted_list, &poly_pp);
         // Used later by coherence check
         let addr_vir_mems_shifted_prover = {
-          let addr_vir_mems_shifted = [
-            addr_vir_mems_list[1..]
-              .to_vec()
-              .clone()
+          let addr_vir_mems_shifted = addr_vir_mems_shifted_list
               .into_iter()
               .flatten()
-              .collect(),
-            vec![E::ZERO; VIR_MEM_WIDTH],
-          ]
-          .concat();
+              .collect();
           // create a multilinear polynomial using the supplied assignment for variables
           let addr_poly_vir_mems_shifted = DensePolynomial::new(addr_vir_mems_shifted);
           let addr_vir_mems_shifted_prover = ProverWitnessSecInfo::new(
@@ -1915,24 +1995,32 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
           );
           addr_vir_mems_shifted_prover
         };
-        let addr_ts_bits_prover = {
+        let (addr_ts_bits_prover, addr_ts_bits_comm) = {
+          let (addr_ts_bits_mle, addr_ts_bits_p_comm, addr_ts_bits_v_comm) = Self::mat_to_comm(&addr_ts_bits_list, &poly_pp);
+
           let addr_ts_bits = addr_ts_bits_list.clone().into_iter().flatten().collect();
           // create a multilinear polynomial using the supplied assignment for variables
           let addr_poly_ts_bits = DensePolynomial::new(addr_ts_bits);
           let addr_ts_bits_prover =
             ProverWitnessSecInfo::new(vec![addr_ts_bits_list], vec![addr_poly_ts_bits]);
-          addr_ts_bits_prover
+          (addr_ts_bits_prover, addr_ts_bits_v_comm)
         };
         (
           vec![addr_poly_vir_mems],
+          Some(addr_vir_mems_v_comm),
           addr_vir_mems_shifted_prover,
+          Some(addr_vir_mems_shifted_v_comm),
           addr_ts_bits_prover,
+          Some(addr_ts_bits_comm),
         )
       } else {
         (
           Vec::new(),
+          None,
           ProverWitnessSecInfo::dummy(),
+          None,
           ProverWitnessSecInfo::dummy(),
+          None,
         )
       }
     };
@@ -2529,7 +2617,27 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     timer_prove.stop();
 
     SNARK {
+      poly_vp,
+      block_vars_comm_list,
+      exec_inputs_comm,
+      addr_phy_mems_comm,
+      addr_phy_mems_shifted_comm,
+      addr_vir_mems_comm,
+      addr_vir_mems_shifted_comm,
+      addr_ts_bits_comm,
+
       perm_exec_w2_comm,
+      perm_exec_w3_comm,
+      perm_exec_w3_shifted_comm,
+      block_w2_comm_list,
+      block_w3_comm_list,
+      block_w3_shifted_comm_list,
+      phy_mem_addr_w2_comm,
+      phy_mem_addr_w3_comm,
+      phy_mem_addr_w3_shifted_comm,
+      vir_mem_addr_w2_comm,
+      vir_mem_addr_w3_comm,
+      vir_mem_addr_w3_shifted_comm,
 
       block_r1cs_sat_proof,
       block_inst_evals_bound_rp,

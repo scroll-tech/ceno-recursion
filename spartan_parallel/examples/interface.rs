@@ -9,6 +9,7 @@ use goldilocks::GoldilocksExt2;
 use libspartan::{instance::Instance, InputsAssignment, MemsAssignment, VarsAssignment, SNARK, transcript::Transcript};
 use serde::{Deserialize, Serialize};
 use std::time::*;
+use mpcs::WhirDefault;
 
 const TOTAL_NUM_VARS_BOUND: usize = 10000000;
 
@@ -100,6 +101,9 @@ impl<E: ExtensionField + for<'de> serde::de::Deserialize<'de>> RunTimeKnowledge<
 }
 
 fn main() {
+  type E = GoldilocksExt2;
+  type Pcs = WhirDefault<E>;
+
   let benchmark_name = &env::args().collect::<Vec<String>>()[1];
   // let ctk = CompileTimeKnowledge::read_from_file(benchmark_name.to_string()).unwrap();
   let ctk = CompileTimeKnowledge::deserialize_from_file(benchmark_name.to_string());
@@ -197,11 +201,11 @@ fn main() {
   // block_comm_map records the sparse_polys committed in each commitment
   // Note that A, B, C are committed separately, so sparse_poly[3*i+2] corresponds to poly C of instance i
   let (block_comm_map, block_comm_list, block_decomm_list) =
-    SNARK::multi_encode(&block_inst_for_commit);
+    SNARK::<E, Pcs>::multi_encode(&block_inst_for_commit);
   println!("Finished Block");
-  let (pairwise_check_comm, pairwise_check_decomm) = SNARK::encode(&pairwise_check_inst);
+  let (pairwise_check_comm, pairwise_check_decomm) = SNARK::<E, Pcs>::encode(&pairwise_check_inst);
   println!("Finished Pairwise");
-  let (perm_root_comm, perm_root_decomm) = SNARK::encode(&perm_root_inst);
+  let (perm_root_comm, perm_root_decomm) = SNARK::<E, Pcs>::encode(&perm_root_inst);
   println!("Finished Perm");
 
   // --
@@ -218,7 +222,7 @@ fn main() {
   println!("Running the proof...");
   // produce a proof of satisfiability
   let mut prover_transcript = Transcript::new(b"snark_example");
-  let proof = SNARK::prove(
+  let proof: SNARK<E, Pcs> = SNARK::prove(
     ctk.input_block_num,
     ctk.output_block_num,
     &ctk.input_liveness,

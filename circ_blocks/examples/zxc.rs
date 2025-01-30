@@ -38,6 +38,7 @@ use libspartan::{
 };
 use serde::{Deserialize, Serialize};
 use std::time::*;
+use mpcs::{WhirDefault, PolynomialCommitmentScheme};
 
 // How many reserved variables (EXCLUDING V) are in front of the actual input / output?
 // %BN, %RET, %TS, %AS, %SP, %BP
@@ -1289,7 +1290,7 @@ fn get_run_time_knowledge<const VERBOSE: bool, E: ExtensionField + Send + Sync>(
     }
 }
 
-fn run_spartan_proof<E: ExtensionField + Send + Sync>(
+fn run_spartan_proof<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>>(
     ctk: CompileTimeKnowledge,
     rtk: RunTimeKnowledge<E>,
 ) {
@@ -1380,11 +1381,11 @@ fn run_spartan_proof<E: ExtensionField + Send + Sync>(
     // block_comm_map records the sparse_polys committed in each commitment
     // Note that A, B, C are committed separately, so sparse_poly[3*i+2] corresponds to poly C of instance i
     let (block_comm_map, block_comm_list, block_decomm_list) =
-        SNARK::multi_encode(&block_inst_for_commit);
+        SNARK::<E, Pcs>::multi_encode(&block_inst_for_commit);
     println!("Finished Block");
-    let (pairwise_check_comm, pairwise_check_decomm) = SNARK::encode(&pairwise_check_inst);
+    let (pairwise_check_comm, pairwise_check_decomm) = SNARK::<E, Pcs>::encode(&pairwise_check_inst);
     println!("Finished Pairwise");
-    let (perm_root_comm, perm_root_decomm) = SNARK::encode(&perm_root_inst);
+    let (perm_root_comm, perm_root_decomm) = SNARK::<E, Pcs>::encode(&perm_root_inst);
     println!("Finished Perm");
 
     // --
@@ -1401,7 +1402,7 @@ fn run_spartan_proof<E: ExtensionField + Send + Sync>(
     println!("Running the proof...");
     // produce a proof of satisfiability
     let mut prover_transcript = Transcript::new(b"snark_example");
-    let proof = SNARK::prove(
+    let proof: SNARK<E, Pcs> = SNARK::prove(
         ctk.input_block_num,
         ctk.output_block_num,
         &ctk.input_liveness,
@@ -1446,7 +1447,7 @@ fn run_spartan_proof<E: ExtensionField + Send + Sync>(
         &perm_root_comm,
         &perm_root_decomm,
         &mut prover_transcript,
-    );
+      );
 
     println!("Verifying the proof...");
     // verify the proof of satisfiability
@@ -1495,6 +1496,8 @@ fn run_spartan_proof<E: ExtensionField + Send + Sync>(
 }
 
 fn main() {
+    type E = GoldilocksExt2;
+    type Pcs = WhirDefault<E>;
     env_logger::Builder::from_default_env()
         .format_level(false)
         .format_timestamp(None)
@@ -1604,7 +1607,7 @@ fn main() {
     // --
     // Generate Witnesses
     // --
-    let rtk = get_run_time_knowledge::<false, GoldilocksExt2>(
+    let rtk = get_run_time_knowledge::<false, E>(
         path.clone(),
         &options,
         entry_regs,
@@ -1633,7 +1636,7 @@ fn main() {
     rtk.serialize_to_file(benchmark_name.to_string(), MAX_FILE_SIZE)
         .unwrap();
     if INLINE_SPARTAN_PROOF {
-        run_spartan_proof(ctk, rtk);
+        run_spartan_proof::<E, Pcs>(ctk, rtk);
     }
 
     println!("Compiler time: {}ms", compiler_time.as_millis());

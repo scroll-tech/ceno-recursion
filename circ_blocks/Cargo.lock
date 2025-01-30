@@ -651,6 +651,7 @@ dependencies = [
  "logos",
  "lp-solvers 0.0.4",
  "merlin",
+ "mpcs",
  "once_cell",
  "pairing",
  "paste",

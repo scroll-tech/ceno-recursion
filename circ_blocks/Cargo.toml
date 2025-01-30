@@ -61,6 +61,7 @@ once_cell = "1"
 regex = "1"
 ff_ext = { path = "../../ceno/ff_ext" }
 goldilocks = { git = "https://github.com/scroll-tech/ceno-Goldilocks" }
+mpcs = { path = "../../ceno/mpcs" }
 
 [dev-dependencies]
 quickcheck = "1"

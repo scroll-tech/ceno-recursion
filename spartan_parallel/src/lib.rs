@@ -47,6 +47,8 @@ use errors::{ProofVerifyError, R1CSError};
 use instance::Instance;
 use itertools::Itertools;
 use math::Math;
+use multilinear_extensions::mle::DenseMultilinearExtension;
+use mpcs::PolynomialCommitmentScheme;
 use r1csinstance::{R1CSCommitment, R1CSDecommitment, R1CSEvalProof, R1CSInstance};
 use r1csproof::R1CSProof;
 use random::RandomTape;
@@ -206,7 +208,7 @@ impl<E: ExtensionField> IOProofs<E> {
       exec_poly_inputs,
       [
         vec![
-          0,                                                                             // input valid
+          0,                         // input valid
           output_exec_num * num_ios, // output valid
           2,                         // input block num
           output_exec_num * num_ios + 2 + (num_inputs_unpadded - 1), // output block num
@@ -608,8 +610,10 @@ impl VerifierWitnessSecInfo {
 }
 
 /// `SNARK` holds a proof produced by Spartan SNARK
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SNARK<E: ExtensionField> {
+#[derive(Serialize, Debug)]
+pub struct SNARK<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
+  perm_exec_w2_comm: (Pcs::VerifierParam, Pcs::CommitmentWithWitness),
+
   block_r1cs_sat_proof: R1CSProof<E>,
   block_inst_evals_bound_rp: [E; 3],
   block_inst_evals_list: Vec<E>,
@@ -660,7 +664,7 @@ impl PartialEq for InstanceSortHelper {
 }
 impl Eq for InstanceSortHelper {}
 
-impl<E: ExtensionField + Send + Sync> SNARK<E> {
+impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<E, Pcs> {
   fn protocol_name() -> &'static [u8] {
     b"Spartan SNARK proof"
   }
@@ -676,7 +680,7 @@ impl<E: ExtensionField + Send + Sync> SNARK<E> {
                            + bincode::serialize(&self.addr_comm_vir_mems_shifted).unwrap().len()
                            + bincode::serialize(&self.addr_comm_ts_bits).unwrap().len()
 
-                           + bincode::serialize(&self.perm_exec_comm_w2_list).unwrap().len()
+                           + bincode::serialize(&self.perm_exec_w2_comm_list).unwrap().len()
                            + bincode::serialize(&self.perm_exec_comm_w3_list).unwrap().len()
                            + bincode::serialize(&self.perm_exec_comm_w3_shifted).unwrap().len()
 
@@ -878,6 +882,14 @@ impl<E: ExtensionField + Send + Sync> SNARK<E> {
     }
   }
 
+  fn mat_to_mle(mat: &Vec<Vec<E>>) -> DenseMultilinearExtension<E> {
+    // Flatten the witnesses into a Q_i * X list
+    let mat_concat_p: Vec<E> = mat.clone().into_iter().flatten().collect();
+    // create a multilinear polynomial using the supplied assignment for variables
+    let poly = DenseMultilinearExtension::from_evaluation_vec_smart(mat_concat_p.len().log_2(), mat_concat_p);
+    poly
+  }
+
   /// A method to produce a SNARK proof of the satisfiability of an R1CS instance
   pub fn prove(
     input_block_num: usize,
@@ -938,7 +950,7 @@ impl<E: ExtensionField + Send + Sync> SNARK<E> {
 
     append_protocol_name(
       transcript,
-      SNARK::<E>::protocol_name(),
+      SNARK::<E, Pcs>::protocol_name(),
     );
 
     // --
@@ -1241,6 +1253,7 @@ impl<E: ExtensionField + Send + Sync> SNARK<E> {
       comb_r,
       perm_w0_prover,
       // perm_exec
+      perm_exec_w2_comm,
       perm_exec_w2_prover,
       perm_exec_w3_prover,
       perm_exec_w3_shifted_prover, // shifted by W3_WIDTH
@@ -1325,6 +1338,11 @@ impl<E: ExtensionField + Send + Sync> SNARK<E> {
         }
         (perm_exec_w2, perm_exec_w3)
       };
+
+      let perm_exec_mle_w2 = Self::mat_to_mle(&perm_exec_w2);
+      let perm_exec_w2_param = Pcs::setup(perm_exec_mle_w2.num_vars.pow2()).unwrap();
+      let (perm_exec_w2_pp, perm_exec_w2_vp) = Pcs::trim(perm_exec_w2_param, perm_exec_mle_w2.num_vars.pow2()).unwrap();
+      let perm_exec_w2_comm = Pcs::commit(&perm_exec_w2_pp, &perm_exec_mle_w2).unwrap();
 
       // commit the witnesses and inputs separately instance-by-instance
       let (perm_exec_poly_w2, perm_exec_poly_w3, perm_exec_poly_w3_shifted) = {
@@ -1607,6 +1625,7 @@ impl<E: ExtensionField + Send + Sync> SNARK<E> {
         comb_tau,
         comb_r,
         perm_w0_prover,
+        (perm_exec_w2_vp, perm_exec_w2_comm),
         perm_exec_w2_prover,
         perm_exec_w3_prover,
         perm_exec_w3_shifted_prover,
@@ -2510,6 +2529,8 @@ impl<E: ExtensionField + Send + Sync> SNARK<E> {
     timer_prove.stop();
 
     SNARK {
+      perm_exec_w2_comm,
+
       block_r1cs_sat_proof,
       block_inst_evals_bound_rp,
       block_inst_evals_list,
@@ -2597,7 +2618,7 @@ impl<E: ExtensionField + Send + Sync> SNARK<E> {
     let timer_verify = Timer::new("SNARK::verify");
     append_protocol_name(
       transcript,
-      SNARK::<E>::protocol_name(),
+      SNARK::<E, Pcs>::protocol_name(),
     );
 
     // --

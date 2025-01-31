@@ -8,14 +8,15 @@ use super::sumcheck::SumcheckInstanceProof;
 use super::timer::Timer;
 use super::transcript::{Transcript, append_protocol_name, challenge_vector, challenge_scalar, append_field_to_transcript};
 use ff_ext::ExtensionField;
+use mpcs::PolynomialCommitmentScheme;
 use crate::{ProverWitnessSecInfo, VerifierWitnessSecInfo};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::iter::zip;
 use rayon::prelude::*;
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct R1CSProof<E: ExtensionField> {
+#[derive(Serialize, Debug)]
+pub struct R1CSProof<E: ExtensionField, Pcs> {
   sc_proof_phase1: SumcheckInstanceProof<E>,
   sc_proof_phase2: SumcheckInstanceProof<E>,
   claims_phase2: (E, E, E),
@@ -26,7 +27,7 @@ pub struct R1CSProof<E: ExtensionField> {
   // proof_eval_vars_at_ry_list: Vec<PolyEvalProof<E>>,
 }
 
-impl<E: ExtensionField + Send + Sync> R1CSProof<E> {
+impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSProof<E, Pcs> {
   fn prove_phase_one(
     num_rounds: usize,
     num_rounds_x_max: usize,
@@ -125,16 +126,16 @@ impl<E: ExtensionField + Send + Sync> R1CSProof<E> {
     // NUM_INPUTS: number of inputs per block
     // W_MAT: num_instances x num_proofs x num_inputs hypermatrix for all values
     // POLY_W: one dense polynomial per instance
-    witness_secs: Vec<&ProverWitnessSecInfo<E>>,
+    witness_secs: Vec<&ProverWitnessSecInfo<E, Pcs>>,
     // INSTANCES
     inst: &R1CSInstance<E>,
     transcript: &mut Transcript<E>,
-  ) -> (R1CSProof<E>, [Vec<E>; 4]) {
+  ) -> (R1CSProof<E, Pcs>, [Vec<E>; 4]) {
     let ZERO = E::ZERO;
     let ONE = E::ONE;
 
     let timer_prove = Timer::new("R1CSProof::prove");
-    append_protocol_name(transcript, R1CSProof::<E>::protocol_name());
+    append_protocol_name(transcript, R1CSProof::<E, Pcs>::protocol_name());
 
     let num_witness_secs = witness_secs.len();
 
@@ -525,7 +526,7 @@ impl<E: ExtensionField + Send + Sync> R1CSProof<E> {
     let ZERO = E::ZERO;
     let ONE = E::ONE;
 
-    append_protocol_name(transcript, R1CSProof::<E>::protocol_name());
+    append_protocol_name(transcript, R1CSProof::<E, Pcs>::protocol_name());
 
     let num_witness_secs = witness_secs.len();
 

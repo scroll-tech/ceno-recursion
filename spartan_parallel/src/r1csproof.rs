@@ -10,13 +10,13 @@ use super::transcript::{Transcript, append_protocol_name, challenge_vector, chal
 use ff_ext::ExtensionField;
 use mpcs::PolynomialCommitmentScheme;
 use crate::{ProverWitnessSecInfo, VerifierWitnessSecInfo};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::cmp::min;
 use std::iter::zip;
 use rayon::prelude::*;
 
 #[derive(Serialize, Debug)]
-pub struct R1CSProof<E: ExtensionField, Pcs> {
+pub struct R1CSProof<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
   sc_proof_phase1: SumcheckInstanceProof<E>,
   sc_proof_phase2: SumcheckInstanceProof<E>,
   claims_phase2: (E, E, E),
@@ -24,7 +24,35 @@ pub struct R1CSProof<E: ExtensionField, Pcs> {
   // The long version must exist, the short version might not
   eval_vars_at_ry_list: Vec<Vec<E>>,
   eval_vars_at_ry: E,
-  // proof_eval_vars_at_ry_list: Vec<PolyEvalProof<E>>,
+  proof_eval_vars_at_ry_list: Vec<Pcs::Proof>,
+}
+
+// Generate a unified z_mat from a list of w_mats
+// z_mat is of dimension p * q[p] * w * x[p][q]
+// w_mats is of dimension w *  P * q[p] * wx[p][q]
+fn gen_z_mat<E: ExtensionField + Send + Sync>(w_mats: Vec<&Vec<Vec<Vec<E>>>>, p: usize, q: &Vec<usize>, wx: Vec<&Vec<usize>>, x: &Vec<Vec<usize>>) -> Vec<Vec<Vec<Vec<E>>>> {
+  let ZERO = E::ZERO;
+  let z_mat = (0..p).map(|p| {
+    (0..q[p]).into_par_iter().map(|q| {
+      (0..w_mats.len()).map(|w| {
+        let w_mat = w_mats[w];
+        let wx = wx[w];
+        let p_w = if w_mat.len() == 1 { 0 } else { p };
+        let q_w = if w_mat[p_w].len() == 1 { 0 } else { q };
+
+        let r_w = if wx[p_w] < x[p][w] {
+          let padding = std::iter::repeat(ZERO).take(x[p][w] - wx[p_w]).collect::<Vec<E>>();
+          let mut r = w_mat[p_w][q_w].clone();
+          r.extend(padding);
+          r
+        } else {
+          w_mat[p_w][q_w].iter().take(x[p][w]).cloned().collect::<Vec<E>>()
+        };
+        r_w
+      }).collect::<Vec<Vec<E>>>()
+    }).collect::<Vec<Vec<Vec<E>>>>()
+  }).collect::<Vec<Vec<Vec<Vec<E>>>>>();
+  z_mat
 }
 
 impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSProof<E, Pcs> {
@@ -189,25 +217,13 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     // append input to variables to create a single vector z
     let timer_tmp = Timer::new("prove_z_mat_gen");
     
-    let z_mat = (0..num_instances).map(|p| {
-      (0..num_proofs[p]).into_par_iter().map(|q| {
-        (0..witness_secs.len()).map(|w| {
-          let ws = witness_secs[w];
-          let p_w = if ws.w_mat.len() == 1 { 0 } else { p };
-          let q_w = if ws.w_mat[p_w].len() == 1 { 0 } else { q };
-
-          let r_w = if ws.num_inputs[p_w] < num_inputs[p][w] {
-            let padding = std::iter::repeat(ZERO).take(num_inputs[p][w] - ws.num_inputs[p_w]).collect::<Vec<E>>();
-            let mut r = ws.w_mat[p_w][q_w].clone();
-            r.extend(padding);
-            r
-          } else {
-            ws.w_mat[p_w][q_w].iter().take(num_inputs[p][w]).cloned().collect::<Vec<E>>()
-          };
-          r_w
-        }).collect::<Vec<Vec<E>>>()
-      }).collect::<Vec<Vec<Vec<E>>>>()
-    }).collect::<Vec<Vec<Vec<Vec<E>>>>>();
+    let z_mat = gen_z_mat(
+      witness_secs.iter().map(|i| &i.w_mat).collect(),
+      num_instances,
+      num_proofs,
+      witness_secs.iter().map(|i| &i.num_inputs).collect(),
+      &num_inputs,
+    );
     timer_tmp.stop();
 
     // derive the verifier's challenge \tau
@@ -240,7 +256,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
 
     // Sumcheck 1: (Az * Bz - Cz) * eq(x, q, p) = 0
     let timer_tmp = Timer::new("prove_sum_check");
-    let (sc_proof_phase1, rx_rev, _claims_phase1) = R1CSProof::prove_phase_one(
+    let (sc_proof_phase1, rx_rev, _claims_phase1) = R1CSProof::<E, Pcs>::prove_phase_one(
       num_rounds_x + num_rounds_q + num_rounds_p,
       num_rounds_x,
       num_rounds_q,
@@ -341,7 +357,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
 
     // Sumcheck 2: (rA + rB + rC) * Z * eq(p) = e
     let timer_tmp = Timer::new("prove_sum_check");
-    let (sc_proof_phase2, ry_rev, _claims_phase2, claimed_vars_at_ry) = R1CSProof::prove_phase_two(
+    let (sc_proof_phase2, ry_rev, _claims_phase2, claimed_vars_at_ry) = R1CSProof::<E, Pcs>::prove_phase_two(
       num_rounds_y + num_rounds_w + num_rounds_p,
       num_rounds_y,
       num_rounds_w,
@@ -494,6 +510,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
         claims_phase2: (*Az_claim, *Bz_claim, *Cz_claim),
         eval_vars_at_ry_list: raw_eval_vars_at_ry_list,
         eval_vars_at_ry,
+        proof_eval_vars_at_ry_list: Vec::new(),
         // proof_eval_vars_at_ry_list,
       },
       [rp, rq, rx, [rw, ry].concat()],

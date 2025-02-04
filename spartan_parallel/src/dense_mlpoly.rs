@@ -458,6 +458,24 @@ impl<E: ExtensionField> PolyEvalProof<E> {
     _random_tape: &mut RandomTape<E>,
   ) -> Vec<PolyEvalProof<E>> {
     // TODO: Alternative evaluation proof scheme
+    /* Pad or trim rq and ry in the following sense
+    let num_vars_q = num_proofs.log_2();
+    let num_vars_y = num_inputs.log_2();
+    let ry_short = {
+      if num_vars_y >= ry.len() {
+        let ry_pad = &vec![zero; num_vars_y - ry.len()];
+        [ry_pad, ry].concat()
+      }
+      // Else ry_short is the last w.num_inputs[p].log_2() entries of ry
+      // thus, to obtain the actual ry, need to multiply by (1 - ry2)(1 - ry3)..., which is ry_factors[num_rounds_y - w.num_inputs[p]]
+      else {
+        ry[ry.len() - num_vars_y..].to_vec()
+      }
+    };
+    let rq_short = rq[rq.len() - num_vars_q..].to_vec();
+    let r = [rq_short, ry_short.clone()].concat();
+    };
+      */
     vec![]
   }
 

@@ -8,7 +8,8 @@ use super::sumcheck::SumcheckInstanceProof;
 use super::timer::Timer;
 use super::transcript::{Transcript, append_protocol_name, challenge_vector, challenge_scalar, append_field_to_transcript};
 use ff_ext::ExtensionField;
-use mpcs::PolynomialCommitmentScheme;
+use itertools::max;
+use mpcs::{pcs_open, PolynomialCommitmentScheme};
 use crate::{ProverWitnessSecInfo, VerifierWitnessSecInfo};
 use serde::Serialize;
 use std::cmp::min;
@@ -432,18 +433,50 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
       }
     }
 
-    /*
-    let proof_eval_vars_at_ry_list = PolyEvalProof::prove_batched_instances_disjoint_rounds(
-      &poly_list,
-      &num_proofs_list,
-      &num_inputs_list,
-      &rq,
-      &ry,
-      &Zr_list,
-      transcript,
-      random_tape,
-    );
-    */
+    let max_len = max(poly_list.iter().map(|&p| p.num_vars)).unwrap().next_power_of_two();
+    let param = Pcs::setup(max_len).unwrap();
+    let (pp, _error) = Pcs::trim(param, max_len).unwrap();
+
+    let mut proof_eval_vars_at_ry_list: Vec<Pcs::Proof> = Vec::new();
+    let mut proof_idx: usize = 0;
+    for i in 0..num_witness_secs {
+      let w = witness_secs[i];
+      let wit_sec_num_instance = w.w_mat.len();
+      for p in 0..wit_sec_num_instance {
+        let poly = poly_list[proof_idx];
+
+        let num_proofs = num_proofs_list[proof_idx];
+        let num_inputs = num_inputs_list[proof_idx];
+        let num_vars_q = num_proofs.log_2();
+        let num_vars_y = num_inputs.log_2();
+        let ry_short = {
+          if num_vars_y >= ry.len() {
+            let mut ry_pad: Vec<E> = vec![E::ZERO; num_vars_y - ry.len()];
+            ry_pad.extend_from_slice(&ry);
+            ry_pad
+          }
+          // Else ry_short is the last w.num_inputs[p].log_2() entries of ry
+          // thus, to obtain the actual ry, need to multiply by (1 - ry2)(1 - ry3)..., which is ry_factors[num_rounds_y - w.num_inputs[p]]
+          else {
+            ry[ry.len() - num_vars_y..].to_vec()
+          }
+        };
+        let rq_short = rq[rq.len() - num_vars_q..].to_vec();
+        let r = [rq_short, ry_short.clone()].concat();
+        let Zr = Zr_list[proof_idx];
+  
+        let pcs_proof: Pcs::Proof = pcs_open::<E, Pcs>(
+          &pp, 
+          poly, 
+          &witness_secs[i].comm_w[p],
+          &r,
+          &Zr, 
+          transcript
+        ).expect("PCS proof should not fail");
+  
+        proof_eval_vars_at_ry_list.push(pcs_proof);
+      }
+    }
 
     // Bind the resulting witness list to rp
     // poly_vars stores the result of each witness matrix bounded to (rq_short ++ ry)
@@ -510,8 +543,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
         claims_phase2: (*Az_claim, *Bz_claim, *Cz_claim),
         eval_vars_at_ry_list: raw_eval_vars_at_ry_list,
         eval_vars_at_ry,
-        proof_eval_vars_at_ry_list: Vec::new(),
-        // proof_eval_vars_at_ry_list,
+        proof_eval_vars_at_ry_list,
       },
       [rp, rq, rx, [rw, ry].concat()],
     )

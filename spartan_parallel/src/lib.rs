@@ -530,20 +530,23 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> ProverWitnessSecInfo
 
 // Information regarding one witness sec
 #[derive(Clone)]
-struct VerifierWitnessSecInfo {
+struct VerifierWitnessSecInfo<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
   // Number of inputs per block
   num_inputs: Vec<usize>,
   // Number of proofs per block, used by merge
   num_proofs: Vec<usize>,
+  // One commitment per circuit
+  comm_w: Vec<Pcs::Commitment>
 }
 
-impl VerifierWitnessSecInfo {
+impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> VerifierWitnessSecInfo<E, Pcs> {
   // Unfortunately, cannot obtain all metadata from the commitment
-  fn new(num_inputs: Vec<usize>, num_proofs: &Vec<usize>) -> VerifierWitnessSecInfo {
+  fn new(num_inputs: Vec<usize>, num_proofs: &Vec<usize>, comm_w: Vec<Pcs::Commitment>) -> VerifierWitnessSecInfo {
     let l = num_inputs.len();
     VerifierWitnessSecInfo {
       num_inputs,
       num_proofs: num_proofs[..l].to_vec(),
+      comm_w,
     }
   }
 
@@ -551,6 +554,7 @@ impl VerifierWitnessSecInfo {
     VerifierWitnessSecInfo {
       num_inputs: Vec::new(),
       num_proofs: Vec::new(),
+      comm_w: Vec::new(),
     }
   }
 
@@ -558,6 +562,7 @@ impl VerifierWitnessSecInfo {
     VerifierWitnessSecInfo {
       num_inputs: vec![1],
       num_proofs: vec![1],
+      comm_w: vec![Pcs::Commitment::default()],
     }
   }
 
@@ -565,15 +570,18 @@ impl VerifierWitnessSecInfo {
   fn concat(components: Vec<&VerifierWitnessSecInfo>) -> VerifierWitnessSecInfo {
     let mut num_inputs = Vec::new();
     let mut num_proofs = Vec::new();
+    let mut comm_w = Vec::new();
 
     for c in components {
       num_inputs.extend(c.num_inputs.clone());
       num_proofs.extend(c.num_proofs.clone());
+      comm_w.extend(c.comm_w.clone());
     }
 
     VerifierWitnessSecInfo {
       num_inputs,
       num_proofs,
+      comm_w,
     }
   }
 
@@ -589,6 +597,7 @@ impl VerifierWitnessSecInfo {
     let mut inst_map = Vec::new();
     let mut merged_num_inputs = Vec::new();
     let mut merged_num_proofs = Vec::new();
+    let mut merged_comm_w = Vec::new();
     while inst_map.len() < merged_size {
       // Choose the next instance with the most proofs
       let mut next_max_num_proofs = 0;
@@ -606,6 +615,7 @@ impl VerifierWitnessSecInfo {
       inst_map.push(next_component);
       merged_num_inputs.push(components[next_component].num_inputs[pointers[next_component]]);
       merged_num_proofs.push(components[next_component].num_proofs[pointers[next_component]]);
+      merged_comm_w.push(components[next_component].comm_w[pointers[next_component]]);
       pointers[next_component] = pointers[next_component] + 1;
     }
 
@@ -613,6 +623,7 @@ impl VerifierWitnessSecInfo {
       VerifierWitnessSecInfo {
         num_inputs: merged_num_inputs,
         num_proofs: merged_num_proofs,
+        comm_w: merged_comm_w,
       },
       inst_map,
     )
@@ -637,6 +648,14 @@ pub struct SNARK<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
   block_w2_comm_list: Vec<Pcs::Commitment>,
   block_w3_comm_list: Vec<Pcs::Commitment>,
   block_w3_shifted_comm_list: Vec<Pcs::Commitment>,
+
+  init_phy_mem_w2_comm: Option<Pcs::Commitment>,
+  init_phy_mem_w3_comm: Option<Pcs::Commitment>,
+  init_phy_mem_w3_shifted_comm: Option<Pcs::Commitment>,
+  init_vir_mem_w2_comm: Option<Pcs::Commitment>,
+  init_vir_mem_w3_comm: Option<Pcs::Commitment>,
+  init_vir_mem_w3_shifted_comm: Option<Pcs::Commitment>,
+
   phy_mem_addr_w2_comm: Option<Pcs::Commitment>,
   phy_mem_addr_w3_comm: Option<Pcs::Commitment>,
   phy_mem_addr_w3_shifted_comm: Option<Pcs::Commitment>,
@@ -1613,7 +1632,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
 
     // Initial Physical Memory-as-a-whole
     let timer_sec_gen = Timer::new("init_phy_mem_witness_gen");
-    let (init_phy_mem_w2_prover, _, init_phy_mem_w3_prover, _, init_phy_mem_w3_shifted_prover, _) =
+    let (init_phy_mem_w2_prover, init_phy_mem_w2_comm, init_phy_mem_w3_prover, init_phy_mem_w3_comm, init_phy_mem_w3_shifted_prover, init_phy_mem_w3_shifted_comm) =
       Self::mem_gen::<INIT_PHY_MEM_WIDTH>(
         total_num_init_phy_mem_accesses,
         &init_phy_mems_list,
@@ -1626,7 +1645,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
 
     // Initial Virtual Memory-as-a-whole
     let timer_sec_gen = Timer::new("init_vir_mem_witness_gen");
-    let (init_vir_mem_w2_prover, _, init_vir_mem_w3_prover, _, init_vir_mem_w3_shifted_prover, _) =
+    let (init_vir_mem_w2_prover, init_vir_mem_w2_comm, init_vir_mem_w3_prover, init_vir_mem_w3_comm, init_vir_mem_w3_shifted_prover, init_vir_mem_w3_shifted_comm) =
       Self::mem_gen::<INIT_VIR_MEM_WIDTH>(
         total_num_init_vir_mem_accesses,
         &init_vir_mems_list,
@@ -1648,6 +1667,24 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
         transcript,
         &poly_pp,
       );
+
+    for op_comm in vec![
+      init_phy_mem_w2_comm,
+      init_phy_mem_w3_comm,
+      init_phy_mem_w3_shifted_comm,
+      init_vir_mem_w2_comm,
+      init_vir_mem_w3_comm,
+      init_vir_mem_w3_shifted_comm,
+      phy_mem_addr_w2_comm,
+      phy_mem_addr_w3_comm,
+      phy_mem_addr_w3_shifted_comm,
+    ] {
+      match op_comm {
+        Some(comm) => Pcs::write_commitment(comm, transcript),
+        None => Ok(()),
+      }
+    }
+
     timer_sec_gen.stop();
 
     // Virtual Memory-as-a-whole
@@ -1700,6 +1737,14 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
         let (vir_mem_addr_w2_mle, vir_mem_addr_w2_p_comm, vir_mem_addr_w2_v_comm) = Self::mat_to_comm(&vir_mem_addr_w2, &poly_pp);
         let (vir_mem_addr_w3_mle, vir_mem_addr_w3_p_comm, vir_mem_addr_w3_v_comm) = Self::mat_to_comm(&vir_mem_addr_w3, &poly_pp);
         let (vir_mem_addr_w3_shifted_mle, vir_mem_addr_w3_shifted_p_comm, vir_mem_addr_w3_shifted_v_comm) = Self::mat_to_comm(&vir_mem_addr_w3_shifted_mat, &poly_pp);  
+
+        for comm in vec![
+          vir_mem_addr_w2_v_comm,
+          vir_mem_addr_w3_v_comm,
+          vir_mem_addr_w3_shifted_v_comm,
+        ] {
+          Pcs::write_commitment(comm, transcript);
+        }
 
         let vir_mem_addr_w2_prover =
           ProverWitnessSecInfo::new(vec![vir_mem_addr_w2], vec![vir_mem_addr_w2_mle], vec![vir_mem_addr_w2_p_comm]);
@@ -2394,6 +2439,14 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
       block_w2_comm_list,
       block_w3_comm_list,
       block_w3_shifted_comm_list,
+
+      init_phy_mem_w2_comm,
+      init_phy_mem_w3_comm,
+      init_phy_mem_w3_shifted_comm,
+      init_vir_mem_w2_comm,
+      init_vir_mem_w3_comm,
+      init_vir_mem_w3_shifted_comm,
+
       phy_mem_addr_w2_comm,
       phy_mem_addr_w3_comm,
       phy_mem_addr_w3_shifted_comm,
@@ -2744,21 +2797,23 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
               .next_power_of_two()
           })
           .collect();
-        VerifierWitnessSecInfo::new(block_w2_size_list, &block_num_proofs)
+        VerifierWitnessSecInfo::new(block_w2_size_list, &block_num_proofs, self.block_w2_comm_list)
       };
       (
-        VerifierWitnessSecInfo::new(vec![num_ios], &vec![1]),
-        VerifierWitnessSecInfo::new(vec![num_ios], &vec![consis_num_proofs]),
-        VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![consis_num_proofs]),
-        VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![consis_num_proofs]),
+        VerifierWitnessSecInfo::new(vec![num_ios], &vec![1], vec![Pcs::Commitment::default()]),
+        VerifierWitnessSecInfo::new(vec![num_ios], &vec![consis_num_proofs], vec![self.perm_exec_w2_comm]),
+        VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![consis_num_proofs], vec![self.perm_exec_w3_comm]),
+        VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![consis_num_proofs], vec![self.perm_exec_w3_shifted_comm]),
         block_w2_verifier,
         VerifierWitnessSecInfo::new(
           vec![W3_WIDTH; block_num_instances],
           &block_num_proofs.clone(),
+          self.block_w3_comm_list,
         ),
         VerifierWitnessSecInfo::new(
           vec![W3_WIDTH; block_num_instances],
           &block_num_proofs.clone(),
+          self.block_w3_shifted_comm_list,
         ),
       )
     };
@@ -2782,9 +2837,10 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
           VerifierWitnessSecInfo::new(
             vec![INIT_PHY_MEM_WIDTH],
             &vec![total_num_init_phy_mem_accesses],
+            vec![self.init_phy_mem_w2_comm.expect("commitment should exist")]
           ),
-          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_init_phy_mem_accesses]),
-          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_init_phy_mem_accesses]),
+          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_init_phy_mem_accesses], vec![self.init_phy_mem_w3_comm.expect("commitment should exist")]),
+          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_init_phy_mem_accesses], vec![self.init_phy_mem_w3_shifted_comm.expect("commitment should exist")]),
         )
       } else {
         (
@@ -2801,9 +2857,10 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
           VerifierWitnessSecInfo::new(
             vec![INIT_VIR_MEM_WIDTH],
             &vec![total_num_init_vir_mem_accesses],
+            vec![self.init_vir_mem_w2_comm.expect("commitment should exist")],
           ),
-          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_init_vir_mem_accesses]),
-          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_init_vir_mem_accesses]),
+          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_init_vir_mem_accesses], vec![self.init_vir_mem_w3_comm.expect("commitment should exist")]),
+          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_init_vir_mem_accesses], vec![self.init_vir_mem_w3_shifted_comm.expect("commitment should exist")]),
         )
       } else {
         (
@@ -2817,9 +2874,9 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     let (phy_mem_addr_w2_verifier, phy_mem_addr_w3_verifier, phy_mem_addr_w3_shifted_verifier) = {
       if total_num_phy_mem_accesses > 0 {
         (
-          VerifierWitnessSecInfo::new(vec![PHY_MEM_WIDTH], &vec![total_num_phy_mem_accesses]),
-          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_phy_mem_accesses]),
-          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_phy_mem_accesses]),
+          VerifierWitnessSecInfo::new(vec![PHY_MEM_WIDTH], &vec![total_num_phy_mem_accesses], vec![self.phy_mem_addr_w2_comm.expect("commitment should exist")]),
+          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_phy_mem_accesses], vec![self.phy_mem_addr_w3_comm].expect("commitment should exist")),
+          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_phy_mem_accesses], vec![self.phy_mem_addr_w3_shifted_comm].expect("commitment should exist")),
         )
       } else {
         (
@@ -2832,10 +2889,18 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
 
     let (vir_mem_addr_w2_verifier, vir_mem_addr_w3_verifier, vir_mem_addr_w3_shifted_verifier) = {
       if total_num_vir_mem_accesses > 0 {
+        for comm in vec![
+          self.vir_mem_addr_w2_comm,
+          self.vir_mem_addr_w3_comm,
+          self.vir_mem_addr_w3_shifted_comm,
+        ] {
+          Pcs::write_commitment(comm, transcript);
+        }
+
         (
-          VerifierWitnessSecInfo::new(vec![VIR_MEM_WIDTH], &vec![total_num_vir_mem_accesses]),
-          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_vir_mem_accesses]),
-          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_vir_mem_accesses]),
+          VerifierWitnessSecInfo::new(vec![VIR_MEM_WIDTH], &vec![total_num_vir_mem_accesses], vec![self.vir_mem_addr_w2_comm]),
+          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_vir_mem_accesses], vec![self.vir_mem_addr_w3_comm]),
+          VerifierWitnessSecInfo::new(vec![W3_WIDTH], &vec![total_num_vir_mem_accesses], vec![self.vir_mem_addr_w3_shifted_comm]),
         )
       } else {
         (
@@ -2848,15 +2913,15 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
 
     let (block_vars_verifier, exec_inputs_verifier) = {
       // add the commitment to the verifier's transcript
+      for comm in self.block_vars_comm_list.into_iter().chain(vec![self.exec_inputs_comm]) {
+        Pcs::write_commitment(comm, transcript);
+      }
+
       (
-        VerifierWitnessSecInfo::new(block_num_vars, &block_num_proofs),
-        VerifierWitnessSecInfo::new(vec![num_ios], &vec![consis_num_proofs]),
+        VerifierWitnessSecInfo::new(block_num_vars, &block_num_proofs, self.block_vars_comm_list),
+        VerifierWitnessSecInfo::new(vec![num_ios], &vec![consis_num_proofs], vec![self.exec_inputs_comm]),
       )
     };
-
-    for comm in self.block_vars_comm_list.into_iter().chain(vec![self.exec_inputs_comm]) {
-      Pcs::write_commitment(comm, transcript);
-    }
 
     let init_phy_mems_verifier = {
       if input_stack.len() > 0 {
@@ -2887,6 +2952,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
         VerifierWitnessSecInfo::new(
           vec![INIT_PHY_MEM_WIDTH],
           &vec![total_num_init_phy_mem_accesses],
+          vec![Pcs::Commitment::default()],
         )
       } else {
         VerifierWitnessSecInfo::dummy()
@@ -2921,6 +2987,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
         VerifierWitnessSecInfo::new(
           vec![INIT_VIR_MEM_WIDTH],
           &vec![total_num_init_vir_mem_accesses],
+          vec![Pcs::Commitment::default()],
         )
       } else {
         VerifierWitnessSecInfo::dummy()
@@ -2936,8 +3003,8 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
           Pcs::write_commitment(comm, transcript);
         }
         (
-          VerifierWitnessSecInfo::new(vec![PHY_MEM_WIDTH], &vec![total_num_phy_mem_accesses]),
-          VerifierWitnessSecInfo::new(vec![PHY_MEM_WIDTH], &vec![total_num_phy_mem_accesses]),
+          VerifierWitnessSecInfo::new(vec![PHY_MEM_WIDTH], &vec![total_num_phy_mem_accesses], vec![self.addr_phy_mems_comm.expect("commitment should exist")]),
+          VerifierWitnessSecInfo::new(vec![PHY_MEM_WIDTH], &vec![total_num_phy_mem_accesses], vec![self.addr_phy_mems_shifted_comm.expect("commitment should exist")]),
         )
       } else {
         (
@@ -2952,15 +3019,17 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
         for comm in vec![
           self.addr_vir_mems_comm,
           self.addr_vir_mems_shifted_comm,
+          self.addr_ts_bits_comm,
         ] {
           Pcs::write_commitment(comm, transcript);
         }
         (
-          VerifierWitnessSecInfo::new(vec![VIR_MEM_WIDTH], &vec![total_num_vir_mem_accesses]),
-          VerifierWitnessSecInfo::new(vec![VIR_MEM_WIDTH], &vec![total_num_vir_mem_accesses]),
+          VerifierWitnessSecInfo::new(vec![VIR_MEM_WIDTH], &vec![total_num_vir_mem_accesses], vec![self.addr_vir_mems_comm.expect("commitment should exist")]),
+          VerifierWitnessSecInfo::new(vec![VIR_MEM_WIDTH], &vec![total_num_vir_mem_accesses], vec![self.addr_vir_mems_shifted_comm.expect("commitment should exist")]),
           VerifierWitnessSecInfo::new(
             vec![mem_addr_ts_bits_size],
             &vec![total_num_vir_mem_accesses],
+            vec![self.addr_ts_bits_comm.expect("commitment should exist")],
           ),
         )
       } else {

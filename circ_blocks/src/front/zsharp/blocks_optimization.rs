@@ -3087,6 +3087,7 @@ impl<'ast> ZGen<'ast> {
                 0
             });
         }
+        println!("SPILL_SIZE: {:?}", spill_size);
 
         // Forward Analysis to determine the effectiveness of spilling each candidate
         // Program state is consisted of two parts
@@ -3296,6 +3297,7 @@ impl<'ast> ZGen<'ast> {
                 }
             }
         }
+        
         // As long as any block has spill_size > 0, keep vote out the candidate that can reduce the most total_spill_size
         let mut total_spill_size = spill_size.iter().fold(0, |a, b| a + b);
         let mut spills: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -3455,20 +3457,18 @@ impl<'ast> ZGen<'ast> {
 
                 // Handle function return scope change
                 while stack.len() > bls[cur_bl].scope {
-                    let mut sp_offset = stack[stack.len() - 1].len() - 1;
+                    let mut sp_offset = stack[stack.len() - 1].len();
                     for (var, ty) in stack[stack.len() - 1].iter().rev() {
+                        sp_offset -= 1;
                         new_instructions.push(BlockContent::MemPop((
                             var.to_string(),
                             ty.clone(),
                             sp_offset,
                         )));
-                        sp_offset -= 1;
                         oos.remove(var);
                     }
                     stack.pop();
                 }
-
-                let cur_frame = bls[cur_bl].scope - 1;
 
                 // Check shadower declaration
                 // Ignore all memory instructions
@@ -3566,14 +3566,14 @@ impl<'ast> ZGen<'ast> {
                 if succ_scope < bls[cur_bl].scope {
                     assert!(push_list.len() == 0);
                     while stack.len() > succ_scope {
-                        let mut sp_offset = stack[stack.len() - 1].len() - 1;
+                        let mut sp_offset = stack[stack.len() - 1].len();
                         for (var, ty) in stack[stack.len() - 1].iter().rev() {
+                            sp_offset -= 1;
                             new_instructions.push(BlockContent::MemPop((
                                 var.to_string(),
                                 ty.clone(),
                                 sp_offset,
                             )));
-                            sp_offset -= 1;
                         }
                         stack.pop();
                     }
@@ -3581,6 +3581,7 @@ impl<'ast> ZGen<'ast> {
 
                 // Perform all stack pushes
                 if push_list.len() > 0 {
+                    let cur_frame = bls[cur_bl].scope - 1;
                     let mut sp_offset = 0;
                     // %PHY[%SP + 0] = %BP
                     new_instructions.push(BlockContent::MemPush((
@@ -3611,7 +3612,7 @@ impl<'ast> ZGen<'ast> {
 
                 // If there is a function call, push all live & in-scope candidates onto stack
                 if successor_fn[cur_bl].len() != 0 && successor_fn[cur_bl] != successor[cur_bl] {
-                    let cur_frame = cur_frame + 1;
+                    let cur_frame = bls[cur_bl].scope;
                     assert_eq!(successor[cur_bl].len(), 1);
                     assert_eq!(successor_fn[cur_bl].len(), 1);
                     stack.push(Vec::new());

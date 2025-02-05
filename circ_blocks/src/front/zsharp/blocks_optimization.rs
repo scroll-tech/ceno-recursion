@@ -3087,7 +3087,6 @@ impl<'ast> ZGen<'ast> {
                 0
             });
         }
-        println!("SPILL_SIZE: {:?}", spill_size);
 
         // Forward Analysis to determine the effectiveness of spilling each candidate
         // Program state is consisted of two parts

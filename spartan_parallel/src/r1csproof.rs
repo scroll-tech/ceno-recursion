@@ -435,7 +435,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
 
     let max_len = max(poly_list.iter().map(|&p| p.num_vars)).unwrap().next_power_of_two();
     let param = Pcs::setup(max_len).unwrap();
-    let (pp, _error) = Pcs::trim(param, max_len).unwrap();
+    let (pp, vp) = Pcs::trim(param, max_len).unwrap();
 
     let mut proof_eval_vars_at_ry_list: Vec<Pcs::Proof> = Vec::new();
     let mut proof_idx: usize = 0;
@@ -672,6 +672,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     let mut num_proofs_list = Vec::new();
     let mut num_inputs_list = Vec::new();
     let mut eval_Zr_list = Vec::new();
+    let mut comm_w_list = Vec::new();
     for i in 0..num_witness_secs {
       let w = witness_secs[i];
       let wit_sec_num_instance = w.num_proofs.len();
@@ -681,22 +682,23 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
           num_proofs_list.push(w.num_proofs[p]);
           num_inputs_list.push(w.num_inputs[p]);
           eval_Zr_list.push(self.eval_vars_at_ry_list[i][p]);
+          comm_w_list.push(w.comm_w[p]);
         } else {
           assert_eq!(self.eval_vars_at_ry_list[i][p], ZERO);
         }
       }
     }
 
-    /*
-    PolyEvalProof::verify_batched_instances_disjoint_rounds(
+    Self::verify_batched_instances_disjoint_rounds(
       &self.proof_eval_vars_at_ry_list,
       &num_proofs_list,
       &num_inputs_list,
       transcript,
       &rq,
       &ry,
+      eval_Zr_list,
+      &comm_w_list,
     )?;
-    */
 
     // Then on rp
     let mut expected_eval_vars_list = Vec::new();
@@ -775,5 +777,52 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     assert_eq!(claim_post_phase_2, expected_claim_post_phase2);
 
     Ok([rp, rq, rx, [rw, ry].concat()])
+  }
+
+  pub fn verify_batched_instances_disjoint_rounds(
+    proof_list: &Vec<Pcs::Proof>,
+    num_proofs_list: &Vec<usize>,
+    num_inputs_list: &Vec<usize>,
+    transcript: &mut Transcript<E>,
+    rq: &[E],
+    ry: &[E],
+    eval_Zr_list: Vec<E>,
+    comm_w: &Vec<Pcs::Commitment>,
+  ) -> Result<(), ProofVerifyError> {
+    let max_num_proofs = max(num_proofs_list);
+    let max_num_inputs = max(num_inputs_list);
+    let max_len = (max_num_proofs + max_num_inputs).next_power_of_two();
+
+    let param = Pcs::setup(max_len).unwrap();
+    let (_pp, vp) = Pcs::trim(param, max_len).unwrap();
+
+    for (idx, proof) in proof_list.into_iter().enumerate() {
+      let num_proofs = num_proofs_list[idx];
+      let num_inputs = num_inputs_list[idx];
+
+      let num_vars_q = num_proofs.log_2();
+      let num_vars_y = num_inputs.log_2();
+
+      let ry_short = {
+        if num_vars_y >= ry.len() {
+          let mut ry_pad: Vec<E> = vec![E::ZERO; num_vars_y - ry.len()];
+          ry_pad.extend_from_slice(&ry);
+          ry_pad
+        }
+        // Else ry_short is the last w.num_inputs[p].log_2() entries of ry
+        // thus, to obtain the actual ry, need to multiply by (1 - ry2)(1 - ry3)..., which is ry_factors[num_rounds_y - w.num_inputs[p]]
+        else {
+          ry[ry.len() - num_vars_y..].to_vec()
+        }
+      };
+      let rq_short = rq[rq.len() - num_vars_q..].to_vec();
+      let r = [rq_short, ry_short.clone()].concat();
+      let Zr = eval_Zr_list[idx];
+      let comm = comm_w[idx];
+
+      pcs_verify(vp, comm, &r, &Zr, proof, transcript);
+    }
+
+    Ok(())
   }
 }

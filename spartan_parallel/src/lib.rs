@@ -562,7 +562,7 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> VerifierWitnessSecIn
     VerifierWitnessSecInfo {
       num_inputs: vec![1],
       num_proofs: vec![1],
-      comm_w: vec![Pcs::Commitment::default()],
+      comm_w: Vec::new(),
     }
   }
 
@@ -1686,8 +1686,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     ] {
       match op_comm {
         Some(comm) => {
-          Pcs::write_commitment(comm, transcript);
-          ()
+          Pcs::write_commitment(comm, transcript).unwrap()
         },
         None => (),
       }
@@ -1751,7 +1750,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
           &vir_mem_addr_w3_v_comm,
           &vir_mem_addr_w3_shifted_v_comm,
         ] {
-          Pcs::write_commitment(comm, transcript);
+          Pcs::write_commitment(comm, transcript).unwrap();
         }
 
         let vir_mem_addr_w2_prover =
@@ -1794,9 +1793,9 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     let (block_vars_prover, block_vars_v_comm_list) = Self::mats_to_prove_wit_sec(block_vars_mat, &poly_pp);
     let (exec_inputs_prover, exec_inputs_v_comm) = Self::mat_to_prove_wit_sec(exec_inputs_list, &poly_pp);
     for comm in block_vars_v_comm_list.iter() {
-      Pcs::write_commitment(comm, transcript);
+      Pcs::write_commitment(comm, transcript).unwrap();
     }
-    Pcs::write_commitment(&exec_inputs_v_comm, transcript);
+    Pcs::write_commitment(&exec_inputs_v_comm, transcript).unwrap();
     
     let init_phy_mems_prover = if total_num_init_phy_mem_accesses > 0 {
       Self::mat_to_prover_wit_sec_no_commit(init_phy_mems_list)
@@ -1819,7 +1818,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
           &addr_phy_mems_v_comm,
           &addr_phy_mems_shifted_v_comm,
         ] {
-          Pcs::write_commitment(comm, transcript);
+          Pcs::write_commitment(comm, transcript).unwrap();
         }
 
         (addr_phy_mems_prover, Some(addr_phy_mems_v_comm), addr_phy_mems_shifted_prover, Some(addr_phy_mems_shifted_v_comm))
@@ -1840,7 +1839,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
           &addr_vir_mems_shifted_v_comm,
           &addr_ts_bits_v_comm,
         ] {
-          Pcs::write_commitment(comm, transcript);
+          Pcs::write_commitment(comm, transcript).unwrap();
         }
 
         (
@@ -2833,16 +2832,16 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
       &self.perm_exec_w3_comm,
       &self.perm_exec_w3_shifted_comm,
     ] {
-      Pcs::write_commitment(comm, transcript);
+      Pcs::write_commitment(comm, transcript).unwrap();
     }
     for comm in self.block_w2_comm_list.iter() {
-      Pcs::write_commitment(comm, transcript);
+      Pcs::write_commitment(comm, transcript).unwrap();
     }
     for comm in self.block_w3_comm_list.iter() {
-      Pcs::write_commitment(comm, transcript);
+      Pcs::write_commitment(comm, transcript).unwrap();
     }
     for comm in self.block_w3_shifted_comm_list.iter() {
-      Pcs::write_commitment(comm, transcript);
+      Pcs::write_commitment(comm, transcript).unwrap();
     }
 
     let (init_phy_mem_w2_verifier, init_phy_mem_w3_verifier, init_phy_mem_w3_shifted_verifier) = {
@@ -2903,9 +2902,9 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
 
     let (vir_mem_addr_w2_verifier, vir_mem_addr_w3_verifier, vir_mem_addr_w3_shifted_verifier) = {
       if total_num_vir_mem_accesses > 0 {
-        Pcs::write_commitment(self.vir_mem_addr_w2_comm.as_ref().clone().expect("valid commitment expected"), transcript);
-        Pcs::write_commitment(self.vir_mem_addr_w3_comm.as_ref().clone().expect("valid commitment expected"), transcript);
-        Pcs::write_commitment(self.vir_mem_addr_w3_shifted_comm.as_ref().clone().expect("valid commitment expected"), transcript);
+        Pcs::write_commitment(self.vir_mem_addr_w2_comm.as_ref().clone().expect("valid commitment expected"), transcript).unwrap();
+        Pcs::write_commitment(self.vir_mem_addr_w3_comm.as_ref().clone().expect("valid commitment expected"), transcript).unwrap();
+        Pcs::write_commitment(self.vir_mem_addr_w3_shifted_comm.as_ref().clone().expect("valid commitment expected"), transcript).unwrap();
 
         (
           VerifierWitnessSecInfo::new(vec![VIR_MEM_WIDTH], &vec![total_num_vir_mem_accesses], vec![self.vir_mem_addr_w2_comm.clone().expect("valid commitment expected")]),
@@ -2924,9 +2923,9 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     let (block_vars_verifier, exec_inputs_verifier) = {
       // add the commitment to the verifier's transcript
       for comm in self.block_vars_comm_list.iter() {
-        Pcs::write_commitment(comm, transcript);
+        Pcs::write_commitment(comm, transcript).unwrap();
       }
-      Pcs::write_commitment(&self.exec_inputs_comm, transcript);
+      Pcs::write_commitment(&self.exec_inputs_comm, transcript).unwrap();
 
       (
         VerifierWitnessSecInfo::new(block_num_vars, &block_num_proofs, self.block_vars_comm_list.clone()),
@@ -3007,8 +3006,8 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
 
     let (addr_phy_mems_verifier, addr_phy_mems_shifted_verifier) = {
       if total_num_phy_mem_accesses > 0 {
-        Pcs::write_commitment(&self.addr_phy_mems_comm.clone().expect("valid commitment expected"), transcript);
-        Pcs::write_commitment(&self.addr_phy_mems_shifted_comm.clone().expect("valid commitment expected"), transcript);
+        Pcs::write_commitment(&self.addr_phy_mems_comm.clone().expect("valid commitment expected"), transcript).unwrap();
+        Pcs::write_commitment(&self.addr_phy_mems_shifted_comm.clone().expect("valid commitment expected"), transcript).unwrap();
 
         (
           VerifierWitnessSecInfo::new(vec![PHY_MEM_WIDTH], &vec![total_num_phy_mem_accesses], vec![self.addr_phy_mems_comm.clone().expect("commitment should exist")]),
@@ -3024,9 +3023,9 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
 
     let (addr_vir_mems_verifier, addr_vir_mems_shifted_verifier, addr_ts_bits_verifier) = {
       if total_num_vir_mem_accesses > 0 {
-        Pcs::write_commitment(self.addr_vir_mems_comm.clone().as_ref().expect("valid commitment expected"), transcript);
-        Pcs::write_commitment(self.addr_vir_mems_shifted_comm.clone().as_ref().expect("valid commitment expected"), transcript);
-        Pcs::write_commitment(self.addr_ts_bits_comm.clone().as_ref().expect("valid commitment expected"), transcript);
+        Pcs::write_commitment(self.addr_vir_mems_comm.clone().as_ref().expect("valid commitment expected"), transcript).unwrap();
+        Pcs::write_commitment(self.addr_vir_mems_shifted_comm.clone().as_ref().expect("valid commitment expected"), transcript).unwrap();
+        Pcs::write_commitment(self.addr_ts_bits_comm.clone().as_ref().expect("valid commitment expected"), transcript).unwrap();
 
         (
           VerifierWitnessSecInfo::new(vec![VIR_MEM_WIDTH], &vec![total_num_vir_mem_accesses], vec![self.addr_vir_mems_comm.clone().expect("commitment should exist")]),

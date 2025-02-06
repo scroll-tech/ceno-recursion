@@ -9,7 +9,6 @@ use core::ops::Index;
 use rayon::{iter::ParallelIterator, slice::ParallelSliceMut};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
-use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct DensePolynomial<E: ExtensionField> {
@@ -383,8 +382,8 @@ impl<E: ExtensionField> PolyEvalProof<E> {
 
   pub fn verify(
     &self,
-    transcript: &mut Transcript<E>,
-    r: &[E], // point at which the polynomial is evaluated
+    _transcript: &mut Transcript<E>,
+    _r: &[E], // point at which the polynomial is evaluated
   ) -> Result<(), ProofVerifyError> {
     // TODO: Alternative evaluation proof scheme
     Ok(())

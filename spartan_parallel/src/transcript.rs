@@ -51,7 +51,7 @@ pub fn append_field_to_transcript<E: ExtensionField>(
 
 /// Append a vector ExtensionField scalars to transcript
 pub fn append_field_vector_to_transcript<E: ExtensionField>(
-  label: &'static [u8],
+  _label: &'static [u8],
   transcript: &mut Transcript<E>,
   input: &[E],
 ) {

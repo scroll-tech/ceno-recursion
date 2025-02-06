@@ -15,6 +15,7 @@ use serde::Serialize;
 use std::cmp::min;
 use std::iter::zip;
 use rayon::prelude::*;
+use mpcs::pcs_verify;
 
 #[derive(Serialize, Debug)]
 pub struct R1CSProof<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
@@ -435,7 +436,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
 
     let max_len = max(poly_list.iter().map(|&p| p.num_vars)).unwrap().next_power_of_two();
     let param = Pcs::setup(max_len).unwrap();
-    let (pp, vp) = Pcs::trim(param, max_len).unwrap();
+    let (pp, _vp) = Pcs::trim(param, max_len).unwrap();
 
     let mut proof_eval_vars_at_ry_list: Vec<Pcs::Proof> = Vec::new();
     let mut proof_idx: usize = 0;
@@ -475,6 +476,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
         ).expect("PCS proof should not fail");
   
         proof_eval_vars_at_ry_list.push(pcs_proof);
+        proof_idx += 1;
       }
     }
 
@@ -566,7 +568,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     // NUM_INPUTS: number of inputs per block
     // W_MAT: num_instances x num_proofs x num_inputs hypermatrix for all values
     // COMM_W: one commitment per instance
-    witness_secs: Vec<&VerifierWitnessSecInfo>,
+    witness_secs: Vec<&VerifierWitnessSecInfo<E, Pcs>>,
 
     num_cons: usize,
     evals: &[E; 3],
@@ -682,7 +684,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
           num_proofs_list.push(w.num_proofs[p]);
           num_inputs_list.push(w.num_inputs[p]);
           eval_Zr_list.push(self.eval_vars_at_ry_list[i][p]);
-          comm_w_list.push(w.comm_w[p]);
+          comm_w_list.push(w.comm_w[p].clone());
         } else {
           assert_eq!(self.eval_vars_at_ry_list[i][p], ZERO);
         }
@@ -789,8 +791,8 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     eval_Zr_list: Vec<E>,
     comm_w: &Vec<Pcs::Commitment>,
   ) -> Result<(), ProofVerifyError> {
-    let max_num_proofs = max(num_proofs_list);
-    let max_num_inputs = max(num_inputs_list);
+    let max_num_proofs = max(num_proofs_list).expect("max should exist").clone();
+    let max_num_inputs = max(num_inputs_list).expect("max should exist").clone();
     let max_len = (max_num_proofs + max_num_inputs).next_power_of_two();
 
     let param = Pcs::setup(max_len).unwrap();
@@ -817,10 +819,8 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
       };
       let rq_short = rq[rq.len() - num_vars_q..].to_vec();
       let r = [rq_short, ry_short.clone()].concat();
-      let Zr = eval_Zr_list[idx];
-      let comm = comm_w[idx];
 
-      pcs_verify(vp, comm, &r, &Zr, proof, transcript);
+      pcs_verify::<E, Pcs>(&vp, &comm_w[idx], &r, &eval_Zr_list[idx], proof, transcript);
     }
 
     Ok(())

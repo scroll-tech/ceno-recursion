@@ -29,6 +29,8 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     SumcheckInstanceProof { compressed_polys }
   }
 
+  // TODO(Matthias): ok, how does `verify` have to change?
+  // OK, this verify might not have to change at all?
   pub fn verify(
     &self,
     claim: S,
@@ -43,6 +45,10 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     assert_eq!(self.compressed_polys.len(), num_rounds);
     for i in 0..self.compressed_polys.len() {
       let poly = self.compressed_polys[i].decompress(&e);
+
+      // TODO(Matthias): this shouldn't actually be an assert_eq?  We would just want to return an error?
+      // Or is this the recursive verification?
+      // OK, ignore this for now.
 
       // verify degree bound
       assert_eq!(poly.degree(), degree_bound);
@@ -500,6 +506,11 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     )
   }
 
+  // Does this function need to change?
+  // Perhaps because it looks like we are going rfom
+  // |a, b, c, d| a * (b * c - d)
+  // to
+  // |a, b, c, d, e| a * (b * c + e^7 - d)
   pub fn prove_cubic_with_additive_term_disjoint_rounds<F>(
     claim: &S,
     num_rounds: usize,
@@ -514,6 +525,9 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
     poly_B: &mut DensePolynomialPqx<S>,
     poly_C: &mut DensePolynomialPqx<S>,
     poly_D: &mut DensePolynomialPqx<S>,
+    // why do we have this?
+    // We only ever call this function with comb_func = |a, b, c, d| a * (b * c - d)
+    // Why the extra unused flexibility?
     comb_func: F,
     transcript: &mut Transcript,
   ) -> (Self, Vec<S>, Vec<S>)
@@ -652,10 +666,12 @@ impl<S: SpartanExtensionField> SumcheckInstanceProof<S> {
             eval_point_3,
           ];
           let poly = UniPoly::from_evals(&evals);
+          // TODO(Matthias): we send this one to the verifier.
           poly
         } else {
           // Singlecore evaluation in other Modes
           let mut eval_point_0 = ZERO;
+          // TODO(Matthias): we get eval_point_1 later.
           let mut eval_point_2 = ZERO;
           let mut eval_point_3 = ZERO;
 

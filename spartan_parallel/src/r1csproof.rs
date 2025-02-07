@@ -19,6 +19,7 @@ use rayon::prelude::*;
 pub struct R1CSProof<S: SpartanExtensionField> {
   sc_proof_phase1: SumcheckInstanceProof<S>,
   sc_proof_phase2: SumcheckInstanceProof<S>,
+  // TODO(Matthias): do we need a fourth claim here?  For 'Dz'?
   claims_phase2: (S, S, S),
   // Need to commit vars for short and long witnesses separately
   // The long version must exist, the short version might not
@@ -43,10 +44,13 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
     evals_Cz: &mut DensePolynomialPqx<S>,
     transcript: &mut Transcript,
   ) -> (SumcheckInstanceProof<S>, Vec<S>, Vec<S>) {
+    // Ok, this looks like f in the issue.  We are adding a g term.
     let comb_func = |poly_A_comp: &S, poly_B_comp: &S, poly_C_comp: &S, poly_D_comp: &S| -> S {
       *poly_A_comp * (*poly_B_comp * *poly_C_comp - *poly_D_comp)
     };
 
+    // Do we need to change the output terms here?
+    // Do we need to extent the called fuction, or write another function?
     let (sc_proof_phase_one, r, claims) =
       SumcheckInstanceProof::<S>::prove_cubic_with_additive_term_disjoint_rounds(
         &S::field_zero(), // claim is zero
@@ -59,6 +63,8 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
         evals_tau_p,
         evals_tau_q,
         evals_tau_x,
+        // TODO(Matthias): the letters in our local variable names and the names of the arguments of
+        // prove_cubic_with_additive_term_disjoint_rounds are not consistent.  Is this a problem?
         evals_Az,
         evals_Bz,
         evals_Cz,
@@ -554,6 +560,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
 
     let (claim_post_phase_1, rx_rev) = self.sc_proof_phase1.verify(
       ZERO,
+      // OK, here we are talking about rounds.  The issue also mentions round numbers. 
       num_rounds_x + num_rounds_q + num_rounds_p,
       3,
       transcript,
@@ -580,6 +587,7 @@ impl<S: SpartanExtensionField + Send + Sync> R1CSProof<S> {
 
 
     // perform the intermediate sum-check test with claimed Az, Bz, and Cz
+    // TODO(Matthias): ok, I assume we also need a claimed Dz?
     let (Az_claim, Bz_claim, Cz_claim) = self.claims_phase2;
     S::append_field_to_transcript(b"Az_claim", transcript, Az_claim);
     S::append_field_to_transcript(b"Bz_claim", transcript, Bz_claim);

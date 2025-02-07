@@ -12,6 +12,8 @@ pub struct UniPoly<S: SpartanExtensionField> {
 
 // ax^2 + bx + c stored as vec![c,a]
 // ax^3 + bx^2 + cx + d stored as vec![d,b,a]
+// TODO(Matthias): looks like we need to do something here to store our x^7 term?
+// Are the first two lines above talking about either/or, or about storing both of these?
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CompressedUniPoly<S: SpartanExtensionField> {
   coeffs_except_linear_term: Vec<S>,

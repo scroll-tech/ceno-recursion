@@ -42,7 +42,7 @@ use std::{
   io::Write,
 };
 
-use dense_mlpoly::{DensePolynomial, PolyEvalProof};
+use dense_mlpoly::DensePolynomial;
 use errors::{ProofVerifyError, R1CSError};
 use instance::Instance;
 use itertools::Itertools;
@@ -67,8 +67,8 @@ const W3_WIDTH: usize = 8;
 
 /// `ComputationCommitment` holds a public preprocessed NP statement (e.g., R1CS)
 #[derive(Clone, Serialize)]
-pub struct ComputationCommitment<E: ExtensionField> {
-  comm: R1CSCommitment<E>,
+pub struct ComputationCommitment<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
+  comm: R1CSCommitment<E, Pcs>,
 }
 
 /// `ComputationDecommitment` holds information to decommit `ComputationCommitment`
@@ -143,16 +143,16 @@ pub type MemsAssignment<E> = Assignment<E>;
 
 // IOProofs contains a series of proofs that the committed values match the input and output of the program
 #[derive(Serialize, Deserialize, Debug)]
-struct IOProofs<E: ExtensionField> {
+struct IOProofs<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
   // The prover needs to prove:
   // 1. Input and output block are both valid
   // 2. Block number of the input and output block are correct
   // 3. Input and outputs are correct
   // 4. The constant value of the input is 1
-  proofs: Vec<PolyEvalProof<E>>,
+  proofs: Vec<Pcs::Proof>,
 }
 
-impl<E: ExtensionField> IOProofs<E> {
+impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> IOProofs<E, Pcs> {
   // Given the polynomial in execution order, generate all proofs
   fn prove(
     exec_poly_inputs: &DensePolynomial<E>,
@@ -171,7 +171,7 @@ impl<E: ExtensionField> IOProofs<E> {
     output_exec_num: usize,
     transcript: &mut Transcript<E>,
     random_tape: &mut RandomTape<E>,
-  ) -> IOProofs<E> {
+  ) -> IOProofs<E, Pcs> {
     let r_len = (num_proofs * num_ios).log_2();
     let to_bin_array = |x: usize| {
       (0..r_len)
@@ -203,37 +203,39 @@ impl<E: ExtensionField> IOProofs<E> {
     }
     input_indices = input_indices[..live_input.len()].to_vec();
 
+    // _debug
     // batch prove all proofs
-    let proofs = PolyEvalProof::prove_batched_points(
-      exec_poly_inputs,
-      [
-        vec![
-          0,                         // input valid
-          output_exec_num * num_ios, // output valid
-          2,                         // input block num
-          output_exec_num * num_ios + 2 + (num_inputs_unpadded - 1), // output block num
-          output_exec_num * num_ios + 2 + (num_inputs_unpadded - 1) + output_offset - 1, // output correctness
-        ],
-        input_indices, // input correctness
-      ]
-      .concat()
-      .iter()
-      .map(|i| to_bin_array(*i))
-      .collect(),
-      vec![
-        vec![
-          E::ONE,
-          E::ONE,
-          input_block_num,
-          output_block_num,
-          output,
-        ],
-        live_input,
-      ]
-      .concat(),
-      transcript,
-      random_tape,
-    );
+    // let proofs = PolyEvalProof::prove_batched_points(
+    //   exec_poly_inputs,
+    //   [
+    //     vec![
+    //       0,                         // input valid
+    //       output_exec_num * num_ios, // output valid
+    //       2,                         // input block num
+    //       output_exec_num * num_ios + 2 + (num_inputs_unpadded - 1), // output block num
+    //       output_exec_num * num_ios + 2 + (num_inputs_unpadded - 1) + output_offset - 1, // output correctness
+    //     ],
+    //     input_indices, // input correctness
+    //   ]
+    //   .concat()
+    //   .iter()
+    //   .map(|i| to_bin_array(*i))
+    //   .collect(),
+    //   vec![
+    //     vec![
+    //       E::ONE,
+    //       E::ONE,
+    //       input_block_num,
+    //       output_block_num,
+    //       output,
+    //     ],
+    //     live_input,
+    //   ]
+    //   .concat(),
+    //   transcript,
+    //   random_tape,
+    // );
+    let proofs = vec![];
     IOProofs { proofs }
   }
 
@@ -284,36 +286,38 @@ impl<E: ExtensionField> IOProofs<E> {
     }
     input_indices = input_indices[..live_input.len()].to_vec();
 
+    // _debug
     // batch verify all proofs
-    PolyEvalProof::verify_plain_batched_points(
-      &self.proofs,
-      transcript,
-      [
-        vec![
-          0,                                                                             // input valid
-          output_exec_num * num_ios, // output valid
-          2,                         // input block num
-          output_exec_num * num_ios + 2 + (num_inputs_unpadded - 1), // output block num
-          output_exec_num * num_ios + 2 + (num_inputs_unpadded - 1) + output_offset - 1, // output correctness
-        ],
-        input_indices, // input correctness
-      ]
-      .concat()
-      .iter()
-      .map(|i| to_bin_array(*i))
-      .collect(),
-      vec![
-        vec![
-          E::ONE,
-          E::ONE,
-          input_block_num,
-          output_block_num,
-          output,
-        ],
-        live_input,
-      ]
-      .concat(),
-    )
+    // PolyEvalProof::verify_plain_batched_points(
+    //   &self.proofs,
+    //   transcript,
+    //   [
+    //     vec![
+    //       0,                                                                             // input valid
+    //       output_exec_num * num_ios, // output valid
+    //       2,                         // input block num
+    //       output_exec_num * num_ios + 2 + (num_inputs_unpadded - 1), // output block num
+    //       output_exec_num * num_ios + 2 + (num_inputs_unpadded - 1) + output_offset - 1, // output correctness
+    //     ],
+    //     input_indices, // input correctness
+    //   ]
+    //   .concat()
+    //   .iter()
+    //   .map(|i| to_bin_array(*i))
+    //   .collect(),
+    //   vec![
+    //     vec![
+    //       E::ONE,
+    //       E::ONE,
+    //       input_block_num,
+    //       output_block_num,
+    //       output,
+    //     ],
+    //     live_input,
+    //   ]
+    //   .concat(),
+    // )
+    Ok(())
   }
 }
 
@@ -321,11 +325,11 @@ impl<E: ExtensionField> IOProofs<E> {
 // We do so by treating both polynomials as univariate and evaluate on a single point C
 // Finally, show shifted(C) = orig(C) * C^(shift_size) + rc * openings, where rc * openings are the first few entries of the original poly dot product with the power series of C
 #[derive(Serialize, Deserialize, Debug)]
-struct ShiftProofs<E: ExtensionField> {
-  proof: PolyEvalProof<E>,
+struct ShiftProofs<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
+  proof: Pcs::Proof,
 }
 
-impl<E: ExtensionField> ShiftProofs<E> {
+impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> ShiftProofs<E, Pcs> {
   fn prove(
     orig_polys: Vec<&DensePolynomial<E>>,
     shifted_polys: Vec<&DensePolynomial<E>>,
@@ -333,7 +337,7 @@ impl<E: ExtensionField> ShiftProofs<E> {
     header_len_list: Vec<usize>,
     transcript: &mut Transcript<E>,
     random_tape: &mut RandomTape<E>,
-  ) -> ShiftProofs<E> {
+  ) -> ShiftProofs<E, Pcs> {
     // Assert that all polynomials are of the same size
     let num_instances = orig_polys.len();
     assert_eq!(num_instances, shifted_polys.len());
@@ -367,13 +371,15 @@ impl<E: ExtensionField> ShiftProofs<E> {
       orig_evals.push(orig_eval);
       shifted_evals.push(shifted_eval);
     }
-    let addr_phy_mems_shift_proof = PolyEvalProof::prove_uni_batched_instances(
-      &[orig_polys, shifted_polys].concat(),
-      &c,
-      &[orig_evals, shifted_evals].concat(),
-      transcript,
-      random_tape,
-    );
+    
+    // _debug
+    // let addr_phy_mems_shift_proof = PolyEvalProof::prove_uni_batched_instances(
+    //   &[orig_polys, shifted_polys].concat(),
+    //   &c,
+    //   &[orig_evals, shifted_evals].concat(),
+    //   transcript,
+    //   random_tape,
+    // );
 
     ShiftProofs {
       proof: addr_phy_mems_shift_proof,
@@ -405,12 +411,13 @@ impl<E: ExtensionField> ShiftProofs<E> {
       next_c = next_c * c;
     }
 
+    // _debug
     // Proof of opening
-    self.proof.verify_uni_batched_instances(
-      transcript,
-      &c,
-      [poly_size_list.clone(), poly_size_list].concat(),
-    )?;
+    // self.proof.verify_uni_batched_instances(
+    //   transcript,
+    //   &c,
+    //   [poly_size_list.clone(), poly_size_list].concat(),
+    // )?;
     Ok(())
   }
 }
@@ -666,16 +673,16 @@ pub struct SNARK<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
   block_r1cs_sat_proof: R1CSProof<E, Pcs>,
   block_inst_evals_bound_rp: [E; 3],
   block_inst_evals_list: Vec<E>,
-  block_r1cs_eval_proof_list: Vec<R1CSEvalProof<E>>,
+  block_r1cs_eval_proof_list: Vec<R1CSEvalProof<E, Pcs>>,
 
   pairwise_check_r1cs_sat_proof: R1CSProof<E, Pcs>,
   pairwise_check_inst_evals_bound_rp: [E; 3],
   pairwise_check_inst_evals_list: Vec<E>,
-  pairwise_check_r1cs_eval_proof: R1CSEvalProof<E>,
+  pairwise_check_r1cs_eval_proof: R1CSEvalProof<E, Pcs>,
 
   perm_root_r1cs_sat_proof: R1CSProof<E, Pcs>,
   perm_root_inst_evals: [E; 3],
-  perm_root_r1cs_eval_proof: R1CSEvalProof<E>,
+  perm_root_r1cs_eval_proof: R1CSEvalProof<E, Pcs>,
   // Product proof for permutation
   // perm_poly_poly_list: Vec<E>,
   // proof_eval_perm_poly_prod_list: Vec<PolyEvalProof<E>>,
@@ -808,11 +815,11 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     inst: &Instance<E>,
   ) -> (
     Vec<Vec<usize>>,
-    Vec<ComputationCommitment<E>>,
+    Vec<ComputationCommitment<E, Pcs>>,
     Vec<ComputationDecommitment<E>>,
   ) {
     let timer_encode = Timer::new("SNARK::encode");
-    let (label_map, mut comm, mut decomm) = inst.inst.multi_commit();
+    let (label_map, mut comm, mut decomm) = R1CSCommitment::multi_commit(&inst.inst);
 
     timer_encode.stop();
     (
@@ -829,9 +836,9 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
   }
 
   /// A public computation to create a commitment to a single R1CS instance
-  pub fn encode(inst: &Instance<E>) -> (ComputationCommitment<E>, ComputationDecommitment<E>) {
+  pub fn encode(inst: &Instance<E>) -> (ComputationCommitment<E, Pcs>, ComputationDecommitment<E>) {
     let timer_encode = Timer::new("SNARK::encode");
-    let (comm, decomm) = inst.inst.commit();
+    let (comm, decomm) = R1CSCommitment::commit(&inst.inst);
 
     timer_encode.stop();
     (
@@ -995,7 +1002,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     block_num_proofs: &Vec<usize>,
     block_inst: &mut Instance<E>,
     block_comm_map: &Vec<Vec<usize>>,
-    block_comm_list: &Vec<ComputationCommitment<E>>,
+    block_comm_list: &Vec<ComputationCommitment<E, Pcs>>,
     block_decomm_list: &Vec<ComputationDecommitment<E>>,
 
     consis_num_proofs: usize,
@@ -1004,7 +1011,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     total_num_phy_mem_accesses: usize,
     total_num_vir_mem_accesses: usize,
     pairwise_check_inst: &mut Instance<E>,
-    pairwise_check_comm: &ComputationCommitment<E>,
+    pairwise_check_comm: &ComputationCommitment<E, Pcs>,
     pairwise_check_decomm: &ComputationDecommitment<E>,
 
     block_vars_mat: Vec<Vec<VarsAssignment<E>>>,
@@ -1016,7 +1023,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     addr_ts_bits_list: Vec<MemsAssignment<E>>,
 
     perm_root_inst: &Instance<E>,
-    perm_root_comm: &ComputationCommitment<E>,
+    perm_root_comm: &ComputationCommitment<E, Pcs>,
     perm_root_decomm: &ComputationDecommitment<E>,
     transcript: &mut Transcript<E>,
   ) -> Self {
@@ -2515,7 +2522,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     block_num_proofs: &Vec<usize>,
     block_num_cons: usize,
     block_comm_map: &Vec<Vec<usize>>,
-    block_comm_list: &Vec<ComputationCommitment<E>>,
+    block_comm_list: &Vec<ComputationCommitment<E, Pcs>>,
 
     consis_num_proofs: usize,
     total_num_init_phy_mem_accesses: usize,
@@ -2523,10 +2530,10 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     total_num_phy_mem_accesses: usize,
     total_num_vir_mem_accesses: usize,
     pairwise_check_num_cons: usize,
-    pairwise_check_comm: &ComputationCommitment<E>,
+    pairwise_check_comm: &ComputationCommitment<E, Pcs>,
 
     perm_root_num_cons: usize,
-    perm_root_comm: &ComputationCommitment<E>,
+    perm_root_comm: &ComputationCommitment<E, Pcs>,
 
     transcript: &mut Transcript<E>,
   ) -> Result<(), ProofVerifyError> {

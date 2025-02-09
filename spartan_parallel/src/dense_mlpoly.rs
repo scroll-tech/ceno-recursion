@@ -1,5 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 use ff_ext::ExtensionField;
+use multilinear_extensions::mle::DenseMultilinearExtension;
 
 use super::errors::ProofVerifyError;
 use super::math::Math;
@@ -346,6 +347,10 @@ impl<E: ExtensionField> DensePolynomial<E> {
         .collect::<Vec<E>>(),
     )
   }
+
+  pub fn to_ceno_mle(&self) -> DenseMultilinearExtension<E> {
+    DenseMultilinearExtension::from_evaluation_vec_smart(self.num_vars, self.Z.clone())
+  }
 }
 
 impl<E: ExtensionField> Index<usize> for DensePolynomial<E> {
@@ -354,164 +359,6 @@ impl<E: ExtensionField> Index<usize> for DensePolynomial<E> {
   #[inline(always)]
   fn index(&self, _index: usize) -> &E {
     &(self.Z[_index])
-  }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PolyEvalProof<E: ExtensionField> {
-  _phantom: E,
-}
-
-impl<E: ExtensionField> PolyEvalProof<E> {
-  fn protocol_name() -> &'static [u8] {
-    b"polynomial evaluation proof"
-  }
-
-  pub fn prove(
-    _poly: &DensePolynomial<E>,
-    _r: &[E], // point at which the polynomial is evaluated
-    _Zr: &E,  // evaluation of \widetilde{Z}(r)
-    _transcript: &mut Transcript<E>,
-    _random_tape: &mut RandomTape<E>,
-  ) -> PolyEvalProof<E> {
-    // TODO: Alternative evaluation proof scheme
-    PolyEvalProof {
-      _phantom: E::ZERO,
-    }
-  }
-
-  pub fn verify(
-    &self,
-    _transcript: &mut Transcript<E>,
-    _r: &[E], // point at which the polynomial is evaluated
-  ) -> Result<(), ProofVerifyError> {
-    // TODO: Alternative evaluation proof scheme
-    Ok(())
-  }
-
-  pub fn verify_plain(
-    &self,
-    transcript: &mut Transcript<E>,
-    r: &[E], // point at which the polynomial is evaluated
-    _Zr: &E, // evaluation \widetilde{Z}(r)
-  ) -> Result<(), ProofVerifyError> {
-    self.verify(transcript, r)
-  }
-
-  // Evaluation of multiple points on the same instance
-  pub fn prove_batched_points(
-    _poly: &DensePolynomial<E>,
-    _r_list: Vec<Vec<E>>, // point at which the polynomial is evaluated
-    _Zr_list: Vec<E>,     // evaluation of \widetilde{Z}(r) on each point
-    _transcript: &mut Transcript<E>,
-    _random_tape: &mut RandomTape<E>,
-  ) -> Vec<PolyEvalProof<E>> {
-    // TODO: Alternative evaluation proof scheme
-    vec![]
-  }
-
-  pub fn verify_plain_batched_points(
-    _proof_list: &Vec<PolyEvalProof<E>>,
-    _transcript: &mut Transcript<E>,
-    _r_list: Vec<Vec<E>>, // point at which the polynomial is evaluated
-    _Zr_list: Vec<E>,     // commitment to \widetilde{Z}(r) on each point
-  ) -> Result<(), ProofVerifyError> {
-    // TODO: Alternative evaluation proof scheme
-    Ok(())
-  }
-
-  // Evaluation on multiple instances, each at different point
-  // Size of each instance might be different, but all are larger than the evaluation point
-  pub fn prove_batched_instances(
-    _poly_list: &Vec<DensePolynomial<E>>, // list of instances
-    _r_list: Vec<&Vec<E>>,                // point at which the polynomial is evaluated
-    _Zr_list: &Vec<E>,                    // evaluation of \widetilde{Z}(r) on each instance
-    _transcript: &mut Transcript<E>,
-    _random_tape: &mut RandomTape<E>,
-  ) -> Vec<PolyEvalProof<E>> {
-    // TODO: Alternative evaluation proof scheme
-    vec![]
-  }
-
-  pub fn verify_plain_batched_instances(
-    _proof_list: &Vec<PolyEvalProof<E>>,
-    _transcript: &mut Transcript<E>,
-    _r_list: Vec<&Vec<E>>,       // point at which the polynomial is evaluated
-    _Zr_list: &Vec<E>,           // commitment to \widetilde{Z}(r) of each instance
-    _num_vars_list: &Vec<usize>, // size of each polynomial
-  ) -> Result<(), ProofVerifyError> {
-    // TODO: Alternative evaluation proof scheme
-    Ok(())
-  }
-
-  // Like prove_batched_instances, but r is divided into rq ++ ry
-  // Each polynomial is supplemented with num_proofs and num_inputs
-  pub fn prove_batched_instances_disjoint_rounds(
-    _poly_list: &Vec<&DensePolynomial<E>>,
-    _num_proofs_list: &Vec<usize>,
-    _num_inputs_list: &Vec<usize>,
-    _rq: &[E],
-    _ry: &[E],
-    _Zr_list: &Vec<E>,
-    _transcript: &mut Transcript<E>,
-    _random_tape: &mut RandomTape<E>,
-  ) -> Vec<PolyEvalProof<E>> {
-    // TODO: Alternative evaluation proof scheme
-    /* Pad or trim rq and ry in the following sense
-    let num_vars_q = num_proofs.log_2();
-    let num_vars_y = num_inputs.log_2();
-    let ry_short = {
-      if num_vars_y >= ry.len() {
-        let ry_pad = &vec![zero; num_vars_y - ry.len()];
-        [ry_pad, ry].concat()
-      }
-      // Else ry_short is the last w.num_inputs[p].log_2() entries of ry
-      // thus, to obtain the actual ry, need to multiply by (1 - ry2)(1 - ry3)..., which is ry_factors[num_rounds_y - w.num_inputs[p]]
-      else {
-        ry[ry.len() - num_vars_y..].to_vec()
-      }
-    };
-    let rq_short = rq[rq.len() - num_vars_q..].to_vec();
-    let r = [rq_short, ry_short.clone()].concat();
-    };
-      */
-    vec![]
-  }
-
-  pub fn verify_batched_instances_disjoint_rounds(
-    _proof_list: &Vec<PolyEvalProof<E>>,
-    _num_proofs_list: &Vec<usize>,
-    _num_inputs_list: &Vec<usize>,
-    _transcript: &mut Transcript<E>,
-    _rq: &[E],
-    _ry: &[E],
-  ) -> Result<(), ProofVerifyError> {
-    // TODO: Alternative evaluation proof scheme
-    Ok(())
-  }
-
-  // Treat the polynomial(s) as univariate and open on a single point
-  pub fn prove_uni_batched_instances(
-    _poly_list: &Vec<&DensePolynomial<E>>,
-    _r: &E,       // point at which the polynomial is evaluated
-    _Zr: &Vec<E>, // evaluation of \widetilde{Z}(r)
-    _transcript: &mut Transcript<E>,
-    _random_tape: &mut RandomTape<E>,
-  ) -> PolyEvalProof<E> {
-    // TODO: Alternative evaluation proof scheme
-    PolyEvalProof {
-      _phantom: E::ZERO,
-    }
-  }
-
-  pub fn verify_uni_batched_instances(
-    &self,
-    _transcript: &mut Transcript<E>,
-    _r: &E, // point at which the polynomial is evaluated
-    _poly_size: Vec<usize>,
-  ) -> Result<(), ProofVerifyError> {
-    // TODO: Alternative evaluation proof scheme
-    Ok(())
   }
 }
 

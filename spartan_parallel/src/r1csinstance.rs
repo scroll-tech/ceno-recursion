@@ -1,3 +1,4 @@
+use mpcs::PolynomialCommitmentScheme;
 use rayon::prelude::*;
 
 use std::cmp::{max, min};
@@ -36,10 +37,10 @@ pub struct R1CSInstance<E: ExtensionField> {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct R1CSCommitment<E: ExtensionField> {
+pub struct R1CSCommitment<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
   num_cons: usize,
   num_vars: usize,
-  comm: SparseMatPolyCommitment<E>,
+  comm: SparseMatPolyCommitment<E, Pcs>,
 }
 
 pub struct R1CSDecommitment<E: ExtensionField> {
@@ -48,7 +49,7 @@ pub struct R1CSDecommitment<E: ExtensionField> {
   dense: MultiSparseMatPolynomialAsDense<E>,
 }
 
-impl<E: ExtensionField> R1CSCommitment<E> {
+impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> R1CSCommitment<E, Pcs> {
   pub fn get_num_cons(&self) -> usize {
     self.num_cons
   }
@@ -466,19 +467,21 @@ impl<E: ExtensionField + Send + Sync> R1CSInstance<E> {
   pub fn evaluate(&self, rx: &[E], ry: &[E]) -> (E, E, E) {
     assert_eq!(self.num_instances, 1);
 
-    let evals = SparseMatPolynomial::multi_evaluate(
+    let evals: Vec<E> = SparseMatPolynomial::multi_evaluate(
       &[&self.A_list[0], &self.B_list[0], &self.C_list[0]],
       rx,
       ry,
     );
     (evals[0], evals[1], evals[2])
   }
+}
 
+impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> R1CSCommitment<E, Pcs> {
   pub fn multi_commit(
-    &self,
+    instance: &R1CSInstance<E>,
   ) -> (
     Vec<Vec<usize>>,
-    Vec<R1CSCommitment<E>>,
+    Vec<R1CSCommitment<E, Pcs>>,
     Vec<R1CSDecommitment<E>>,
   ) {
     let mut vars_size: HashMap<usize, usize> = HashMap::new();
@@ -488,25 +491,25 @@ impl<E: ExtensionField + Send + Sync> R1CSInstance<E> {
     let mut max_num_vars_list: Vec<usize> = Vec::new();
 
     // Group the instances based on number of variables, which are already orders of 2^4
-    for i in 0..self.num_instances {
-      let var_len = self.num_vars[i];
+    for i in 0..instance.num_instances {
+      let var_len = instance.num_vars[i];
       // A_list, B_list, C_list
       if let Some(index) = vars_size.get(&var_len) {
         label_map[*index].push(3 * i);
-        sparse_polys_list[*index].push(&self.A_list[i]);
+        sparse_polys_list[*index].push(&instance.A_list[i]);
         label_map[*index].push(3 * i + 1);
-        sparse_polys_list[*index].push(&self.B_list[i]);
+        sparse_polys_list[*index].push(&instance.B_list[i]);
         label_map[*index].push(3 * i + 2);
-        sparse_polys_list[*index].push(&self.C_list[i]);
-        max_num_cons_list[*index] = max(max_num_cons_list[*index], self.num_cons[i]);
-        max_num_vars_list[*index] = max(max_num_vars_list[*index], self.num_vars[i]);
+        sparse_polys_list[*index].push(&instance.C_list[i]);
+        max_num_cons_list[*index] = max(max_num_cons_list[*index], instance.num_cons[i]);
+        max_num_vars_list[*index] = max(max_num_vars_list[*index], instance.num_vars[i]);
       } else {
         let next_label = vars_size.len();
         vars_size.insert(var_len, next_label);
         label_map.push(vec![3 * i, 3 * i + 1, 3 * i + 2]);
-        sparse_polys_list.push(vec![&self.A_list[i], &self.B_list[i], &self.C_list[i]]);
-        max_num_cons_list.push(self.num_cons[i]);
-        max_num_vars_list.push(self.num_vars[i]);
+        sparse_polys_list.push(vec![&instance.A_list[i], &instance.B_list[i], &instance.C_list[i]]);
+        max_num_cons_list.push(instance.num_cons[i]);
+        max_num_vars_list.push(instance.num_vars[i]);
       }
     }
 
@@ -515,7 +518,7 @@ impl<E: ExtensionField + Send + Sync> R1CSInstance<E> {
     for ((sparse_polys, max_num_cons), max_num_vars) in
       zip(zip(sparse_polys_list, max_num_cons_list), max_num_vars_list)
     {
-      let (comm, dense) = SparseMatPolynomial::multi_commit(&sparse_polys);
+      let (comm, dense) = SparseMatPolyCommitment::multi_commit(&sparse_polys);
       let r1cs_comm = R1CSCommitment {
         num_cons: max_num_cons.next_power_of_two(),
         num_vars: max_num_vars,
@@ -535,24 +538,24 @@ impl<E: ExtensionField + Send + Sync> R1CSInstance<E> {
   }
 
   // Used if there is only one instance
-  pub fn commit(&self) -> (R1CSCommitment<E>, R1CSDecommitment<E>) {
+  pub fn commit(instance: &R1CSInstance<E>) -> (R1CSCommitment<E, Pcs>, R1CSDecommitment<E>) {
     let mut sparse_polys = Vec::new();
-    for i in 0..self.num_instances {
-      sparse_polys.push(&self.A_list[i]);
-      sparse_polys.push(&self.B_list[i]);
-      sparse_polys.push(&self.C_list[i]);
+    for i in 0..instance.num_instances {
+      sparse_polys.push(&instance.A_list[i]);
+      sparse_polys.push(&instance.B_list[i]);
+      sparse_polys.push(&instance.C_list[i]);
     }
 
-    let (comm, dense) = SparseMatPolynomial::multi_commit(&sparse_polys);
+    let (comm, dense) = SparseMatPolyCommitment::multi_commit(&sparse_polys);
     let r1cs_comm = R1CSCommitment {
-      num_cons: self.num_instances * self.max_num_cons,
-      num_vars: self.max_num_vars,
+      num_cons: instance.num_instances * instance.max_num_cons,
+      num_vars: instance.max_num_vars,
       comm,
     };
 
     let r1cs_decomm = R1CSDecommitment {
-      num_cons: self.num_instances * self.max_num_cons,
-      num_vars: self.max_num_vars,
+      num_cons: instance.num_instances * instance.max_num_cons,
+      num_vars: instance.max_num_vars,
       dense,
     };
 
@@ -561,11 +564,11 @@ impl<E: ExtensionField + Send + Sync> R1CSInstance<E> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct R1CSEvalProof<E: ExtensionField> {
-  proof: SparseMatPolyEvalProof<E>,
+pub struct R1CSEvalProof<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
+  proof: SparseMatPolyEvalProof<E, Pcs>,
 }
 
-impl<E: ExtensionField> R1CSEvalProof<E> {
+impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> R1CSEvalProof<E, Pcs> {
   // If is BLOCK, separate the first 3 entries of ry out (corresponding to the 5 segments of witnesses)
   pub fn prove<const IS_BLOCK: bool>(
     decomm: &R1CSDecommitment<E>,
@@ -574,7 +577,7 @@ impl<E: ExtensionField> R1CSEvalProof<E> {
     evals: &Vec<E>,
     transcript: &mut Transcript<E>,
     random_tape: &mut RandomTape<E>,
-  ) -> R1CSEvalProof<E> {
+  ) -> R1CSEvalProof<E, Pcs> {
     let timer = Timer::new("R1CSEvalProof::prove");
     let rx_skip_len = rx.len() - min(rx.len(), decomm.num_cons.log_2());
     let rx_header = rx[..rx_skip_len]
@@ -614,7 +617,7 @@ impl<E: ExtensionField> R1CSEvalProof<E> {
 
   pub fn verify<const IS_BLOCK: bool>(
     &self,
-    comm: &R1CSCommitment<E>,
+    comm: &R1CSCommitment<E, Pcs>,
     rx: &[E], // point at which the R1CS matrix polynomials are evaluated
     ry: &[E],
     evals: &Vec<E>,

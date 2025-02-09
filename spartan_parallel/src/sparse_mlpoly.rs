@@ -2,8 +2,10 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::needless_range_loop)]
 use ff_ext::ExtensionField;
+use mpcs::PolynomialCommitmentScheme;
+use multilinear_extensions::mle::DenseMultilinearExtension;
 use super::dense_mlpoly::DensePolynomial;
-use super::dense_mlpoly::{EqPolynomial, IdentityPolynomial, PolyEvalProof};
+use super::dense_mlpoly::{EqPolynomial, IdentityPolynomial};
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::product_tree::{DotProductCircuit, ProductCircuit, ProductCircuitEvalProofBatched};
@@ -39,6 +41,11 @@ pub struct Derefs<E: ExtensionField> {
   comb: DensePolynomial<E>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DerefsCommitment<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
+  comm_ops_val: Pcs::Commitment
+}
+
 impl<E: ExtensionField> Derefs<E> {
   pub fn new(row_ops_val: Vec<DensePolynomial<E>>, col_ops_val: Vec<DensePolynomial<E>>) -> Self {
     assert_eq!(row_ops_val.len(), col_ops_val.len());
@@ -61,12 +68,23 @@ impl<E: ExtensionField> Derefs<E> {
   }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DerefsEvalProof<E: ExtensionField> {
-  proof_derefs: PolyEvalProof<E>,
+impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> DerefsCommitment<E, Pcs> {
+  pub fn commit(derefs: &Derefs<E>) -> DerefsCommitment<E, Pcs> {
+    let l = derefs.comb.len();
+    let param = Pcs::setup(l).unwrap();
+    let (pp, _vp) = Pcs::trim(param, l).unwrap();
+    let comm_ops_val = Pcs::get_pure_commitment(&Pcs::commit(&pp, &derefs.comb.to_ceno_mle()).expect("Commitment should not fail"));
+    DerefsCommitment { comm_ops_val }
+  }
 }
 
-impl<E: ExtensionField> DerefsEvalProof<E> {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DerefsEvalProof<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
+  comm_derefs: Pcs::CommitmentWithWitness,
+  proof_derefs: Pcs::Proof,
+}
+
+impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> DerefsEvalProof<E, Pcs> {
   fn protocol_name() -> &'static [u8] {
     b"Derefs evaluation proof"
   }
@@ -77,7 +95,7 @@ impl<E: ExtensionField> DerefsEvalProof<E> {
     evals: Vec<E>,
     transcript: &mut Transcript<E>,
     random_tape: &mut RandomTape<E>,
-  ) -> PolyEvalProof<E> {
+  ) -> Self {
     assert_eq!(joint_poly.get_num_vars(), r.len() + evals.len().log_2());
 
     // append the claimed evaluations to transcript
@@ -102,10 +120,16 @@ impl<E: ExtensionField> DerefsEvalProof<E> {
     // decommit the joint polynomial at r_joint
     append_field_to_transcript(b"joint_claim_eval", transcript, eval_joint);
 
-    let proof_derefs =
-      PolyEvalProof::prove(joint_poly, &r_joint, &eval_joint, transcript, random_tape);
+    let l: usize = 1 << joint_poly.get_num_vars();
+    let mle = joint_poly.to_ceno_mle();
+    let (pp, _vp) = Pcs::trim(Pcs::setup(l), l);
+    let comm_derefs = Pcs::commit(&pp, &mle).expect("Commit should not fail.");
+    let proof_derefs = Pcs::open(pp, &mle, comm_derefs, &r_joint, &eval_joint, transcript).expect("Proof should not fail");
 
-    proof_derefs
+    Self {
+      comm_derefs,
+      proof_derefs,
+    }
   }
 
   // evalues both polynomials at r and produces a joint proof of opening
@@ -119,7 +143,7 @@ impl<E: ExtensionField> DerefsEvalProof<E> {
   ) -> Self {
     append_protocol_name(
       transcript,
-      DerefsEvalProof::<E>::protocol_name(),
+      DerefsEvalProof::<E, Pcs>::protocol_name(),
     );
 
     let evals = {
@@ -128,14 +152,12 @@ impl<E: ExtensionField> DerefsEvalProof<E> {
       evals.resize(evals.len().next_power_of_two(), E::ZERO);
       evals
     };
-    let proof_derefs =
-      DerefsEvalProof::prove_single(&derefs.comb, r, evals, transcript, random_tape);
-
-    DerefsEvalProof { proof_derefs }
+    
+    DerefsEvalProof::<E, Pcs>::prove_single(&derefs.comb, r, evals, transcript, random_tape)
   }
 
   fn verify_single(
-    proof: &PolyEvalProof<E>,
+    proof: &Self,
     r: &[E],
     evals: Vec<E>,
     transcript: &mut Transcript<E>,
@@ -158,7 +180,9 @@ impl<E: ExtensionField> DerefsEvalProof<E> {
     // decommit the joint polynomial at r_joint
     append_field_to_transcript(b"joint_claim_eval", transcript, joint_claim_eval);
 
-    proof.verify_plain(transcript, &r_joint, &joint_claim_eval)
+    let l: usize = 1 << poly_evals.get_num_vars();
+    let (_pp, vp) = Pcs::trim(Pcs::setup(l), l);
+    Pcs::verify(vp, proof.comm_derefs, &r_joint, &joint_claim_eval, proof.proof_derefs, transcript)
   }
 
   // verify evaluations of both polynomials at r
@@ -171,14 +195,14 @@ impl<E: ExtensionField> DerefsEvalProof<E> {
   ) -> Result<(), ProofVerifyError> {
     append_protocol_name(
       transcript,
-      DerefsEvalProof::<E>::protocol_name(),
+      DerefsEvalProof::<E, Pcs>::protocol_name(),
     );
 
     let mut evals = eval_row_ops_val_vec.to_owned();
     evals.extend(eval_col_ops_val_vec);
     evals.resize(evals.len().next_power_of_two(), E::ZERO);
 
-    DerefsEvalProof::verify_single(&self.proof_derefs, r, evals, transcript)
+    DerefsEvalProof::<E, Pcs>::verify_single(&self.proof_derefs, r, evals, transcript)
   }
 }
 
@@ -251,17 +275,21 @@ pub struct MultiSparseMatPolynomialAsDense<E: ExtensionField> {
   col: AddrTimestamps<E>,
   comb_ops: DensePolynomial<E>,
   comb_mem: DensePolynomial<E>,
+  comb_ops_ceno_mle: DenseMultilinearExtension<E>,
+  comb_mem_ceno_mle: DenseMultilinearExtension<E>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct SparseMatPolyCommitment<E: ExtensionField> {
+pub struct SparseMatPolyCommitment<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
   batch_size: usize,
   num_ops: usize,
   num_mem_cells: usize,
+  comm_comb_ops: Pcs::Commitment,
+  comm_comb_mem: Pcs::Commitment,
   _phantom: E,
 }
 
-impl<E: ExtensionField> SparseMatPolyCommitment<E> {
+impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> SparseMatPolyCommitment<E, Pcs> {
   pub fn append_to_transcript(&self, _label: &'static [u8], transcript: &mut Transcript<E>) {
     append_field_to_transcript(b"batch_size", transcript, E::from(self.batch_size as u64));
     append_field_to_transcript(b"num_ops", transcript, E::from(self.num_ops as u64));
@@ -348,6 +376,9 @@ impl<E: ExtensionField> SparseMatPolynomial<E> {
     let mut comb_mem = row.audit_ts.clone();
     comb_mem.extend(&col.audit_ts);
 
+    let comb_ops_ceno_mle = comb_ops.clone().to_ceno_mle();
+    let comb_mem_ceno_mle = comb_mem.clone().to_ceno_mle();
+
     MultiSparseMatPolynomialAsDense {
       batch_size: sparse_polys.len(),
       row: ret_row,
@@ -355,9 +386,10 @@ impl<E: ExtensionField> SparseMatPolynomial<E> {
       val: ret_val_vec,
       comb_ops,
       comb_mem,
+      comb_ops_ceno_mle,
+      comb_mem_ceno_mle,
     }
   }
-
 
   fn evaluate_with_tables(&self, eval_table_rx: &[E], eval_table_ry: &[E]) -> E {
     assert_eq!(self.num_vars_x.pow2(), eval_table_rx.len());
@@ -454,21 +486,34 @@ impl<E: ExtensionField> SparseMatPolynomial<E> {
     }
     M_evals
   }
+}
 
+impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> SparseMatPolyCommitment<E, Pcs> {
   pub fn multi_commit(
     sparse_polys: &[&SparseMatPolynomial<E>],
   ) -> (
-    SparseMatPolyCommitment<E>,
+    SparseMatPolyCommitment<E, Pcs>,
     MultiSparseMatPolynomialAsDense<E>,
   ) {
     let batch_size = sparse_polys.len();
     let dense = SparseMatPolynomial::multi_sparse_to_dense_rep(sparse_polys);
+
+    let l_ops = dense.comb_ops.len();
+    let l_mem = dense.comb_mem.len();
+
+    let (p_ops, _) = Pcs::trim(Pcs::setup(l_ops).expect("Param setup should not fail"), l_ops).unwrap();
+    let (p_mem, _) = Pcs::trim(Pcs::setup(l_mem).expect("Param setup should not fail"), l_mem).unwrap();
+
+    let comm_comb_ops = Pcs::get_pure_commitment(&Pcs::commit(&p_ops, &dense.comb_ops_ceno_mle).expect("Commit should not fail"));
+    let comm_comb_mem = Pcs::get_pure_commitment(&Pcs::commit(&p_mem, &dense.comb_mem_ceno_mle).expect("Commit should not fail"));
 
     (
       SparseMatPolyCommitment {
         batch_size,
         num_mem_cells: dense.row.audit_ts.len(),
         num_ops: dense.row.read_ts[0].len(),
+        comm_comb_ops,
+        comm_comb_mem,
         _phantom: E::ZERO,
       },
       dense,
@@ -480,7 +525,6 @@ impl<E: ExtensionField> MultiSparseMatPolynomialAsDense<E> {
   pub fn deref(&self, row_mem_val: &[E], col_mem_val: &[E]) -> Derefs<E> {
     let row_ops_val = self.row.deref(row_mem_val);
     let col_ops_val = self.col.deref(col_mem_val);
-
     Derefs::new(row_ops_val, col_ops_val)
   }
 }
@@ -649,17 +693,19 @@ impl<E: ExtensionField> PolyEvalNetwork<E> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct HashLayerProof<E: ExtensionField> {
+pub struct HashLayerProof<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
   eval_row: (Vec<E>, Vec<E>, E),
   eval_col: (Vec<E>, Vec<E>, E),
   eval_val: Vec<E>,
   eval_derefs: (Vec<E>, Vec<E>),
-  pub proof_ops: PolyEvalProof<E>,
-  pub proof_mem: PolyEvalProof<E>,
-  pub proof_derefs: DerefsEvalProof<E>,
+  pub comm_ops: Pcs::CommitmentWithWitness,
+  pub proof_ops: Pcs::Proof,
+  pub comm_mem: Pcs::CommitmentWithWitness,
+  pub proof_mem: Pcs::Proof,
+  pub proof_derefs: DerefsEvalProof<E, Pcs>,
 }
 
-impl<E: ExtensionField> HashLayerProof<E> {
+impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> HashLayerProof<E, Pcs> {
   fn protocol_name() -> &'static [u8] {
     b"Sparse polynomial hash layer proof"
   }
@@ -699,7 +745,7 @@ impl<E: ExtensionField> HashLayerProof<E> {
   ) -> Self {
     append_protocol_name(
       transcript,
-      HashLayerProof::<E>::protocol_name(),
+      HashLayerProof::<E, Pcs>::protocol_name(),
     );
 
     let (rand_mem, rand_ops) = rand;
@@ -754,13 +800,11 @@ impl<E: ExtensionField> HashLayerProof<E> {
     debug_assert_eq!(dense.comb_ops.evaluate(&r_joint_ops), joint_claim_eval_ops);
     append_field_to_transcript(b"joint_claim_eval_ops", transcript, joint_claim_eval_ops);
 
-    let proof_ops = PolyEvalProof::prove(
-      &dense.comb_ops,
-      &r_joint_ops,
-      &joint_claim_eval_ops,
-      transcript,
-      random_tape,
-    );
+    let l: usize = 1 << dense.comb_ops.get_num_vars();
+    let mle = dense.comb_ops.clone().to_ceno_mle();
+    let (pp, _vp) = Pcs::trim(Pcs::setup(l), l);
+    let comm_ops = Pcs::commit(&pp, &mle).expect("Commit should not fail.");
+    let proof_ops = Pcs::open(pp, &mle, comm_ops, &r_joint_ops, &joint_claim_eval_ops, transcript).expect("Proof should not fail");
 
     // form a single decommitment using comb_comb_mem at rand_mem
     let evals_mem: Vec<E> = vec![eval_row_audit_ts, eval_col_audit_ts];
@@ -779,20 +823,20 @@ impl<E: ExtensionField> HashLayerProof<E> {
     debug_assert_eq!(dense.comb_mem.evaluate(&r_joint_mem), joint_claim_eval_mem);
     append_field_to_transcript(b"joint_claim_eval_mem", transcript, joint_claim_eval_mem);
 
-    let proof_mem = PolyEvalProof::prove(
-      &dense.comb_mem,
-      &r_joint_mem,
-      &joint_claim_eval_mem,
-      transcript,
-      random_tape,
-    );
+    let l: usize = 1 << dense.comb_mem.get_num_vars();
+    let mle = dense.comb_mem.clone().to_ceno_mle();
+    let (pp, _vp) = Pcs::trim(Pcs::setup(l), l);
+    let comm_mem = Pcs::commit(&pp, &mle).expect("Commit should not fail.");
+    let proof_mem = Pcs::open(pp, &mle, comm_mem, &r_joint_mem, &joint_claim_eval_mem, transcript).expect("Proof should not fail");
 
     HashLayerProof {
       eval_row: (eval_row_addr_vec, eval_row_read_ts_vec, eval_row_audit_ts),
       eval_col: (eval_col_addr_vec, eval_col_read_ts_vec, eval_col_audit_ts),
       eval_val: eval_val_vec,
       eval_derefs,
+      comm_ops,
       proof_ops,
+      comm_mem,
       proof_mem,
       proof_derefs,
     }
@@ -857,7 +901,7 @@ impl<E: ExtensionField> HashLayerProof<E> {
     claims_row: &(E, Vec<E>, Vec<E>, E),
     claims_col: &(E, Vec<E>, Vec<E>, E),
     claims_dotp: &[E],
-    _comm: &SparseMatPolyCommitment<E>,
+    _comm: &SparseMatPolyCommitment<E, Pcs>,
     rx: &[E],
     ry: &[E],
     r_hash: &E,
@@ -867,7 +911,7 @@ impl<E: ExtensionField> HashLayerProof<E> {
     let timer = Timer::new("verify_hash_proof");
     append_protocol_name(
       transcript,
-      HashLayerProof::<E>::protocol_name(),
+      HashLayerProof::<E, Pcs>::protocol_name(),
     );
 
     let (rand_mem, rand_ops) = rand;
@@ -916,9 +960,10 @@ impl<E: ExtensionField> HashLayerProof<E> {
     let mut r_joint_ops = challenges_ops;
     r_joint_ops.extend(rand_ops);
     append_field_to_transcript(b"joint_claim_eval_ops", transcript, joint_claim_eval_ops);
-    self
-      .proof_ops
-      .verify_plain(transcript, &r_joint_ops, &joint_claim_eval_ops)?;
+
+    let l: usize = 1 << poly_evals_ops.get_num_vars();
+    let (_pp, vp) = Pcs::trim(Pcs::setup(l), l);
+    Pcs::verify(vp, self.comm_ops, &r_joint_ops, &joint_claim_eval_ops, self.proof_ops, transcript)?;
 
     // verify proof-mem using comm_comb_mem at rand_mem
     // form a single decommitment using comb_comb_mem at rand_mem
@@ -937,13 +982,13 @@ impl<E: ExtensionField> HashLayerProof<E> {
     r_joint_mem.extend(rand_mem);
     append_field_to_transcript(b"joint_claim_eval_mem", transcript, joint_claim_eval_mem);
 
-    self
-      .proof_mem
-      .verify_plain(transcript, &r_joint_mem, &joint_claim_eval_mem)?;
+    let l: usize = 1 << poly_evals_mem.get_num_vars();
+    let (_pp, vp) = Pcs::trim(Pcs::setup(l), l);
+    Pcs::verify(vp, self.comm_mem, &r_joint_mem, &joint_claim_eval_mem, self.proof_mem, transcript)?;
 
     // verify the claims from the product layer
     let (eval_ops_addr, eval_read_ts, eval_audit_ts) = &self.eval_row;
-    HashLayerProof::verify_helper(
+    HashLayerProof::<E, Pcs>::verify_helper(
       &(rand_mem, rand_ops),
       claims_row,
       eval_row_ops_val,
@@ -956,7 +1001,7 @@ impl<E: ExtensionField> HashLayerProof<E> {
     )?;
 
     let (eval_ops_addr, eval_read_ts, eval_audit_ts) = &self.eval_col;
-    HashLayerProof::verify_helper(
+    HashLayerProof::<E, Pcs>::verify_helper(
       &(rand_mem, rand_ops),
       claims_col,
       eval_col_ops_val,
@@ -1231,12 +1276,12 @@ impl<E: ExtensionField> ProductLayerProof<E> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct PolyEvalNetworkProof<E: ExtensionField> {
+pub struct PolyEvalNetworkProof<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
   pub proof_prod_layer: ProductLayerProof<E>,
-  pub proof_hash_layer: HashLayerProof<E>,
+  pub proof_hash_layer: HashLayerProof<E, Pcs>,
 }
 
-impl<E: ExtensionField> PolyEvalNetworkProof<E> {
+impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> PolyEvalNetworkProof<E, Pcs> {
   fn protocol_name() -> &'static [u8] {
     b"Sparse polynomial evaluation proof"
   }
@@ -1252,7 +1297,7 @@ impl<E: ExtensionField> PolyEvalNetworkProof<E> {
   ) -> Self {
     append_protocol_name(
       transcript,
-      PolyEvalNetworkProof::<E>::protocol_name(),
+      PolyEvalNetworkProof::<E, Pcs>::protocol_name(),
     );
 
     let (proof_prod_layer, rand_mem, rand_ops) = ProductLayerProof::prove(
@@ -1282,7 +1327,7 @@ impl<E: ExtensionField> PolyEvalNetworkProof<E> {
 
   pub fn verify(
     &self,
-    comm: &SparseMatPolyCommitment<E>,
+    comm: &SparseMatPolyCommitment<E, Pcs>,
     r_header: E,
     evals: &[E],
     rx: &[E],
@@ -1294,7 +1339,7 @@ impl<E: ExtensionField> PolyEvalNetworkProof<E> {
     let timer = Timer::new("verify_polyeval_proof");
     append_protocol_name(
       transcript,
-      PolyEvalNetworkProof::<E>::protocol_name(),
+      PolyEvalNetworkProof::<E, Pcs>::protocol_name(),
     );
 
     let num_instances = evals.len();
@@ -1345,11 +1390,11 @@ impl<E: ExtensionField> PolyEvalNetworkProof<E> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SparseMatPolyEvalProof<E: ExtensionField> {
-  pub poly_eval_network_proof: PolyEvalNetworkProof<E>,
+pub struct SparseMatPolyEvalProof<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
+  pub poly_eval_network_proof: PolyEvalNetworkProof<E, Pcs>,
 }
 
-impl<E: ExtensionField> SparseMatPolyEvalProof<E> {
+impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> SparseMatPolyEvalProof<E, Pcs> {
   fn protocol_name() -> &'static [u8] {
     b"Sparse polynomial evaluation proof"
   }
@@ -1380,10 +1425,10 @@ impl<E: ExtensionField> SparseMatPolyEvalProof<E> {
     evals: &[E], // a vector evaluation of \widetilde{M}(r = (rx,ry)) for each M
     transcript: &mut Transcript<E>,
     random_tape: &mut RandomTape<E>,
-  ) -> SparseMatPolyEvalProof<E> {
+  ) -> SparseMatPolyEvalProof<E, Pcs> {
     append_protocol_name(
       transcript,
-      SparseMatPolyEvalProof::<E>::protocol_name(),
+      SparseMatPolyEvalProof::<E, Pcs>::protocol_name(),
     );
 
     // ensure there is one eval for each polynomial in dense
@@ -1391,7 +1436,7 @@ impl<E: ExtensionField> SparseMatPolyEvalProof<E> {
 
     let (mem_rx, mem_ry) = {
       // equalize the lengths of rx and ry
-      let (rx_ext, ry_ext) = SparseMatPolyEvalProof::equalize(rx, ry);
+      let (rx_ext, ry_ext) = SparseMatPolyEvalProof::<E, Pcs>::equalize(rx, ry);
       let poly_rx = EqPolynomial::new(rx_ext).evals();
       let poly_ry = EqPolynomial::new(ry_ext).evals();
       (poly_rx, poly_ry)
@@ -1441,7 +1486,7 @@ impl<E: ExtensionField> SparseMatPolyEvalProof<E> {
 
   pub fn verify(
     &self,
-    comm: &SparseMatPolyCommitment<E>,
+    comm: &SparseMatPolyCommitment<E, Pcs>,
     r_header: E,
     rx: &[E], // point at which the polynomial is evaluated
     ry: &[E],
@@ -1450,11 +1495,11 @@ impl<E: ExtensionField> SparseMatPolyEvalProof<E> {
   ) -> Result<(), ProofVerifyError> {
     append_protocol_name(
       transcript,
-      SparseMatPolyEvalProof::<E>::protocol_name(),
+      SparseMatPolyEvalProof::<E, Pcs>::protocol_name(),
     );
 
     // equalize the lengths of rx and ry
-    let (rx_ext, ry_ext) = SparseMatPolyEvalProof::equalize(rx, ry);
+    let (rx_ext, ry_ext) = SparseMatPolyEvalProof::<E, Pcs>::equalize(rx, ry);
 
     let (nz, num_mem_cells) = (comm.num_ops, comm.num_mem_cells);
     assert_eq!(rx_ext.len().pow2(), num_mem_cells);

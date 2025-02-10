@@ -122,9 +122,9 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> DerefsEvalProof<E, P
 
     let l: usize = 1 << joint_poly.get_num_vars();
     let mle = joint_poly.to_ceno_mle();
-    let (pp, _vp) = Pcs::trim(Pcs::setup(l), l);
+    let (pp, _vp) = Pcs::trim(Pcs::setup(l).expect("Param setup should not fail."), l).expect("Param trim should not fail.");
     let comm_derefs = Pcs::commit(&pp, &mle).expect("Commit should not fail.");
-    let proof_derefs = Pcs::open(pp, &mle, comm_derefs, &r_joint, &eval_joint, transcript).expect("Proof should not fail");
+    let proof_derefs = Pcs::open(&pp, &mle, &comm_derefs, &r_joint, &eval_joint, transcript).expect("Proof should not fail");
 
     Self {
       comm_derefs,
@@ -181,8 +181,12 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> DerefsEvalProof<E, P
     append_field_to_transcript(b"joint_claim_eval", transcript, joint_claim_eval);
 
     let l: usize = 1 << poly_evals.get_num_vars();
-    let (_pp, vp) = Pcs::trim(Pcs::setup(l), l);
-    Pcs::verify(vp, proof.comm_derefs, &r_joint, &joint_claim_eval, proof.proof_derefs, transcript)
+    let (_pp, vp) = Pcs::trim(Pcs::setup(l).expect("Param setup should not fail."), l).expect("Param trim should not fail.");
+    let r = Pcs::verify(&vp, &Pcs::get_pure_commitment(&proof.comm_derefs), &r_joint, &joint_claim_eval, &proof.proof_derefs, transcript);
+    match r {
+      Ok(()) => Ok(()),
+      Error => ProofVerifyError::InternalError
+    }
   }
 
   // verify evaluations of both polynomials at r
@@ -202,7 +206,7 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> DerefsEvalProof<E, P
     evals.extend(eval_col_ops_val_vec);
     evals.resize(evals.len().next_power_of_two(), E::ZERO);
 
-    DerefsEvalProof::<E, Pcs>::verify_single(&self.proof_derefs, r, evals, transcript)
+    DerefsEvalProof::<E, Pcs>::verify_single(&self, r, evals, transcript)
   }
 }
 
@@ -802,9 +806,9 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> HashLayerProof<E, Pc
 
     let l: usize = 1 << dense.comb_ops.get_num_vars();
     let mle = dense.comb_ops.clone().to_ceno_mle();
-    let (pp, _vp) = Pcs::trim(Pcs::setup(l), l);
+    let (pp, _vp) = Pcs::trim(Pcs::setup(l).expect("Param setup shuold not fail."), l).expect("Param trim should not fail.");
     let comm_ops = Pcs::commit(&pp, &mle).expect("Commit should not fail.");
-    let proof_ops = Pcs::open(pp, &mle, comm_ops, &r_joint_ops, &joint_claim_eval_ops, transcript).expect("Proof should not fail");
+    let proof_ops = Pcs::open(&pp, &mle, &comm_ops, &r_joint_ops, &joint_claim_eval_ops, transcript).expect("Proof should not fail");
 
     // form a single decommitment using comb_comb_mem at rand_mem
     let evals_mem: Vec<E> = vec![eval_row_audit_ts, eval_col_audit_ts];
@@ -825,9 +829,9 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> HashLayerProof<E, Pc
 
     let l: usize = 1 << dense.comb_mem.get_num_vars();
     let mle = dense.comb_mem.clone().to_ceno_mle();
-    let (pp, _vp) = Pcs::trim(Pcs::setup(l), l);
+    let (pp, _vp) = Pcs::trim(Pcs::setup(l).expect("Param setup should not fail."), l).expect("Param trim should not fail.");
     let comm_mem = Pcs::commit(&pp, &mle).expect("Commit should not fail.");
-    let proof_mem = Pcs::open(pp, &mle, comm_mem, &r_joint_mem, &joint_claim_eval_mem, transcript).expect("Proof should not fail");
+    let proof_mem = Pcs::open(&pp, &mle, &comm_mem, &r_joint_mem, &joint_claim_eval_mem, transcript).expect("Proof should not fail");
 
     HashLayerProof {
       eval_row: (eval_row_addr_vec, eval_row_read_ts_vec, eval_row_audit_ts),
@@ -962,8 +966,12 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> HashLayerProof<E, Pc
     append_field_to_transcript(b"joint_claim_eval_ops", transcript, joint_claim_eval_ops);
 
     let l: usize = 1 << poly_evals_ops.get_num_vars();
-    let (_pp, vp) = Pcs::trim(Pcs::setup(l), l);
-    Pcs::verify(vp, self.comm_ops, &r_joint_ops, &joint_claim_eval_ops, self.proof_ops, transcript)?;
+    let (_pp, vp) = Pcs::trim(Pcs::setup(l).expect("Param setup should not fail."), l).expect("Param trim should not fail.");
+    let r = Pcs::verify(&vp, &Pcs::get_pure_commitment(&self.comm_ops), &r_joint_ops, &joint_claim_eval_ops, &self.proof_ops, transcript);
+    match r {
+      Ok(()) => Ok(()),
+      Error => ProofVerifyError::InternalError
+    }
 
     // verify proof-mem using comm_comb_mem at rand_mem
     // form a single decommitment using comb_comb_mem at rand_mem
@@ -983,8 +991,12 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> HashLayerProof<E, Pc
     append_field_to_transcript(b"joint_claim_eval_mem", transcript, joint_claim_eval_mem);
 
     let l: usize = 1 << poly_evals_mem.get_num_vars();
-    let (_pp, vp) = Pcs::trim(Pcs::setup(l), l);
-    Pcs::verify(vp, self.comm_mem, &r_joint_mem, &joint_claim_eval_mem, self.proof_mem, transcript)?;
+    let (_pp, vp) = Pcs::trim(Pcs::setup(l).expect("Param setup should not fail."), l).expect("Param trim should not fail.");
+    let r = Pcs::verify(&vp, &Pcs::get_pure_commitment(&self.comm_mem), &r_joint_mem, &joint_claim_eval_mem, &self.proof_mem, transcript);
+    match r {
+      Ok(()) => Ok(()),
+      Error => ProofVerifyError::InternalError
+    }
 
     // verify the claims from the product layer
     let (eval_ops_addr, eval_read_ts, eval_audit_ts) = &self.eval_row;

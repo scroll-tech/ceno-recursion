@@ -39,7 +39,7 @@ mod unipoly;
 use std::{
   cmp::{max, Ordering},
   fs::File,
-  io::Write,
+  io::Write, marker::PhantomData,
 };
 
 use dense_mlpoly::DensePolynomial;
@@ -326,7 +326,10 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> IOProofs<E, Pcs> {
 // Finally, show shifted(C) = orig(C) * C^(shift_size) + rc * openings, where rc * openings are the first few entries of the original poly dot product with the power series of C
 #[derive(Serialize, Deserialize, Debug)]
 struct ShiftProofs<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
-  proof: Pcs::Proof,
+  // _debug
+  // proof: Pcs::Proof,
+  _phantom_e: E,
+  _phantom_c: Pcs::Commitment
 }
 
 impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> ShiftProofs<E, Pcs> {
@@ -382,7 +385,9 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> ShiftProofs<E, Pcs> 
     // );
 
     ShiftProofs {
-      proof: addr_phy_mems_shift_proof,
+      // proof: addr_phy_mems_shift_proof,
+      _phantom_e: E::from_u128(0),
+      _phantom_c: Pcs::Commitment::default(),
     }
   }
 
@@ -762,6 +767,8 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     */
     let dense_commit_size = 0;
 
+    // _debug_serialization
+    /*
     let block_proof_size = bincode::serialize(&self.block_r1cs_sat_proof)
       .unwrap()
       .len()
@@ -774,7 +781,11 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
       + bincode::serialize(&self.block_r1cs_eval_proof_list)
         .unwrap()
         .len();
+    */
+    let block_proof_size = 0;
 
+    // _debug_serialization
+    /*
     let pairwise_proof_size = bincode::serialize(&self.pairwise_check_r1cs_sat_proof)
       .unwrap()
       .len()
@@ -787,7 +798,11 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
       + bincode::serialize(&self.pairwise_check_r1cs_eval_proof)
         .unwrap()
         .len();
+    */
+    let pairwise_proof_size = 0;
 
+    // _debug_serialization
+    /*
     let perm_proof_size = bincode::serialize(&self.perm_root_r1cs_sat_proof)
       .unwrap()
       .len()
@@ -797,6 +812,9 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
       + bincode::serialize(&self.perm_root_r1cs_eval_proof)
         .unwrap()
         .len();
+    */
+    let perm_proof_size = 0;
+
     // + bincode::serialize(&self.perm_poly_poly_list).unwrap().len()
     // + bincode::serialize(&self.proof_eval_perm_poly_prod_list).unwrap().len();
 
@@ -2039,7 +2057,9 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
             &mut random_tape,
           );
 
-          let proof_encoded: Vec<u8> = bincode::serialize(&proof).unwrap();
+          // _debug_serialization
+          // let proof_encoded: Vec<u8> = bincode::serialize(&proof).unwrap();
+          let proof_encoded: Vec<u8> = vec![];
           Timer::print(&format!("len_r1cs_eval_proof {:?}", proof_encoded.len()));
 
           r1cs_eval_proof_list.push(proof);
@@ -2155,7 +2175,9 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
           &mut random_tape,
         );
 
-        let proof_encoded: Vec<u8> = bincode::serialize(&proof).unwrap();
+        // _debug_serialization
+        // let proof_encoded: Vec<u8> = bincode::serialize(&proof).unwrap();
+        let proof_encoded: Vec<u8> = vec![];
         Timer::print(&format!("len_r1cs_eval_proof {:?}", proof_encoded.len()));
         proof
       };
@@ -2270,7 +2292,9 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
           &mut random_tape,
         );
 
-        let proof_encoded: Vec<u8> = bincode::serialize(&proof).unwrap();
+        // _debug_serialization
+        // let proof_encoded: Vec<u8> = bincode::serialize(&proof).unwrap();
+        let proof_encoded: Vec<u8> = vec![];
         Timer::print(&format!("len_r1cs_eval_proof {:?}", proof_encoded.len()));
         proof
       };

@@ -1279,7 +1279,7 @@ impl<E: ExtensionField> ProductLayerProof<E> {
   }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct PolyEvalNetworkProof<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
   pub proof_prod_layer: ProductLayerProof<E>,
   pub proof_hash_layer: HashLayerProof<E, Pcs>,
@@ -1393,7 +1393,7 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> PolyEvalNetworkProof
   }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct SparseMatPolyEvalProof<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
   pub poly_eval_network_proof: PolyEvalNetworkProof<E, Pcs>,
 }

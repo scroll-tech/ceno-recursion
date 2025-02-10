@@ -19,6 +19,7 @@ use super::sparse_mlpoly::{
 use super::timer::Timer;
 use flate2::{write::ZlibEncoder, Compression};
 use serde::{Deserialize, Serialize};
+use serde::ser::{Serializer, SerializeStruct};
 use std::iter::zip;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -563,9 +564,20 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> R1CSCommitment<E, Pc
   }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct R1CSEvalProof<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
   proof: SparseMatPolyEvalProof<E, Pcs>,
+}
+
+impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> Serialize for R1CSEvalProof<E, Pcs> {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+      S: Serializer,
+  {
+      let mut state = serializer.serialize_struct("R1CSEvalProof<E, Pcs>", 1)?;
+      state.serialize_field("_inner", &0)?;
+      state.end()
+  }
 }
 
 impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> R1CSEvalProof<E, Pcs> {

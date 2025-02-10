@@ -185,7 +185,7 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> DerefsEvalProof<E, P
     let r = Pcs::verify(&vp, &Pcs::get_pure_commitment(&proof.comm_derefs), &r_joint, &joint_claim_eval, &proof.proof_derefs, transcript);
     match r {
       Ok(()) => Ok(()),
-      Error => ProofVerifyError::InternalError
+      Err(e) => Err(ProofVerifyError::InternalError)
     }
   }
 
@@ -774,9 +774,9 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> HashLayerProof<E, Pc
     // evaluate row_addr, row_read-ts, col_addr, col_read-ts, val at rand_ops
     // evaluate row_audit_ts and col_audit_ts at rand_mem
     let (eval_row_addr_vec, eval_row_read_ts_vec, eval_row_audit_ts) =
-      HashLayerProof::prove_helper((rand_mem, rand_ops), &dense.row);
+      HashLayerProof::<E, Pcs>::prove_helper((rand_mem, rand_ops), &dense.row);
     let (eval_col_addr_vec, eval_col_read_ts_vec, eval_col_audit_ts) =
-      HashLayerProof::prove_helper((rand_mem, rand_ops), &dense.col);
+      HashLayerProof::<E, Pcs>::prove_helper((rand_mem, rand_ops), &dense.col);
     let eval_val_vec = (0..dense.val.len())
       .map(|i| dense.val[i].evaluate(rand_ops))
       .collect::<Vec<E>>();
@@ -970,7 +970,7 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> HashLayerProof<E, Pc
     let r = Pcs::verify(&vp, &Pcs::get_pure_commitment(&self.comm_ops), &r_joint_ops, &joint_claim_eval_ops, &self.proof_ops, transcript);
     match r {
       Ok(()) => Ok(()),
-      Error => ProofVerifyError::InternalError
+      Err(e) => Err(ProofVerifyError::InternalError)
     }
 
     // verify proof-mem using comm_comb_mem at rand_mem

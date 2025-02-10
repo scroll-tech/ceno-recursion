@@ -967,11 +967,7 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> HashLayerProof<E, Pc
 
     let l: usize = 1 << poly_evals_ops.get_num_vars();
     let (_pp, vp) = Pcs::trim(Pcs::setup(l).expect("Param setup should not fail."), l).expect("Param trim should not fail.");
-    let r = Pcs::verify(&vp, &Pcs::get_pure_commitment(&self.comm_ops), &r_joint_ops, &joint_claim_eval_ops, &self.proof_ops, transcript);
-    match r {
-      Ok(()) => Ok(()),
-      Err(e) => Err(ProofVerifyError::InternalError)
-    }
+    Pcs::verify(&vp, &Pcs::get_pure_commitment(&self.comm_ops), &r_joint_ops, &joint_claim_eval_ops, &self.proof_ops, transcript).map_err(|e| ProofVerifyError::InternalError)?;
 
     // verify proof-mem using comm_comb_mem at rand_mem
     // form a single decommitment using comb_comb_mem at rand_mem
@@ -992,11 +988,7 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> HashLayerProof<E, Pc
 
     let l: usize = 1 << poly_evals_mem.get_num_vars();
     let (_pp, vp) = Pcs::trim(Pcs::setup(l).expect("Param setup should not fail."), l).expect("Param trim should not fail.");
-    let r = Pcs::verify(&vp, &Pcs::get_pure_commitment(&self.comm_mem), &r_joint_mem, &joint_claim_eval_mem, &self.proof_mem, transcript);
-    match r {
-      Ok(()) => Ok(()),
-      Error => ProofVerifyError::InternalError
-    }
+    Pcs::verify(&vp, &Pcs::get_pure_commitment(&self.comm_mem), &r_joint_mem, &joint_claim_eval_mem, &self.proof_mem, transcript).map_err(|e| ProofVerifyError::InternalError)?;
 
     // verify the claims from the product layer
     let (eval_ops_addr, eval_read_ts, eval_audit_ts) = &self.eval_row;

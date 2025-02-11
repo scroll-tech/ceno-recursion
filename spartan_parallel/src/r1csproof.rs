@@ -820,7 +820,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
       let rq_short = rq[rq.len() - num_vars_q..].to_vec();
       let r = [rq_short, ry_short.clone()].concat();
 
-      pcs_verify::<E, Pcs>(&vp, &comm_w[idx], &r, &eval_Zr_list[idx], proof, transcript);
+      pcs_verify::<E, Pcs>(&vp, &comm_w[idx], &r, &eval_Zr_list[idx], proof, transcript).map_err(|_e| ProofVerifyError::InternalError)?
     }
 
     Ok(())

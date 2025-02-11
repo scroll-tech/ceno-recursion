@@ -1628,16 +1628,16 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
         &perm_exec_w3_v_comm,
         &perm_exec_w3_shifted_v_comm,
       ] {
-        Pcs::write_commitment(comm, transcript);
+        Pcs::write_commitment(comm, transcript).expect("Appending commitment should not fail");
       }
       for comm in block_w2_v_comm.iter() {
-        Pcs::write_commitment(comm, transcript);
+        Pcs::write_commitment(comm, transcript).expect("Appending commitment should not fail");
       }
       for comm in block_w3_v_comm.iter() {
-        Pcs::write_commitment(comm, transcript);
+        Pcs::write_commitment(comm, transcript).expect("Appending commitment should not fail");
       }
       for comm in block_w3_shifted_v_comm.iter() {
-        Pcs::write_commitment(comm, transcript);
+        Pcs::write_commitment(comm, transcript).expect("Appending commitment should not fail");
       }
 
       (

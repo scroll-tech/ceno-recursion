@@ -3,7 +3,7 @@
 #![allow(clippy::needless_range_loop)]
 use ff_ext::ExtensionField;
 use mpcs::PolynomialCommitmentScheme;
-use multilinear_extensions::mle::DenseMultilinearExtension;
+use multilinear_extensions::mle::{DenseMultilinearExtension, MultilinearExtension};
 use super::dense_mlpoly::DensePolynomial;
 use super::dense_mlpoly::{EqPolynomial, IdentityPolynomial};
 use super::errors::ProofVerifyError;
@@ -277,8 +277,6 @@ pub struct MultiSparseMatPolynomialAsDense<E: ExtensionField> {
   val: Vec<DensePolynomial<E>>,
   row: AddrTimestamps<E>,
   col: AddrTimestamps<E>,
-  comb_ops: DensePolynomial<E>,
-  comb_mem: DensePolynomial<E>,
   comb_ops_ceno_mle: DenseMultilinearExtension<E>,
   comb_mem_ceno_mle: DenseMultilinearExtension<E>,
 }
@@ -388,8 +386,6 @@ impl<E: ExtensionField> SparseMatPolynomial<E> {
       row: ret_row,
       col: ret_col,
       val: ret_val_vec,
-      comb_ops,
-      comb_mem,
       comb_ops_ceno_mle,
       comb_mem_ceno_mle,
     }
@@ -502,8 +498,8 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> SparseMatPolyCommitm
     let batch_size = sparse_polys.len();
     let dense = SparseMatPolynomial::multi_sparse_to_dense_rep(sparse_polys);
 
-    let l_ops = dense.comb_ops.len();
-    let l_mem = dense.comb_mem.len();
+    let l_ops = 1 << dense.comb_ops_ceno_mle.num_vars;
+    let l_mem = 1 << dense.comb_mem_ceno_mle.num_vars;
 
     let (p_ops, _) = Pcs::trim(Pcs::setup(l_ops).expect("Param setup should not fail"), l_ops).unwrap();
     let (p_mem, _) = Pcs::trim(Pcs::setup(l_mem).expect("Param setup should not fail"), l_mem).unwrap();
@@ -801,14 +797,13 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> HashLayerProof<E, Pc
     let joint_claim_eval_ops = poly_evals_ops[0];
     let mut r_joint_ops = challenges_ops;
     r_joint_ops.extend(rand_ops);
-    debug_assert_eq!(dense.comb_ops.evaluate(&r_joint_ops), joint_claim_eval_ops);
+    debug_assert_eq!(dense.comb_ops_ceno_mle.evaluate(&r_joint_ops), joint_claim_eval_ops);
     append_field_to_transcript(b"joint_claim_eval_ops", transcript, joint_claim_eval_ops);
 
-    let l: usize = 1 << dense.comb_ops.get_num_vars();
-    let mle = dense.comb_ops.clone().to_ceno_mle();
+    let l: usize = 1 << dense.comb_ops_ceno_mle.num_vars;
     let (pp, _vp) = Pcs::trim(Pcs::setup(l).expect("Param setup shuold not fail."), l).expect("Param trim should not fail.");
-    let comm_ops = Pcs::commit(&pp, &mle).expect("Commit should not fail.");
-    let proof_ops = Pcs::open(&pp, &mle, &comm_ops, &r_joint_ops, &joint_claim_eval_ops, transcript).expect("Proof should not fail");
+    let comm_ops = Pcs::commit(&pp, &dense.comb_ops_ceno_mle).expect("Commit should not fail.");
+    let proof_ops = Pcs::open(&pp, &dense.comb_ops_ceno_mle, &comm_ops, &r_joint_ops, &joint_claim_eval_ops, transcript).expect("Proof should not fail");
 
     // form a single decommitment using comb_comb_mem at rand_mem
     let evals_mem: Vec<E> = vec![eval_row_audit_ts, eval_col_audit_ts];
@@ -824,14 +819,13 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> HashLayerProof<E, Pc
     let joint_claim_eval_mem = poly_evals_mem[0];
     let mut r_joint_mem = challenges_mem;
     r_joint_mem.extend(rand_mem);
-    debug_assert_eq!(dense.comb_mem.evaluate(&r_joint_mem), joint_claim_eval_mem);
+    debug_assert_eq!(dense.comb_mem_ceno_mle.evaluate(&r_joint_mem), joint_claim_eval_mem);
     append_field_to_transcript(b"joint_claim_eval_mem", transcript, joint_claim_eval_mem);
 
-    let l: usize = 1 << dense.comb_mem.get_num_vars();
-    let mle = dense.comb_mem.clone().to_ceno_mle();
+    let l: usize = 1 << dense.comb_mem_ceno_mle.num_vars;
     let (pp, _vp) = Pcs::trim(Pcs::setup(l).expect("Param setup should not fail."), l).expect("Param trim should not fail.");
-    let comm_mem = Pcs::commit(&pp, &mle).expect("Commit should not fail.");
-    let proof_mem = Pcs::open(&pp, &mle, &comm_mem, &r_joint_mem, &joint_claim_eval_mem, transcript).expect("Proof should not fail");
+    let comm_mem = Pcs::commit(&pp, &dense.comb_mem_ceno_mle).expect("Commit should not fail.");
+    let proof_mem = Pcs::open(&pp, &dense.comb_mem_ceno_mle, &comm_mem, &r_joint_mem, &joint_claim_eval_mem, transcript).expect("Proof should not fail");
 
     HashLayerProof {
       eval_row: (eval_row_addr_vec, eval_row_read_ts_vec, eval_row_audit_ts),

@@ -11,16 +11,6 @@ use rayon::{iter::ParallelIterator, slice::ParallelSliceMut};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 
-// _debug
-/*
-#[derive(Debug, Clone)]
-pub struct DensePolynomial<E: ExtensionField> {
-  num_vars: usize, // the number of variables in the multilinear polynomial
-  len: usize,
-  Z: Vec<E>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
-}
-*/
-
 pub struct EqPolynomial<E: ExtensionField> {
   r: Vec<E>,
 }

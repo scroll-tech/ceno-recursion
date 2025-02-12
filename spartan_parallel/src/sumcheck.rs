@@ -69,7 +69,6 @@ impl<E: ExtensionField> SumcheckInstanceProof<E> {
 }
 
 impl<E: ExtensionField> SumcheckInstanceProof<E> {
-  // _debug: remove native sumcheck prover
   pub fn prove_cubic<F>(
     claim: &E,
     num_rounds: usize,

@@ -948,7 +948,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
     let param = Pcs::setup(num_vars).unwrap();
     let (pp, _error) = Pcs::trim(param, num_vars).unwrap();
     // create a multilinear polynomial using the supplied assignment for variables
-    let poly = DenseMultilinearExtension::from_evaluation_vec_smart(mat_concat_p.len().log_2(), mat_concat_p);
+    let poly = DenseMultilinearExtension::from_evaluations_vec(mat_concat_p.len().log_2(), mat_concat_p);
     let p_comm = Pcs::commit(&pp, &poly).unwrap();
     let v_comm = Pcs::get_pure_commitment(&p_comm);
     (poly, p_comm, v_comm)

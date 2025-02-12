@@ -241,19 +241,19 @@ impl<E: ExtensionField> AddrTimestamps<E> {
         audit_ts[addr] = w_ts;
       }
 
-      let ops_addr_inst_evals = ops_addr_inst.into_iter().map(|&n| E::from_u128(n as u128)).collect::<Vec<E>>();
-      let read_ts_evals = read_ts.into_iter().map(|n| E::from_u128(n as u128)).collect::<Vec<E>>();
-      ops_addr_vec.push(DenseMultilinearExtension::from_evaluation_vec_smart(ops_addr_inst_evals.len().log_2(), ops_addr_inst_evals));
-      read_ts_vec.push(DenseMultilinearExtension::from_evaluation_vec_smart(read_ts_evals.len().log_2(), read_ts_evals));
+      let ops_addr_inst_evals = ops_addr_inst.into_iter().map(|&n| E::from_u128(n as u128).as_bases()[0]).collect::<Vec<E::BaseField>>();
+      let read_ts_evals = read_ts.into_iter().map(|n| E::from_u128(n as u128).as_bases()[0]).collect::<Vec<E::BaseField>>();
+      ops_addr_vec.push(DenseMultilinearExtension::from_evaluations_vec(ops_addr_inst_evals.len().log_2(), ops_addr_inst_evals));
+      read_ts_vec.push(DenseMultilinearExtension::from_evaluations_vec(read_ts_evals.len().log_2(), read_ts_evals));
     }
 
-    let audit_ts_evals = audit_ts.into_iter().map(|n| E::from_u128(n as u128)).collect::<Vec<E>>();
+    let audit_ts_evals = audit_ts.into_iter().map(|n| E::from_u128(n as u128).as_bases()[0]).collect::<Vec<E::BaseField>>();
 
     AddrTimestamps {
       ops_addr: ops_addr_vec,
       ops_addr_usize: ops_addr,
       read_ts: read_ts_vec,
-      audit_ts: DenseMultilinearExtension::from_evaluation_vec_smart(audit_ts_evals.len().log_2(), audit_ts_evals),
+      audit_ts: DenseMultilinearExtension::from_evaluations_vec(audit_ts_evals.len().log_2(), audit_ts_evals),
     }
   }
 
@@ -261,11 +261,11 @@ impl<E: ExtensionField> AddrTimestamps<E> {
     let evals = (0..addr.len())
       .map(|i| {
         let a = addr[i];
-        mem_val[a]
+        mem_val[a].as_bases()[0]
       })
-      .collect::<Vec<E>>();
+      .collect::<Vec<E::BaseField>>();
 
-    DenseMultilinearExtension::from_evaluation_vec_smart(evals.len().log_2(), evals)
+    DenseMultilinearExtension::from_evaluations_vec(evals.len().log_2(), evals)
   }
 
   pub fn deref(&self, mem_val: &[E]) -> Vec<DenseMultilinearExtension<E>> {
@@ -350,7 +350,8 @@ impl<E: ExtensionField> SparseMatPolynomial<E> {
       let (ops_row, ops_col, val) = poly.sparse_to_dense_vecs(N);
       ops_row_vec.push(ops_row);
       ops_col_vec.push(ops_col);
-      val_vec.push(DenseMultilinearExtension::from_evaluation_vec_smart(val.len().log_2(), val));
+      let val = val.into_iter().map(|e| e.as_bases()[0]).collect::<Vec<E::BaseField>>();
+      val_vec.push(DenseMultilinearExtension::from_evaluations_vec(val.len().log_2(), val));
     }
 
     let any_poly = &sparse_polys[0];

@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 use super::custom_dense_mlpoly::DensePolynomialPqx;
-use super::dense_mlpoly::{DensePolynomial, EqPolynomial};
+use super::dense_mlpoly::EqPolynomial;
+use multilinear_extensions::mle::{DenseMultilinearExtension, MultilinearExtension};
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::r1csinstance::R1CSInstance;
@@ -8,12 +9,14 @@ use super::sumcheck::SumcheckInstanceProof;
 use super::timer::Timer;
 use super::transcript::{Transcript, append_protocol_name, challenge_vector, challenge_scalar, append_field_to_transcript};
 use ff_ext::ExtensionField;
-use mpcs::PolynomialCommitmentScheme;
+use itertools::max;
+use mpcs::{pcs_open, PolynomialCommitmentScheme};
 use crate::{ProverWitnessSecInfo, VerifierWitnessSecInfo};
 use serde::Serialize;
 use std::cmp::min;
 use std::iter::zip;
 use rayon::prelude::*;
+use mpcs::pcs_verify;
 
 #[derive(Serialize, Debug)]
 pub struct R1CSProof<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
@@ -63,9 +66,9 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     num_rounds_p: usize,
     num_proofs: &Vec<usize>,
     num_cons: &Vec<usize>,
-    evals_tau_p: &mut DensePolynomial<E>,
-    evals_tau_q: &mut DensePolynomial<E>,
-    evals_tau_x: &mut DensePolynomial<E>,
+    evals_tau_p: &mut DenseMultilinearExtension<E>,
+    evals_tau_q: &mut DenseMultilinearExtension<E>,
+    evals_tau_x: &mut DenseMultilinearExtension<E>,
     evals_Az: &mut DensePolynomialPqx<E>,
     evals_Bz: &mut DensePolynomialPqx<E>,
     evals_Cz: &mut DensePolynomialPqx<E>,
@@ -106,7 +109,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     num_witness_secs: usize,
     num_inputs: Vec<Vec<usize>>,
     claim: &E,
-    evals_eq: &mut DensePolynomial<E>,
+    evals_eq: &mut DenseMultilinearExtension<E>,
     evals_ABC: &mut DensePolynomialPqx<E>,
     evals_z: &mut DensePolynomialPqx<E>,
     transcript: &mut Transcript<E>,
@@ -240,9 +243,12 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     let tau_x = challenge_vector(transcript, b"challenge_tau_x", num_rounds_x);
 
     // compute the initial evaluation table for R(\tau, x)
-    let mut poly_tau_p = DensePolynomial::new(EqPolynomial::new(tau_p).evals());
-    let mut poly_tau_q = DensePolynomial::new(EqPolynomial::new(tau_q).evals());
-    let mut poly_tau_x = DensePolynomial::new(EqPolynomial::new(tau_x).evals());
+    let tau_p_evals = EqPolynomial::new(tau_p).evals();
+    let tau_q_evals = EqPolynomial::new(tau_q).evals();
+    let tau_x_evals = EqPolynomial::new(tau_x).evals();
+    let mut poly_tau_p = DenseMultilinearExtension::from_evaluation_vec_smart(tau_p_evals.len().log_2(), tau_p_evals);
+    let mut poly_tau_q = DenseMultilinearExtension::from_evaluation_vec_smart(tau_q_evals.len().log_2(), tau_q_evals);
+    let mut poly_tau_x = DenseMultilinearExtension::from_evaluation_vec_smart(tau_x_evals.len().log_2(), tau_x_evals);
     let (mut poly_Az, mut poly_Bz, mut poly_Cz) = inst.multiply_vec_block(
       num_instances,
       num_proofs.clone(),
@@ -272,9 +278,9 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
       transcript,
     );
 
-    assert_eq!(poly_tau_p.len(), 1);
-    assert_eq!(poly_tau_q.len(), 1);
-    assert_eq!(poly_tau_x.len(), 1);
+    assert_eq!(poly_tau_p.evaluations().len(), 1);
+    assert_eq!(poly_tau_q.evaluations().len(), 1);
+    assert_eq!(poly_tau_x.evaluations().len(), 1);
     assert_eq!(poly_Az.len(), 1);
     assert_eq!(poly_Bz.len(), 1);
     assert_eq!(poly_Cz.len(), 1);
@@ -282,7 +288,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     timer_sc_proof_phase1.stop();
 
     let (_tau_claim, Az_claim, Bz_claim, Cz_claim) = (
-      &(poly_tau_p[0] * poly_tau_q[0] * poly_tau_x[0]),
+      &(poly_tau_p.get_ext_field_vec()[0] * poly_tau_q.get_ext_field_vec()[0] * poly_tau_x.get_ext_field_vec()[0]),
       &poly_Az.index(0, 0, 0, 0),
       &poly_Bz.index(0, 0, 0, 0),
       &poly_Cz.index(0, 0, 0, 0),
@@ -353,7 +359,8 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     timer_tmp.stop();
 
     // An Eq function to match p with rp
-    let mut eq_p_rp_poly = DensePolynomial::new(EqPolynomial::new(rp).evals());
+    let rp_evals = EqPolynomial::new(rp).evals();
+    let mut eq_p_rp_poly = DenseMultilinearExtension::from_evaluation_vec_smart(rp_evals.len().log_2(), rp_evals);
 
     // Sumcheck 2: (rA + rB + rC) * Z * eq(p) = e
     let timer_tmp = Timer::new("prove_sum_check");
@@ -432,18 +439,51 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
       }
     }
 
-    /*
-    let proof_eval_vars_at_ry_list = PolyEvalProof::prove_batched_instances_disjoint_rounds(
-      &poly_list,
-      &num_proofs_list,
-      &num_inputs_list,
-      &rq,
-      &ry,
-      &Zr_list,
-      transcript,
-      random_tape,
-    );
-    */
+    let max_len = max(poly_list.iter().map(|&p| p.num_vars)).unwrap().next_power_of_two();
+    let param = Pcs::setup(max_len).unwrap();
+    let (pp, _vp) = Pcs::trim(param, max_len).unwrap();
+
+    let mut proof_eval_vars_at_ry_list: Vec<Pcs::Proof> = Vec::new();
+    let mut proof_idx: usize = 0;
+    for i in 0..num_witness_secs {
+      let w = witness_secs[i];
+      let wit_sec_num_instance = w.w_mat.len();
+      for p in 0..wit_sec_num_instance {
+        let poly = poly_list[proof_idx];
+
+        let num_proofs = num_proofs_list[proof_idx];
+        let num_inputs = num_inputs_list[proof_idx];
+        let num_vars_q = num_proofs.log_2();
+        let num_vars_y = num_inputs.log_2();
+        let ry_short = {
+          if num_vars_y >= ry.len() {
+            let mut ry_pad: Vec<E> = vec![E::ZERO; num_vars_y - ry.len()];
+            ry_pad.extend_from_slice(&ry);
+            ry_pad
+          }
+          // Else ry_short is the last w.num_inputs[p].log_2() entries of ry
+          // thus, to obtain the actual ry, need to multiply by (1 - ry2)(1 - ry3)..., which is ry_factors[num_rounds_y - w.num_inputs[p]]
+          else {
+            ry[ry.len() - num_vars_y..].to_vec()
+          }
+        };
+        let rq_short = rq[rq.len() - num_vars_q..].to_vec();
+        let r = [rq_short, ry_short.clone()].concat();
+        let Zr = Zr_list[proof_idx];
+  
+        let pcs_proof: Pcs::Proof = pcs_open::<E, Pcs>(
+          &pp, 
+          poly, 
+          &witness_secs[i].comm_w[p],
+          &r,
+          &Zr, 
+          transcript
+        ).expect("PCS proof should not fail");
+  
+        proof_eval_vars_at_ry_list.push(pcs_proof);
+        proof_idx += 1;
+      }
+    }
 
     // Bind the resulting witness list to rp
     // poly_vars stores the result of each witness matrix bounded to (rq_short ++ ry)
@@ -497,7 +537,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     }
     timer_polyeval.stop();
 
-    let poly_vars = DensePolynomial::new(eval_vars_comb_list);
+    let poly_vars = DenseMultilinearExtension::from_evaluation_vec_smart(eval_vars_comb_list.len().log_2(), eval_vars_comb_list);
     let eval_vars_at_ry = poly_vars.evaluate(&rp);
     // prove the final step of sum-check #2
     // Deferred to verifier
@@ -510,8 +550,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
         claims_phase2: (*Az_claim, *Bz_claim, *Cz_claim),
         eval_vars_at_ry_list: raw_eval_vars_at_ry_list,
         eval_vars_at_ry,
-        proof_eval_vars_at_ry_list: Vec::new(),
-        // proof_eval_vars_at_ry_list,
+        proof_eval_vars_at_ry_list,
       },
       [rp, rq, rx, [rw, ry].concat()],
     )
@@ -534,7 +573,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     // NUM_INPUTS: number of inputs per block
     // W_MAT: num_instances x num_proofs x num_inputs hypermatrix for all values
     // COMM_W: one commitment per instance
-    witness_secs: Vec<&VerifierWitnessSecInfo>,
+    witness_secs: Vec<&VerifierWitnessSecInfo<E, Pcs>>,
 
     num_cons: usize,
     evals: &[E; 3],
@@ -640,6 +679,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     let mut num_proofs_list = Vec::new();
     let mut num_inputs_list = Vec::new();
     let mut eval_Zr_list = Vec::new();
+    let mut comm_w_list = Vec::new();
     for i in 0..num_witness_secs {
       let w = witness_secs[i];
       let wit_sec_num_instance = w.num_proofs.len();
@@ -649,22 +689,23 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
           num_proofs_list.push(w.num_proofs[p]);
           num_inputs_list.push(w.num_inputs[p]);
           eval_Zr_list.push(self.eval_vars_at_ry_list[i][p]);
+          comm_w_list.push(w.comm_w[p].clone());
         } else {
           assert_eq!(self.eval_vars_at_ry_list[i][p], ZERO);
         }
       }
     }
 
-    /*
-    PolyEvalProof::verify_batched_instances_disjoint_rounds(
+    Self::verify_batched_instances_disjoint_rounds(
       &self.proof_eval_vars_at_ry_list,
       &num_proofs_list,
       &num_inputs_list,
       transcript,
       &rq,
       &ry,
+      eval_Zr_list,
+      &comm_w_list,
     )?;
-    */
 
     // Then on rp
     let mut expected_eval_vars_list = Vec::new();
@@ -743,5 +784,50 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     assert_eq!(claim_post_phase_2, expected_claim_post_phase2);
 
     Ok([rp, rq, rx, [rw, ry].concat()])
+  }
+
+  pub fn verify_batched_instances_disjoint_rounds(
+    proof_list: &Vec<Pcs::Proof>,
+    num_proofs_list: &Vec<usize>,
+    num_inputs_list: &Vec<usize>,
+    transcript: &mut Transcript<E>,
+    rq: &[E],
+    ry: &[E],
+    eval_Zr_list: Vec<E>,
+    comm_w: &Vec<Pcs::Commitment>,
+  ) -> Result<(), ProofVerifyError> {
+    let max_num_proofs = max(num_proofs_list).expect("max should exist").clone();
+    let max_num_inputs = max(num_inputs_list).expect("max should exist").clone();
+    let max_len = (max_num_proofs + max_num_inputs).next_power_of_two();
+
+    let param = Pcs::setup(max_len).unwrap();
+    let (_pp, vp) = Pcs::trim(param, max_len).unwrap();
+
+    for (idx, proof) in proof_list.into_iter().enumerate() {
+      let num_proofs = num_proofs_list[idx];
+      let num_inputs = num_inputs_list[idx];
+
+      let num_vars_q = num_proofs.log_2();
+      let num_vars_y = num_inputs.log_2();
+
+      let ry_short = {
+        if num_vars_y >= ry.len() {
+          let mut ry_pad: Vec<E> = vec![E::ZERO; num_vars_y - ry.len()];
+          ry_pad.extend_from_slice(&ry);
+          ry_pad
+        }
+        // Else ry_short is the last w.num_inputs[p].log_2() entries of ry
+        // thus, to obtain the actual ry, need to multiply by (1 - ry2)(1 - ry3)..., which is ry_factors[num_rounds_y - w.num_inputs[p]]
+        else {
+          ry[ry.len() - num_vars_y..].to_vec()
+        }
+      };
+      let rq_short = rq[rq.len() - num_vars_q..].to_vec();
+      let r = [rq_short, ry_short.clone()].concat();
+
+      pcs_verify::<E, Pcs>(&vp, &comm_w[idx], &r, &eval_Zr_list[idx], proof, transcript).map_err(|_e| ProofVerifyError::InternalError)?
+    }
+
+    Ok(())
   }
 }

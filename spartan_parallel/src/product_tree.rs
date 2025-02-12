@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use ff_ext::ExtensionField;
 
-use super::dense_mlpoly::DensePolynomial;
+use multilinear_extensions::mle::{DenseMultilinearExtension, MultilinearExtension};
 use super::dense_mlpoly::EqPolynomial;
 use super::math::Math;
 use super::sumcheck::SumcheckInstanceProof;
@@ -10,35 +10,40 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 pub struct ProductCircuit<E: ExtensionField> {
-  left_vec: Vec<DensePolynomial<E>>,
-  right_vec: Vec<DensePolynomial<E>>,
+  left_vec: Vec<DenseMultilinearExtension<E>>,
+  right_vec: Vec<DenseMultilinearExtension<E>>,
 }
 
 impl<E: ExtensionField> ProductCircuit<E> {
   fn compute_layer(
-    inp_left: &DensePolynomial<E>,
-    inp_right: &DensePolynomial<E>,
-  ) -> (DensePolynomial<E>, DensePolynomial<E>) {
-    let len = inp_left.len() + inp_right.len();
+    inp_left: &DenseMultilinearExtension<E>,
+    inp_right: &DenseMultilinearExtension<E>,
+  ) -> (DenseMultilinearExtension<E>, DenseMultilinearExtension<E>) {
+    let len = inp_left.evaluations().len() + inp_right.evaluations().len();
     let outp_left = (0..len / 4)
-      .map(|i| inp_left[i] * inp_right[i])
+      .map(|i| inp_left.get_ext_field_vec()[i] * inp_right.get_ext_field_vec()[i])
       .collect::<Vec<E>>();
     let outp_right = (len / 4..len / 2)
-      .map(|i| inp_left[i] * inp_right[i])
+      .map(|i| inp_left.get_ext_field_vec()[i] * inp_right.get_ext_field_vec()[i])
       .collect::<Vec<E>>();
 
     (
-      DensePolynomial::new(outp_left),
-      DensePolynomial::new(outp_right),
+      DenseMultilinearExtension::from_evaluation_vec_smart(outp_left.len().log_2(), outp_left),
+      DenseMultilinearExtension::from_evaluation_vec_smart(outp_right.len().log_2(), outp_right),
     )
   }
 
-  pub fn new(poly: &DensePolynomial<E>) -> Self {
-    let mut left_vec: Vec<DensePolynomial<E>> = Vec::new();
-    let mut right_vec: Vec<DensePolynomial<E>> = Vec::new();
+  pub fn new(poly: &DenseMultilinearExtension<E>) -> Self {
+    let mut left_vec: Vec<DenseMultilinearExtension<E>> = Vec::new();
+    let mut right_vec: Vec<DenseMultilinearExtension<E>> = Vec::new();
 
-    let num_layers = poly.len().log_2();
-    let (outp_left, outp_right) = poly.split(poly.len() / 2);
+    let split_idx = poly.evaluations().len() / 2;
+    let num_layers = poly.evaluations().len().log_2();
+
+    let (outp_left, outp_right): (DenseMultilinearExtension<E>, DenseMultilinearExtension<E>) = (
+      DenseMultilinearExtension::from_evaluation_vec_smart(split_idx.log_2(), poly.get_ext_field_vec()[0..split_idx].to_vec()),
+      DenseMultilinearExtension::from_evaluation_vec_smart(split_idx.log_2(), poly.get_ext_field_vec()[split_idx..].to_vec())
+    );
 
     left_vec.push(outp_left);
     right_vec.push(outp_right);
@@ -57,27 +62,27 @@ impl<E: ExtensionField> ProductCircuit<E> {
 
   pub fn evaluate(&self) -> E {
     let len = self.left_vec.len();
-    assert_eq!(self.left_vec[len - 1].get_num_vars(), 0);
-    assert_eq!(self.right_vec[len - 1].get_num_vars(), 0);
-    self.left_vec[len - 1][0] * self.right_vec[len - 1][0]
+    assert_eq!(self.left_vec[len - 1].num_vars, 0);
+    assert_eq!(self.right_vec[len - 1].num_vars, 0);
+    self.left_vec[len - 1].get_ext_field_vec()[0] * self.right_vec[len - 1].get_ext_field_vec()[0]
   }
 }
 
 #[derive(Clone)]
 pub struct DotProductCircuit<E: ExtensionField> {
-  left: DensePolynomial<E>,
-  right: DensePolynomial<E>,
-  weight: DensePolynomial<E>,
+  left: DenseMultilinearExtension<E>,
+  right: DenseMultilinearExtension<E>,
+  weight: DenseMultilinearExtension<E>,
 }
 
 impl<E: ExtensionField> DotProductCircuit<E> {
   pub fn new(
-    left: DensePolynomial<E>,
-    right: DensePolynomial<E>,
-    weight: DensePolynomial<E>,
+    left: DenseMultilinearExtension<E>,
+    right: DenseMultilinearExtension<E>,
+    weight: DenseMultilinearExtension<E>,
   ) -> Self {
-    assert_eq!(left.len(), right.len());
-    assert_eq!(left.len(), weight.len());
+    assert_eq!(left.evaluations().len(), right.evaluations().len());
+    assert_eq!(left.evaluations().len(), weight.evaluations().len());
     DotProductCircuit {
       left,
       right,
@@ -86,17 +91,28 @@ impl<E: ExtensionField> DotProductCircuit<E> {
   }
 
   pub fn evaluate(&self) -> E {
-    (0..self.left.len())
-      .map(|i| self.left[i] * self.right[i] * self.weight[i])
+    (0..self.left.evaluations().len())
+      .map(|i| self.left.get_ext_field_vec()[i] * self.right.get_ext_field_vec()[i] * self.weight.get_ext_field_vec()[i])
       .sum()
   }
 
   pub fn split(&mut self) -> (DotProductCircuit<E>, DotProductCircuit<E>) {
-    let idx = self.left.len() / 2;
-    assert_eq!(idx * 2, self.left.len());
-    let (l1, l2) = self.left.split(idx);
-    let (r1, r2) = self.right.split(idx);
-    let (w1, w2) = self.weight.split(idx);
+    let idx = self.left.evaluations().len() / 2;
+    assert_eq!(idx * 2, self.left.evaluations().len());
+
+    let (l1, l2): (DenseMultilinearExtension<E>, DenseMultilinearExtension<E>) = (
+      DenseMultilinearExtension::from_evaluation_vec_smart(idx.log_2(), self.left.get_ext_field_vec()[0..idx].to_vec()),
+      DenseMultilinearExtension::from_evaluation_vec_smart(idx.log_2(), self.left.get_ext_field_vec()[idx..].to_vec())
+    );
+    let (r1, r2): (DenseMultilinearExtension<E>, DenseMultilinearExtension<E>) = (
+      DenseMultilinearExtension::from_evaluation_vec_smart(idx.log_2(), self.right.get_ext_field_vec()[0..idx].to_vec()),
+      DenseMultilinearExtension::from_evaluation_vec_smart(idx.log_2(), self.right.get_ext_field_vec()[idx..].to_vec())
+    );
+    let (w1, w2): (DenseMultilinearExtension<E>, DenseMultilinearExtension<E>) = (
+      DenseMultilinearExtension::from_evaluation_vec_smart(idx.log_2(), self.weight.get_ext_field_vec()[0..idx].to_vec()),
+      DenseMultilinearExtension::from_evaluation_vec_smart(idx.log_2(), self.weight.get_ext_field_vec()[idx..].to_vec())
+    );
+
     (
       DotProductCircuit {
         left: l1,
@@ -179,12 +195,13 @@ impl<E: ExtensionField> ProductCircuitEvalProof<E> {
     let mut claim = circuit.evaluate();
     let mut rand = Vec::new();
     for layer_id in (0..num_layers).rev() {
-      let len = circuit.left_vec[layer_id].len() + circuit.right_vec[layer_id].len();
+      let len = circuit.left_vec[layer_id].evaluations().len() + circuit.right_vec[layer_id].evaluations().len();
 
-      let mut poly_C = DensePolynomial::new(EqPolynomial::new(rand.clone()).evals());
-      assert_eq!(poly_C.len(), len / 2);
+      let poly_c_evals = EqPolynomial::new(rand.clone()).evals();
+      let mut poly_C = DenseMultilinearExtension::from_evaluation_vec_smart(poly_c_evals.len().log_2(), poly_c_evals);
+      assert_eq!(poly_C.evaluations().len(), len / 2);
 
-      let num_rounds_prod = poly_C.len().log_2();
+      let num_rounds_prod = poly_C.evaluations().len().log_2();
       let comb_func_prod = |poly_A_comp: &E, poly_B_comp: &E, poly_C_comp: &E| -> E {
         *poly_A_comp * *poly_B_comp * *poly_C_comp
       };
@@ -269,19 +286,20 @@ impl<E: ExtensionField> ProductCircuitEvalProofBatched<E> {
     let mut rand = Vec::new();
     for layer_id in (0..num_layers).rev() {
       // prepare paralell instance that share poly_C first
-      let len = prod_circuit_vec[0].left_vec[layer_id].len()
-        + prod_circuit_vec[0].right_vec[layer_id].len();
+      let len = prod_circuit_vec[0].left_vec[layer_id].evaluations().len()
+        + prod_circuit_vec[0].right_vec[layer_id].evaluations().len();
 
-      let mut poly_C_par = DensePolynomial::new(EqPolynomial::new(rand.clone()).evals());
-      assert_eq!(poly_C_par.len(), len / 2);
+      let poly_c_par_evals = EqPolynomial::new(rand.clone()).evals();
+      let mut poly_C_par = DenseMultilinearExtension::from_evaluation_vec_smart(poly_c_par_evals.len().log_2(), poly_c_par_evals);
+      assert_eq!(poly_C_par.evaluations().len(), len / 2);
 
-      let num_rounds_prod = poly_C_par.len().log_2();
+      let num_rounds_prod = poly_C_par.evaluations().len().log_2();
       let comb_func_prod = |poly_A_comp: &E, poly_B_comp: &E, poly_C_comp: &E| -> E {
         *poly_A_comp * *poly_B_comp * *poly_C_comp
       };
 
-      let mut poly_A_batched_par: Vec<&mut DensePolynomial<E>> = Vec::new();
-      let mut poly_B_batched_par: Vec<&mut DensePolynomial<E>> = Vec::new();
+      let mut poly_A_batched_par: Vec<&mut DenseMultilinearExtension<E>> = Vec::new();
+      let mut poly_B_batched_par: Vec<&mut DenseMultilinearExtension<E>> = Vec::new();
       for prod_circuit in prod_circuit_vec.iter_mut() {
         poly_A_batched_par.push(&mut prod_circuit.left_vec[layer_id]);
         poly_B_batched_par.push(&mut prod_circuit.right_vec[layer_id])
@@ -293,16 +311,16 @@ impl<E: ExtensionField> ProductCircuitEvalProofBatched<E> {
       );
 
       // prepare sequential instances that don't share poly_C
-      let mut poly_A_batched_seq: Vec<&mut DensePolynomial<E>> = Vec::new();
-      let mut poly_B_batched_seq: Vec<&mut DensePolynomial<E>> = Vec::new();
-      let mut poly_C_batched_seq: Vec<&mut DensePolynomial<E>> = Vec::new();
+      let mut poly_A_batched_seq: Vec<&mut DenseMultilinearExtension<E>> = Vec::new();
+      let mut poly_B_batched_seq: Vec<&mut DenseMultilinearExtension<E>> = Vec::new();
+      let mut poly_C_batched_seq: Vec<&mut DenseMultilinearExtension<E>> = Vec::new();
       if layer_id == 0 && !dotp_circuit_vec.is_empty() {
         // add additional claims
         for item in dotp_circuit_vec.iter() {
           claims_to_verify.push(item.evaluate());
-          assert_eq!(len / 2, item.left.len());
-          assert_eq!(len / 2, item.right.len());
-          assert_eq!(len / 2, item.weight.len());
+          assert_eq!(len / 2, item.left.evaluations().len());
+          assert_eq!(len / 2, item.right.evaluations().len());
+          assert_eq!(len / 2, item.weight.evaluations().len());
         }
 
         for dotp_circuit in dotp_circuit_vec.iter_mut() {

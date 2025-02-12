@@ -42,12 +42,11 @@ use std::{
   io::Write, marker::PhantomData,
 };
 
-use dense_mlpoly::DensePolynomial;
+use multilinear_extensions::mle::{DenseMultilinearExtension, MultilinearExtension};
 use errors::{ProofVerifyError, R1CSError};
 use instance::Instance;
 use itertools::Itertools;
 use math::Math;
-use multilinear_extensions::mle::DenseMultilinearExtension;
 use mpcs::{PolynomialCommitmentScheme, ProverParam};
 use r1csinstance::{R1CSCommitment, R1CSDecommitment, R1CSEvalProof, R1CSInstance};
 use r1csproof::R1CSProof;
@@ -155,7 +154,7 @@ struct IOProofs<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
 impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> IOProofs<E, Pcs> {
   // Given the polynomial in execution order, generate all proofs
   fn prove(
-    exec_poly_inputs: &DensePolynomial<E>,
+    exec_poly_inputs: &DenseMultilinearExtension<E>,
 
     num_ios: usize,
     num_inputs_unpadded: usize,
@@ -334,8 +333,8 @@ struct ShiftProofs<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> {
 
 impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> ShiftProofs<E, Pcs> {
   fn prove(
-    orig_polys: Vec<&DensePolynomial<E>>,
-    shifted_polys: Vec<&DensePolynomial<E>>,
+    orig_polys: Vec<&DenseMultilinearExtension<E>>,
+    shifted_polys: Vec<&DenseMultilinearExtension<E>>,
     // For each orig_poly, how many entries at the front of proof 0 are non-zero?
     header_len_list: Vec<usize>,
     transcript: &mut Transcript<E>,
@@ -346,11 +345,11 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> ShiftProofs<E, Pcs> 
     assert_eq!(num_instances, shifted_polys.len());
     let max_poly_size = orig_polys
       .iter()
-      .fold(0, |m, p| if p.len() > m { p.len() } else { m });
+      .fold(0, |m, p| if p.evaluations().len() > m { p.evaluations().len() } else { m });
     let max_poly_size =
       shifted_polys
         .iter()
-        .fold(max_poly_size, |m, p| if p.len() > m { p.len() } else { m });
+        .fold(max_poly_size, |m, p| if p.evaluations().len() > m { p.evaluations().len() } else { m });
     // Open entry 0..header_len_list[p] - 1
     for p in 0..num_instances {
       for _i in 0..header_len_list[p] {}
@@ -368,9 +367,9 @@ impl<E: ExtensionField, Pcs: PolynomialCommitmentScheme<E>> ShiftProofs<E, Pcs> 
     for p in 0..num_instances {
       let orig_poly = orig_polys[p];
       let shifted_poly = shifted_polys[p];
-      let orig_eval = (0..orig_poly.len()).fold(E::ZERO, |a, b| a + orig_poly[b] * rc[b]);
+      let orig_eval = (0..orig_poly.evaluations().len()).fold(E::ZERO, |a, b| a + orig_poly.get_ext_field_vec()[b] * rc[b]);
       let shifted_eval =
-        (0..shifted_poly.len()).fold(E::ZERO, |a, b| a + shifted_poly[b] * rc[b]);
+        (0..shifted_poly.evaluations().len()).fold(E::ZERO, |a, b| a + shifted_poly.get_ext_field_vec()[b] * rc[b]);
       orig_evals.push(orig_eval);
       shifted_evals.push(shifted_eval);
     }
@@ -2826,7 +2825,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
       }
       perm_w0.extend(vec![E::ZERO; num_ios - 2 * num_inputs_unpadded]);
       // create a multilinear polynomial using the supplied assignment for variables
-      let _perm_poly_w0 = DensePolynomial::new(perm_w0.clone());
+      let _perm_poly_w0: DenseMultilinearExtension<E> = DenseMultilinearExtension::from_evaluation_vec_smart(perm_w0.len().log_2(), perm_w0);
 
       // block_w2
       let block_w2_verifier = {
@@ -2989,7 +2988,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
         ]
         .concat();
         // create a multilinear polynomial using the supplied assignment for variables
-        let _poly_init_stacks = DensePolynomial::new(init_stacks.clone());
+        let _poly_init_stacks: DenseMultilinearExtension<E> = DenseMultilinearExtension::from_evaluation_vec_smart(init_stacks.len().log_2(), init_stacks);
         VerifierWitnessSecInfo::new(
           vec![INIT_PHY_MEM_WIDTH],
           &vec![total_num_init_phy_mem_accesses],
@@ -3024,7 +3023,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> SNARK<
         ]
         .concat();
         // create a multilinear polynomial using the supplied assignment for variables
-        let _poly_init_mems = DensePolynomial::new(init_mems.clone());
+        let _poly_init_mems: DenseMultilinearExtension<E> = DenseMultilinearExtension::from_evaluation_vec_smart(init_mems.len().log_2(), init_mems);
         VerifierWitnessSecInfo::new(
           vec![INIT_VIR_MEM_WIDTH],
           &vec![total_num_init_vir_mem_accesses],

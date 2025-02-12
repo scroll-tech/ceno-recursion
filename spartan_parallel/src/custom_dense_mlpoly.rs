@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 use std::cmp::min;
 
-use crate::dense_mlpoly::DensePolynomial;
+use multilinear_extensions::mle::DenseMultilinearExtension;
 use crate::math::Math;
 use ff_ext::ExtensionField;
 use rayon::prelude::*;
@@ -366,30 +366,31 @@ impl<E: ExtensionField> DensePolynomialPqx<E> {
     return cl.index(0, 0, 0, 0);
   }
 
-  // Convert to a (p, q_rev, x_rev) regular dense poly of form (p, q, x)
-  pub fn to_dense_poly(&self) -> DensePolynomial<E> {
-    let ZERO = E::ZERO;
+  // _debug
+  // // Convert to a (p, q_rev, x_rev) regular dense poly of form (p, q, x)
+  // pub fn to_dense_poly(&self) -> DensePolynomial<E> {
+  //   let ZERO = E::ZERO;
 
-    let p_space = self.num_vars_p.pow2();
-    let q_space = self.num_vars_q.pow2();
-    let w_space = self.num_vars_w.pow2();
-    let x_space = self.num_vars_x.pow2();
+  //   let p_space = self.num_vars_p.pow2();
+  //   let q_space = self.num_vars_q.pow2();
+  //   let w_space = self.num_vars_w.pow2();
+  //   let x_space = self.num_vars_x.pow2();
 
-    let mut Z_poly = vec![ZERO; p_space * q_space * w_space * x_space];
-    for p in 0..self.num_instances {
-      for q in 0..self.num_proofs[p] {
-        for w in 0..self.num_witness_secs {
-          for x in 0..self.num_inputs[p][w] {
-              Z_poly[
-                  p * q_space * w_space * x_space
-                + q * w_space * x_space
-                + w * x_space
-                + x
-              ] = self.Z[p][q][w][x];
-          }
-        }
-      }
-    }
-    DensePolynomial::new(Z_poly)
-  }
+  //   let mut Z_poly = vec![ZERO; p_space * q_space * w_space * x_space];
+  //   for p in 0..self.num_instances {
+  //     for q in 0..self.num_proofs[p] {
+  //       for w in 0..self.num_witness_secs {
+  //         for x in 0..self.num_inputs[p][w] {
+  //             Z_poly[
+  //                 p * q_space * w_space * x_space
+  //               + q * w_space * x_space
+  //               + w * x_space
+  //               + x
+  //             ] = self.Z[p][q][w][x];
+  //         }
+  //       }
+  //     }
+  //   }
+  //   DensePolynomial::new(Z_poly)
+  // }
 }

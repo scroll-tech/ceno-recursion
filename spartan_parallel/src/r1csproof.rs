@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 use super::custom_dense_mlpoly::DensePolynomialPqx;
-use super::dense_mlpoly::{DensePolynomial, EqPolynomial};
+use super::dense_mlpoly::EqPolynomial;
+use multilinear_extensions::mle::{DenseMultilinearExtension, MultilinearExtension};
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::r1csinstance::R1CSInstance;
@@ -65,9 +66,9 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     num_rounds_p: usize,
     num_proofs: &Vec<usize>,
     num_cons: &Vec<usize>,
-    evals_tau_p: &mut DensePolynomial<E>,
-    evals_tau_q: &mut DensePolynomial<E>,
-    evals_tau_x: &mut DensePolynomial<E>,
+    evals_tau_p: &mut DenseMultilinearExtension<E>,
+    evals_tau_q: &mut DenseMultilinearExtension<E>,
+    evals_tau_x: &mut DenseMultilinearExtension<E>,
     evals_Az: &mut DensePolynomialPqx<E>,
     evals_Bz: &mut DensePolynomialPqx<E>,
     evals_Cz: &mut DensePolynomialPqx<E>,
@@ -108,7 +109,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     num_witness_secs: usize,
     num_inputs: Vec<Vec<usize>>,
     claim: &E,
-    evals_eq: &mut DensePolynomial<E>,
+    evals_eq: &mut DenseMultilinearExtension<E>,
     evals_ABC: &mut DensePolynomialPqx<E>,
     evals_z: &mut DensePolynomialPqx<E>,
     transcript: &mut Transcript<E>,
@@ -242,9 +243,12 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     let tau_x = challenge_vector(transcript, b"challenge_tau_x", num_rounds_x);
 
     // compute the initial evaluation table for R(\tau, x)
-    let mut poly_tau_p = DensePolynomial::new(EqPolynomial::new(tau_p).evals());
-    let mut poly_tau_q = DensePolynomial::new(EqPolynomial::new(tau_q).evals());
-    let mut poly_tau_x = DensePolynomial::new(EqPolynomial::new(tau_x).evals());
+    let tau_p_evals = EqPolynomial::new(tau_p).evals();
+    let tau_q_evals = EqPolynomial::new(tau_q).evals();
+    let tau_x_evals = EqPolynomial::new(tau_x).evals();
+    let mut poly_tau_p = DenseMultilinearExtension::from_evaluation_vec_smart(tau_p_evals.len().log_2(), tau_p_evals);
+    let mut poly_tau_q = DenseMultilinearExtension::from_evaluation_vec_smart(tau_q_evals.len().log_2(), tau_q_evals);
+    let mut poly_tau_x = DenseMultilinearExtension::from_evaluation_vec_smart(tau_x_evals.len().log_2(), tau_x_evals);
     let (mut poly_Az, mut poly_Bz, mut poly_Cz) = inst.multiply_vec_block(
       num_instances,
       num_proofs.clone(),
@@ -274,9 +278,9 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
       transcript,
     );
 
-    assert_eq!(poly_tau_p.len(), 1);
-    assert_eq!(poly_tau_q.len(), 1);
-    assert_eq!(poly_tau_x.len(), 1);
+    assert_eq!(poly_tau_p.evaluations().len(), 1);
+    assert_eq!(poly_tau_q.evaluations().len(), 1);
+    assert_eq!(poly_tau_x.evaluations().len(), 1);
     assert_eq!(poly_Az.len(), 1);
     assert_eq!(poly_Bz.len(), 1);
     assert_eq!(poly_Cz.len(), 1);
@@ -284,7 +288,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     timer_sc_proof_phase1.stop();
 
     let (_tau_claim, Az_claim, Bz_claim, Cz_claim) = (
-      &(poly_tau_p[0] * poly_tau_q[0] * poly_tau_x[0]),
+      &(poly_tau_p.get_ext_field_vec()[0] * poly_tau_q.get_ext_field_vec()[0] * poly_tau_x.get_ext_field_vec()[0]),
       &poly_Az.index(0, 0, 0, 0),
       &poly_Bz.index(0, 0, 0, 0),
       &poly_Cz.index(0, 0, 0, 0),
@@ -355,7 +359,8 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     timer_tmp.stop();
 
     // An Eq function to match p with rp
-    let mut eq_p_rp_poly = DensePolynomial::new(EqPolynomial::new(rp).evals());
+    let rp_evals = EqPolynomial::new(rp).evals();
+    let mut eq_p_rp_poly = DenseMultilinearExtension::from_evaluation_vec_smart(rp_evals.len().log_2(), rp_evals);
 
     // Sumcheck 2: (rA + rB + rC) * Z * eq(p) = e
     let timer_tmp = Timer::new("prove_sum_check");
@@ -532,7 +537,7 @@ impl<E: ExtensionField + Send + Sync, Pcs: PolynomialCommitmentScheme<E>> R1CSPr
     }
     timer_polyeval.stop();
 
-    let poly_vars = DensePolynomial::new(eval_vars_comb_list);
+    let poly_vars = DenseMultilinearExtension::from_evaluation_vec_smart(eval_vars_comb_list.len().log_2(), eval_vars_comb_list);
     let eval_vars_at_ry = poly_vars.evaluate(&rp);
     // prove the final step of sum-check #2
     // Deferred to verifier

@@ -8,7 +8,7 @@ use ff_ext::ExtensionField;
 use crate::transcript::{Transcript, append_field_to_transcript};
 
 use super::custom_dense_mlpoly::DensePolynomialPqx;
-use super::dense_mlpoly::DensePolynomial;
+use multilinear_extensions::mle::{DenseMultilinearExtension, MultilinearExtension};
 use super::errors::ProofVerifyError;
 use super::math::Math;
 use super::random::RandomTape;
@@ -456,9 +456,12 @@ impl<E: ExtensionField + Send + Sync> R1CSInstance<E> {
       c_evals.push(evals[2]);
     }
     // Bind A, B, C to rp
-    let a_eval = DensePolynomial::new(a_evals).evaluate(rp);
-    let b_eval = DensePolynomial::new(b_evals).evaluate(rp);
-    let c_eval = DensePolynomial::new(c_evals).evaluate(rp);
+    let a_poly = DenseMultilinearExtension::from_evaluation_vec_smart(a_evals.len().log_2(), a_evals);
+    let b_poly = DenseMultilinearExtension::from_evaluation_vec_smart(b_evals.len().log_2(), b_evals);
+    let c_poly = DenseMultilinearExtension::from_evaluation_vec_smart(c_evals.len().log_2(), c_evals);
+    let a_eval = a_poly.evaluate(rp);
+    let b_eval = b_poly.evaluate(rp);
+    let c_eval = c_poly.evaluate(rp);
     let eval_bound_rp = (a_eval, b_eval, c_eval);
 
     (eval_list, eval_bound_rp)

@@ -11,12 +11,15 @@ use rayon::{iter::ParallelIterator, slice::ParallelSliceMut};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 
+// _debug
+/*
 #[derive(Debug, Clone)]
 pub struct DensePolynomial<E: ExtensionField> {
   num_vars: usize, // the number of variables in the multilinear polynomial
   len: usize,
   Z: Vec<E>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
 }
+*/
 
 pub struct EqPolynomial<E: ExtensionField> {
   r: Vec<E>,
@@ -112,6 +115,8 @@ impl<E: ExtensionField> IdentityPolynomial<E> {
   }
 }
 
+// _debug
+/*
 impl<E: ExtensionField> DensePolynomial<E> {
   pub fn new(mut Z: Vec<E>) -> Self {
     // If length of Z is not a power of 2, append Z with 0
@@ -352,7 +357,10 @@ impl<E: ExtensionField> DensePolynomial<E> {
     DenseMultilinearExtension::from_evaluation_vec_smart(self.num_vars, self.Z.clone())
   }
 }
+*/
 
+// _debug
+/*
 impl<E: ExtensionField> Index<usize> for DensePolynomial<E> {
   type Output = E;
 
@@ -361,6 +369,7 @@ impl<E: ExtensionField> Index<usize> for DensePolynomial<E> {
     &(self.Z[_index])
   }
 }
+*/
 
 /*
 #[cfg(test)]

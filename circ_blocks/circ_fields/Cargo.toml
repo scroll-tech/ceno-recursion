@@ -11,7 +11,7 @@ ff-derive-num = "0.2"
 lazy_static = "1.4"
 num-traits = "0.2"
 paste = "1.0"
-rand = "0.8"
+rand = "0.9"
 rug = { version = "1.11", features = ["serde"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 datasize = { version = "0.2", features = ["detailed"] }
@@ -21,4 +21,4 @@ ff = { path = "../../ff" }
 ff_derive = { path = "../../ff/ff_derive" }
 
 [dev-dependencies]
-rand = "0.8"
+rand = "0.9"

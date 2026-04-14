@@ -17,7 +17,7 @@ circ_waksman = { path = "circ_waksman" }
 rug = { version = "1.26", features = ["serde"] }
 gmp-mpfr-sys = { version = "1.6", optional = true }
 lazy_static = { version = "1.5", optional = true }
-rand = "0.8"
+rand = "0.9"
 rand_chacha = "0.3"
 rsmt2 = { version = "0.16", optional = true }
 ieee754 = { version = "0.2", optional = true }
